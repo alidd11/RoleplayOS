@@ -8,6 +8,66 @@ function NetworkService:Init(context: any)
 end
 function NetworkService:Start()
 	self.context.Network:RegisterFunction(
+		"GetFrameworkStatus",
+		tablePayload,
+		function(player, _, requestId)
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = {
+					Framework = "RoleplayOS",
+					Version = "0.1-dev",
+					SchemaVersion = self.context.Configuration.Framework.SchemaVersion,
+					Server = self.context.Services
+						:Get("CommunityServerService")
+						:GetServerContext(player),
+					Capabilities = {
+						"Characters",
+						"Access control",
+						"Economy",
+						"Jobs and applications",
+						"Vehicles",
+						"Properties and furniture",
+						"Emergency services",
+						"MDT and dispatch",
+						"Private communities",
+					},
+				},
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction("CreatePrivateCommunity", function(payload)
+		return type(payload) == "table" and type(payload.Name) == "string"
+	end, function(player, payload, requestId)
+		if game.PrivateServerOwnerId == 0 or player.UserId ~= game.PrivateServerOwnerId then
+			return {
+				Success = false,
+				Code = "PRIVATE_SERVER_OWNER_REQUIRED",
+				Message = "Only the private server owner can create this community.",
+				RequestId = requestId,
+			}
+		end
+		local community, reason =
+			self.context.Services:Get("CommunityService"):Create(player, payload.Name)
+		if not community then
+			return {
+				Success = false,
+				Code = reason,
+				Message = "The community could not be created.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Community created.",
+			Data = self.context.Services:Get("CommunityService"):PublicSummary(player),
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction(
 		"GetStartMenu",
 		tablePayload,
 		function(player, _, requestId)

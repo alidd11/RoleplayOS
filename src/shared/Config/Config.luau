@@ -3,7 +3,7 @@
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 1,
+		SchemaVersion = 2,
 		AutosaveSeconds = 120,
 		ShutdownSaveSeconds = 25,
 		MaxSaveAttempts = 4,
@@ -15,6 +15,51 @@ local Config = {
 		MinimumAge = 16,
 		MaximumAge = 100,
 		DeletionConfirmationSeconds = 10,
+	},
+	Communities = {
+		Enabled = true,
+		AllowPrivateServerCommunities = true,
+		MaximumMembershipsPerPlayer = 20,
+		DefaultTemplateId = "RoleplayCommunity",
+		Templates = {
+			RoleplayCommunity = {
+				Id = "RoleplayCommunity",
+				Name = "Roleplay Community",
+				MaximumMembers = 250,
+				DefaultMemberRoleId = "Member",
+				Roles = {
+					Owner = { Id = "Owner", Priority = 100, Permissions = { "*" } },
+					Administrator = {
+						Id = "Administrator",
+						Priority = 80,
+						Permissions = {
+							"Community.Manage",
+							"Members.Manage",
+							"Sessions.Manage",
+							"Moderation.Manage",
+							"Content.Manage",
+						},
+					},
+					Moderator = {
+						Id = "Moderator",
+						Priority = 60,
+						Permissions = { "Members.View", "Sessions.Manage", "Moderation.Manage" },
+					},
+					Member = {
+						Id = "Member",
+						Priority = 10,
+						Permissions = { "Community.Join", "Sessions.Join" },
+					},
+				},
+				DefaultPolicies = {
+					JoinMode = "Approval",
+					AllowPublicCivilian = true,
+					RequireCommunityMembership = false,
+					EconomyPreset = "Standard",
+					RoleplayRules = "Standard",
+				},
+			},
+		},
 	},
 	Economy = {
 		StartingBankBalance = 2500,

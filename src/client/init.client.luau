@@ -60,3 +60,7 @@ for _, name in
 do
 	controllers[name]:Start()
 end
+
+if game:GetService("RunService"):IsStudio() then
+	require(script.UI.DeveloperDashboard).mount(context)
+end

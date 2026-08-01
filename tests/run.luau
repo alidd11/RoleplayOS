@@ -14,6 +14,7 @@ local Placement = require(Shared.FurniturePlacementValidator)
 local Serialisation = require(Shared.Serialisation)
 local ProfileSchema = require(Shared.ProfileSchema)
 local Response = require(Shared.Response)
+local CommunityPolicy = require(Shared.CommunityPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -117,8 +118,45 @@ end)
 H.test("migration reconciles missing fields", function()
 	local profile = ProfileSchema.migrate({ SchemaVersion = 0 }, 42)
 	H.expect(
-		profile.SchemaVersion == 1 and profile.UserId == 42 and type(profile.Characters) == "table",
+		profile.SchemaVersion == 2
+			and profile.UserId == 42
+			and type(profile.Characters) == "table"
+			and type(profile.Communities) == "table",
 		"migration failed"
+	)
+end)
+H.test("community permissions honour active role", function()
+	local template = Config.Communities.Templates.RoleplayCommunity
+	H.expect(
+		CommunityPolicy.hasPermission(template, { RoleId = "Owner", Status = "Active" }, "Anything"),
+		"owner wildcard failed"
+	)
+	H.expect(
+		not CommunityPolicy.hasPermission(
+			template,
+			{ RoleId = "Member", Status = "Suspended" },
+			"Sessions.Join"
+		),
+		"suspended member permitted"
+	)
+end)
+H.test("community hierarchy prevents peer management", function()
+	local template = Config.Communities.Templates.RoleplayCommunity
+	H.expect(
+		CommunityPolicy.canManage(
+			template,
+			{ RoleId = "Administrator", Status = "Active" },
+			{ RoleId = "Member", Status = "Active" }
+		),
+		"administrator cannot manage member"
+	)
+	H.expect(
+		not CommunityPolicy.canManage(
+			template,
+			{ RoleId = "Administrator", Status = "Active" },
+			{ RoleId = "Administrator", Status = "Active" }
+		),
+		"peer management allowed"
 	)
 end)
 H.test("response envelope contains contract fields", function()

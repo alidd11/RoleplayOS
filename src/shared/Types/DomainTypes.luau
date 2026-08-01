@@ -219,6 +219,26 @@ export type AuditLogEntry = {
 	RequestId: string?,
 	Metadata: { [string]: any },
 }
+export type CommunityRole = { Id: string, Priority: number, Permissions: { string } }
+export type CommunityMembership = {
+	CommunityId: string,
+	RoleId: string,
+	Status: "Invited" | "Pending" | "Active" | "Suspended" | "Banned",
+	JoinedAt: number?,
+	UpdatedAt: number,
+}
+export type CommunityRecord = {
+	CommunityId: string,
+	Name: string,
+	OwnerUserId: number,
+	TemplateId: string,
+	CreatedAt: number,
+	UpdatedAt: number,
+	Policies: { [string]: any },
+	Branding: { PrimaryColour: string?, LogoAssetId: number? },
+	Members: { [string]: CommunityMembership },
+	Version: number,
+}
 export type DutyProfile = {
 	ProfileId: string,
 	DepartmentId: string,
@@ -255,6 +275,7 @@ export type PlayerProfile = {
 	Applications: { ApplicationRecord },
 	Qualifications: { [string]: Qualification },
 	GamepassCache: { [string]: boolean },
+	Communities: { [string]: CommunityMembership },
 	AuditMetadata: { [string]: any },
 }
 

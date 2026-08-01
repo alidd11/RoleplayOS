@@ -1,11 +1,11 @@
 --!strict
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 1
+ProfileSchema.CURRENT_VERSION = 2
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 1,
+		SchemaVersion = 2,
 		UserId = userId,
 		Settings = {},
 		CharacterSlots = {},
@@ -15,6 +15,7 @@ function ProfileSchema.default(userId: number): any
 		Applications = {},
 		Qualifications = {},
 		GamepassCache = {},
+		Communities = {},
 		AuditMetadata = {},
 	}
 end
@@ -43,6 +44,10 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if version == 0 then
 		data.SchemaVersion = 1
 		data.DutyProfiles = data.DutyProfiles or {}
+	end
+	if data.SchemaVersion == 1 then
+		data.Communities = data.Communities or {}
+		data.SchemaVersion = 2
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

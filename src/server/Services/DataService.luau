@@ -7,11 +7,39 @@ local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
 local DataService = { sessions = {}, running = false }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
+local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 
 function DataService:Init(context: any)
 	self.context = context
 	self.store = DataStoreService:GetDataStore(STORE_NAME)
+	self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
+end
+
+function DataService:GetCommunity(communityId: string): (any?, string?)
+	local ok, result = self:_retry(function()
+		return self.communityStore:GetAsync(communityId)
+	end)
+	if not ok then
+		self.context.Logger:Error("Community load failed", { CommunityId = communityId })
+		return nil, "COMMUNITY_LOAD_FAILED"
+	end
+	return result, nil
+end
+
+function DataService:UpdateCommunity(communityId: string, transform: (any?) -> any): (any?, string?)
+	local updated
+	local ok = self:_retry(function()
+		return self.communityStore:UpdateAsync(communityId, function(stored)
+			updated = transform(stored)
+			return updated
+		end)
+	end)
+	if not ok then
+		self.context.Logger:Error("Community update failed", { CommunityId = communityId })
+		return nil, "COMMUNITY_UPDATE_FAILED"
+	end
+	return updated, nil
 end
 
 function DataService:_retry(operation: () -> any): (boolean, any)

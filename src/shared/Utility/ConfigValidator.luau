@@ -16,6 +16,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Properties",
 			"Furniture",
 			"Network",
+			"Communities",
 		}
 	do
 		if type(config[section]) ~= "table" then
@@ -60,6 +61,18 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	for id, vehicle in config.Vehicles or {} do
 		if type(vehicle.Price) ~= "number" or vehicle.Price < 0 then
 			table.insert(errors, "Invalid vehicle price: " .. id)
+		end
+	end
+	for templateId, template in config.Communities and config.Communities.Templates or {} do
+		if template.Id ~= templateId or not template.Roles[template.DefaultMemberRoleId] then
+			table.insert(errors, "Invalid community template: " .. templateId)
+		end
+		local priorities = {}
+		for roleId, role in template.Roles do
+			if role.Id ~= roleId or priorities[role.Priority] then
+				table.insert(errors, "Invalid or duplicate community role priority: " .. roleId)
+			end
+			priorities[role.Priority] = true
 		end
 	end
 	return #errors == 0, errors

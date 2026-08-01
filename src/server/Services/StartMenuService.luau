@@ -26,6 +26,11 @@ function StartMenuService:Build(player: Player): (any?, string?)
 	end
 	local slotCount = self.context.Configuration.Characters.FreeSlots
 	return {
+		Framework = {
+			Version = "0.1-dev",
+			Environment = self.context.Configuration.Framework.Environment,
+		},
+		Server = self.context.Services:Get("CommunityServerService"):GetServerContext(player),
 		Characters = self.context.Services:Get("CharacterService"):List(player),
 		EmptySlots = math.max(0, slotCount - #session.Profile.CharacterSlots),
 		Roles = roles,

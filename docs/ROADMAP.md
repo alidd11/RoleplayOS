@@ -1,7 +1,7 @@
 # Roadmap
 
 - **v0.1 foundation:** lifecycle, typed contracts, persistence, access, economy, ownership, network security, service interfaces, tests and documentation.
-- **v0.2 start menu and character UI:** production view layer, character creator, accessibility and purchase/application journeys.
+- **v0.2 start menu, character and community UI:** production view layer, character creator, community creation/membership, accessibility and purchase/application journeys.
 - **v0.3 civilian jobs and economy gameplay:** physical task adapters, anti-AFK evidence, transfers, fines and balancing.
 - **v0.4 dealerships and garages:** production vehicles, spawn volumes, transfer, resale, fuel and condition.
 - **v0.5 properties and furniture:** map entrances, interior allocator, tenancy, keyholders, placement collision and editing.

@@ -2,6 +2,8 @@
 
 RoleplayOS is a server-authoritative, configuration-first Roblox roleplay framework written in strict Luau and managed with Rojo. Version 0.1 establishes safe service, persistence, access, economy, ownership, MDT and dispatch boundaries for development on an empty baseplate.
 
+The same framework supports the public game and privately operated roleplay communities. Community owners can manage membership, staff hierarchy, sessions, policies and branding within server-enforced limits; see [Private communities](docs/COMMUNITIES.md).
+
 ## Quick start
 
 1. Install [Aftman](https://github.com/LPGhatguy/aftman), then run `aftman install`.
