@@ -1,0 +1,115 @@
+--!strict
+
+local AccessEvaluator = {}
+
+local messages = {
+	GAMEPASS_REQUIRED = "A gamepass is required.",
+	APPLICATION_REQUIRED = "An approved application is required.",
+	RANK_REQUIRED = "A higher rank is required.",
+	QUALIFICATION_REQUIRED = "A qualification is required.",
+	DEPARTMENT_REQUIRED = "Department membership is required.",
+	WHITELIST_REQUIRED = "Whitelist access is required.",
+	STAFF_REQUIRED = "Staff permission is required.",
+	SUSPENDED = "Access is suspended.",
+	BLACKLISTED = "Access is denied because this account is blacklisted.",
+	ACCESS_DENIED = "Access requirements are not met.",
+}
+
+local function denied(code: string, message: string?, metadata: any?): any
+	return {
+		Allowed = false,
+		ReasonCode = code,
+		Message = message or messages[code] or messages.ACCESS_DENIED,
+		Metadata = metadata or {},
+	}
+end
+
+function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
+	if subject.Blacklisted then
+		return denied("BLACKLISTED", subject.BlacklistReason)
+	end
+	if subject.Suspended then
+		return denied("SUSPENDED", subject.SuspensionReason)
+	end
+	local current = now or os.time()
+	if
+		subject.TemporaryAccess
+		and rule.Id
+		and (subject.TemporaryAccess[rule.Id] or 0) > current
+	then
+		return { Allowed = true, ReasonCode = "TEMPORARY_ACCESS", Message = "", Metadata = {} }
+	end
+	local kind = rule.AccessType
+	if kind == "Public" then
+		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+	end
+	if kind == "Gamepass" then
+		if subject.Gamepasses and subject.Gamepasses[tostring(rule.GamepassId or rule.Id)] then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("GAMEPASS_REQUIRED", rule.Message, { GamepassId = rule.GamepassId })
+	end
+	if kind == "Application" then
+		if subject.Applications and subject.Applications[rule.DepartmentId] == "Accepted" then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("APPLICATION_REQUIRED", rule.Message, {
+			DepartmentId = rule.DepartmentId,
+			Status = subject.Applications and subject.Applications[rule.DepartmentId],
+		})
+	end
+	if kind == "Rank" then
+		if
+			(subject.Ranks and subject.Ranks[rule.DepartmentId] or -1) >= (rule.MinimumRank or 0)
+		then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("RANK_REQUIRED", rule.Message, { MinimumRank = rule.MinimumRank })
+	end
+	if kind == "Qualification" then
+		if subject.Qualifications and subject.Qualifications[rule.QualificationId] then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied(
+			"QUALIFICATION_REQUIRED",
+			rule.Message,
+			{ QualificationId = rule.QualificationId }
+		)
+	end
+	if kind == "Department" then
+		if subject.Departments and subject.Departments[rule.DepartmentId] then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("DEPARTMENT_REQUIRED")
+	end
+	if kind == "Whitelist" then
+		if subject.Whitelists and subject.Whitelists[rule.Id] then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("WHITELIST_REQUIRED")
+	end
+	if kind == "Staff" then
+		if subject.Permissions and subject.Permissions[rule.Id] then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("STAFF_REQUIRED")
+	end
+	if kind == "Combined" then
+		local matchAny = rule.Match == "Any"
+		local last = denied("ACCESS_DENIED")
+		for _, child in rule.Rules or {} do
+			local result = AccessEvaluator.evaluate(child, subject, current)
+			if result.Allowed == matchAny then
+				return result
+			end
+			last = result
+		end
+		if matchAny then
+			return last
+		end
+		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+	end
+	return denied("ACCESS_DENIED")
+end
+
+return table.freeze(AccessEvaluator)
