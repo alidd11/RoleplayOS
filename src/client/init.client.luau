@@ -1,0 +1,62 @@
+--!strict
+local FeatureController = require(script.Controllers.FeatureController)
+local events = {
+	StartMenuChanged = Instance.new("BindableEvent"),
+	DispatchChanged = Instance.new("BindableEvent"),
+}
+local controllers = {
+	NetworkController = require(script.Controllers.NetworkController),
+	NotificationController = require(script.Controllers.NotificationController),
+	CharacterController = require(script.Controllers.CharacterController),
+	GamepassController = require(script.Controllers.GamepassController),
+	ApplicationController = require(script.Controllers.ApplicationController),
+	MDTController = require(script.Controllers.MDTController),
+	DispatchController = require(script.Controllers.DispatchController),
+	StartMenuController = require(script.Controllers.StartMenuController),
+}
+for _, name in
+	{ "AccessPrompts", "Jobs", "Vehicles", "Properties", "Furniture", "EmergencyServices" }
+do
+	controllers[name .. "Controller"] = FeatureController.new(name)
+end
+local context = { Controllers = controllers, Events = events }
+for _, name in
+	{
+		"NetworkController",
+		"NotificationController",
+		"CharacterController",
+		"GamepassController",
+		"ApplicationController",
+		"MDTController",
+		"DispatchController",
+		"AccessPromptsController",
+		"JobsController",
+		"VehiclesController",
+		"PropertiesController",
+		"FurnitureController",
+		"EmergencyServicesController",
+		"StartMenuController",
+	}
+do
+	controllers[name]:Init(context)
+end
+for _, name in
+	{
+		"NetworkController",
+		"NotificationController",
+		"CharacterController",
+		"GamepassController",
+		"ApplicationController",
+		"MDTController",
+		"DispatchController",
+		"AccessPromptsController",
+		"JobsController",
+		"VehiclesController",
+		"PropertiesController",
+		"FurnitureController",
+		"EmergencyServicesController",
+		"StartMenuController",
+	}
+do
+	controllers[name]:Start()
+end
