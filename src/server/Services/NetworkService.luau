@@ -338,6 +338,38 @@ function NetworkService:Start()
 			}
 		end
 	)
+	self.context.Network:RegisterFunction("SetCustomRegistration", function(payload)
+		return type(payload) == "table"
+			and type(payload.VehicleId) == "string"
+			and type(payload.Registration) == "string"
+	end, function(player, payload, requestId)
+		local result, reason = self.context.Services
+			:Get("VehicleOwnershipService")
+			:SetCustomRegistration(player, payload.VehicleId, payload.Registration)
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result
+				then "Registration updated."
+				else "That registration could not be used.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction(
+		"GetCCTVCameras",
+		tablePayload,
+		function(player, _, requestId)
+			local cameras, reason = self.context.Services:Get("CCTVService"):Snapshot(player)
+			return {
+				Success = cameras ~= nil,
+				Code = if cameras then "OK" else reason,
+				Message = if cameras then "" else "CCTV is unavailable for this duty.",
+				Data = cameras,
+				RequestId = requestId,
+			}
+		end
+	)
 	self.context.Network:RegisterFunction(
 		"GetDispatchSnapshot",
 		tablePayload,

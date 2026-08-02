@@ -4,11 +4,11 @@ local SettingsValidator = require(script.Parent.SettingsValidator)
 local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 4
+ProfileSchema.CURRENT_VERSION = 5
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 4,
+		SchemaVersion = 5,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -18,6 +18,7 @@ function ProfileSchema.default(userId: number): any
 		Applications = {},
 		Qualifications = {},
 		GamepassCache = {},
+		TeamVehicleRegistrations = {},
 		Communities = {},
 		AuditMetadata = {},
 	}
@@ -65,6 +66,10 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 				}
 		end
 		data.SchemaVersion = 4
+	end
+	if data.SchemaVersion == 4 then
+		data.TeamVehicleRegistrations = data.TeamVehicleRegistrations or {}
+		data.SchemaVersion = 5
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

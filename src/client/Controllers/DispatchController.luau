@@ -121,6 +121,14 @@ function DispatchController:_mount()
 	close.Activated:Connect(function()
 		gui.Enabled = false
 	end)
+	local cctv = button(shell, "VIEW CCTV")
+	cctv.AnchorPoint = Vector2.new(1, 0)
+	cctv.Position = UDim2.new(1, -100, 0, 18)
+	cctv.Size = UDim2.fromOffset(88, 30)
+	cctv.BackgroundColor3 = C.Accent
+	cctv.Activated:Connect(function()
+		self.context.Controllers.CCTVController:Open()
+	end)
 
 	local callsTitle = label(shell, "ACTIVE CALLS", 10, true)
 	callsTitle.Position = UDim2.fromOffset(20, 72)

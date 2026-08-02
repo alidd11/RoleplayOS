@@ -5,6 +5,20 @@ function WarrantService:Init(context: any)
 	self.context = context
 end
 function WarrantService:Start() end
+function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { any })
+	local active = {}
+	local now = os.time()
+	for _, warrant in self.warrants do
+		if
+			warrant.CharacterId == characterId
+			and warrant.Active == true
+			and (warrant.ExpiresAt == nil or warrant.ExpiresAt > now)
+		then
+			table.insert(active, warrant)
+		end
+	end
+	return #active > 0, active
+end
 function WarrantService:Create(
 	actor: Player,
 	characterId: string,

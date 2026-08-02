@@ -13,12 +13,18 @@ function VehicleRecordService:Search(query: string): { any }
 			for _, character in session.Profile.Characters do
 				for _, vehicle in character.Vehicles do
 					if string.find(string.lower(vehicle.Registration), query, 1, true) then
+						local wanted = self.context.Services
+							:Get("WarrantService")
+							:HasActiveForCharacter(vehicle.OwnerCharacterId)
 						table.insert(results, {
 							VehicleId = vehicle.VehicleId,
 							Registration = vehicle.Registration,
 							DefinitionId = vehicle.DefinitionId,
 							OwnerCharacterId = vehicle.OwnerCharacterId,
-							Flags = {},
+							OwnerName = character.Identity.FirstName
+								.. " "
+								.. character.Identity.LastName,
+							Flags = if wanted then { "WANTED" } else {},
 						})
 					end
 				end

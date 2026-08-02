@@ -3,7 +3,7 @@
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 4,
+		SchemaVersion = 5,
 		Branding = {
 			GameName = "Emergency Response: Portsmouth",
 			ShowRoleplayOSMark = true,
@@ -105,16 +105,38 @@ local Config = {
 	Gamepasses = {
 		PremiumVehicles = {
 			Id = "PremiumVehicles",
-			GamepassId = 0,
+			GamepassId = 1935128985,
 			Name = "Premium Vehicles",
 			Description = "Unlocks the premium vehicle catalogue.",
 		},
 		ExtraCharacterSlot = {
 			Id = "ExtraCharacterSlot",
-			GamepassId = 0,
+			GamepassId = 1935374962,
 			Name = "Extra Character Slot",
 			Description = "Adds one civilian character slot.",
 		},
+		CustomRegistration = {
+			Id = "CustomRegistration",
+			GamepassId = 1932237647,
+			Name = "Custom Registration Plate",
+			Description = "Lets civilians choose a moderated registration for an owned vehicle.",
+		},
+	},
+	VehicleIdentity = {
+		MinimumRegistrationLength = 2,
+		MaximumRegistrationLength = 8,
+		PlatePartNames = { "RegistrationPlate", "NumberPlate", "LicencePlate", "LicensePlate" },
+	},
+	CCTV = {
+		CameraTag = "RoleplayOSCCTV",
+		MaximumCameras = 64,
+		ViewerDepartments = { "Control" },
+	},
+	ANPR = {
+		SensorTag = "RoleplayOSANPR",
+		CooldownSeconds = 15,
+		MaximumSensors = 128,
+		RoadsRoleId = "RoadsPolicingOfficer",
 	},
 	Departments = {
 		Police = {
@@ -697,7 +719,7 @@ local Config = {
 			Access = {
 				AccessType = "Gamepass",
 				Id = "PremiumVehicles",
-				GamepassId = 0,
+				GamepassId = 1935128985,
 				DisplayWhenLocked = true,
 			},
 		},
@@ -853,6 +875,8 @@ local Config = {
 			DispatchAssignUnit = { Capacity = 8, RefillPerSecond = 1 },
 			DispatchCloseCall = { Capacity = 4, RefillPerSecond = 0.5 },
 			DispatchSetUnitStatus = { Capacity = 6, RefillPerSecond = 1 },
+			SetCustomRegistration = { Capacity = 2, RefillPerSecond = 0.05 },
+			GetCCTVCameras = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
 			PhoneSendText = { Capacity = 5, RefillPerSecond = 0.5 },
 			PhonePlaceCall = { Capacity = 3, RefillPerSecond = 0.25 },
