@@ -9,16 +9,72 @@ local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 local DataService = { sessions = {}, running = false }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
+local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
 
 function DataService:Init(context: any)
 	self.context = context
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockCommunities = {}
+	self.mockRegistrations = {}
 	if not self.mock then
 		self.store = DataStoreService:GetDataStore(STORE_NAME)
 		self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
+		self.registrationStore = DataStoreService:GetDataStore(REGISTRATION_STORE_NAME)
 	end
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
+end
+
+function DataService:ReserveCustomRegistration(
+	registration: string,
+	userId: number,
+	vehicleId: string
+): (boolean, string?)
+	if self.mock then
+		local existing = self.mockRegistrations[registration]
+		if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
+			return false, "REGISTRATION_ALREADY_USED"
+		end
+		self.mockRegistrations[registration] = { UserId = userId, VehicleId = vehicleId }
+		return true, nil
+	end
+	local reserved = false
+	local ok = self:_retry(function()
+		return self.registrationStore:UpdateAsync(registration, function(existing)
+			if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
+				return existing
+			end
+			reserved = true
+			return { UserId = userId, VehicleId = vehicleId, UpdatedAt = os.time() }
+		end)
+	end)
+	if not ok then
+		return false, "REGISTRATION_STORE_UNAVAILABLE"
+	end
+	return reserved, if reserved then nil else "REGISTRATION_ALREADY_USED"
+end
+
+function DataService:ReleaseCustomRegistration(
+	registration: string,
+	userId: number,
+	vehicleId: string
+)
+	if self.mock then
+		local existing = self.mockRegistrations[registration]
+		if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
+			self.mockRegistrations[registration] = nil
+		end
+		return
+	end
+	task.spawn(function()
+		self:_retry(function()
+			return self.registrationStore:UpdateAsync(registration, function(existing)
+				if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
+					return nil
+				end
+				return existing
+			end)
+		end)
+	end)
 end
 
 function DataService:GetCommunity(communityId: string): (any?, string?)

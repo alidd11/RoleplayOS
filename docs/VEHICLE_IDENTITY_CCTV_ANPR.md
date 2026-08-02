@@ -4,7 +4,7 @@ Every purchased vehicle receives one generated registration when its persistent 
 
 Spawned models carry server-authored vehicle, registration and owner attributes. Existing parts named `RegistrationPlate`, `NumberPlate`, `LicencePlate` or `LicensePlate` receive the plate display. If a model has none, RoleplayOS adds lightweight welded front and rear plates.
 
-The Custom Registration Plate pass is `1932237647`. Custom values are upper-cased, restricted to letters, numbers and spaces, length-limited, filtered with Roblox `TextService`, rejected if filtering changes the value, checked against loaded vehicle records and audited. Clients cannot assign a registration directly. Production deployments should add a persistent global registration reservation index before supporting multiple places that share vehicle ownership.
+The Custom Registration Plate pass is `1932237647`. Custom values are upper-cased, restricted to letters, numbers and spaces, length-limited, filtered with Roblox `TextService`, rejected if filtering changes the value, atomically reserved in a dedicated DataStore and audited. The reservation prevents two live servers from accepting the same custom plate. Clients cannot assign a registration directly.
 
 Tag the lens or view-origin `BasePart` of a CCTV model with `RoleplayOSCCTV`. Set `CameraId` to a stable unique ID and `DisplayName` to the control-room label. Control duty can request the bounded server camera list and use the dispatch console's **View CCTV** action. The client receives serialised positions rather than Instances and exits back to the normal Roblox camera.
 

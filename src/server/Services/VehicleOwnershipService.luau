@@ -118,10 +118,23 @@ function VehicleOwnershipService:SetCustomRegistration(
 	if existing and existing.VehicleId ~= vehicle.VehicleId then
 		return nil, "REGISTRATION_ALREADY_USED"
 	end
+	local reserved, reserveReason = self.context.Services
+		:Get("DataService")
+		:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
+	if not reserved then
+		return nil, reserveReason
+	end
+	local previousRegistration = vehicle.Registration
+	local previousWasCustom = vehicle.CustomRegistration == true
 	self.registrations[vehicle.Registration] = nil
 	vehicle.Registration = registration
 	vehicle.CustomRegistration = true
 	self.registrations[registration] = true
+	if previousWasCustom and previousRegistration ~= registration then
+		self.context.Services
+			:Get("DataService")
+			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
+	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
