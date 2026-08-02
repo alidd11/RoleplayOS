@@ -488,8 +488,19 @@ function PhoneController:Start()
 	table.insert(
 		self.connections,
 		self.context.Events.CharacterChanged.Event:Connect(function()
-			self.launcher.Visible = true
+			self.hasCharacter = true
+			self.launcher.Visible = not self.vehicleMode
 			self:Refresh()
+		end)
+	)
+	table.insert(
+		self.connections,
+		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
+			self.vehicleMode = active
+			self.launcher.Visible = self.hasCharacter == true and not active
+			if active then
+				self.body.Visible = false
+			end
 		end)
 	)
 end

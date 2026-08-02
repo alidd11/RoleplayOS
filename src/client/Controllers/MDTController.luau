@@ -257,6 +257,18 @@ function MDTController:Start()
 			self:RefreshAccess()
 		end)
 	)
+	table.insert(
+		self.connections,
+		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
+			self.launcher.AnchorPoint = if active then Vector2.new(0, 1) else Vector2.new(0, 0.5)
+			self.launcher.Position = if active
+				then UDim2.new(0, 18, 1, -50)
+				else UDim2.new(0, 18, 0.62, 0)
+			if active then
+				self.shell.Visible = false
+			end
+		end)
+	)
 	self:RefreshAccess()
 end
 

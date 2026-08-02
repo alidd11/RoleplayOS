@@ -6,6 +6,7 @@ local events = {
 	SettingsChanged = Instance.new("BindableEvent"),
 	CharacterChanged = Instance.new("BindableEvent"),
 	DutyChanged = Instance.new("BindableEvent"),
+	VehicleModeChanged = Instance.new("BindableEvent"),
 }
 local controllers = {
 	NetworkController = require(script.Controllers.NetworkController),
@@ -21,6 +22,7 @@ local controllers = {
 	DispatchController = require(script.Controllers.DispatchController),
 	EmergencyAlertController = require(script.Controllers.EmergencyAlertController),
 	NeedsController = require(script.Controllers.NeedsController),
+	VehicleUIController = require(script.Controllers.VehicleUIController),
 	CommunityController = require(script.Controllers.CommunityController),
 	DutyController = require(script.Controllers.DutyController),
 	StartMenuController = require(script.Controllers.StartMenuController),
@@ -46,6 +48,7 @@ for _, name in
 		"DispatchController",
 		"EmergencyAlertController",
 		"NeedsController",
+		"VehicleUIController",
 		"CommunityController",
 		"DutyController",
 		"AccessPromptsController",
@@ -74,6 +77,7 @@ for _, name in
 		"DispatchController",
 		"EmergencyAlertController",
 		"NeedsController",
+		"VehicleUIController",
 		"CommunityController",
 		"DutyController",
 		"AccessPromptsController",

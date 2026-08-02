@@ -60,6 +60,7 @@ function MinimapController:_mount()
 	shell.BackgroundColor3 = C.Surface
 	shell.BorderSizePixel = 0
 	shell.Parent = gui
+	self.shell = shell
 	corner(shell, 13)
 	local shellStroke = Instance.new("UIStroke")
 	shellStroke.Color = Color3.fromRGB(52, 66, 88)
@@ -241,6 +242,22 @@ function MinimapController:Start()
 		)
 	end
 	self:_rebuild()
+	table.insert(
+		self.connections,
+		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
+			local viewportWidth = if workspace.CurrentCamera
+				then workspace.CurrentCamera.ViewportSize.X
+				else 1280
+			self.shell.Visible = not active or viewportWidth >= 760
+			self.shell.AnchorPoint = if active then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
+			self.shell.Position = if active
+				then UDim2.new(0, 18, 0.55, 0)
+				else UDim2.new(1, -18, 0.5, 0)
+			self.shell.Size = if active
+				then UDim2.fromOffset(150, 170)
+				else UDim2.fromOffset(184, 208)
+		end)
+	)
 	self.running = true
 	task.spawn(function()
 		while self.running do

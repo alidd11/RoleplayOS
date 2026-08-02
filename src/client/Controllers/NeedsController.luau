@@ -56,6 +56,7 @@ function NeedsController:Start()
 	hud.Parent = gui
 	self.stamina = bar(hud, "STAMINA", Color3.fromRGB(67, 175, 255), 0)
 	self.hunger = bar(hud, "HUNGER", Color3.fromRGB(255, 174, 66), 0.52)
+	self.hud = hud
 	local blur = Instance.new("BlurEffect")
 	blur.Name = "RoleplayOSHungerBlur"
 	blur.Size = 0
@@ -66,6 +67,16 @@ function NeedsController:Start()
 		self.stamina.Fill.Size = UDim2.fromScale(math.clamp(state.Stamina / 100, 0, 1), 1)
 		self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
 		self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
+	end)
+	self.vehicleConnection = self.context.Events.VehicleModeChanged.Event:Connect(function(active)
+		local viewportWidth = if workspace.CurrentCamera
+			then workspace.CurrentCamera.ViewportSize.X
+			else 1280
+		self.hud.AnchorPoint = if active then Vector2.new(0, 1) else Vector2.new(0.5, 1)
+		self.hud.Position = if active then UDim2.new(0, 18, 1, -24) else UDim2.new(0.5, 0, 1, -64)
+		self.hud.Size = if active
+			then UDim2.fromOffset(if viewportWidth < 760 then 170 else 220, 13)
+			else UDim2.fromOffset(270, 15)
 	end)
 	ContextActionService:BindAction("RoleplayOSSprint", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin or inputState == Enum.UserInputState.End then
@@ -85,6 +96,9 @@ function NeedsController:Destroy()
 	ContextActionService:UnbindAction("RoleplayOSSprint")
 	if self.connection then
 		self.connection:Disconnect()
+	end
+	if self.vehicleConnection then
+		self.vehicleConnection:Disconnect()
 	end
 	if self.blur then
 		self.blur:Destroy()

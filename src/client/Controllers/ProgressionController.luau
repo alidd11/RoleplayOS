@@ -82,6 +82,7 @@ function ProgressionController:_mount()
 	card.BorderSizePixel = 0
 	card.Text = ""
 	card.Parent = gui
+	self.card = card
 	corner(card, 11)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
@@ -225,6 +226,23 @@ function ProgressionController:Start()
 		self.connections,
 		self.context.Events.CharacterChanged.Event:Connect(function()
 			self:Refresh()
+		end)
+	)
+	table.insert(
+		self.connections,
+		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
+			local viewportWidth = if workspace.CurrentCamera
+				then workspace.CurrentCamera.ViewportSize.X
+				else 1280
+			self.panel.Visible = false
+			self.expanded = false
+			self.card.AnchorPoint = if active then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
+			self.card.Position = if active
+				then UDim2.new(0.5, 0, 0, 18)
+				else UDim2.new(0.5, 0, 1, -88)
+			self.card.Size = if active
+				then UDim2.fromOffset(if viewportWidth < 760 then 220 else 280, 48)
+				else UDim2.fromOffset(330, 56)
 		end)
 	)
 	self:Refresh()
