@@ -357,6 +357,19 @@ function NetworkService:Start()
 		}
 	end)
 	self.context.Network:RegisterFunction(
+		"GetOwnedVehicles",
+		tablePayload,
+		function(player, _, requestId)
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = self.context.Services:Get("VehicleOwnershipService"):List(player),
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
 		"GetCCTVCameras",
 		tablePayload,
 		function(player, _, requestId)

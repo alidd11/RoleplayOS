@@ -877,6 +877,7 @@ local Config = {
 			DispatchSetUnitStatus = { Capacity = 6, RefillPerSecond = 1 },
 			SetCustomRegistration = { Capacity = 2, RefillPerSecond = 0.05 },
 			GetCCTVCameras = { Capacity = 4, RefillPerSecond = 0.5 },
+			GetOwnedVehicles = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
 			PhoneSendText = { Capacity = 5, RefillPerSecond = 0.5 },
 			PhonePlaceCall = { Capacity = 3, RefillPerSecond = 0.25 },

@@ -45,6 +45,24 @@ function VehicleOwnershipService:GetByRegistration(registration: string): (any?,
 	return nil, nil
 end
 
+function VehicleOwnershipService:List(player: Player): { any }
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session
+		and session.ActiveCharacterId
+		and session.Profile.Characters[session.ActiveCharacterId]
+	local result = {}
+	for _, vehicle in if character then character.Vehicles else {} do
+		local definition = self.context.Configuration.Vehicles[vehicle.DefinitionId]
+		table.insert(result, {
+			VehicleId = vehicle.VehicleId,
+			Name = if definition then definition.Name else vehicle.DefinitionId,
+			Registration = vehicle.Registration,
+			CustomRegistration = vehicle.CustomRegistration == true,
+		})
+	end
+	return result
+end
+
 function VehicleOwnershipService:GetOrCreateTeamRegistration(
 	player: Player,
 	teamName: string,
