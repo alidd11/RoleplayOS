@@ -1,0 +1,34 @@
+{
+  "name": "RoleplayOS Acceptance",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "RoleplayOS": {
+        "$className": "Folder",
+        "Shared": { "$path": "src/shared/Utility" },
+        "Config": { "$path": "src/shared/Config" },
+        "Types": { "$path": "src/shared/Types" },
+        "Network": { "$path": "src/shared/Network" }
+      }
+    },
+    "ServerScriptService": {
+      "RoleplayOS": {
+        "$className": "Folder",
+        "Services": { "$path": "src/server/Services" },
+        "Systems": { "$path": "src/server/Systems" },
+        "Bootstrap": { "$path": "src/server/Bootstrap.server.luau" }
+      },
+      "RoleplayOSAcceptance": {
+        "$path": "tests"
+      }
+    },
+    "ServerStorage": {
+      "RoleplayOSAssets": { "$path": "server-assets" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "RoleplayOSClient": { "$path": "src/client" }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "RoleplayOSRealBaseplate",
+  "tree": {
+    "$className": "DataModel",
+    "$ignoreUnknownInstances": true,
+    "ReplicatedStorage": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOS": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Shared": { "$path": "src/shared/Utility" },
+        "Config": { "$path": "src/shared/Config" },
+        "Types": { "$path": "src/shared/Types" },
+        "Network": { "$path": "src/shared/Network" }
+      }
+    },
+    "ServerScriptService": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOS": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Services": { "$path": "src/server/Services" },
+        "Systems": { "$path": "src/server/Systems" },
+        "Bootstrap": { "$path": "src/server/Bootstrap.server.luau" }
+      }
+    },
+    "ServerStorage": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOSAssets": {
+        "$path": "server-assets",
+        "$ignoreUnknownInstances": true
+      }
+    },
+    "StarterPlayer": {
+      "$ignoreUnknownInstances": true,
+      "StarterPlayerScripts": {
+        "$ignoreUnknownInstances": true,
+        "RoleplayOSClient": {
+          "$path": "src/client",
+          "$ignoreUnknownInstances": true
+        }
+      }
+    }
+  }
+}

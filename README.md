@@ -15,6 +15,8 @@ Core gameplay decisions are made on the server. Clients request actions and rece
 
 See [Architecture](docs/ARCHITECTURE.md), [Access control](docs/ACCESS_CONTROL.md), [Roblox groups](docs/ROBLOX_GROUPS.md), [Interface system](docs/UI_SYSTEM.md), [UX benchmark](docs/UX_BENCHMARK.md), [Advanced settings](docs/SETTINGS.md), [Progression](docs/PROGRESSION.md), [Spawning](docs/SPAWNING.md), [Development](docs/DEVELOPMENT.md), [Testing](docs/TESTING.md), and the [Roadmap](docs/ROADMAP.md). This is an engineering foundation with a functional premium start experience, not a production-ready game.
 
+To connect RoleplayOS to an existing map, follow [Real baseplate deployment](docs/REAL_BASEPLATE_DEPLOYMENT.md). Its migration-specific Rojo project preserves the map and unrelated Studio content.
+
 ## Repository layout
 
 - `src/shared`: replicated types, safe configuration and pure logic

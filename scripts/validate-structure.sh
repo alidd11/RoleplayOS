@@ -6,6 +6,8 @@ required=(
   src/server/Services/DataService.luau src/server/Services/EconomyService.luau
   src/shared/Types/DomainTypes.luau src/shared/Config/Config.luau
   docs/ARCHITECTURE.md docs/SECURITY.md tests/run.luau
+  real-baseplate.project.json docs/REAL_BASEPLATE_DEPLOYMENT.md
+  scripts/validate-deployment.py
 )
 
 for path in "${required[@]}"; do
