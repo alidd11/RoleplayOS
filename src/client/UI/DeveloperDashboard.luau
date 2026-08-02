@@ -99,6 +99,14 @@ local function clear(container: Instance)
 	end
 end
 
+local function elevate(container: Instance, zIndex: number)
+	for _, descendant in container:GetDescendants() do
+		if descendant:IsA("GuiObject") then
+			descendant.ZIndex = zIndex
+		end
+	end
+end
+
 local function card(parent: Instance, height: number): Frame
 	local item = Instance.new("Frame")
 	item.BackgroundColor3 = COLOURS.Surface
@@ -137,7 +145,8 @@ function App.mount(context: any): ScreenGui
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOS"
 	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
+	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	gui.ClipToDeviceSafeArea = true
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
@@ -296,6 +305,7 @@ function App.mount(context: any): ScreenGui
 				create.Text = "Create character"
 			end
 		end)
+		elevate(modal, 22)
 		modal.Size = UDim2.fromOffset(438, 442)
 		modal.BackgroundTransparency = 1
 		TweenService
@@ -364,6 +374,7 @@ function App.mount(context: any): ScreenGui
 		cancel.Activated:Connect(function()
 			shade:Destroy()
 		end)
+		elevate(modal, 22)
 	end
 
 	local renderPlay: () -> ()
