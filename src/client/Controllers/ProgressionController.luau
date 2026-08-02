@@ -75,39 +75,39 @@ function ProgressionController:_mount()
 	local card = Instance.new("TextButton")
 	card.Name = "ProgressionCard"
 	card.AutoButtonColor = false
-	card.AnchorPoint = Vector2.new(0.5, 0)
-	card.Position = UDim2.new(0.5, 0, 0, 16)
-	card.Size = UDim2.fromOffset(390, 78)
+	card.AnchorPoint = Vector2.new(0.5, 1)
+	card.Position = UDim2.new(0.5, 0, 1, -88)
+	card.Size = UDim2.fromOffset(330, 56)
 	card.BackgroundColor3 = C.Surface
 	card.BorderSizePixel = 0
 	card.Text = ""
 	card.Parent = gui
-	corner(card, 13)
+	corner(card, 11)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
 	stroke.Transparency = 0.15
 	stroke.Parent = card
 
 	self.teamLabel = label(card, "PUBLIC ROLE", 10, true)
-	self.teamLabel.Position = UDim2.fromOffset(18, 10)
+	self.teamLabel.Position = UDim2.fromOffset(14, 6)
 	self.teamLabel.Size = UDim2.new(1, -120, 0, 17)
 	self.teamLabel.TextColor3 = C.Accent
-	self.levelLabel = label(card, "Level 1", 18, true)
-	self.levelLabel.Position = UDim2.fromOffset(18, 28)
-	self.levelLabel.Size = UDim2.fromOffset(120, 24)
+	self.levelLabel = label(card, "Level 1", 15, true)
+	self.levelLabel.Position = UDim2.fromOffset(14, 20)
+	self.levelLabel.Size = UDim2.fromOffset(120, 20)
 	self.xpLabel = label(card, "0 / 100 XP", 11, false)
 	self.xpLabel.AnchorPoint = Vector2.new(1, 0)
-	self.xpLabel.Position = UDim2.new(1, -18, 0, 34)
+	self.xpLabel.Position = UDim2.new(1, -14, 0, 22)
 	self.xpLabel.Size = UDim2.fromOffset(180, 18)
 	self.xpLabel.TextColor3 = C.Muted
 	self.xpLabel.TextXAlignment = Enum.TextXAlignment.Right
-	self.fill = progressBar(card, UDim2.new(0, 18, 1, -16), UDim2.new(1, -36, 0, 6))
+	self.fill = progressBar(card, UDim2.new(0, 14, 1, -10), UDim2.new(1, -28, 0, 4))
 
 	local panel = Instance.new("Frame")
 	panel.Name = "RoleCatalogue"
-	panel.AnchorPoint = Vector2.new(0.5, 0)
-	panel.Position = UDim2.new(0.5, 0, 0, 102)
-	panel.Size = UDim2.fromOffset(390, 420)
+	panel.AnchorPoint = Vector2.new(0.5, 1)
+	panel.Position = UDim2.new(0.5, 0, 1, -152)
+	panel.Size = UDim2.fromOffset(360, 360)
 	panel.BackgroundColor3 = C.Surface
 	panel.BorderSizePixel = 0
 	panel.Visible = false

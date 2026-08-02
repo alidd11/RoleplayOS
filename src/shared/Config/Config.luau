@@ -88,6 +88,15 @@ local Config = {
 		MaximumRewardIds = 500,
 		DefaultTaskXP = 25,
 	},
+	Minimap = {
+		Enabled = true,
+		BoundsTag = "RoleplayOSMinimapBounds",
+		RoadTag = "RoleplayOSMinimapRoad",
+		PointTag = "RoleplayOSMinimapPOI",
+		UpdateHz = 8,
+		MaximumRoads = 300,
+		MaximumPoints = 80,
+	},
 	Gamepasses = {
 		PremiumVehicles = {
 			Id = "PremiumVehicles",
