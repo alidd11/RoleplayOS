@@ -5,6 +5,8 @@ local CollectionService = game:GetService("CollectionService")
 
 local ContentValidationService = {
 	report = { Ready = {}, Missing = {}, Invalid = {}, Discovered = {}, WorldReady = {} },
+	assetIdentities = {},
+	replacements = {},
 }
 
 local forbiddenClasses = {
@@ -103,6 +105,77 @@ end
 function ContentValidationService:Init(context: any)
 	self.context = context
 	self.report = { Ready = {}, Missing = {}, Invalid = {}, Discovered = {}, WorldReady = {} }
+	self.assetIdentities = {}
+	self.replacements = {}
+end
+
+function ContentValidationService:_registerIdentity(root: Instance, fallbackId: string): boolean
+	local rawId = root:GetAttribute("RoleplayOSAssetId")
+	local assetId = if type(rawId) == "string" and rawId ~= "" then rawId else fallbackId
+	if type(assetId) ~= "string" or assetId == "" or #assetId > 80 then
+		table.insert(self.report.Invalid, "Asset:" .. root:GetFullName() .. ":INVALID_ASSET_ID")
+		return false
+	end
+	local existing = self.assetIdentities[assetId]
+	if existing and existing ~= root then
+		table.insert(
+			self.report.Invalid,
+			"Asset:"
+				.. assetId
+				.. ":DUPLICATE_ID:"
+				.. existing:GetFullName()
+				.. ":"
+				.. root:GetFullName()
+		)
+		return false
+	end
+	self.assetIdentities[assetId] = root
+	local replaced = root:GetAttribute("RoleplayOSReplacesAssetId")
+	if replaced ~= nil then
+		if
+			type(replaced) ~= "string"
+			or replaced == ""
+			or replaced == assetId
+			or #replaced > 80
+		then
+			table.insert(self.report.Invalid, "Asset:" .. assetId .. ":INVALID_REPLACEMENT_ID")
+			return false
+		end
+		self.replacements[assetId] = replaced
+	end
+	return true
+end
+
+function ContentValidationService:_verifyReplacements()
+	for assetId, replacedId in self.replacements do
+		if self.assetIdentities[replacedId] then
+			table.insert(
+				self.report.Invalid,
+				"Asset:" .. assetId .. ":OBSOLETE_REPLACED_ASSET_STILL_PRESENT:" .. replacedId
+			)
+		end
+	end
+end
+
+function ContentValidationService:_indexUnmanagedIdentities(roots: { Instance })
+	for _, container in roots do
+		for _, instance in container:GetDescendants() do
+			local rawId = instance:GetAttribute("RoleplayOSAssetId")
+			if type(rawId) == "string" and rawId ~= "" and not self.assetIdentities[rawId] then
+				if self:_registerIdentity(instance, rawId) then
+					local issue = "Asset:"
+						.. rawId
+						.. ":UNMANAGED_ASSET_ID:"
+						.. instance:GetFullName()
+					if self.context.Configuration.Framework.Environment == "Production" then
+						table.insert(self.report.Invalid, issue)
+					else
+						table.insert(self.report.Missing, issue)
+					end
+				end
+			end
+		end
+	end
 end
 
 local function worldQualityIssue(root: Instance, configuration: any): string?
@@ -138,6 +211,7 @@ end
 function ContentValidationService:_checkWorldAssets()
 	local quality = self.context.Configuration.ContentQuality
 	local foundKinds = {}
+	local worldRoot = workspace:FindFirstChild(quality.WorldAssetRootName)
 	for _, root in CollectionService:GetTagged(quality.WorldAssetTag) do
 		if not root:IsDescendantOf(workspace) then
 			table.insert(self.report.Invalid, "WorldAsset:" .. root.Name .. ":NOT_IN_WORKSPACE")
@@ -162,6 +236,29 @@ function ContentValidationService:_checkWorldAssets()
 				self.report.Invalid,
 				"WorldAsset:" .. root:GetFullName() .. ":UNKNOWN_KIND"
 			)
+			continue
+		end
+		if
+			not worldRoot
+			or not root.Parent
+			or root.Parent.Name ~= kind
+			or root.Parent.Parent ~= worldRoot
+		then
+			table.insert(
+				self.report.Invalid,
+				"WorldAsset:" .. root:GetFullName() .. ":WRONG_WORLD_ASSET_FOLDER"
+			)
+			continue
+		end
+		local rawId = root:GetAttribute("RoleplayOSAssetId")
+		if type(rawId) ~= "string" or rawId == "" then
+			table.insert(
+				self.report.Invalid,
+				"WorldAsset:" .. root:GetFullName() .. ":ASSET_ID_REQUIRED"
+			)
+			continue
+		end
+		if not self:_registerIdentity(root, rawId) then
 			continue
 		end
 		foundKinds[kind] = true
@@ -374,6 +471,11 @@ function ContentValidationService:_check(
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":WRONG_CLASS")
 		return
 	end
+	local declaredId = template:GetAttribute("RoleplayOSAssetId")
+	if declaredId ~= nil and declaredId ~= id then
+		table.insert(self.report.Invalid, kind .. ":" .. id .. ":CONFIG_ID_MISMATCH")
+		return
+	end
 	local unsafe = unsafeDescendant(template)
 	if unsafe then
 		table.insert(
@@ -385,6 +487,9 @@ function ContentValidationService:_check(
 	local qualityProblem = qualityIssue(template, expectedClass, self.context.Configuration)
 	if qualityProblem then
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":" .. qualityProblem)
+		return
+	end
+	if not self:_registerIdentity(template, id) then
 		return
 	end
 	if expectedClass == "Model" and not template:FindFirstChildWhichIsA("VehicleSeat", true) then
@@ -403,6 +508,19 @@ function ContentValidationService:_check(
 end
 
 function ContentValidationService:Start()
+	local quality = self.context.Configuration.ContentQuality
+	local quarantine = workspace:FindFirstChild(quality.QuarantineRootName)
+		or ServerStorage:FindFirstChild(quality.QuarantineRootName)
+	if quarantine and #quarantine:GetDescendants() > 0 then
+		local issue = "Quarantine:"
+			.. quarantine:GetFullName()
+			.. ":OBSOLETE_ASSETS_MUST_BE_DELETED"
+		if self.context.Configuration.Framework.Environment == "Production" then
+			table.insert(self.report.Invalid, issue)
+		else
+			table.insert(self.report.Missing, issue)
+		end
+	end
 	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 	if not assets then
 		self.context.Logger:Warning("RoleplayOS content root is missing", {})
@@ -416,6 +534,19 @@ function ContentValidationService:Start()
 		end
 	end
 	self:_checkWorldAssets()
+	local identityRoots = {}
+	local worldRoot = workspace:FindFirstChild(quality.WorldAssetRootName)
+	if worldRoot then
+		table.insert(identityRoots, worldRoot)
+	end
+	if quarantine then
+		table.insert(identityRoots, quarantine)
+	end
+	if assets then
+		table.insert(identityRoots, assets)
+	end
+	self:_indexUnmanagedIdentities(identityRoots)
+	self:_verifyReplacements()
 	self.context.Logger:Info("RoleplayOS content audit complete", {
 		Ready = #self.report.Ready,
 		Missing = #self.report.Missing,
@@ -450,6 +581,8 @@ function ContentValidationService:Destroy()
 	table.clear(self.report.Invalid)
 	table.clear(self.report.Discovered)
 	table.clear(self.report.WorldReady)
+	table.clear(self.assetIdentities)
+	table.clear(self.replacements)
 end
 
 return ContentValidationService

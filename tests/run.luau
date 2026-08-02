@@ -184,7 +184,7 @@ end)
 H.test("migration reconciles missing fields", function()
 	local profile = ProfileSchema.migrate({ SchemaVersion = 0 }, 42)
 	H.expect(
-		profile.SchemaVersion == 4
+		profile.SchemaVersion == Config.Framework.SchemaVersion
 			and profile.UserId == 42
 			and type(profile.Characters) == "table"
 			and type(profile.Communities) == "table",

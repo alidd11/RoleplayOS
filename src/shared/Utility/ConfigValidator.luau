@@ -7,6 +7,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	for _, section in
 		{
 			"Framework",
+			"ContentQuality",
 			"ExperienceAccess",
 			"Characters",
 			"Economy",
@@ -29,6 +30,67 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if type(config[section]) ~= "table" then
 			table.insert(errors, "Missing configuration section: " .. section)
 		end
+	end
+	local quality = config.ContentQuality or {}
+	if
+		type(quality.RequireCertification) ~= "boolean"
+		or type(quality.CertificationVersion) ~= "number"
+		or quality.CertificationVersion < 1
+		or type(quality.WorldAssetTag) ~= "string"
+		or quality.WorldAssetTag == ""
+		or type(quality.WorldAssetRootName) ~= "string"
+		or quality.WorldAssetRootName == ""
+		or type(quality.QuarantineRootName) ~= "string"
+		or quality.QuarantineRootName == ""
+	then
+		table.insert(errors, "Invalid content certification configuration")
+	end
+	local requiredKinds = {}
+	if
+		type(quality.RequiredWorldAssetKinds) ~= "table"
+		or #quality.RequiredWorldAssetKinds == 0
+	then
+		table.insert(errors, "World asset kinds are required")
+	else
+		for _, kind in quality.RequiredWorldAssetKinds do
+			if type(kind) ~= "string" or kind == "" or requiredKinds[kind] then
+				table.insert(errors, "Invalid or duplicate world asset kind")
+			else
+				requiredKinds[kind] = true
+			end
+		end
+	end
+	for _, field in
+		{
+			"MaximumVehicleParts",
+			"MaximumToolParts",
+			"MaximumWorldAssetParts",
+			"MaximumVehicleDescendants",
+			"MaximumToolDescendants",
+			"MaximumWorldAssetDescendants",
+			"MinimumVehicleExtentStuds",
+			"MaximumVehicleExtentStuds",
+			"MinimumWorldAssetExtentStuds",
+			"MaximumWorldAssetExtentStuds",
+		}
+	do
+		if type(quality[field]) ~= "number" or quality[field] <= 0 then
+			table.insert(errors, "Invalid content quality field: " .. field)
+		end
+	end
+	if
+		type(quality.MinimumVehicleExtentStuds) == "number"
+		and type(quality.MaximumVehicleExtentStuds) == "number"
+		and quality.MinimumVehicleExtentStuds >= quality.MaximumVehicleExtentStuds
+	then
+		table.insert(errors, "Invalid vehicle content extent range")
+	end
+	if
+		type(quality.MinimumWorldAssetExtentStuds) == "number"
+		and type(quality.MaximumWorldAssetExtentStuds) == "number"
+		and quality.MinimumWorldAssetExtentStuds >= quality.MaximumWorldAssetExtentStuds
+	then
+		table.insert(errors, "Invalid world asset extent range")
 	end
 	for sectionName, section in config do
 		if
@@ -91,6 +153,42 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	do
 		if type(vehicleSpawning[field]) ~= "number" or vehicleSpawning[field] <= 0 then
 			table.insert(errors, "Invalid vehicle spawning field: " .. field)
+		end
+	end
+	local network = config.Network or {}
+	if
+		type(network.MaximumPayloadBytes) ~= "number"
+		or network.MaximumPayloadBytes < 256
+		or type(network.MaximumDepth) ~= "number"
+		or network.MaximumDepth < 1
+		or type(network.MaximumNodes) ~= "number"
+		or network.MaximumNodes < 1
+		or type(network.MaximumStringBytes) ~= "number"
+		or network.MaximumStringBytes < 1
+		or network.MaximumStringBytes > network.MaximumPayloadBytes
+		or type(network.MaximumConcurrentRequests) ~= "number"
+		or network.MaximumConcurrentRequests < 1
+		or type(network.GlobalCapacity) ~= "number"
+		or network.GlobalCapacity < 1
+		or type(network.GlobalRefillPerSecond) ~= "number"
+		or network.GlobalRefillPerSecond <= 0
+	then
+		table.insert(errors, "Invalid global network safety configuration")
+	end
+	if type(network.Endpoints) ~= "table" then
+		table.insert(errors, "Network endpoint rate limits are required")
+	else
+		for name, limits in network.Endpoints do
+			if
+				type(name) ~= "string"
+				or type(limits) ~= "table"
+				or type(limits.Capacity) ~= "number"
+				or limits.Capacity < 1
+				or type(limits.RefillPerSecond) ~= "number"
+				or limits.RefillPerSecond <= 0
+			then
+				table.insert(errors, "Invalid endpoint rate limit: " .. tostring(name))
+			end
 		end
 	end
 	if

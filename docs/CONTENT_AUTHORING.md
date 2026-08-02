@@ -13,6 +13,8 @@ RoleplayOS deliberately distinguishes functional staging fallbacks from producti
 | `RoleplayOSAssetSource` | String | Creator/source and licence or “Universal Projects original”. Never claim ownership of an imported asset. |
 | `RoleplayOSRealWorldReference` | String | The specific UK object/vehicle/reference set used for proportions, markings and operation. |
 | `RoleplayOSReviewedBy` | String | Internal reviewer or review ticket identifier. |
+| `RoleplayOSAssetId` | String | Stable unique identity. Required for world assets and recommended for every template. |
+| `RoleplayOSReplacesAssetId` | String | Set only on a replacement; startup rejects the replacement while the obsolete asset ID still exists. |
 
 Certification means all of the following have been checked:
 
@@ -101,10 +103,30 @@ Visible world artwork is certified separately from invisible functional sensors.
 same source, reference, reviewer, certification-version and certification attributes as
 vehicle and Tool templates. Imported scripts and interaction objects remain forbidden.
 
+Every visible world model must be a direct child of its kind folder:
+
+```text
+Workspace/RoleplayOSWorldAssets
+├── ANPRCamera
+├── CCTVCamera
+├── CustodyFurniture
+├── DealershipNPC
+├── DispatchFurniture
+└── SpeedCamera
+```
+
+For example, an ANPR camera with `RoleplayOSAssetKind = "ANPRCamera"` must be directly
+inside `Workspace/RoleplayOSWorldAssets/ANPRCamera`. A tagged model elsewhere is rejected.
+
 Do not tag invisible trigger volumes as visual assets. Keep the functional tag on the
 invisible volume and the certification tag on its visible shell. A replacement is complete
 only after the old shell has been removed, the new shell is in the correct world folder,
 and the certification ledger in `docs/WORLD_ASSET_CERTIFICATION.md` has been updated.
+
+Quarantine is temporary. Development reports any descendants under
+`RoleplayOSAssetQuarantine`; Production refuses to start until the quarantine is empty or
+deleted. When a new root uses `RoleplayOSReplacesAssetId`, the old stable ID must no longer
+exist anywhere in registered content.
 
 Folder placement does not configure world interaction points. Use CollectionService tags and stable attributes:
 

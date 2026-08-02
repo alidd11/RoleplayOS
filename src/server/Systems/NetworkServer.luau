@@ -46,7 +46,8 @@ function NetworkServer:RegisterFunction(
 	local remote = Instance.new("RemoteFunction")
 	remote.Name = name
 	remote.Parent = self.folder
-	local limits = self.config.Endpoints[name] or { Capacity = 2, RefillPerSecond = 0.5 }
+	local limits = self.config.Endpoints[name]
+	assert(limits ~= nil, "Explicit rate limit required for endpoint: " .. name)
 	local limiter = RateLimiter.new(limits.Capacity, limits.RefillPerSecond)
 	self.limiters[name] = limiter
 	self.endpoints[name] = remote

@@ -50,6 +50,8 @@ local Config = {
 		RequireCertification = true,
 		CertificationVersion = 1,
 		WorldAssetTag = "RoleplayOSWorldAsset",
+		WorldAssetRootName = "RoleplayOSWorldAssets",
+		QuarantineRootName = "RoleplayOSAssetQuarantine",
 		RequiredWorldAssetKinds = {
 			"ANPRCamera",
 			"CCTVCamera",
@@ -1239,7 +1241,6 @@ local Config = {
 			CreateCharacter = { Capacity = 2, RefillPerSecond = 0.1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
-			EconomyTransfer = { Capacity = 3, RefillPerSecond = 0.2 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
 			MDTRevokeWarrant = { Capacity = 2, RefillPerSecond = 0.05 },

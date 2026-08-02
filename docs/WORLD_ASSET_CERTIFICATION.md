@@ -25,7 +25,9 @@ Runtime attributes alone are not sufficient proof.
    desktop, mobile, gamepad and relevant VR/vehicle views.
 5. Replace the previous visible shell in its department/world folder. Preserve RoleplayOS
    sensor tags only on the intended invisible functional volumes.
-6. Delete the obsolete shell after confirming no references depend on it. Record the new
+6. Give the replacement a new stable `RoleplayOSAssetId` and set
+   `RoleplayOSReplacesAssetId` to the old ID. Delete the obsolete shell after confirming no
+   references depend on it; the runtime audit rejects both IDs being present together. Record the new
    Studio path and reviewer here, then add `RoleplayOSWorldAsset` and the required
    certification attributes to the new top-level model.
 

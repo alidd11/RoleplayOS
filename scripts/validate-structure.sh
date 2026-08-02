@@ -8,10 +8,12 @@ required=(
   docs/ARCHITECTURE.md docs/SECURITY.md tests/run.luau
   real-baseplate.project.json docs/REAL_BASEPLATE_DEPLOYMENT.md
   scripts/validate-deployment.py
+  scripts/validate-network-limits.py
 )
 
 for path in "${required[@]}"; do
   test -e "$path" || { echo "Missing required path: $path" >&2; exit 1; }
 done
 
+python3 scripts/validate-network-limits.py
 echo "Repository structure is valid."
