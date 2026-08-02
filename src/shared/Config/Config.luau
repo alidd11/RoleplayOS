@@ -5,7 +5,7 @@ local Config = {
 		Environment = "Development",
 		SchemaVersion = 4,
 		Branding = {
-			GameName = "",
+			GameName = "Emergency Response: Portsmouth",
 			ShowRoleplayOSMark = true,
 		},
 		UseMockDataInStudio = true,
