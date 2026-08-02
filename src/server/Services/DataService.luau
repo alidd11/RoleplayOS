@@ -12,12 +12,19 @@ local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 
 function DataService:Init(context: any)
 	self.context = context
-	self.store = DataStoreService:GetDataStore(STORE_NAME)
-	self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
+	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
+	self.mockCommunities = {}
+	if not self.mock then
+		self.store = DataStoreService:GetDataStore(STORE_NAME)
+		self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
+	end
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
 end
 
 function DataService:GetCommunity(communityId: string): (any?, string?)
+	if self.mock then
+		return self.mockCommunities[communityId], nil
+	end
 	local ok, result = self:_retry(function()
 		return self.communityStore:GetAsync(communityId)
 	end)
@@ -29,6 +36,11 @@ function DataService:GetCommunity(communityId: string): (any?, string?)
 end
 
 function DataService:UpdateCommunity(communityId: string, transform: (any?) -> any): (any?, string?)
+	if self.mock then
+		local updated = transform(self.mockCommunities[communityId])
+		self.mockCommunities[communityId] = updated
+		return updated, nil
+	end
 	local updated
 	local ok = self:_retry(function()
 		return self.communityStore:UpdateAsync(communityId, function(stored)
@@ -60,7 +72,7 @@ function DataService:Load(player: Player): (any?, string?)
 	if self.sessions[player.UserId] then
 		return nil, "SESSION_ALREADY_LOADED"
 	end
-	if RunService:IsStudio() and self.context.Configuration.Framework.UseMockDataInStudio then
+	if self.mock then
 		local profile = ProfileSchema.default(player.UserId)
 		if self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio then
 			profile.DutyProfiles.StudioPolice = {
