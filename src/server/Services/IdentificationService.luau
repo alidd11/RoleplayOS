@@ -27,6 +27,7 @@ end
 
 function IdentificationService:Init(context: any)
 	self.context = context
+	self.event = context.Network:RegisterEvent("CredentialPresented")
 end
 
 function IdentificationService:_character(player: Player): any?
@@ -159,7 +160,13 @@ function IdentificationService:Present(
 		result.ForceName = self.context.Configuration.Identification.PoliceForceName
 		result.WarrantNumber = string.format("UP-%06d", actor.UserId % 1000000)
 	end
-	return result, nil
+	self.event:FireClient(target, result)
+	return {
+		Presented = true,
+		PresentedToUserId = target.UserId,
+		CredentialType = credentialType,
+	},
+		nil
 end
 
 function IdentificationService:Destroy()

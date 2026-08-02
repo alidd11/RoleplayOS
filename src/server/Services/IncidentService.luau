@@ -192,6 +192,26 @@ function IncidentService:Recent(player: Player, page: number): (any?, string?)
 		return nil, reason
 	end
 	local entries = {}
+	-- Open dispatch calls are operational MDT records immediately. They remain
+	-- server-local and are replaced by the persisted incident created when the
+	-- dispatcher resolves the call.
+	for _, call in self.context.Services:Get("CallService"):Snapshot() do
+		if duty.DepartmentId == "Control" or table.find(call.DepartmentIds, duty.DepartmentId) then
+			table.insert(entries, {
+				IncidentId = "CALL-" .. call.CallId,
+				CallId = call.CallId,
+				Title = call.Summary,
+				Status = "Live call · " .. call.Status,
+				IncidentType = call.IncidentType,
+				Location = call.Location,
+				Priority = call.Priority,
+				DepartmentIds = table.clone(call.DepartmentIds),
+				CreatedAt = call.CreatedAt,
+				Revision = call.Revision,
+				LiveDispatchCall = true,
+			})
+		end
+	end
 	for _, entry in if index and type(index.Entries) == "table" then index.Entries else {} do
 		local departments = if type(entry.DepartmentIds) == "table" then entry.DepartmentIds else {}
 		if duty.DepartmentId == "Control" or table.find(departments, duty.DepartmentId) then
@@ -207,7 +227,7 @@ function IncidentService:Recent(player: Player, page: number): (any?, string?)
 	local items = {}
 	for indexPosition = first, math.min(#entries, first + size - 1) do
 		local summary = entries[indexPosition]
-		local record = self.cache[summary.IncidentId]
+		local record = if summary.LiveDispatchCall then summary else self.cache[summary.IncidentId]
 		if not record then
 			record, reason = self.context.Services
 				:Get("DataService")

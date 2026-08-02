@@ -13,8 +13,16 @@ function ExperienceAccessService:_check(player: Player)
 	if not config.Enabled or not player:IsDescendantOf(Players) then
 		return
 	end
-	local membership =
-		self.context.Services:Get("GroupService"):GetMembership(player, config.RequiredGroupLinkId)
+	local groupService = self.context.Services:Get("GroupService")
+	local membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
+	for attempt = 2, 3 do
+		if membership.Failed ~= true or not player:IsDescendantOf(Players) then
+			break
+		end
+		task.wait(attempt)
+		groupService:Invalidate(player, config.RequiredGroupLinkId)
+		membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
+	end
 	if
 		membership.IsMember == true
 		and (membership.HighestRank or 0) >= (membership.MinimumRank or 1)
@@ -31,7 +39,11 @@ function ExperienceAccessService:_check(player: Player)
 		GroupId = membership.GroupId,
 		Failed = membership.Failed == true,
 	})
-	player:Kick(config.KickMessage)
+	player:Kick(
+		if membership.Failed == true
+			then "Roblox could not verify your Universal Projects membership. Please rejoin shortly."
+			else config.KickMessage
+	)
 end
 
 function ExperienceAccessService:Start()

@@ -96,8 +96,11 @@ function DispatchService:PrepareCall(player: Player, payload: any): (any?, strin
 			table.insert(departments, departmentId)
 		end
 	end
-	if #departments == 0 then
-		departments = { "Control" }
+	if #departments == 0 or (#departments == 1 and departments[1] == "Control") then
+		departments = table.clone(
+			self.context.Configuration.Dispatch.DefaultDepartmentsByIncidentType[payload.IncidentType]
+				or { "Control" }
+		)
 	end
 	return {
 		Summary = string.sub(summary, 1, 160),

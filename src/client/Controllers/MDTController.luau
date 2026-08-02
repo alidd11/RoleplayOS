@@ -8,12 +8,12 @@ local UserInputService = game:GetService("UserInputService")
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
 local C = {
-	Surface = Color3.fromRGB(12, 18, 28),
-	Raised = Color3.fromRGB(22, 30, 43),
-	Border = Color3.fromRGB(52, 66, 88),
+	Surface = Color3.fromRGB(6, 16, 28),
+	Raised = Color3.fromRGB(14, 32, 50),
+	Border = Color3.fromRGB(48, 91, 121),
 	Text = Color3.fromRGB(244, 247, 252),
 	Muted = Color3.fromRGB(151, 163, 184),
-	Accent = Color3.fromRGB(91, 156, 255),
+	Accent = Color3.fromRGB(27, 137, 191),
 }
 
 local function corner(parent: Instance, radius: number)
@@ -108,11 +108,16 @@ function MDTController:_mount()
 	stroke.Transparency = 0.15
 	stroke.Parent = shell
 	self.shell = shell
+	local classification = Instance.new("Frame")
+	classification.Size = UDim2.new(1, 0, 0, 4)
+	classification.BackgroundColor3 = Color3.fromRGB(241, 176, 47)
+	classification.BorderSizePixel = 0
+	classification.Parent = shell
 
-	local title = text(shell, "ROLEPLAYOS  ·  MOBILE DATA TERMINAL", 16, true)
+	local title = text(shell, "FORCE CONTROL  ·  OPERATIONAL MDT", 16, true)
 	title.Position = UDim2.fromOffset(22, 15)
 	title.Size = UDim2.new(1, -110, 0, 24)
-	local subtitle = text(shell, "Secure operational records", 10)
+	local subtitle = text(shell, "COMMAND & CONTROL / RECORDS GATEWAY  ·  RESTRICTED", 10)
 	subtitle.Position = UDim2.fromOffset(22, 39)
 	subtitle.Size = UDim2.new(1, -110, 0, 18)
 	subtitle.TextColor3 = C.Muted
@@ -632,6 +637,23 @@ function MDTController:Start()
 		self.connections,
 		self.context.Events.DutyChanged.Event:Connect(function()
 			self:RefreshAccess()
+		end)
+	)
+	table.insert(
+		self.connections,
+		self.context.Events.DispatchChanged.Event:Connect(function(update)
+			if not self.allowed then
+				return
+			end
+			if update.Kind == "CallCreated" then
+				self.context.Controllers.NotificationController:Show(
+					"A new relevant dispatch call is available in MDT incidents.",
+					"MDT update"
+				)
+			end
+			if self.recordType == "Incident" and self.shell.Visible then
+				self:_performSearch()
+			end
 		end)
 	)
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("MDT", function(layout)

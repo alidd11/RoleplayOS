@@ -8,9 +8,35 @@ function DutyService:Init(context: any)
 end
 
 function DutyService:Start()
-	self.connection = Players.PlayerRemoving:Connect(function(player)
-		self:End(player)
-	end)
+	self.connections = self.connections or {}
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			self:End(player)
+		end)
+	)
+	local function watch(player: Player)
+		table.insert(
+			self.connections,
+			player.CharacterAdded:Connect(function()
+				task.delay(1, function()
+					local duty = self:Get(player)
+					if not duty then
+						return
+					end
+					local role = self.context.Configuration.Roles[duty.RoleId]
+					if role and role.LoadoutId then
+						self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
+					end
+					self.context.Services:Get("IdentificationService"):Refresh(player)
+				end)
+			end)
+		)
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
 end
 
 function DutyService:Get(player: Player): any?
@@ -138,9 +164,10 @@ function DutyService:End(player: Player)
 end
 
 function DutyService:Destroy()
-	if self.connection then
-		self.connection:Disconnect()
+	for _, connection in self.connections or {} do
+		connection:Disconnect()
 	end
+	table.clear(self.connections or {})
 	table.clear(self.active)
 end
 

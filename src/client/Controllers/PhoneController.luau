@@ -251,19 +251,42 @@ function PhoneController:_render()
 	self:_clear()
 	self.heading.Text = self.page
 	if self.page == "Home" then
-		local greeting = label(self.content, "Connected to RoleplayOS Mobile", 16, true)
-		greeting.Size = UDim2.new(1, 0, 0, 48)
-		local copy = label(
-			self.content,
-			"Call or message players currently in this server. For emergencies, use the dedicated 999 service.",
-			11
-		)
-		copy.Position = UDim2.fromOffset(0, 58)
-		copy.Size = UDim2.new(1, 0, 0, 80)
-		copy.TextColor3 = C.Muted
-		local flashlight = button(self.content, "FLASHLIGHT  ·  OFF", Color3.fromRGB(93, 83, 36))
-		flashlight.Position = UDim2.fromOffset(0, 150)
-		flashlight.Size = UDim2.new(1, 0, 0, 48)
+		local greeting = label(self.content, "RoleplayOS Mobile", 15, true)
+		greeting.Size = UDim2.new(1, 0, 0, 28)
+		local function appTile(
+			name: string,
+			symbol: string,
+			colour: Color3,
+			column: number,
+			row: number
+		): TextButton
+			local tile = button(self.content, symbol .. "\n" .. name, colour)
+			tile.Position = UDim2.new(column * 0.25, column * 3, 0, 38 + row * 92)
+			tile.Size = UDim2.new(0.25, -9, 0, 76)
+			tile.TextSize = 12
+			return tile
+		end
+		local phone = appTile("Phone", "☎", C.Green, 0, 0)
+		local messages = appTile("Messages", "✉", Color3.fromRGB(70, 190, 92), 1, 0)
+		local contacts = appTile("Contacts", "●", Color3.fromRGB(95, 151, 235), 2, 0)
+		local flashlight = appTile("Torch", "✦", Color3.fromRGB(95, 98, 107), 3, 0)
+		local emergency = appTile("999", "✚", C.Red, 0, 1)
+		phone.Activated:Connect(function()
+			self.page = "Call"
+			self:_render()
+		end)
+		messages.Activated:Connect(function()
+			self.page = "Messages"
+			self:_render()
+		end)
+		contacts.Activated:Connect(function()
+			self.page = "Contacts"
+			self:_render()
+		end)
+		emergency.Activated:Connect(function()
+			self.page = "Emergency"
+			self:_render()
+		end)
 		flashlight.Activated:Connect(function()
 			self.flashlightEnabled = not self.flashlightEnabled
 			local response = self.context.Controllers.NetworkController:Request(
@@ -273,7 +296,7 @@ function PhoneController:_render()
 			if not response.Success then
 				self.flashlightEnabled = false
 			end
-			flashlight.Text = "FLASHLIGHT  ·  " .. (self.flashlightEnabled and "ON" or "OFF")
+			flashlight.Text = "✦\n" .. (self.flashlightEnabled and "Torch On" or "Torch")
 			self.context.Controllers.NotificationController:Show(response.Message, "Phone")
 		end)
 	elseif self.page == "Contacts" then

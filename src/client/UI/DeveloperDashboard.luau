@@ -352,9 +352,11 @@ function App.mount(context: any): ScreenGui
 		modalPadding.PaddingRight = UDim.new(0, modalInset)
 		modalPadding.Parent = modal
 		local modalFlow = Instance.new("UIListLayout")
+		modalFlow.SortOrder = Enum.SortOrder.LayoutOrder
 		modalFlow.Padding = UDim.new(0, if shortViewport then 6 else 12)
 		modalFlow.Parent = modal
 		local title = text(modal, "Create a character", 24, COLOURS.Text, true)
+		title.LayoutOrder = 1
 		title.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 36)
 		title.TextSize = if shortViewport then 20 else 24
 		local copy = text(
@@ -363,19 +365,25 @@ function App.mount(context: any): ScreenGui
 			13,
 			COLOURS.Muted
 		)
+		copy.LayoutOrder = 2
 		copy.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 38)
 		copy.TextWrapped = true
 		local firstName = input(modal, "First name")
 		local lastName = input(modal, "Last name")
 		local dateOfBirth = input(modal, "Date of birth  ·  YYYY-MM-DD")
+		firstName.LayoutOrder = 3
+		lastName.LayoutOrder = 4
+		dateOfBirth.LayoutOrder = 5
 		if shortViewport then
 			firstName.Size = UDim2.new(1, 0, 0, 40)
 			lastName.Size = UDim2.new(1, 0, 0, 40)
 			dateOfBirth.Size = UDim2.new(1, 0, 0, 40)
 		end
 		local errorLabel = text(modal, "", 12, COLOURS.Danger)
+		errorLabel.LayoutOrder = 6
 		errorLabel.Size = UDim2.new(1, 0, 0, if shortViewport then 20 else 24)
 		local actions = Instance.new("Frame")
+		actions.LayoutOrder = 7
 		actions.BackgroundTransparency = 1
 		actions.Size = UDim2.new(1, 0, 0, if shortViewport then 42 else 46)
 		actions.Parent = modal

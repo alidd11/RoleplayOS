@@ -256,6 +256,22 @@ function PhoneService:PlaceCall(player: Player, rawNumber: any): (any?, string?)
 	self.userCalls[recipient.UserId] = call.CallId
 	self.event:FireClient(player, { Kind = "Call", Call = call })
 	self.event:FireClient(recipient, { Kind = "Call", Call = call })
+	task.delay(45, function()
+		local current = self.calls[call.CallId]
+		if current and current.State == "Ringing" then
+			local caller = Players:GetPlayerByUserId(current.CallerUserId)
+			local recipientPlayer = Players:GetPlayerByUserId(current.RecipientUserId)
+			if caller then
+				self:EndCall(caller, current.CallId)
+			elseif recipientPlayer then
+				self:EndCall(recipientPlayer, current.CallId)
+			else
+				self.userCalls[current.CallerUserId] = nil
+				self.userCalls[current.RecipientUserId] = nil
+				self.calls[current.CallId] = nil
+			end
+		end
+	end)
 	return call, nil
 end
 
@@ -334,13 +350,22 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 end
 
 function PhoneService:Start()
+	local function onCharacterAdded(player: Player)
+		local callId = self.userCalls[player.UserId]
+		if callId then
+			self:EndCall(player, callId)
+		end
+		task.delay(1, function()
+			if player.Parent then
+				self:EnsureTool(player)
+			end
+		end)
+	end
 	for _, player in Players:GetPlayers() do
 		table.insert(
 			self.connections,
 			player.CharacterAdded:Connect(function()
-				task.delay(1, function()
-					self:EnsureTool(player)
-				end)
+				onCharacterAdded(player)
 			end)
 		)
 	end
@@ -350,9 +375,7 @@ function PhoneService:Start()
 			table.insert(
 				self.connections,
 				player.CharacterAdded:Connect(function()
-					task.delay(1, function()
-						self:EnsureTool(player)
-					end)
+					onCharacterAdded(player)
 				end)
 			)
 		end)

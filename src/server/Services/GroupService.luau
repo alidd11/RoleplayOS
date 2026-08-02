@@ -17,6 +17,18 @@ function RobloxGroupService:GetMembership(player: Player, linkId: string): any
 	return self:GetMembershipByGroupId(player, definition.GroupId, linkId, definition.MinimumRank)
 end
 
+function RobloxGroupService:Invalidate(player: Player, linkId: string?)
+	local playerCache = self.cache[player.UserId]
+	if not playerCache then
+		return
+	end
+	if linkId then
+		playerCache[linkId] = nil
+	else
+		self.cache[player.UserId] = nil
+	end
+end
+
 function RobloxGroupService:GetMembershipByGroupId(
 	player: Player,
 	groupId: number,
