@@ -36,11 +36,18 @@ function VehicleUIController:_watchCharacter(character: Model)
 	end
 	table.insert(
 		self.connections,
-		humanoid.Seated:Connect(function(active)
-			self:_set(active)
+		humanoid.Seated:Connect(function(active, seatPart)
+			self:_set(active and seatPart ~= nil and seatPart:IsA("VehicleSeat"))
 		end)
 	)
-	self:_set(humanoid.SeatPart ~= nil)
+	table.insert(
+		self.connections,
+		humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
+			local seatPart = humanoid.SeatPart
+			self:_set(seatPart ~= nil and seatPart:IsA("VehicleSeat"))
+		end)
+	)
+	self:_set(humanoid.SeatPart ~= nil and humanoid.SeatPart:IsA("VehicleSeat"))
 end
 
 function VehicleUIController:Start()

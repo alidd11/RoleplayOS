@@ -3,6 +3,7 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 
 local DispatchService = { Optional = true, connections = {}, occupied = {} }
@@ -21,12 +22,17 @@ function DispatchService:IsAtConsole(player: Player): boolean
 	local character = player.Character
 	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
 	local seat = if humanoid then humanoid.SeatPart else nil
+	local studioAccess = RunService:IsStudio()
+		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio == true
 	return seat ~= nil
 		and CollectionService:HasTag(seat, self.context.Configuration.Dispatch.SeatTag)
-		and DispatchPolicy.canDispatch(
-			self:_duty(player),
-			self.context.Configuration.Dispatch.DispatcherDepartments,
-			true
+		and (
+			studioAccess
+			or DispatchPolicy.canDispatch(
+				self:_duty(player),
+				self.context.Configuration.Dispatch.DispatcherDepartments,
+				true
+			)
 		)
 end
 
