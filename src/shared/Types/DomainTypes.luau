@@ -312,6 +312,12 @@ export type PlayerProfile = {
 	Applications: { ApplicationRecord },
 	Qualifications: { [string]: Qualification },
 	GamepassCache: { [string]: boolean },
+	CustodySentence: {
+		ReleaseAt: number,
+		TotalSeconds: number,
+		Offences: { any },
+		UpdatedAt: number,
+	},
 	Communities: { [string]: CommunityMembership },
 	AuditMetadata: { [string]: any },
 }

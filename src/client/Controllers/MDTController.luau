@@ -1,9 +1,12 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 
 local MDTController = { connections = {} }
+local MDT_ACTION = "RoleplayOSToggleMDT"
 local C = {
 	Surface = Color3.fromRGB(12, 18, 28),
 	Raised = Color3.fromRGB(22, 30, 43),
@@ -71,6 +74,15 @@ function MDTController:_mount()
 	launcher.Size = UDim2.fromOffset(96, 38)
 	launcher.Visible = false
 	self.launcher = launcher
+	local shortcutGlyph = Instance.new("ImageLabel")
+	shortcutGlyph.Name = "ControllerGlyph"
+	shortcutGlyph.AnchorPoint = Vector2.new(1, 0.5)
+	shortcutGlyph.Position = UDim2.new(1, -10, 0.5, 0)
+	shortcutGlyph.Size = UDim2.fromOffset(20, 20)
+	shortcutGlyph.BackgroundTransparency = 1
+	shortcutGlyph.Visible = false
+	shortcutGlyph.Parent = launcher
+	self.shortcutGlyph = shortcutGlyph
 
 	local shell = Instance.new("Frame")
 	shell.Name = "Terminal"
@@ -79,6 +91,7 @@ function MDTController:_mount()
 	shell.Size = UDim2.fromScale(0.86, 0.82)
 	shell.BackgroundColor3 = C.Surface
 	shell.BorderSizePixel = 0
+	shell.SelectionGroup = true
 	shell.Visible = false
 	shell.Parent = gui
 	corner(shell, 14)
@@ -114,6 +127,7 @@ function MDTController:_mount()
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -16, 0, 15)
 	close.Size = UDim2.fromOffset(72, 30)
+	self.close = close
 
 	local person = button(shell, "PEOPLE")
 	person.Position = UDim2.fromOffset(22, 73)
@@ -548,13 +562,71 @@ end
 
 function MDTController:Start()
 	self:_mount()
+	local function updateShortcutLabel(lastInputType: Enum.UserInputType)
+		if tostring(lastInputType):find("Gamepad") then
+			local key = UserInputService:GetStringForKeyCode(Enum.KeyCode.ButtonSelect)
+			local image = UserInputService:GetImageForKeyCode(Enum.KeyCode.ButtonSelect)
+			self.launcher.Text = if image == ""
+				then "MDT  ·  " .. (if key == "" then "VIEW" else key)
+				else "MDT"
+			self.shortcutGlyph.Image = image
+			self.shortcutGlyph.Visible = image ~= ""
+		else
+			self.launcher.Text = "MDT  ·  M"
+			self.shortcutGlyph.Visible = false
+		end
+	end
+	local function toggleMDT(
+		_actionName: string,
+		inputState: Enum.UserInputState,
+		inputObject: InputObject
+	): Enum.ContextActionResult
+		if
+			inputState == Enum.UserInputState.Begin
+			and inputObject.KeyCode == Enum.KeyCode.ButtonB
+		then
+			if self.warrantModal.Visible then
+				self.warrantModal.Visible = false
+				GuiService.SelectedObject = self.warrantAction
+				return Enum.ContextActionResult.Sink
+			elseif self.shell.Visible then
+				self.shell.Visible = false
+				GuiService.SelectedObject = self.launcher
+				return Enum.ContextActionResult.Sink
+			end
+			return Enum.ContextActionResult.Pass
+		end
+		if
+			inputState ~= Enum.UserInputState.Begin
+			or not self.allowed
+			or UserInputService:GetFocusedTextBox() ~= nil
+		then
+			return Enum.ContextActionResult.Pass
+		end
+		self.shell.Visible = not self.shell.Visible
+		if self.shell.Visible and UserInputService.GamepadEnabled then
+			GuiService.SelectedObject = self.close
+		elseif
+			GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.shell)
+		then
+			GuiService.SelectedObject = self.launcher
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	ContextActionService:BindAction(
+		MDT_ACTION,
+		toggleMDT,
+		false,
+		Enum.KeyCode.M,
+		Enum.KeyCode.ButtonSelect,
+		Enum.KeyCode.ButtonB
+	)
+	ContextActionService:SetTitle(MDT_ACTION, "MDT")
+	ContextActionService:SetDescription(MDT_ACTION, "Open or close the data terminal.")
+	updateShortcutLabel(UserInputService:GetLastInputType())
 	table.insert(
 		self.connections,
-		UserInputService.InputBegan:Connect(function(input, processed)
-			if not processed and input.KeyCode == Enum.KeyCode.M and self.allowed then
-				self.shell.Visible = not self.shell.Visible
-			end
-		end)
+		UserInputService.LastInputTypeChanged:Connect(updateShortcutLabel)
 	)
 	table.insert(
 		self.connections,
@@ -595,6 +667,7 @@ function MDTController:Search(recordType: string, query: string, page: number?):
 end
 
 function MDTController:Destroy()
+	ContextActionService:UnbindAction(MDT_ACTION)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

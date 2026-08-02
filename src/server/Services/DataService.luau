@@ -364,13 +364,17 @@ function DataService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			local ok = self:Save(player, true)
-			if not ok then
-				self.context.Logger:Warning(
-					"Final profile release failed",
-					{ UserId = player.UserId }
-				)
-			end
+			-- Defer the final save so gameplay services can commit disconnect consequences
+			-- (for example, leaving while restrained) before the session lease is released.
+			task.defer(function()
+				local ok = self:Save(player, true)
+				if not ok then
+					self.context.Logger:Warning(
+						"Final profile release failed",
+						{ UserId = player.UserId }
+					)
+				end
+			end)
 		end)
 	)
 	for _, player in Players:GetPlayers() do

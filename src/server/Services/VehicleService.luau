@@ -49,7 +49,9 @@ function VehicleService:_configureTerminal(instance: Instance)
 		prompt.Parent = parent
 	end
 	prompt.ActionText = "Browse vehicles"
-	prompt.ObjectText = "Vehicle terminal"
+	prompt.ObjectText = tostring(instance:GetAttribute("DisplayName") or "Vehicle terminal")
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.HoldDuration = self.context.Configuration.VehicleSpawning.PromptHoldDuration
 	prompt.MaxActivationDistance =
 		self.context.Configuration.VehicleSpawning.MaximumInteractionDistance
@@ -200,6 +202,59 @@ function VehicleService:_terminal(player: Player, terminalId: string): (Instance
 	return nil, "TERMINAL_NOT_FOUND"
 end
 
+function VehicleService:_terminalScope(terminal: Instance): (any?, string?)
+	local dealershipId = terminal:GetAttribute("DealershipId")
+	if type(dealershipId) == "string" and self.context.Configuration.Dealerships[dealershipId] then
+		return { Kind = "Civilian", DealershipId = dealershipId }, nil
+	end
+	local departmentId = terminal:GetAttribute("DepartmentId")
+	if type(departmentId) == "string" and self.context.Configuration.Departments[departmentId] then
+		local divisionId = terminal:GetAttribute("DivisionId")
+		if
+			divisionId ~= nil
+			and (
+				type(divisionId) ~= "string"
+				or not self.context.Configuration.Divisions[divisionId]
+				or self.context.Configuration.Divisions[divisionId].DepartmentId ~= departmentId
+			)
+		then
+			return nil, "TERMINAL_DIVISION_INVALID"
+		end
+		return {
+			Kind = "Service",
+			DepartmentId = departmentId,
+			DivisionId = divisionId,
+		},
+			nil
+	end
+	return nil, "TERMINAL_SCOPE_REQUIRED"
+end
+
+function VehicleService:AuthoriseDealershipTerminal(
+	player: Player,
+	terminalId: string
+): (any?, string?)
+	local terminal, reason = self:_terminal(player, terminalId)
+	if not terminal then
+		return nil, reason
+	end
+	local scope, scopeReason = self:_terminalScope(terminal)
+	if not scope or scope.Kind ~= "Civilian" or not scope.DealershipId then
+		return nil, scopeReason or "DEALERSHIP_TERMINAL_REQUIRED"
+	end
+	return scope, nil
+end
+
+function VehicleService:_definitionMatchesTerminal(definition: any, scope: any): boolean
+	if scope.Kind ~= "Service" or definition.DepartmentId ~= scope.DepartmentId then
+		return false
+	end
+	if type(scope.DivisionId) == "string" then
+		return definition.DivisionId == scope.DivisionId
+	end
+	return true
+end
+
 function VehicleService:_spawnPoint(terminal: Instance, terminalId: string): (BasePart?, string?)
 	local settings = self.context.Configuration.VehicleSpawning
 	local terminalPosition = worldPosition(terminal)
@@ -272,18 +327,27 @@ function VehicleService:Menu(player: Player, terminalId: string): (any?, string?
 	if not terminal then
 		return nil, reason
 	end
-	local dealershipId = terminal:GetAttribute("DealershipId")
+	local scope, scopeReason = self:_terminalScope(terminal)
+	if not scope then
+		return nil, scopeReason
+	end
+	local dealershipId = scope.DealershipId
 	local dealership = if type(dealershipId) == "string"
 		then self.context.Configuration.Dealerships[dealershipId]
 		else nil
-	local owned = self.context.Services:Get("VehicleOwnershipService"):List(player)
+	local owned = if scope.Kind == "Civilian"
+		then self.context.Services:Get("VehicleOwnershipService"):List(player)
+		else {}
 	local active = self.activeByUserId[player.UserId]
 	for _, vehicle in owned do
 		vehicle.Available = active == nil
 	end
 	local serviceVehicles = {}
 	for definitionId, definition in self.context.Configuration.Vehicles do
-		if definition.Category == "Service" then
+		if
+			definition.Category == "Service"
+			and self:_definitionMatchesTerminal(definition, scope)
+		then
 			local allowed, accessReason = self:_serviceAccess(player, definition)
 			if allowed or definition.Access.DisplayWhenLocked == true then
 				table.insert(serviceVehicles, {
@@ -304,6 +368,9 @@ function VehicleService:Menu(player: Player, terminalId: string): (any?, string?
 			Id = terminalId,
 			Name = if dealership then dealership.Name else "Vehicle garage",
 			DealershipId = dealershipId,
+			Kind = scope.Kind,
+			DepartmentId = scope.DepartmentId,
+			DivisionId = scope.DivisionId,
 		},
 		OwnedVehicles = owned,
 		ServiceVehicles = serviceVehicles,
@@ -415,6 +482,10 @@ function VehicleService:SpawnOwned(
 	if not terminal then
 		return nil, reason
 	end
+	local scope, scopeReason = self:_terminalScope(terminal)
+	if not scope or scope.Kind ~= "Civilian" then
+		return nil, scopeReason or "CIVILIAN_TERMINAL_REQUIRED"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session
 		and session.ActiveCharacterId
@@ -452,9 +523,16 @@ function VehicleService:SpawnService(
 	if not terminal then
 		return nil, reason
 	end
+	local scope, scopeReason = self:_terminalScope(terminal)
+	if not scope or scope.Kind ~= "Service" then
+		return nil, scopeReason or "SERVICE_TERMINAL_REQUIRED"
+	end
 	local definition = self.context.Configuration.Vehicles[definitionId]
 	if not definition or definition.Category ~= "Service" then
 		return nil, "TEAM_VEHICLE_NOT_AUTHORISED"
+	end
+	if not self:_definitionMatchesTerminal(definition, scope) then
+		return nil, "VEHICLE_NOT_AVAILABLE_AT_TERMINAL"
 	end
 	local allowed, accessReason = self:_serviceAccess(player, definition)
 	if not allowed then

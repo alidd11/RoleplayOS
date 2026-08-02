@@ -1,7 +1,12 @@
 --!strict
 
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
+local VRService = game:GetService("VRService")
+
+local EXIT_ACTION = "RoleplayOSExitCCTV"
+local NAVIGATE_ACTION = "RoleplayOSNavigateCCTV"
 local CCTVController = { connections = {}, cameras = {}, index = 1, viewing = false }
 
 local function button(parent: Instance, text: string): TextButton
@@ -52,6 +57,7 @@ function CCTVController:_mount()
 	exit.Position = UDim2.new(1, -122, 0, 12)
 	exit.Size = UDim2.fromOffset(110, 40)
 	exit.BackgroundColor3 = Color3.fromRGB(136, 39, 48)
+	self.exitButton = exit
 	local name = Instance.new("TextLabel")
 	name.Name = "CameraName"
 	name.Position = UDim2.fromOffset(142, 8)
@@ -102,6 +108,13 @@ function CCTVController:_apply()
 end
 
 function CCTVController:Open()
+	if VRService.VREnabled then
+		self.context.Controllers.NotificationController:Show(
+			"CCTV viewing is unavailable in VR because it uses a fixed scripted camera.",
+			"VR comfort"
+		)
+		return
+	end
 	local response = self.context.Controllers.NetworkController:Request("GetCCTVCameras", {})
 	if not response.Success or #(response.Data or {}) == 0 then
 		self.context.Controllers.NotificationController:Show(
@@ -115,11 +128,15 @@ function CCTVController:Open()
 	self.viewing = true
 	self.gui.Enabled = true
 	self:_apply()
+	GuiService.SelectedObject = self.exitButton
 end
 
 function CCTVController:Exit()
 	self.viewing = false
 	self.gui.Enabled = false
+	if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.gui) then
+		GuiService.SelectedObject = nil
+	end
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera.CameraType = Enum.CameraType.Custom
@@ -128,17 +145,38 @@ end
 
 function CCTVController:Start()
 	self:_mount()
-	table.insert(
-		self.connections,
-		UserInputService.InputBegan:Connect(function(input, processed)
-			if self.viewing and not processed and input.KeyCode == Enum.KeyCode.Escape then
-				self:Exit()
+	ContextActionService:BindActionAtPriority(EXIT_ACTION, function(_, inputState)
+		if self.viewing and inputState == Enum.UserInputState.Begin then
+			self:Exit()
+		end
+		return if self.viewing then Enum.ContextActionResult.Sink else Enum.ContextActionResult.Pass
+	end, false, 3000, Enum.KeyCode.Escape, Enum.KeyCode.ButtonB)
+	ContextActionService:SetTitle(EXIT_ACTION, "EXIT CCTV")
+	ContextActionService:SetDescription(EXIT_ACTION, "Return to your character camera.")
+	ContextActionService:BindActionAtPriority(NAVIGATE_ACTION, function(_, inputState, input)
+		if not self.viewing then
+			return Enum.ContextActionResult.Pass
+		end
+		if inputState == Enum.UserInputState.Begin then
+			if input.KeyCode == Enum.KeyCode.ButtonL1 then
+				self.index = if self.index <= 1 then #self.cameras else self.index - 1
+			else
+				self.index = if self.index >= #self.cameras then 1 else self.index + 1
 			end
-		end)
+			self:_apply()
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, 3000, Enum.KeyCode.ButtonL1, Enum.KeyCode.ButtonR1)
+	ContextActionService:SetTitle(NAVIGATE_ACTION, "CHANGE CCTV")
+	ContextActionService:SetDescription(
+		NAVIGATE_ACTION,
+		"Use the shoulder buttons to change camera."
 	)
 end
 
 function CCTVController:Destroy()
+	ContextActionService:UnbindAction(EXIT_ACTION)
+	ContextActionService:UnbindAction(NAVIGATE_ACTION)
 	self:Exit()
 	for _, connection in self.connections do
 		connection:Disconnect()

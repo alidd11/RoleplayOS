@@ -34,7 +34,7 @@ end
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 6,
+		SchemaVersion = 7,
 		Branding = {
 			GameName = "Emergency Response: Portsmouth",
 			ShowRoleplayOSMark = true,
@@ -263,11 +263,45 @@ local Config = {
 	},
 	Custody = {
 		BookingDeskTag = "RoleplayOSCustodyDesk",
+		CellSpawnTag = "RoleplayOSCustodyCellSpawn",
+		VehicleSeatTag = "RoleplayOSCustodySeat",
 		MaximumInteractionDistance = 12,
 		MaximumBookingDistance = 18,
+		MaximumVehicleDistance = 16,
 		MaximumReasonLength = 160,
+		MaximumSearchGroundsLength = 220,
+		MaximumSearchItems = 30,
+		MaximumBookingHistory = 40,
+		MaximumCriminalRecordHistory = 100,
+		MaximumActiveOffences = 16,
+		MaximumStackedSentenceSeconds = 1800,
+		CuffedWalkSpeed = 8,
+		EscortDistance = 3.25,
+		EscortMaximumForce = 18000,
+		EscortMaximumVelocity = 16,
+		SearchPowers = { "PACE_S1", "PACE_S23_MDA", "PACE_S32_POST_ARREST" },
+		DisconnectPenaltyCode = "LEAVE_WHILE_RESTRAINED",
+		SimulationNotice = "Simplified roleplay simulation — not legal advice or professional training.",
+		ArrestCaution = "You do not have to say anything. But it may harm your defence if you do not mention when questioned something which you later rely on in court. Anything you do say may be given in evidence.",
+		-- Compressed gameplay tariffs, not real-world sentences. The server adds these values;
+		-- clients can only submit an allowlisted Code.
+		OffenceTariffs = {
+			OTHER = { Name = "Other recorded offence", Seconds = 120 },
+			THEFT = { Name = "Theft", Seconds = 180 },
+			ASSAULT = { Name = "Assault", Seconds = 240 },
+			DANGEROUS_DRIVING = { Name = "Dangerous driving", Seconds = 300 },
+			ROBBERY = { Name = "Robbery", Seconds = 420 },
+			FIREARMS = { Name = "Firearms offence", Seconds = 480 },
+			LEAVE_WHILE_RESTRAINED = {
+				Name = "Left the server while restrained",
+				Seconds = 180,
+			},
+		},
 	},
-	Identification = { MaximumPresentationDistance = 12 },
+	Identification = {
+		MaximumPresentationDistance = 12,
+		PoliceForceName = "UP Hampshire & Isle of Wight Constabulary",
+	},
 	UKTime = { Enabled = true, UpdateSeconds = 15 },
 	Departments = {
 		Police = {
@@ -862,6 +896,7 @@ local Config = {
 			Category = "Service",
 			TeamName = "Police",
 			DepartmentId = "Police",
+			DivisionId = "Frontline",
 			RoleIds = {
 				"PoliceOfficer",
 				"PoliceFrontline",
@@ -1198,6 +1233,8 @@ local Config = {
 			PurchaseVehicle = { Capacity = 2, RefillPerSecond = 0.08 },
 			SpawnServiceVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
 			CuffPlayer = { Capacity = 3, RefillPerSecond = 0.3 },
+			CustodyAction = { Capacity = 5, RefillPerSecond = 0.75 },
+			GetCustodyPolicy = { Capacity = 3, RefillPerSecond = 0.2 },
 			BookCustody = { Capacity = 2, RefillPerSecond = 0.1 },
 			GetPresentedId = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },

@@ -15,6 +15,7 @@ for name, event in events do
 end
 local controllers = {
 	UIOrchestrator = require(script.Controllers.UIOrchestrator),
+	ControlsController = require(script.Controllers.ControlsController),
 	NetworkController = require(script.Controllers.NetworkController),
 	NotificationController = require(script.Controllers.NotificationController),
 	SettingsController = require(script.Controllers.SettingsController),
@@ -29,7 +30,6 @@ local controllers = {
 	EmergencyAlertController = require(script.Controllers.EmergencyAlertController),
 	CCTVController = require(script.Controllers.CCTVController),
 	ANPRAlertController = require(script.Controllers.ANPRAlertController),
-	CustomRegistrationController = require(script.Controllers.CustomRegistrationController),
 	NeedsController = require(script.Controllers.NeedsController),
 	VehicleUIController = require(script.Controllers.VehicleUIController),
 	DealershipController = require(script.Controllers.DealershipController),
@@ -49,6 +49,7 @@ local context = { Controllers = controllers, Events = events }
 for _, name in
 	{
 		"UIOrchestrator",
+		"ControlsController",
 		"NetworkController",
 		"NotificationController",
 		"SettingsController",
@@ -63,7 +64,6 @@ for _, name in
 		"EmergencyAlertController",
 		"CCTVController",
 		"ANPRAlertController",
-		"CustomRegistrationController",
 		"NeedsController",
 		"VehicleUIController",
 		"DealershipController",
@@ -86,6 +86,7 @@ end
 for _, name in
 	{
 		"UIOrchestrator",
+		"ControlsController",
 		"NetworkController",
 		"NotificationController",
 		"SettingsController",
@@ -100,7 +101,6 @@ for _, name in
 		"EmergencyAlertController",
 		"CCTVController",
 		"ANPRAlertController",
-		"CustomRegistrationController",
 		"NeedsController",
 		"VehicleUIController",
 		"DealershipController",

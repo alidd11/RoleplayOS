@@ -21,6 +21,9 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if self.active[player.UserId] then
 		return false, "ALREADY_ON_DUTY"
 	end
+	if self.context.Services:Get("CustodyService"):HasActiveSentence(player) then
+		return false, "ACTIVE_CUSTODY_SENTENCE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local profile = session and session.Profile.DutyProfiles[request.DutyProfileId]
 	if not profile then
@@ -83,6 +86,7 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		player.Team = previousTeam
 		return false, unitReason
 	end
+	self.context.Services:Get("IdentificationService"):Refresh(player)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		Action = "Duty.Started",
@@ -96,6 +100,7 @@ function DutyService:End(player: Player)
 	local duty = self.active[player.UserId]
 	self.active[player.UserId] = nil
 	self.context.Services:Get("UnitService"):Unregister(player)
+	self.context.Services:Get("IdentificationService"):Refresh(player)
 	if duty then
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,

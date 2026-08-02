@@ -8,6 +8,10 @@ The start experience has three stable destinations: Play, Careers and Community.
 
 Interactive screens use `CoreUISafeInsets` and device-safe clipping, Roblox's recommended inset for interfaces that must remain clear of the native top bar, chat, menu controls and device cutouts. RoleplayOS does not replace CoreGui, capture native buttons or imitate Roblox system prompts. Marketplace purchases continue through Roblox's native prompt.
 
+`UIOrchestrator` publishes the current input mode and VR state to managed interfaces. Controller shortcuts mirror the keyboard actions (`Y` opens the phone, `View` opens the MDT, `L3` sprints and `B` exits CCTV), and launcher labels change with the active input device. World interactions should use `ProximityPrompt` so Roblox supplies keyboard, touch, gamepad and VR affordances; do not replace prompts with keyboard-only listeners.
+
+VR uses the compact layout with larger peripheral reserves. Avoid camera-space blur, shake, rapid full-screen motion and head-locked decorative HUD in VR. Fixed scripted-camera features such as the current CCTV viewer must refuse VR entry until they have a comfortable head-tracked implementation. Phone and MDT controls remain available, but their dense text-entry workflows still require headset testing and may rely on Roblox's platform text input.
+
 Pressable elements give immediate 100–140 ms scale feedback. Screen and modal entrances use a strong ease-out and remain below 250 ms. Repeated navigation avoids ornamental motion. Future accessibility work must provide reduced-motion behaviour, controller focus order, sufficient contrast, scalable text and safe layouts across phone, tablet, console and desktop.
 
 The Studio profile mode is deliberately explicit and in-memory. It makes unpublished baseplates demonstrable without enabling API access or weakening production persistence.

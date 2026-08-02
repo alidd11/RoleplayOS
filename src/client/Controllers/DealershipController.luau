@@ -1,11 +1,14 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local TERMINAL_TAG = "RoleplayOSVehicleTerminal"
+local CLOSE_ACTION = "RoleplayOSDealershipClose"
 local DealershipController = { connections = {}, terminalConnections = {}, selectedTab = "Owned" }
 
 type VehicleView = {
@@ -116,6 +119,40 @@ function DealershipController:Init(context: any)
 	self.terminalId = nil
 	self.owned = {}
 	self.service = {}
+	self.dealershipId = nil
+	self.plateVehicleId = nil
+end
+
+function DealershipController:_openPlate(vehicle: VehicleView)
+	if not self.dealershipId then
+		return
+	end
+	self.plateVehicleId = vehicle.Id
+	self.plateVehicle.Text = string.format("%s  ·  %s", vehicle.Name, vehicle.Registration or "")
+	self.plateInput.Text = ""
+	self.plateEditor.Visible = true
+	self.plateInput:CaptureFocus()
+end
+
+function DealershipController:_applyPlate()
+	if not self.plateVehicleId or not self.terminalId then
+		return
+	end
+	self.plateApply.Active = false
+	self.plateApply.Text = "CHECKING…"
+	local response = self.context.Controllers.NetworkController:Request("SetCustomRegistration", {
+		TerminalId = self.terminalId,
+		VehicleId = self.plateVehicleId,
+		Registration = self.plateInput.Text,
+	})
+	self.context.Controllers.NotificationController:Show(response.Message, "Custom registration")
+	self.plateApply.Active = true
+	self.plateApply.Text = "MODERATE & APPLY"
+	if response.Success then
+		self.plateEditor.Visible = false
+		self.plateVehicleId = nil
+		self:_open(self.terminalId)
+	end
 end
 
 function DealershipController:_setScale()
@@ -134,12 +171,19 @@ function DealershipController:_setOpen(open: boolean)
 	self.panel.Visible = open
 	self.backdrop.Visible = open
 	if open then
+		self.previousSelection = GuiService.SelectedObject
 		self.panel.Position = UDim2.new(0.5, 0, 0.5, 12)
 		TweenService:Create(
 			self.panel,
 			TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 			{ Position = UDim2.fromScale(0.5, 0.5) }
 		):Play()
+		if UserInputService.GamepadEnabled then
+			GuiService.SelectedObject = self.close
+		end
+	elseif GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.panel) then
+		local previous = self.previousSelection
+		GuiService.SelectedObject = if previous and previous.Parent then previous else nil
 	end
 end
 
@@ -193,8 +237,9 @@ function DealershipController:_render()
 		access.Size = UDim2.new(1, -174, 0, 21)
 		access.TextColor3 = if vehicle.Available then colours.success else colours.locked
 		access.TextTruncate = Enum.TextTruncate.AtEnd
+		local canCustomise = self.selectedTab == "Owned" and self.dealershipId ~= nil
 		local spawn = button(card, if vehicle.Available then "SPAWN" else "LOCKED")
-		spawn.Position = UDim2.new(1, -138, 0.5, -20)
+		spawn.Position = UDim2.new(1, -138, 0, if canCustomise then 11 else 32)
 		spawn.Size = UDim2.fromOffset(118, 40)
 		spawn.BackgroundColor3 = if vehicle.Available then colours.accent else colours.raised
 		spawn.Active = vehicle.Available
@@ -225,6 +270,17 @@ function DealershipController:_render()
 				end)
 			)
 		end
+		if canCustomise then
+			local custom = button(card, "CUSTOM PLATE")
+			custom.Position = UDim2.new(1, -138, 0, 56)
+			custom.Size = UDim2.fromOffset(118, 36)
+			table.insert(
+				self.connections,
+				custom.Activated:Connect(function()
+					self:_openPlate(vehicle)
+				end)
+			)
+		end
 	end
 end
 
@@ -244,6 +300,10 @@ function DealershipController:_open(terminalId: string)
 		return
 	end
 	local data = if type(response.Data) == "table" then response.Data else {}
+	local terminal = if type(data.Terminal) == "table" then data.Terminal else {}
+	self.dealershipId = if type(terminal.DealershipId) == "string"
+		then terminal.DealershipId
+		else nil
 	self.owned = if type(data.OwnedVehicles) == "table" then data.OwnedVehicles else {}
 	self.service = if type(data.ServiceVehicles) == "table" then data.ServiceVehicles else {}
 	self:_render()
@@ -255,17 +315,26 @@ function DealershipController:_bindTerminal(instance: Instance)
 	end
 	local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
 	if not prompt then
+		local promptParent = if instance:IsA("BasePart")
+			then instance
+			else instance:FindFirstChildWhichIsA("BasePart", true)
+		if not promptParent then
+			return
+		end
 		prompt = Instance.new("ProximityPrompt")
 		prompt.ActionText = "Browse vehicles"
-		prompt.ObjectText = "Dealership"
+		prompt.ObjectText = tostring(instance:GetAttribute("DisplayName") or "Dealership")
 		prompt.KeyboardKeyCode = Enum.KeyCode.E
+		prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 		prompt.HoldDuration = 0.65
 		prompt.MaxActivationDistance = 10
 		prompt.RequiresLineOfSight = false
-		prompt.Parent = instance
+		prompt.Parent = promptParent
 	end
 	prompt.ActionText = "Browse vehicles"
+	prompt.ObjectText = tostring(instance:GetAttribute("DisplayName") or prompt.ObjectText)
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	local connection = prompt.Triggered:Connect(function(player)
 		if player ~= Players.LocalPlayer then
 			return
@@ -331,6 +400,7 @@ function DealershipController:_buildUI()
 	close.Position = UDim2.new(1, -62, 0, 20)
 	close.Size = UDim2.fromOffset(38, 38)
 	close.TextSize = 22
+	self.close = close
 	local ownedTab = button(panel, "OWNED VEHICLES")
 	ownedTab.Position = UDim2.fromOffset(24, 87)
 	ownedTab.Size = UDim2.fromOffset(174, 42)
@@ -372,10 +442,92 @@ function DealershipController:_buildUI()
 	empty.TextColor3 = colours.muted
 	empty.Visible = false
 	self.empty = empty
+	local plateEditor = Instance.new("Frame")
+	plateEditor.Size = UDim2.fromScale(1, 1)
+	plateEditor.BackgroundColor3 = colours.background
+	plateEditor.BorderSizePixel = 0
+	plateEditor.Visible = false
+	plateEditor.ZIndex = 40
+	plateEditor.Parent = panel
+	corner(plateEditor, 16)
+	local plateEyebrow = label(plateEditor, "DEALERSHIP SERVICE DESK", 10, true)
+	plateEyebrow.Position = UDim2.fromOffset(36, 42)
+	plateEyebrow.Size = UDim2.new(1, -72, 0, 22)
+	plateEyebrow.TextColor3 = colours.muted
+	local plateTitle = label(plateEditor, "Custom registration", 25, true)
+	plateTitle.Position = UDim2.fromOffset(36, 68)
+	plateTitle.Size = UDim2.new(1, -72, 0, 38)
+	local plateCopy = label(
+		plateEditor,
+		"Choose 2–8 letters, numbers or spaces. Every submission is checked before it is displayed.",
+		13,
+		false
+	)
+	plateCopy.Position = UDim2.fromOffset(36, 116)
+	plateCopy.Size = UDim2.new(1, -72, 0, 48)
+	plateCopy.TextColor3 = colours.muted
+	plateCopy.TextWrapped = true
+	local plateVehicle = label(plateEditor, "", 13, true)
+	plateVehicle.Position = UDim2.fromOffset(36, 190)
+	plateVehicle.Size = UDim2.new(1, -72, 0, 28)
+	local plateInput = Instance.new("TextBox")
+	plateInput.Position = UDim2.fromOffset(36, 232)
+	plateInput.Size = UDim2.new(1, -72, 0, 76)
+	plateInput.BackgroundColor3 = Color3.fromRGB(243, 201, 45)
+	plateInput.BorderSizePixel = 0
+	plateInput.ClearTextOnFocus = false
+	plateInput.Font = Enum.Font.RobotoMono
+	plateInput.PlaceholderText = "AB12 CDE"
+	plateInput.Text = ""
+	plateInput.TextColor3 = Color3.fromRGB(14, 17, 20)
+	plateInput.TextSize = 28
+	plateInput.ZIndex = 41
+	plateInput.Parent = plateEditor
+	corner(plateInput, 10)
+	local plateApply = button(plateEditor, "MODERATE & APPLY")
+	plateApply.Position = UDim2.fromOffset(36, 338)
+	plateApply.Size = UDim2.new(0.64, -6, 0, 52)
+	plateApply.BackgroundColor3 = colours.accent
+	plateApply.ZIndex = 41
+	local plateCancel = button(plateEditor, "CANCEL")
+	plateCancel.Position = UDim2.new(0.64, 6, 0, 338)
+	plateCancel.Size = UDim2.new(0.36, -42, 0, 52)
+	plateCancel.ZIndex = 41
+	local plateNotice = label(
+		plateEditor,
+		"Custom registration gamepass required · roleplay registration only",
+		10,
+		true
+	)
+	plateNotice.Position = UDim2.fromOffset(36, 414)
+	plateNotice.Size = UDim2.new(1, -72, 0, 24)
+	plateNotice.TextColor3 = colours.locked
+	for _, descendant in plateEditor:GetDescendants() do
+		if descendant:IsA("GuiObject") and descendant.ZIndex < 41 then
+			descendant.ZIndex = 41
+		end
+	end
+	self.plateEditor = plateEditor
+	self.plateVehicle = plateVehicle
+	self.plateInput = plateInput
+	self.plateApply = plateApply
 	table.insert(
 		self.connections,
 		backdrop.Activated:Connect(function()
 			self:_setOpen(false)
+		end)
+	)
+	table.insert(
+		self.connections,
+		plateApply.Activated:Connect(function()
+			self:_applyPlate()
+		end)
+	)
+	table.insert(
+		self.connections,
+		plateCancel.Activated:Connect(function()
+			plateEditor.Visible = false
+			self.plateVehicleId = nil
 		end)
 	)
 	table.insert(
@@ -398,19 +550,20 @@ function DealershipController:_buildUI()
 			self:_render()
 		end)
 	)
-	table.insert(
-		self.connections,
-		UserInputService.InputBegan:Connect(function(input, processed)
-			if not processed and input.KeyCode == Enum.KeyCode.Escape and panel.Visible then
-				self:_setOpen(false)
-			end
-		end)
-	)
 	self:_setScale()
 end
 
 function DealershipController:Start()
 	self:_buildUI()
+	ContextActionService:BindAction(CLOSE_ACTION, function(_, state)
+		if state ~= Enum.UserInputState.Begin or not self.panel.Visible then
+			return Enum.ContextActionResult.Pass
+		end
+		self:_setOpen(false)
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.Escape, Enum.KeyCode.ButtonB)
+	ContextActionService:SetTitle(CLOSE_ACTION, "Close vehicles")
+	ContextActionService:SetDescription(CLOSE_ACTION, "Closes the dealership or service fleet menu")
 	for _, instance in CollectionService:GetTagged(TERMINAL_TAG) do
 		self:_bindTerminal(instance)
 	end
@@ -450,6 +603,7 @@ function DealershipController:Start()
 end
 
 function DealershipController:Destroy()
+	ContextActionService:UnbindAction(CLOSE_ACTION)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

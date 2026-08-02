@@ -103,6 +103,8 @@ Map objects stay in Workspace and are discovered through `CollectionService` tag
 | Average-speed entry | `RoleplayOSAverageSpeedEntry` | matching corridor identifier and speed limit |
 | Average-speed exit | `RoleplayOSAverageSpeedExit` | matching corridor identifier and speed limit |
 | Custody booking point | `RoleplayOSCustodyDesk` | stable station/desk identifier |
+| Custody cell spawn | `RoleplayOSCustodyCellSpawn` | optional stable `CellId`; tag a safe anchored part or `SpawnLocation` inside a cell |
+| Detainee vehicle seat | `RoleplayOSCustodySeat` | tag only the rear seat(s) authorised for detainee transport |
 | Dispatch seat | configured dispatch-seat tag | stable control-room identifier; do not classify solely from `VehicleSeat` |
 | Minimap bounds | `RoleplayOSMinimapBounds` | map bounds geometry |
 | Minimap road | `RoleplayOSMinimapRoad` | road classification where required |

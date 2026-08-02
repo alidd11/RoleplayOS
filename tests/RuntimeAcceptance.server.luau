@@ -57,6 +57,8 @@ local expectedFunctions = {
 	"SpawnServiceVehicle",
 	"PurchaseVehicle",
 	"CuffPlayer",
+	"CustodyAction",
+	"GetCustodyPolicy",
 	"BookCustody",
 	"GetPresentedId",
 	"GetPhone",
@@ -79,7 +81,9 @@ if remotes then
 			"authoritative RemoteFunction exists"
 		)
 	end
-	for _, name in { "DispatchChanged", "ANPRAlert", "NeedsChanged", "PhoneChanged" } do
+	for _, name in
+		{ "DispatchChanged", "ANPRAlert", "NeedsChanged", "PhoneChanged", "CustodyChanged" }
+	do
 		local remote = remotes:FindFirstChild(name)
 		check(
 			remote ~= nil and remote:IsA("RemoteEvent"),

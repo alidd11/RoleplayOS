@@ -3,6 +3,22 @@ local NetworkService = {}
 local function tablePayload(value: any): (boolean, string?)
 	return type(value) == "table", "EXPECTED_TABLE"
 end
+local function boundedStringArray(value: any, maximum: number): boolean
+	if value == nil then
+		return true
+	end
+	if type(value) ~= "table" then
+		return false
+	end
+	local count = 0
+	for key, item in value do
+		count += 1
+		if count > maximum or type(key) ~= "number" or type(item) ~= "string" then
+			return false
+		end
+	end
+	return true
+end
 function NetworkService:Init(context: any)
 	self.context = context
 end
@@ -413,9 +429,21 @@ function NetworkService:Start()
 	end)
 	self.context.Network:RegisterFunction("SetCustomRegistration", function(payload)
 		return type(payload) == "table"
+			and type(payload.TerminalId) == "string"
 			and type(payload.VehicleId) == "string"
 			and type(payload.Registration) == "string"
 	end, function(player, payload, requestId)
+		local terminal, terminalReason = self.context.Services
+			:Get("VehicleService")
+			:AuthoriseDealershipTerminal(player, payload.TerminalId)
+		if not terminal then
+			return {
+				Success = false,
+				Code = terminalReason,
+				Message = "Custom registrations can only be changed inside a dealership.",
+				RequestId = requestId,
+			}
+		end
 		local result, reason = self.context.Services
 			:Get("VehicleOwnershipService")
 			:SetCustomRegistration(player, payload.VehicleId, payload.Registration)
@@ -813,10 +841,13 @@ function NetworkService:Start()
 		}
 	end)
 	self.context.Network:RegisterFunction("CuffPlayer", function(payload)
-		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+		return type(payload) == "table"
+			and type(payload.TargetUserId) == "number"
+			and (payload.Mode == nil or payload.Mode == "Apply" or payload.Mode == "Remove")
 	end, function(player, payload, requestId)
-		local result, reason =
-			self.context.Services:Get("CustodyService"):Toggle(player, payload.TargetUserId)
+		local result, reason = self.context.Services
+			:Get("CustodyService")
+			:SetCuffed(player, payload.TargetUserId, payload.Mode)
 		return {
 			Success = result ~= nil,
 			Code = if result then "OK" else reason,
@@ -831,10 +862,15 @@ function NetworkService:Start()
 		return type(payload) == "table"
 			and type(payload.TargetUserId) == "number"
 			and type(payload.Reason) == "string"
+			and boundedStringArray(
+				payload.OffenceCodes,
+				self.context.Configuration.Custody.MaximumActiveOffences
+			)
 	end, function(player, payload, requestId)
-		local record, reason = self.context.Services
-			:Get("CustodyService")
-			:Book(player, payload.TargetUserId, payload.Reason)
+		local record, reason =
+			self.context.Services
+				:Get("CustodyService")
+				:Book(player, payload.TargetUserId, payload.Reason, payload.OffenceCodes)
 		return {
 			Success = record ~= nil,
 			Code = if record then "OK" else reason,
@@ -845,11 +881,45 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("GetPresentedId", function(payload)
-		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+	self.context.Network:RegisterFunction(
+		"GetCustodyPolicy",
+		tablePayload,
+		function(_, _, requestId)
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = self.context.Services:Get("CustodyService"):GetPolicy(),
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction("CustodyAction", function(payload)
+		return type(payload) == "table"
+			and type(payload.TargetUserId) == "number"
+			and type(payload.Action) == "string"
+			and (payload.Data == nil or type(payload.Data) == "table")
 	end, function(player, payload, requestId)
-		local card, reason =
-			self.context.Services:Get("IdentificationService"):Present(player, payload.TargetUserId)
+		local result, reason =
+			self.context.Services
+				:Get("CustodyService")
+				:Action(player, payload.TargetUserId, payload.Action, payload.Data or {})
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result then "Custody action completed." else "Custody action was refused.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("GetPresentedId", function(payload)
+		return type(payload) == "table"
+			and type(payload.TargetUserId) == "number"
+			and (payload.CredentialType == "Civilian" or payload.CredentialType == "Police")
+	end, function(player, payload, requestId)
+		local card, reason = self.context.Services
+			:Get("IdentificationService")
+			:Present(player, payload.TargetUserId, payload.CredentialType)
 		return {
 			Success = card ~= nil,
 			Code = if card then "OK" else reason,

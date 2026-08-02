@@ -1,5 +1,6 @@
 --!strict
 local ServerStorage = game:GetService("ServerStorage")
+local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 local LoadoutService = {}
 local function resolve(root: Instance, path: { string }): Instance?
 	local current: Instance? = root
@@ -32,7 +33,12 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
 			then resolve(assets, toolDefinition.AssetPath)
 			else tools:FindFirstChild(toolId)
-		if template and template:IsA("Tool") then
+		if
+			toolId == "Handcuffs"
+			and (not template or template:GetAttribute("RoleplayOSPremiumModel") ~= true)
+		then
+			ToolFactory.handcuffs().Parent = backpack
+		elseif template and template:IsA("Tool") then
 			template:Clone().Parent = backpack
 		else
 			self.context.Logger:Warning(

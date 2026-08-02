@@ -70,6 +70,7 @@ function NeedsController:Start()
 		self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
 	end)
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
+		self.blur.Enabled = not layout.VR
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
 		self.hud.Position = if layout.Vehicle
 			then UDim2.new(0, 18, 1, -18)
@@ -88,8 +89,12 @@ function NeedsController:Start()
 			end)
 		end
 		return Enum.ContextActionResult.Sink
-	end, true, Enum.KeyCode.LeftShift)
+	end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3)
 	ContextActionService:SetTitle("RoleplayOSSprint", "RUN")
+	ContextActionService:SetDescription(
+		"RoleplayOSSprint",
+		"Hold to sprint while travelling on foot."
+	)
 end
 
 function NeedsController:Destroy()

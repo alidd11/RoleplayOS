@@ -191,10 +191,13 @@ function App.mount(context: any): ScreenGui
 	sidebarStroke.Parent = sidebar
 
 	local brand = text(sidebar, game.Name, 21, COLOURS.Text, true)
-	brand.Position = UDim2.fromOffset(26, 28)
-	brand.Size = UDim2.new(1, -52, 0, 28)
+	brand.Position = UDim2.fromOffset(26, 20)
+	brand.Size = UDim2.new(1, -52, 0, 42)
+	brand.TextSize = 17
+	brand.TextTruncate = Enum.TextTruncate.None
+	brand.TextWrapped = true
 	local version = text(sidebar, "POWERED BY ROLEPLAYOS  ·  0.1", 10, COLOURS.Muted, true)
-	version.Position = UDim2.fromOffset(27, 57)
+	version.Position = UDim2.fromOffset(27, 66)
 	version.Size = UDim2.fromOffset(180, 18)
 
 	local navigation = Instance.new("Frame")
@@ -251,6 +254,8 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local function showModal()
+		local currentLayout = context.Controllers.UIOrchestrator:GetLayout()
+		local shortViewport = currentLayout.Viewport.Y < 520
 		local shade = Instance.new("TextButton")
 		shade.Text = ""
 		shade.AutoButtonColor = false
@@ -262,7 +267,10 @@ function App.mount(context: any): ScreenGui
 		local modal = Instance.new("Frame")
 		modal.AnchorPoint = Vector2.new(0.5, 0.5)
 		modal.Position = UDim2.fromScale(0.5, 0.5)
-		modal.Size = UDim2.fromOffset(460, 465)
+		modal.Size = UDim2.fromOffset(
+			math.min(460, currentLayout.Viewport.X - 32),
+			if shortViewport then math.min(326, currentLayout.Viewport.Y - 24) else 465
+		)
 		modal.BackgroundColor3 = COLOURS.Surface
 		modal.BorderSizePixel = 0
 		modal.ZIndex = 21
@@ -270,32 +278,39 @@ function App.mount(context: any): ScreenGui
 		corner(modal, 15)
 		stroke(modal)
 		local modalPadding = Instance.new("UIPadding")
-		modalPadding.PaddingTop = UDim.new(0, 26)
-		modalPadding.PaddingBottom = UDim.new(0, 26)
-		modalPadding.PaddingLeft = UDim.new(0, 26)
-		modalPadding.PaddingRight = UDim.new(0, 26)
+		local modalInset = if shortViewport then 16 else 26
+		modalPadding.PaddingTop = UDim.new(0, modalInset)
+		modalPadding.PaddingBottom = UDim.new(0, modalInset)
+		modalPadding.PaddingLeft = UDim.new(0, modalInset)
+		modalPadding.PaddingRight = UDim.new(0, modalInset)
 		modalPadding.Parent = modal
 		local modalFlow = Instance.new("UIListLayout")
-		modalFlow.Padding = UDim.new(0, 12)
+		modalFlow.Padding = UDim.new(0, if shortViewport then 6 else 12)
 		modalFlow.Parent = modal
 		local title = text(modal, "Create a character", 24, COLOURS.Text, true)
-		title.Size = UDim2.new(1, 0, 0, 36)
+		title.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 36)
+		title.TextSize = if shortViewport then 20 else 24
 		local copy = text(
 			modal,
 			"Build a civilian identity. You can customise appearance later.",
 			13,
 			COLOURS.Muted
 		)
-		copy.Size = UDim2.new(1, 0, 0, 38)
+		copy.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 38)
 		copy.TextWrapped = true
 		local firstName = input(modal, "First name")
 		local lastName = input(modal, "Last name")
 		local dateOfBirth = input(modal, "Date of birth  ·  YYYY-MM-DD")
+		if shortViewport then
+			firstName.Size = UDim2.new(1, 0, 0, 40)
+			lastName.Size = UDim2.new(1, 0, 0, 40)
+			dateOfBirth.Size = UDim2.new(1, 0, 0, 40)
+		end
 		local errorLabel = text(modal, "", 12, COLOURS.Danger)
-		errorLabel.Size = UDim2.new(1, 0, 0, 24)
+		errorLabel.Size = UDim2.new(1, 0, 0, if shortViewport then 20 else 24)
 		local actions = Instance.new("Frame")
 		actions.BackgroundTransparency = 1
-		actions.Size = UDim2.new(1, 0, 0, 46)
+		actions.Size = UDim2.new(1, 0, 0, if shortViewport then 42 else 46)
 		actions.Parent = modal
 		local cancel = button(actions, "Cancel", false)
 		cancel.Size = UDim2.new(0.5, -6, 1, 0)
@@ -321,7 +336,7 @@ function App.mount(context: any): ScreenGui
 			end
 		end)
 		elevate(modal, 22)
-		if interfaceMotionEnabled() then
+		if interfaceMotionEnabled() and not shortViewport then
 			modal.Size = UDim2.fromOffset(438, 442)
 			modal.BackgroundTransparency = 1
 			TweenService
@@ -862,6 +877,79 @@ function App.mount(context: any): ScreenGui
 	local environment = text(profile, "Development environment", 11, COLOURS.Muted)
 	environment.Position = UDim2.fromOffset(14, 35)
 	environment.Size = UDim2.new(1, -28, 0, 20)
+
+	context.Controllers.UIOrchestrator:Bind("DeveloperDashboard", function(layout)
+		local horizontal = layout.Compact or layout.Viewport.Y < 520
+		local narrow = layout.Viewport.X < 600
+		if horizontal then
+			local barHeight = if narrow then 112 else 82
+			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
+			content.Position = UDim2.fromOffset(0, barHeight)
+			content.Size = UDim2.new(1, 0, 1, -barHeight)
+			brand.Position = UDim2.fromOffset(18, 8)
+			brand.Size = UDim2.fromOffset(if narrow then layout.Viewport.X - 36 else 270, 30)
+			brand.TextSize = 15
+			brand.TextWrapped = false
+			brand.TextTruncate = Enum.TextTruncate.AtEnd
+			version.Position = UDim2.fromOffset(19, 37)
+			navigation.Position = if narrow
+				then UDim2.fromOffset(18, 66)
+				else UDim2.fromOffset(300, 18)
+			navigation.Size = if narrow then UDim2.new(1, -36, 0, 38) else UDim2.new(1, -318, 0, 46)
+			navLayout.FillDirection = Enum.FillDirection.Horizontal
+			navLayout.Padding = UDim.new(0, 6)
+			for _, item in navigation:GetChildren() do
+				if item:IsA("TextButton") then
+					item.Size = UDim2.new(0.25, -5, 1, 0)
+					item.TextXAlignment = Enum.TextXAlignment.Center
+					local padding = item:FindFirstChildOfClass("UIPadding")
+					if padding then
+						padding.PaddingLeft = UDim.new()
+					end
+				end
+			end
+			profile.Visible = false
+			header.Position = UDim2.fromOffset(20, 10)
+			header.Size = UDim2.new(1, -40, 0, 54)
+			pageTitle.TextSize = 24
+			pageDescription.Visible = false
+			status.Position = UDim2.new(1, 0, 0, 3)
+			scroll.Position = UDim2.fromOffset(20, 68)
+			scroll.Size = UDim2.new(1, -40, 1, -76)
+		else
+			sidebar.Size = UDim2.new(0, 250, 1, 0)
+			content.Position = UDim2.fromOffset(250, 0)
+			content.Size = UDim2.new(1, -250, 1, 0)
+			brand.Position = UDim2.fromOffset(26, 20)
+			brand.Size = UDim2.new(1, -52, 0, 42)
+			brand.TextSize = 17
+			brand.TextWrapped = true
+			brand.TextTruncate = Enum.TextTruncate.None
+			version.Position = UDim2.fromOffset(27, 66)
+			navigation.Position = UDim2.fromOffset(18, 112)
+			navigation.Size = UDim2.new(1, -36, 0, 190)
+			navLayout.FillDirection = Enum.FillDirection.Vertical
+			navLayout.Padding = UDim.new(0, 7)
+			for _, item in navigation:GetChildren() do
+				if item:IsA("TextButton") then
+					item.Size = UDim2.new(1, 0, 0, 44)
+					item.TextXAlignment = Enum.TextXAlignment.Left
+					local padding = item:FindFirstChildOfClass("UIPadding")
+					if padding then
+						padding.PaddingLeft = UDim.new(0, 14)
+					end
+				end
+			end
+			profile.Visible = true
+			header.Position = UDim2.fromOffset(44, 30)
+			header.Size = UDim2.new(1, -88, 0, 76)
+			pageTitle.TextSize = 30
+			pageDescription.Visible = true
+			status.Position = UDim2.new(1, 0, 0, 9)
+			scroll.Position = UDim2.fromOffset(44, 118)
+			scroll.Size = UDim2.new(1, -88, 1, -146)
+		end
+	end)
 
 	context.Events.StartMenuChanged.Event:Connect(function(data)
 		menuData = data

@@ -1,9 +1,12 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 
 local PhoneController = { connections = {}, activeCall = nil }
+local PHONE_ACTION = "RoleplayOSTogglePhone"
 local C = {
 	Body = Color3.fromRGB(9, 12, 18),
 	Screen = Color3.fromRGB(18, 24, 35),
@@ -95,6 +98,15 @@ function PhoneController:_mount()
 	launcher.Size = UDim2.fromOffset(112, 38)
 	launcher.Visible = false
 	self.launcher = launcher
+	local shortcutGlyph = Instance.new("ImageLabel")
+	shortcutGlyph.Name = "ControllerGlyph"
+	shortcutGlyph.AnchorPoint = Vector2.new(1, 0.5)
+	shortcutGlyph.Position = UDim2.new(1, -10, 0.5, 0)
+	shortcutGlyph.Size = UDim2.fromOffset(20, 20)
+	shortcutGlyph.BackgroundTransparency = 1
+	shortcutGlyph.Visible = false
+	shortcutGlyph.Parent = launcher
+	self.shortcutGlyph = shortcutGlyph
 
 	local body = Instance.new("Frame")
 	body.Name = "Phone"
@@ -103,6 +115,7 @@ function PhoneController:_mount()
 	body.Size = UDim2.fromOffset(326, 610)
 	body.BackgroundColor3 = C.Body
 	body.BorderSizePixel = 0
+	body.SelectionGroup = true
 	body.Visible = false
 	body.Parent = gui
 	corner(body, 34)
@@ -136,6 +149,7 @@ function PhoneController:_mount()
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -12, 0, 10)
 	close.Size = UDim2.fromOffset(28, 24)
+	self.close = close
 
 	local heading = label(screen, "Phone", 24, true)
 	heading.Position = UDim2.fromOffset(18, 48)
@@ -445,20 +459,70 @@ end
 
 function PhoneController:Start()
 	self:_mount()
+	local function updateShortcutLabel(lastInputType: Enum.UserInputType)
+		if tostring(lastInputType):find("Gamepad") then
+			local key = UserInputService:GetStringForKeyCode(Enum.KeyCode.ButtonY)
+			local image = UserInputService:GetImageForKeyCode(Enum.KeyCode.ButtonY)
+			self.launcher.Text = if image == ""
+				then "PHONE  ·  " .. (if key == "" then "Y" else key)
+				else "PHONE"
+			self.shortcutGlyph.Image = image
+			self.shortcutGlyph.Visible = image ~= ""
+		else
+			self.launcher.Text = "PHONE  ·  P"
+			self.shortcutGlyph.Visible = false
+		end
+	end
+	local function togglePhone(
+		_actionName: string,
+		inputState: Enum.UserInputState,
+		inputObject: InputObject
+	): Enum.ContextActionResult
+		if
+			inputState == Enum.UserInputState.Begin
+			and inputObject.KeyCode == Enum.KeyCode.ButtonB
+		then
+			if not self.body.Visible then
+				return Enum.ContextActionResult.Pass
+			end
+			self.body.Visible = false
+			GuiService.SelectedObject = self.launcher
+			return Enum.ContextActionResult.Sink
+		end
+		if
+			inputState ~= Enum.UserInputState.Begin
+			or not self.launcher.Visible
+			or UserInputService:GetFocusedTextBox() ~= nil
+		then
+			return Enum.ContextActionResult.Pass
+		end
+		self.body.Visible = not self.body.Visible
+		if self.body.Visible then
+			self:Refresh()
+			if UserInputService.GamepadEnabled then
+				GuiService.SelectedObject = self.close
+			end
+		elseif
+			GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.body)
+		then
+			GuiService.SelectedObject = self.launcher
+		end
+		return Enum.ContextActionResult.Sink
+	end
+	ContextActionService:BindAction(
+		PHONE_ACTION,
+		togglePhone,
+		false,
+		Enum.KeyCode.P,
+		Enum.KeyCode.ButtonY,
+		Enum.KeyCode.ButtonB
+	)
+	ContextActionService:SetTitle(PHONE_ACTION, "PHONE")
+	ContextActionService:SetDescription(PHONE_ACTION, "Open or close your phone.")
+	updateShortcutLabel(UserInputService:GetLastInputType())
 	table.insert(
 		self.connections,
-		UserInputService.InputBegan:Connect(function(inputObject, processed)
-			if
-				not processed
-				and inputObject.KeyCode == Enum.KeyCode.P
-				and self.launcher.Visible
-			then
-				self.body.Visible = not self.body.Visible
-				if self.body.Visible then
-					self:Refresh()
-				end
-			end
-		end)
+		UserInputService.LastInputTypeChanged:Connect(updateShortcutLabel)
 	)
 	local event = self.context.Controllers.NetworkController.remotes:WaitForChild("PhoneChanged")
 	local function watchTool(tool: Instance)
@@ -525,6 +589,7 @@ function PhoneController:Start()
 end
 
 function PhoneController:Destroy()
+	ContextActionService:UnbindAction(PHONE_ACTION)
 	if self.unbindLayout then
 		self.unbindLayout()
 	end

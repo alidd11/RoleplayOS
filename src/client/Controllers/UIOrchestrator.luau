@@ -2,6 +2,8 @@
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local VRService = game:GetService("VRService")
 
 export type Layout = {
 	Breakpoint: string,
@@ -13,6 +15,8 @@ export type Layout = {
 	NativeTop: number,
 	HotbarBottom: number,
 	RightReserve: number,
+	InputMode: string,
+	VR: boolean,
 }
 
 local UIOrchestrator = {
@@ -32,8 +36,16 @@ function UIOrchestrator:_layout(): Layout
 	if viewport.X < 100 or viewport.Y < 100 then
 		viewport = Vector2.new(1280, 720)
 	end
-	local breakpoint = if viewport.X < 700
-		then "Compact"
+	local vr = VRService.VREnabled
+	local lastInput = UserInputService:GetLastInputType()
+	local inputMode = if vr
+		then "VR"
+		elseif string.find(lastInput.Name, "Gamepad") then "Gamepad"
+		elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then "Touch"
+		else "KeyboardMouse"
+	local breakpoint = if vr
+		then "VR"
+		elseif viewport.X < 700 then "Compact"
 		elseif viewport.X < 1050 then "Tablet"
 		else "Desktop"
 	local vehicle = self.state == "Driver" or self.state == "Passenger"
@@ -41,12 +53,16 @@ function UIOrchestrator:_layout(): Layout
 		Breakpoint = breakpoint,
 		State = self.state,
 		Viewport = viewport,
-		Compact = breakpoint == "Compact",
+		Compact = breakpoint == "Compact" or vr,
 		Vehicle = vehicle,
 		Dispatch = self.state == "DispatchSeat",
-		NativeTop = 48,
-		HotbarBottom = if vehicle then 112 else 76,
-		RightReserve = if vehicle then (if breakpoint == "Compact" then 150 else 210) else 18,
+		NativeTop = if vr then 72 else 48,
+		HotbarBottom = if vr then 124 else if vehicle then 112 else 76,
+		RightReserve = if vr
+			then 64
+			else if vehicle then (if breakpoint == "Compact" then 150 else 210) else 18,
+		InputMode = inputMode,
+		VR = vr,
 	}
 end
 
@@ -59,6 +75,8 @@ function UIOrchestrator:_publish()
 		playerGui:SetAttribute("RoleplayOSNativeTopPixels", layout.NativeTop)
 		playerGui:SetAttribute("RoleplayOSHotbarBottomPixels", layout.HotbarBottom)
 		playerGui:SetAttribute("RoleplayOSReservedRightPixels", layout.RightReserve)
+		playerGui:SetAttribute("RoleplayOSInputMode", layout.InputMode)
+		playerGui:SetAttribute("RoleplayOSVREnabled", layout.VR)
 	end
 	for _, callback in self.bindings do
 		local ok, problem = pcall(callback, layout)
@@ -115,6 +133,18 @@ function UIOrchestrator:Start()
 	table.insert(
 		self.connections,
 		GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
+			self:_publish()
+		end)
+	)
+	table.insert(
+		self.connections,
+		UserInputService.LastInputTypeChanged:Connect(function()
+			self:_publish()
+		end)
+	)
+	table.insert(
+		self.connections,
+		VRService:GetPropertyChangedSignal("VREnabled"):Connect(function()
 			self:_publish()
 		end)
 	)

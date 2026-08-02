@@ -108,6 +108,16 @@ function SpawnService:EnterCivilian(
 	if not session or session.ActiveCharacterId ~= characterId then
 		return false, "CHARACTER_NOT_ACTIVE"
 	end
+	local custodyService = self.context.Services:Get("CustodyService")
+	if custodyService:HasActiveSentence(player) then
+		local spawned, custodyReason = custodyService:SpawnInCell(player)
+		if not spawned then
+			return false, custodyReason
+		end
+		session.Profile.AuditMetadata.LastCharacterId = characterId
+		self.context.Services:Get("DataService"):MarkDirty(player)
+		return true, nil
+	end
 	local definition = self.context.Configuration.Spawns[spawnId]
 	if not definition or definition.TeamName ~= "Civilian" then
 		return false, "INVALID_CIVILIAN_SPAWN"
