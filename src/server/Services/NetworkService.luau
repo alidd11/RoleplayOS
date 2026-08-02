@@ -67,6 +67,37 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("BeginDuty", function(payload)
+		return type(payload) == "table"
+			and type(payload.DutyProfileId) == "string"
+			and type(payload.RoleId) == "string"
+			and type(payload.StationId) == "string"
+			and type(payload.SpawnId) == "string"
+	end, function(player, payload, requestId)
+		local started, reason = self.context.Services:Get("DutyService"):Begin(player, payload)
+		if not started then
+			return {
+				Success = false,
+				Code = reason,
+				Message = reason == "SPAWN_POINT_UNAVAILABLE"
+						and "That station spawn is not available. Choose another station."
+					or reason == "SPAWN_ROLE_NOT_ALLOWED" and "That role cannot use the selected spawn point."
+					or "Duty could not be started.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "You are now on duty.",
+			Data = {
+				RoleId = payload.RoleId,
+				StationId = payload.StationId,
+				SpawnId = payload.SpawnId,
+			},
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetStartMenu",
 		tablePayload,

@@ -17,6 +17,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Furniture",
 			"Network",
 			"Communities",
+			"Spawns",
 		}
 	do
 		if type(config[section]) ~= "table" then
@@ -61,6 +62,17 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	for id, vehicle in config.Vehicles or {} do
 		if type(vehicle.Price) ~= "number" or vehicle.Price < 0 then
 			table.insert(errors, "Invalid vehicle price: " .. id)
+		end
+	end
+	for spawnId, spawn in config.Spawns or {} do
+		local station = config.Stations[spawn.StationId]
+		if spawn.Id ~= spawnId or not station or not table.find(station.SpawnIds, spawnId) then
+			table.insert(errors, "Invalid spawn definition: " .. spawnId)
+		end
+		for _, roleId in spawn.RoleIds or {} do
+			if not config.Roles[roleId] then
+				table.insert(errors, "Unknown role " .. roleId .. " in spawn " .. spawnId)
+			end
 		end
 	end
 	for templateId, template in config.Communities and config.Communities.Templates or {} do

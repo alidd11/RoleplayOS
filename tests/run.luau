@@ -15,6 +15,7 @@ local Serialisation = require(Shared.Serialisation)
 local ProfileSchema = require(Shared.ProfileSchema)
 local Response = require(Shared.Response)
 local CommunityPolicy = require(Shared.CommunityPolicy)
+local SpawnPolicy = require(Shared.SpawnPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -158,6 +159,26 @@ H.test("community hierarchy prevents peer management", function()
 		),
 		"peer management allowed"
 	)
+end)
+H.test("spawn policy binds role to exact station point", function()
+	local allowed = SpawnPolicy.validate(
+		Config.Stations,
+		Config.Spawns,
+		"CityCentre",
+		"PoliceLockerRoom",
+		"PoliceFrontline",
+		"Police"
+	)
+	H.expect(allowed, "valid frontline spawn rejected")
+	local invalid, reason = SpawnPolicy.validate(
+		Config.Stations,
+		Config.Spawns,
+		"CityCentre",
+		"FireLockerRoom",
+		"PoliceFrontline",
+		"Police"
+	)
+	H.expect(not invalid and reason == "SPAWN_ROLE_NOT_ALLOWED", "cross-service spawn allowed")
 end)
 H.test("response envelope contains contract fields", function()
 	local response = Response.ok({ value = 1 }, "req")

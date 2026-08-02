@@ -22,6 +22,9 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Action = access.ReasonCode == "GAMEPASS_REQUIRED" and "PromptGamepass"
 				or access.ReasonCode == "APPLICATION_REQUIRED" and "OpenApplication"
 				or "SelectRole",
+			Spawns = self.context.Services
+				:Get("StationService")
+				:GetAvailableSpawns(role.Id, role.DepartmentId),
 		})
 	end
 	local slotCount = self.context.Configuration.Characters.FreeSlots

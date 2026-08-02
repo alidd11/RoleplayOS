@@ -87,7 +87,7 @@ local Config = {
 			Id = "Police",
 			Name = "Police",
 			Ranks = { "Constable", "Sergeant", "Inspector" },
-			RoleIds = { "PoliceOfficer" },
+			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
 		},
 		Ambulance = {
 			Id = "Ambulance",
@@ -128,6 +128,19 @@ local Config = {
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
 		},
+		PoliceFrontline = {
+			Id = "PoliceFrontline",
+			Name = "Frontline Policing",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			Access = {
+				AccessType = "Application",
+				DepartmentId = "Police",
+				DisplayWhenLocked = true,
+			},
+			LoadoutId = "PoliceFrontline",
+			UniformId = "PoliceStandard",
+		},
 		Paramedic = {
 			Id = "Paramedic",
 			Name = "Paramedic",
@@ -156,7 +169,50 @@ local Config = {
 			Id = "CityCentre",
 			Name = "City Centre",
 			DepartmentIds = { "Police", "Ambulance", "Fire", "Control" },
-			SpawnNames = { "FrontDesk", "VehicleBay" },
+			SpawnIds = {
+				"CityCivilian",
+				"PoliceLockerRoom",
+				"PoliceVehicleBay",
+				"AmbulanceLockerRoom",
+				"FireLockerRoom",
+			},
+		},
+	},
+	Spawns = {
+		CityCivilian = {
+			Id = "CityCivilian",
+			StationId = "CityCentre",
+			PartName = "RPSpawn_CityCivilian",
+			RoleIds = { "Civilian" },
+			DepartmentIds = {},
+		},
+		PoliceLockerRoom = {
+			Id = "PoliceLockerRoom",
+			StationId = "CityCentre",
+			PartName = "RPSpawn_PoliceLockerRoom",
+			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
+			DepartmentIds = { "Police" },
+		},
+		PoliceVehicleBay = {
+			Id = "PoliceVehicleBay",
+			StationId = "CityCentre",
+			PartName = "RPSpawn_PoliceVehicleBay",
+			RoleIds = { "PoliceFrontline" },
+			DepartmentIds = { "Police" },
+		},
+		AmbulanceLockerRoom = {
+			Id = "AmbulanceLockerRoom",
+			StationId = "CityCentre",
+			PartName = "RPSpawn_AmbulanceLockerRoom",
+			RoleIds = { "Paramedic" },
+			DepartmentIds = { "Ambulance" },
+		},
+		FireLockerRoom = {
+			Id = "FireLockerRoom",
+			StationId = "CityCentre",
+			PartName = "RPSpawn_FireLockerRoom",
+			RoleIds = { "Firefighter" },
+			DepartmentIds = { "Fire" },
 		},
 	},
 	Uniforms = {
@@ -166,6 +222,7 @@ local Config = {
 	},
 	Loadouts = {
 		PoliceResponse = { Id = "PoliceResponse", ToolNames = { "Radio" } },
+		PoliceFrontline = { Id = "PoliceFrontline", ToolNames = { "Radio", "Notebook" } },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ToolNames = { "Radio", "MedicalBag" } },
 		FireStandard = { Id = "FireStandard", ToolNames = { "Radio" } },
 	},
@@ -377,6 +434,7 @@ local Config = {
 			EconomyTransfer = { Capacity = 3, RefillPerSecond = 0.2 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			DispatchUpdate = { Capacity = 10, RefillPerSecond = 2 },
+			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 		},
 	},
 }

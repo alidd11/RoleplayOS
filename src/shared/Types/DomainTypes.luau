@@ -188,8 +188,14 @@ export type ActiveUnit = {
 	StationId: string,
 	Status: string,
 }
-export type Station =
-	{ Id: string, Name: string, DepartmentIds: { string }, SpawnNames: { string } }
+export type Station = { Id: string, Name: string, DepartmentIds: { string }, SpawnIds: { string } }
+export type SpawnDefinition = {
+	Id: string,
+	StationId: string,
+	PartName: string,
+	RoleIds: { string },
+	DepartmentIds: { string },
+}
 export type Role = {
 	Id: string,
 	Name: string,
@@ -207,7 +213,7 @@ export type SpawnRequest = {
 	DutyProfileId: string?,
 	RoleId: string,
 	StationId: string,
-	SpawnName: string,
+	SpawnId: string,
 }
 export type AuditLogEntry = {
 	ActorUserId: number,
