@@ -17,6 +17,7 @@ local messages = {
 	SUSPENDED = "Access is suspended.",
 	BLACKLISTED = "Access is denied because this account is blacklisted.",
 	ACCESS_DENIED = "Access requirements are not met.",
+	SERVER_KIND_REQUIRED = "This entitlement is not available in this server type.",
 }
 
 local function denied(code: string, message: string?, metadata: any?): any
@@ -46,6 +47,12 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 	local kind = rule.AccessType
 	if kind == "Public" then
 		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+	end
+	if kind == "ServerKind" then
+		if subject.ServerKind == rule.Kind then
+			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		end
+		return denied("SERVER_KIND_REQUIRED", rule.Message, { RequiredKind = rule.Kind })
 	end
 	if kind == "Gamepass" then
 		if subject.Gamepasses and subject.Gamepasses[tostring(rule.GamepassId or rule.Id)] then

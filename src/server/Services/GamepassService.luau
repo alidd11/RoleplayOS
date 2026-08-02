@@ -26,6 +26,16 @@ function GamepassService:Refresh(player: Player, definition: any): (boolean, str
 	end
 	return owned, nil
 end
+
+function GamepassService:RefreshAll(player: Player)
+	for _, definition in self.context.Configuration.Gamepasses do
+		if not player.Parent then
+			return
+		end
+		self:Refresh(player, definition)
+	end
+end
+
 function GamepassService:Start()
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(
 		function(player, gamepassId, purchased)
@@ -39,7 +49,25 @@ function GamepassService:Start()
 			end
 		end
 	)
-	Players.PlayerRemoving:Connect(function() end)
+	local function refreshWhenReady(player: Player)
+		task.spawn(function()
+			local deadline = os.clock() + 15
+			while
+				player.Parent
+				and not self.context.Services:Get("DataService"):GetSession(player)
+				and os.clock() < deadline
+			do
+				task.wait(0.1)
+			end
+			if player.Parent then
+				self:RefreshAll(player)
+			end
+		end)
+	end
+	Players.PlayerAdded:Connect(refreshWhenReady)
+	for _, player in Players:GetPlayers() do
+		refreshWhenReady(player)
+	end
 end
 function GamepassService:GetPromptMetadata(definitionId: string): any?
 	local item = self.context.Configuration.Gamepasses[definitionId]

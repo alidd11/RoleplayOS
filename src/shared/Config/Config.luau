@@ -1,5 +1,24 @@
 --!strict
 
+local function publicPassOr(existingRule: any, gamepassId: number): any
+	return {
+		AccessType = "Combined",
+		Match = "Any",
+		DisplayWhenLocked = true,
+		Rules = {
+			existingRule,
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kind = "Public" },
+					{ AccessType = "Gamepass", GamepassId = gamepassId },
+				},
+			},
+		},
+	}
+end
+
 local Config = {
 	Framework = {
 		Environment = "Development",
@@ -121,6 +140,78 @@ local Config = {
 			Name = "Custom Registration Plate",
 			Description = "Lets civilians choose a moderated registration for an owned vehicle.",
 		},
+		CivilianKnife = {
+			Id = "CivilianKnife",
+			GamepassId = 1932205625,
+			Name = "Civilian Knife Access",
+			Description = "Unlocks approved civilian knife items.",
+		},
+		CivilianHandgun = {
+			Id = "CivilianHandgun",
+			GamepassId = 1935362991,
+			Name = "Civilian Handgun Access",
+			Description = "Unlocks approved civilian handgun items.",
+		},
+		CivilianShotgun = {
+			Id = "CivilianShotgun",
+			GamepassId = 1934043075,
+			Name = "Civilian Shotgun Access",
+			Description = "Unlocks approved civilian shotgun items.",
+		},
+		CivilianRifle = {
+			Id = "CivilianRifle",
+			GamepassId = 1933239337,
+			Name = "Civilian Rifle Access",
+			Description = "Unlocks approved civilian rifle items.",
+		},
+		PublicPoliceTeam = {
+			Id = "PublicPoliceTeam",
+			GamepassId = 1933635353,
+			Name = "Public Police Team",
+			Description = "Unlocks the Police team in public servers.",
+		},
+		PublicAmbulanceTeam = {
+			Id = "PublicAmbulanceTeam",
+			GamepassId = 1934391076,
+			Name = "Public Ambulance Team",
+			Description = "Unlocks the Ambulance team in public servers.",
+		},
+		PublicFireTeam = {
+			Id = "PublicFireTeam",
+			GamepassId = 1934942991,
+			Name = "Public Fire & Rescue Team",
+			Description = "Unlocks Fire and Rescue in public servers.",
+		},
+		PublicControlTeam = {
+			Id = "PublicControlTeam",
+			GamepassId = 1931427656,
+			Name = "Public Control Room Team",
+			Description = "Unlocks Emergency Control in public servers.",
+		},
+		PublicTransportTeam = {
+			Id = "PublicTransportTeam",
+			GamepassId = 1935021036,
+			Name = "Public Bus Service Team",
+			Description = "Unlocks the Bus Service in public servers.",
+		},
+		PublicHighwaysTeam = {
+			Id = "PublicHighwaysTeam",
+			GamepassId = 1933137299,
+			Name = "Public Highways Team",
+			Description = "Unlocks Highways in public servers.",
+		},
+		PublicPrisonTeam = {
+			Id = "PublicPrisonTeam",
+			GamepassId = 1935158990,
+			Name = "Public Prison Service Team",
+			Description = "Unlocks the Prison Service in public servers.",
+		},
+	},
+	EquipmentPasses = {
+		Knife = { GamepassId = 1932205625, TeamName = "Civilian", ToolNames = { "Knife" } },
+		Handgun = { GamepassId = 1935362991, TeamName = "Civilian", ToolNames = { "Handgun" } },
+		Shotgun = { GamepassId = 1934043075, TeamName = "Civilian", ToolNames = { "Shotgun" } },
+		Rifle = { GamepassId = 1933239337, TeamName = "Civilian", ToolNames = { "Rifle" } },
 	},
 	VehicleIdentity = {
 		MinimumRegistrationLength = 2,
@@ -306,14 +397,10 @@ local Config = {
 			Name = "Police Officer",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+				1933635353
+			),
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -322,14 +409,10 @@ local Config = {
 			Name = "Frontline Policing",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+				1933635353
+			),
 			LoadoutId = "PoliceFrontline",
 			UniformId = "PoliceStandard",
 		},
@@ -372,14 +455,10 @@ local Config = {
 			Name = "Paramedic",
 			TeamName = "Ambulance",
 			DepartmentId = "Ambulance",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
+				1934391076
+			),
 			LoadoutId = "AmbulanceStandard",
 			UniformId = "AmbulanceStandard",
 		},
@@ -388,14 +467,10 @@ local Config = {
 			Name = "Firefighter",
 			TeamName = "Fire",
 			DepartmentId = "Fire",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
+				1934942991
+			),
 			LoadoutId = "FireStandard",
 			UniformId = "FireStandard",
 		},
@@ -404,15 +479,14 @@ local Config = {
 			Name = "Emergency Control",
 			TeamName = "Control",
 			DepartmentId = "Control",
-			Access = {
+			Access = publicPassOr({
 				AccessType = "Combined",
 				Match = "All",
-				DisplayWhenLocked = true,
 				Rules = {
 					{ AccessType = "Application", DepartmentId = "Control" },
 					{ AccessType = "Group", GroupLinkId = "Control", MinimumGroupRank = 1 },
 				},
-			},
+			}, 1931427656),
 			LoadoutId = "ControlStandard",
 		},
 		TransportOperator = {
@@ -420,14 +494,10 @@ local Config = {
 			Name = "Bus Service",
 			TeamName = "Transport",
 			DepartmentId = "Transport",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
+				1935021036
+			),
 			LoadoutId = "TransportStandard",
 			UniformId = "TransportStandard",
 		},
@@ -436,14 +506,10 @@ local Config = {
 			Name = "Highway Patrol",
 			TeamName = "Highways",
 			DepartmentId = "Highways",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
+				1933137299
+			),
 			LoadoutId = "HighwaysStandard",
 			UniformId = "HighwaysStandard",
 		},
@@ -452,14 +518,10 @@ local Config = {
 			Name = "Prison Service",
 			TeamName = "Prison",
 			DepartmentId = "Prison",
-			Access = {
-				AccessType = "Combined",
-				Match = "All",
-				DisplayWhenLocked = true,
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
-				},
-			},
+			Access = publicPassOr(
+				{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
+				1935158990
+			),
 			LoadoutId = "PrisonStandard",
 			UniformId = "PrisonStandard",
 		},

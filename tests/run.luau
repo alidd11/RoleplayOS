@@ -35,6 +35,15 @@ H.test("gamepass access returns useful denial", function()
 	)
 	H.expect(not result.Allowed and result.ReasonCode == "GAMEPASS_REQUIRED", "wrong denial")
 end)
+H.test("public-only access is restricted by server kind", function()
+	local rule = { AccessType = "ServerKind", Kind = "Public" }
+	H.expect(Access.evaluate(rule, { ServerKind = "Public" }).Allowed, "public denied")
+	local private = Access.evaluate(rule, { ServerKind = "Private" })
+	H.expect(
+		not private.Allowed and private.ReasonCode == "SERVER_KIND_REQUIRED",
+		"private server bypassed public-only access"
+	)
+end)
 H.test("Roblox group access enforces membership and rank", function()
 	local rule = { AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 10 }
 	local denied = Access.evaluate(rule, {

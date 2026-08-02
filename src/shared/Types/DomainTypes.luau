@@ -16,6 +16,7 @@ export type AccessResult = {
 export type AccessRule = {
 	AccessType: "Public"
 		| "Gamepass"
+		| "ServerKind"
 		| "Application"
 		| "Group"
 		| "Rank"
