@@ -7,3 +7,5 @@ The default curve begins at 100 XP and grows by a factor of 1.18 per level, capp
 Completed validated shift tasks award the configured job XP. The employment record mirrors that job track's XP and level as its experience and grade. Duplicate task reward IDs are rejected. Recent history is capped at 100 entries and replay IDs at 500 entries to bound profile size; sensitive grants are audited.
 
 Physical job adapters must issue server-side task proofs through `ShiftService`. Clients must never provide XP amounts, levels, reward reasons or completion authority.
+
+The compact public progression HUD appears only when the server is public, the character is active and the Roblox team is configured as auto-assignable. Its expandable catalogue lists every public role and public job. Whitelisted teams and private-community servers fail the visibility policy on the server and receive no HUD data.

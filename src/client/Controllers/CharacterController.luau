@@ -21,6 +21,7 @@ function CharacterController:Select(characterId: string): any
 	)
 	if response.Success then
 		self.activeCharacterId = characterId
+		self.context.Events.CharacterChanged:Fire(characterId)
 	else
 		self.context.Controllers.NotificationController:Show(response.Message, "Error")
 	end

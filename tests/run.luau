@@ -19,6 +19,7 @@ local CommunityGroupPolicy = require(Shared.CommunityGroupPolicy)
 local SpawnPolicy = require(Shared.SpawnPolicy)
 local SettingsValidator = require(Shared.SettingsValidator)
 local LevelProgression = require(Shared.LevelProgression)
+local ProgressionVisibility = require(Shared.ProgressionVisibility)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -170,6 +171,20 @@ H.test("level progression handles boundaries and maximum level", function()
 	H.expect(summary.Level == 2 and summary.CurrentLevelXP == 0, "threshold did not level up")
 	local maximum = LevelProgression.fromXp(1000000000, 100, 1.18, 100)
 	H.expect(maximum.Level == 100 and maximum.AtMaximumLevel, "maximum level was not capped")
+end)
+H.test("progression HUD is restricted to public non-whitelisted teams", function()
+	H.expect(
+		ProgressionVisibility.isPublicHudAllowed("Public", { AutoAssignable = true }),
+		"public civilian team was hidden"
+	)
+	H.expect(
+		not ProgressionVisibility.isPublicHudAllowed("Public", { AutoAssignable = false }),
+		"whitelisted team received the public HUD"
+	)
+	H.expect(
+		not ProgressionVisibility.isPublicHudAllowed("Private", { AutoAssignable = true }),
+		"private community received the public HUD"
+	)
 end)
 H.test("community permissions honour active role", function()
 	local template = Config.Communities.Templates.RoleplayCommunity

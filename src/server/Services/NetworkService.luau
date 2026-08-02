@@ -174,6 +174,22 @@ function NetworkService:Start()
 		end
 	)
 	self.context.Network:RegisterFunction(
+		"GetPublicProgressionHud",
+		tablePayload,
+		function(player, _, requestId)
+			local hud, reason = self.context.Services:Get("ProgressionService"):GetPublicHud(player)
+			if not hud then
+				return {
+					Success = false,
+					Code = reason,
+					Message = "Public progression is not available here.",
+					RequestId = requestId,
+				}
+			end
+			return { Success = true, Code = "OK", Message = "", Data = hud, RequestId = requestId }
+		end
+	)
+	self.context.Network:RegisterFunction(
 		"UpdateSettings",
 		tablePayload,
 		function(player, payload, requestId)

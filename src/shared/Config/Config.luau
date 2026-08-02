@@ -509,6 +509,7 @@ local Config = {
 			GetStartMenu = { Capacity = 4, RefillPerSecond = 1 },
 			GetSettings = { Capacity = 4, RefillPerSecond = 1 },
 			GetProgression = { Capacity = 4, RefillPerSecond = 1 },
+			GetPublicProgressionHud = { Capacity = 4, RefillPerSecond = 1 },
 			UpdateSettings = { Capacity = 6, RefillPerSecond = 1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },

@@ -2,11 +2,13 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LevelProgression = require(ReplicatedStorage.RoleplayOS.Shared.LevelProgression)
+local ProgressionVisibility = require(ReplicatedStorage.RoleplayOS.Shared.ProgressionVisibility)
 
 local ProgressionService = {}
 
 function ProgressionService:Init(context: any)
 	self.context = context
+	self.event = context.Network:RegisterEvent("ProgressionChanged")
 end
 
 function ProgressionService:Start() end
@@ -52,6 +54,62 @@ function ProgressionService:Get(player: Player, characterId: string?): (any?, st
 		return nil, "CHARACTER_NOT_OWNED"
 	end
 	return self:_summary(self:_state(character)), nil
+end
+
+function ProgressionService:GetPublicHud(player: Player): (any?, string?)
+	local team = player.Team
+	local teamDefinition = team and self.context.Configuration.Teams[team.Name]
+	local serverKind = if game.PrivateServerId == "" then "Public" else "Private"
+	if not ProgressionVisibility.isPublicHudAllowed(serverKind, teamDefinition) then
+		return nil, "PUBLIC_PROGRESSION_UNAVAILABLE"
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session
+		and session.ActiveCharacterId
+		and session.Profile.Characters[session.ActiveCharacterId]
+	if not character then
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+	local state = self:_state(character)
+	local overall = self:_summary(state)
+	local roles = {}
+	for _, role in self.context.Configuration.Roles do
+		if role.TeamName == team.Name and role.Access.AccessType == "Public" then
+			local trackId = "Role:" .. role.Id
+			local track = state.Tracks[trackId] and overall.Tracks[trackId] or overall
+			table.insert(roles, {
+				Id = role.Id,
+				Name = role.Name,
+				Kind = "Role",
+				TrackId = trackId,
+				Progression = track,
+			})
+		end
+	end
+	for _, job in self.context.Configuration.Jobs do
+		if job.Class == "Public" then
+			local trackId = "Job:" .. job.Id
+			local track = state.Tracks[trackId] and overall.Tracks[trackId]
+				or self:_summary({ TotalXP = 0, Tracks = {} })
+			table.insert(roles, {
+				Id = job.Id,
+				Name = job.Name,
+				Kind = "Job",
+				TrackId = trackId,
+				Progression = track,
+			})
+		end
+	end
+	table.sort(roles, function(a, b)
+		return a.Name < b.Name
+	end)
+	return {
+		Visible = true,
+		Team = { Id = teamDefinition.Id, Name = teamDefinition.Name },
+		Overall = overall,
+		Roles = roles,
+	},
+		nil
 end
 
 function ProgressionService:Grant(
@@ -115,6 +173,11 @@ function ProgressionService:Grant(
 		Target = trackId,
 		Metadata = { Amount = amount, ReasonCode = reasonCode, Level = after.Level },
 	})
+	local hud = self:GetPublicHud(player)
+	if hud then
+		hud.Grant = { Amount = amount, TrackId = trackId, LevelsGained = after.LevelsGained }
+		self.event:FireClient(player, hud)
+	end
 	return after, nil
 end
 
