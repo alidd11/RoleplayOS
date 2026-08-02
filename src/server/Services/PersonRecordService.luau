@@ -21,6 +21,8 @@ function PersonRecordService:Search(query: string, page: number): any
 							.. character.Identity.LastName,
 						DateOfBirth = character.Identity.DateOfBirth,
 						Licences = character.Licences,
+						DrivingRecord = character.DrivingRecord,
+						CustodyRecord = character.CustodyRecord,
 						Flags = {},
 					})
 				end

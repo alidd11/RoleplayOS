@@ -34,6 +34,7 @@ function VehicleService:_applyIdentity(model: Model, vehicle: any, ownerUserId: 
 	model:SetAttribute("RoleplayOSVehicleId", vehicle.VehicleId)
 	model:SetAttribute("RoleplayOSRegistration", vehicle.Registration)
 	model:SetAttribute("RoleplayOSOwnerUserId", ownerUserId)
+	model:SetAttribute("RoleplayOSOwnerCharacterId", vehicle.OwnerCharacterId)
 	local matched = false
 	for _, descendant in model:GetDescendants() do
 		if

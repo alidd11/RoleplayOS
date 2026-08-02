@@ -58,6 +58,8 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 		Licences = {},
 		CriminalRecord = {},
 		MedicalRecord = {},
+		DrivingRecord = { Points = 0, Fines = {} },
+		CustodyRecord = { Bookings = {} },
 		Progression = {},
 		Phone = {
 			Number = PhoneValidator.numberFromCharacterId(id),

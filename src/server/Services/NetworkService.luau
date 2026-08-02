@@ -667,6 +667,54 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("CuffPlayer", function(payload)
+		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("CustodyService"):Toggle(player, payload.TargetUserId)
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result
+				then (result.Cuffed and "Player handcuffed." or "Handcuffs removed.")
+				else "The handcuffs could not be used.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("BookCustody", function(payload)
+		return type(payload) == "table"
+			and type(payload.TargetUserId) == "number"
+			and type(payload.Reason) == "string"
+	end, function(player, payload, requestId)
+		local record, reason = self.context.Services
+			:Get("CustodyService")
+			:Book(player, payload.TargetUserId, payload.Reason)
+		return {
+			Success = record ~= nil,
+			Code = if record then "OK" else reason,
+			Message = if record
+				then "Custody booking created."
+				else "Booking requires a nearby custody desk and handcuffed detainee.",
+			Data = record,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("GetPresentedId", function(payload)
+		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+	end, function(player, payload, requestId)
+		local card, reason =
+			self.context.Services:Get("IdentificationService"):Present(player, payload.TargetUserId)
+		return {
+			Success = card ~= nil,
+			Code = if card then "OK" else reason,
+			Message = if card
+				then "Identification presented."
+				else "Identification could not be presented.",
+			Data = card,
+			RequestId = requestId,
+		}
+	end)
 end
 function NetworkService:Destroy() end
 return NetworkService

@@ -134,6 +134,13 @@ function NeedsService:_step(player: Player, delta: number)
 	elseif state.Hunger < 10 then
 		speed *= 0.82
 	end
+	if player:GetAttribute("RoleplayOSCuffed") then
+		state.Sprinting = false
+		speed = 7
+		humanoid.JumpPower = 0
+	else
+		humanoid.JumpPower = 50
+	end
 	humanoid.WalkSpeed = speed
 	local now = os.clock()
 	if now - state.LastSent >= 0.25 then
