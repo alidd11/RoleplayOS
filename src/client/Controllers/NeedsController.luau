@@ -45,6 +45,7 @@ end
 function NeedsController:Start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSNeeds"
+	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
@@ -68,15 +69,14 @@ function NeedsController:Start()
 		self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
 		self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
 	end)
-	self.vehicleConnection = self.context.Events.VehicleModeChanged.Event:Connect(function(active)
-		local viewportWidth = if workspace.CurrentCamera
-			then workspace.CurrentCamera.ViewportSize.X
-			else 1280
-		self.hud.AnchorPoint = if active then Vector2.new(0, 1) else Vector2.new(0.5, 1)
-		self.hud.Position = if active then UDim2.new(0, 18, 1, -24) else UDim2.new(0.5, 0, 1, -64)
-		self.hud.Size = if active
-			then UDim2.fromOffset(if viewportWidth < 760 then 170 else 220, 13)
-			else UDim2.fromOffset(270, 15)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
+		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
+		self.hud.Position = if layout.Vehicle
+			then UDim2.new(0, 18, 1, -18)
+			else UDim2.new(0.5, 0, 1, -layout.HotbarBottom)
+		self.hud.Size = if layout.Vehicle
+			then UDim2.fromOffset(if layout.Compact then 164 else 220, 14)
+			else UDim2.fromOffset(if layout.Compact then 224 else 270, 15)
 	end)
 	ContextActionService:BindAction("RoleplayOSSprint", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin or inputState == Enum.UserInputState.End then
@@ -97,8 +97,8 @@ function NeedsController:Destroy()
 	if self.connection then
 		self.connection:Disconnect()
 	end
-	if self.vehicleConnection then
-		self.vehicleConnection:Disconnect()
+	if self.unbindLayout then
+		self.unbindLayout()
 	end
 	if self.blur then
 		self.blur:Destroy()

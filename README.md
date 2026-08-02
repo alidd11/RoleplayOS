@@ -17,6 +17,8 @@ See [Architecture](docs/ARCHITECTURE.md), [Access control](docs/ACCESS_CONTROL.m
 
 To connect RoleplayOS to an existing map, follow [Real baseplate deployment](docs/REAL_BASEPLATE_DEPLOYMENT.md). Its migration-specific Rojo project preserves the map and unrelated Studio content.
 
+Content builders should follow [Vehicle and Tool content authoring](docs/CONTENT_AUTHORING.md) and the [UK environment modelling bible](docs/UK_ENVIRONMENT_MODELLING_BIBLE.md).
+
 ## Repository layout
 
 - `src/shared`: replicated types, safe configuration and pure logic

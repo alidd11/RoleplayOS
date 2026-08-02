@@ -11,6 +11,7 @@ end
 function SpeedometerController:_mount()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSSpeedometer"
+	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.DisplayOrder = 12
@@ -75,6 +76,12 @@ end
 
 function SpeedometerController:Start()
 	self:_mount()
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Speedometer", function(layout)
+		self.frame.AnchorPoint = Vector2.new(0.5, 1)
+		self.frame.Position = UDim2.new(0.5, 0, 1, -18)
+		self.frame.Size =
+			UDim2.fromOffset(if layout.Compact then 158 else 190, if layout.Compact then 62 else 72)
+	end)
 	local player = Players.LocalPlayer
 	if player.Character then
 		self:_watch(player.Character)
@@ -118,6 +125,9 @@ function SpeedometerController:Destroy()
 	end
 	if self.gui then
 		self.gui:Destroy()
+	end
+	if self.unbindLayout then
+		self.unbindLayout()
 	end
 end
 return SpeedometerController

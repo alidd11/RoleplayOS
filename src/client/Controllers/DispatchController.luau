@@ -102,6 +102,10 @@ function DispatchController:_mount()
 	constraint.MinSize = Vector2.new(760, 500)
 	constraint.MaxSize = Vector2.new(1180, 720)
 	constraint.Parent = shell
+	self.constraint = constraint
+	local scale = Instance.new("UIScale")
+	scale.Parent = shell
+	self.scale = scale
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
 	stroke.Transparency = 0.1
@@ -472,6 +476,15 @@ end
 
 function DispatchController:Start()
 	self:_mount()
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Dispatch", function(layout)
+		self.scale.Scale = if layout.Compact
+			then math.clamp(
+				math.min((layout.Viewport.X - 20) / 760, (layout.Viewport.Y - 28) / 500),
+				0.42,
+				1
+			)
+			else 1
+	end)
 	local function watchCharacter(character: Model)
 		for _, connection in self.characterConnections do
 			connection:Disconnect()
@@ -529,6 +542,9 @@ function DispatchController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.characterConnections)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	if self.gui then
 		self.gui:Destroy()
 	end

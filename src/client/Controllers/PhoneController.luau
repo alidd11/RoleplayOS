@@ -206,6 +206,25 @@ function PhoneController:_mount()
 	close.Activated:Connect(function()
 		body.Visible = false
 	end)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Phone", function(layout)
+		if layout.Compact then
+			body.AnchorPoint = Vector2.new(0.5, 0.5)
+			body.Position = UDim2.fromScale(0.5, 0.5)
+			body.Size = UDim2.new(1, -24, 1, -28)
+		elseif layout.Vehicle then
+			body.AnchorPoint = Vector2.new(0, 0.5)
+			body.Position = UDim2.new(0, 18, 0.5, 0)
+			body.Size = UDim2.fromOffset(286, math.min(520, layout.Viewport.Y - 90))
+		else
+			body.AnchorPoint = Vector2.new(1, 1)
+			body.Position = UDim2.new(1, -18, 1, -76)
+			body.Size = UDim2.fromOffset(326, math.min(610, layout.Viewport.Y - 38))
+		end
+		launcher.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(1, 1)
+		launcher.Position = if layout.Vehicle
+			then UDim2.new(0, 18, 1, -layout.HotbarBottom)
+			else UDim2.new(1, -18, 1, -layout.HotbarBottom)
+	end)
 end
 
 function PhoneController:_clear()
@@ -506,6 +525,9 @@ function PhoneController:Start()
 end
 
 function PhoneController:Destroy()
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

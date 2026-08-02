@@ -1,0 +1,139 @@
+--!strict
+
+local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
+
+export type Layout = {
+	Breakpoint: string,
+	State: string,
+	Viewport: Vector2,
+	Compact: boolean,
+	Vehicle: boolean,
+	Dispatch: boolean,
+	NativeTop: number,
+	HotbarBottom: number,
+	RightReserve: number,
+}
+
+local UIOrchestrator = {
+	connections = {},
+	bindings = {},
+	state = "OnFoot",
+	cameraConnection = nil,
+}
+
+function UIOrchestrator:Init(context: any)
+	self.context = context
+	self.changed = Instance.new("BindableEvent")
+end
+
+function UIOrchestrator:_layout(): Layout
+	local camera = workspace.CurrentCamera
+	local viewport = if camera then camera.ViewportSize else Vector2.new(1280, 720)
+	if viewport.X < 100 or viewport.Y < 100 then
+		viewport = Vector2.new(1280, 720)
+	end
+	local breakpoint = if viewport.X < 700
+		then "Compact"
+		elseif viewport.X < 1050 then "Tablet"
+		else "Desktop"
+	local vehicle = self.state == "Driver" or self.state == "Passenger"
+	return {
+		Breakpoint = breakpoint,
+		State = self.state,
+		Viewport = viewport,
+		Compact = breakpoint == "Compact",
+		Vehicle = vehicle,
+		Dispatch = self.state == "DispatchSeat",
+		NativeTop = 48,
+		HotbarBottom = if vehicle then 112 else 76,
+		RightReserve = if vehicle then (if breakpoint == "Compact" then 150 else 210) else 18,
+	}
+end
+
+function UIOrchestrator:_publish()
+	local layout = self:_layout()
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui:SetAttribute("RoleplayOSUIState", layout.State)
+		playerGui:SetAttribute("RoleplayOSBreakpoint", layout.Breakpoint)
+		playerGui:SetAttribute("RoleplayOSNativeTopPixels", layout.NativeTop)
+		playerGui:SetAttribute("RoleplayOSHotbarBottomPixels", layout.HotbarBottom)
+		playerGui:SetAttribute("RoleplayOSReservedRightPixels", layout.RightReserve)
+	end
+	for _, callback in self.bindings do
+		local ok, problem = pcall(callback, layout)
+		if not ok then
+			warn("RoleplayOS UI layout binding failed: " .. tostring(problem))
+		end
+	end
+	self.changed:Fire(layout)
+end
+
+function UIOrchestrator:Bind(key: string, callback: (Layout) -> ()): () -> ()
+	self.bindings[key] = callback
+	local ok, problem = pcall(callback, self:_layout())
+	if not ok then
+		warn("RoleplayOS UI layout binding failed: " .. tostring(problem))
+	end
+	return function()
+		self.bindings[key] = nil
+	end
+end
+
+function UIOrchestrator:GetLayout(): Layout
+	return self:_layout()
+end
+
+function UIOrchestrator:Start()
+	table.insert(
+		self.connections,
+		self.context.Events.UIStateChanged.Event:Connect(function(state)
+			if type(state) == "string" then
+				self.state = state
+				self:_publish()
+			end
+		end)
+	)
+	local function watchCamera()
+		if self.cameraConnection then
+			self.cameraConnection:Disconnect()
+			self.cameraConnection = nil
+		end
+		local camera = workspace.CurrentCamera
+		if camera then
+			self.cameraConnection = camera
+				:GetPropertyChangedSignal("ViewportSize")
+				:Connect(function()
+					self:_publish()
+				end)
+		end
+	end
+	watchCamera()
+	table.insert(
+		self.connections,
+		workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(watchCamera)
+	)
+	table.insert(
+		self.connections,
+		GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
+			self:_publish()
+		end)
+	)
+	self:_publish()
+end
+
+function UIOrchestrator:Destroy()
+	if self.cameraConnection then
+		self.cameraConnection:Disconnect()
+		self.cameraConnection = nil
+	end
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+	table.clear(self.bindings)
+	self.changed:Destroy()
+end
+
+return UIOrchestrator

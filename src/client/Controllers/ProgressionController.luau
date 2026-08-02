@@ -228,23 +228,17 @@ function ProgressionController:Start()
 			self:Refresh()
 		end)
 	)
-	table.insert(
-		self.connections,
-		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
-			local viewportWidth = if workspace.CurrentCamera
-				then workspace.CurrentCamera.ViewportSize.X
-				else 1280
-			self.panel.Visible = false
-			self.expanded = false
-			self.card.AnchorPoint = if active then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
-			self.card.Position = if active
-				then UDim2.new(0.5, 0, 0, 18)
-				else UDim2.new(0.5, 0, 1, -88)
-			self.card.Size = if active
-				then UDim2.fromOffset(if viewportWidth < 760 then 220 else 280, 48)
-				else UDim2.fromOffset(330, 56)
-		end)
-	)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Progression", function(layout)
+		self.panel.Visible = false
+		self.expanded = false
+		self.card.AnchorPoint = if layout.Vehicle then Vector2.new(0.5, 0) else Vector2.new(0.5, 1)
+		self.card.Position = if layout.Vehicle
+			then UDim2.new(0.5, 0, 0, 12)
+			else UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 22))
+		self.card.Size = if layout.Vehicle
+			then UDim2.fromOffset(if layout.Compact then 210 else 280, 48)
+			else UDim2.fromOffset(if layout.Compact then 260 else 330, 56)
+	end)
 	self:Refresh()
 end
 
@@ -253,6 +247,9 @@ function ProgressionController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	if self.gui then
 		self.gui:Destroy()
 	end

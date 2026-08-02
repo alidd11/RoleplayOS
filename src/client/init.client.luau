@@ -10,6 +10,7 @@ local events = {
 	UIStateChanged = Instance.new("BindableEvent"),
 }
 local controllers = {
+	UIOrchestrator = require(script.Controllers.UIOrchestrator),
 	NetworkController = require(script.Controllers.NetworkController),
 	NotificationController = require(script.Controllers.NotificationController),
 	SettingsController = require(script.Controllers.SettingsController),
@@ -43,6 +44,7 @@ end
 local context = { Controllers = controllers, Events = events }
 for _, name in
 	{
+		"UIOrchestrator",
 		"NetworkController",
 		"NotificationController",
 		"SettingsController",
@@ -79,6 +81,7 @@ do
 end
 for _, name in
 	{
+		"UIOrchestrator",
 		"NetworkController",
 		"NotificationController",
 		"SettingsController",

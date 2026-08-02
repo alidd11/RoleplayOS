@@ -242,22 +242,19 @@ function MinimapController:Start()
 		)
 	end
 	self:_rebuild()
-	table.insert(
-		self.connections,
-		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
-			local viewportWidth = if workspace.CurrentCamera
-				then workspace.CurrentCamera.ViewportSize.X
-				else 1280
-			self.shell.Visible = not active or viewportWidth >= 760
-			self.shell.AnchorPoint = if active then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
-			self.shell.Position = if active
-				then UDim2.new(0, 18, 0.55, 0)
-				else UDim2.new(1, -18, 0.5, 0)
-			self.shell.Size = if active
-				then UDim2.fromOffset(150, 170)
-				else UDim2.fromOffset(184, 208)
-		end)
-	)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Minimap", function(layout)
+		self.shell.Visible = not layout.Vehicle or not layout.Compact
+		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
+		self.shell.Position = if layout.Vehicle
+			then UDim2.new(0, 18, 0.52, 0)
+			else UDim2.new(1, -layout.RightReserve, 0.5, 0)
+		self.shell.Size = if layout.Vehicle
+			then UDim2.fromOffset(150, 170)
+			else UDim2.fromOffset(
+				if layout.Compact then 150 else 184,
+				if layout.Compact then 170 else 208
+			)
+	end)
 	self.running = true
 	task.spawn(function()
 		while self.running do
@@ -273,6 +270,9 @@ function MinimapController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	if self.gui then
 		self.gui:Destroy()
 	end

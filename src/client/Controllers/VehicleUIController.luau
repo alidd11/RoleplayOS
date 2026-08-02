@@ -13,11 +13,6 @@ function VehicleUIController:_broadcast()
 	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
 		playerGui:SetAttribute("RoleplayOSVehicleMode", self.vehicleMode)
-		playerGui:SetAttribute("RoleplayOSReservedRightPixels", if self.vehicleMode then 190 else 0)
-		playerGui:SetAttribute(
-			"RoleplayOSReservedBottomCentrePixels",
-			if self.vehicleMode then 150 else 0
-		)
 	end
 	self.context.Events.VehicleModeChanged:Fire(self.vehicleMode)
 	self.context.Events.UIStateChanged:Fire(self.state)

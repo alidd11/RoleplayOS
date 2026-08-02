@@ -84,6 +84,10 @@ function MDTController:_mount()
 	constraint.MinSize = Vector2.new(720, 470)
 	constraint.MaxSize = Vector2.new(1120, 720)
 	constraint.Parent = shell
+	self.constraint = constraint
+	local scale = Instance.new("UIScale")
+	scale.Parent = shell
+	self.scale = scale
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
 	stroke.Transparency = 0.15
@@ -334,18 +338,28 @@ function MDTController:Start()
 			self:RefreshAccess()
 		end)
 	)
-	table.insert(
-		self.connections,
-		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
-			self.launcher.AnchorPoint = if active then Vector2.new(0, 1) else Vector2.new(0, 0.5)
-			self.launcher.Position = if active
-				then UDim2.new(0, 18, 1, -50)
-				else UDim2.new(0, 18, 0.62, 0)
-			if active then
-				self.shell.Visible = false
-			end
-		end)
-	)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("MDT", function(layout)
+		self.launcher.AnchorPoint = if layout.Vehicle
+			then Vector2.new(0, 1)
+			else Vector2.new(0, 0.5)
+		self.launcher.Position = if layout.Vehicle
+			then UDim2.new(0, 18, 1, -(layout.HotbarBottom + 8))
+			else UDim2.new(0, 18, 0.62, 0)
+		if layout.Compact then
+			self.constraint.MinSize = Vector2.new(720, 470)
+			self.scale.Scale = math.clamp(
+				math.min((layout.Viewport.X - 20) / 720, (layout.Viewport.Y - 28) / 470),
+				0.44,
+				1
+			)
+		else
+			self.constraint.MinSize = Vector2.new(720, 470)
+			self.scale.Scale = 1
+		end
+		if layout.Vehicle then
+			self.shell.Visible = false
+		end
+	end)
 	self:RefreshAccess()
 end
 
@@ -361,6 +375,9 @@ function MDTController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	if self.gui then
 		self.gui:Destroy()
 	end
