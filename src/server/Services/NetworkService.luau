@@ -39,7 +39,7 @@ function NetworkService:Start()
 		end
 	)
 	self.context.Network:RegisterFunction("CreatePrivateCommunity", function(payload)
-		return type(payload) == "table" and type(payload.Name) == "string"
+		return type(payload) == "table" and type(payload.GroupId) == "number"
 	end, function(player, payload, requestId)
 		if game.PrivateServerOwnerId == 0 or player.UserId ~= game.PrivateServerOwnerId then
 			return {
@@ -50,12 +50,15 @@ function NetworkService:Start()
 			}
 		end
 		local community, reason =
-			self.context.Services:Get("CommunityService"):Create(player, payload.Name)
+			self.context.Services:Get("CommunityService"):Create(player, payload.GroupId)
 		if not community then
 			return {
 				Success = false,
 				Code = reason,
-				Message = "The community could not be created.",
+				Message = reason == "COMMUNITY_GROUP_OWNER_REQUIRED"
+						and "You must own that Roblox group."
+					or reason == "COMMUNITY_GROUP_UNAVAILABLE" and "Roblox could not verify that group. Try again shortly."
+					or "The community could not be created.",
 				RequestId = requestId,
 			}
 		end

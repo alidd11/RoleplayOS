@@ -596,7 +596,7 @@ function App.mount(context: any): ScreenGui
 			"Your server",
 			"Communities share RoleplayOS while retaining their identity."
 		)
-		local hero = card(scroll, 200)
+		local hero = card(scroll, 240)
 		local eyebrow = text(
 			hero,
 			server and string.upper(server.Kind .. " SERVER") or "PUBLIC SERVER",
@@ -627,18 +627,38 @@ function App.mount(context: any): ScreenGui
 			COLOURS.Success,
 			true
 		)
-		state.Position = UDim2.fromOffset(22, 151)
+		state.Position = UDim2.fromOffset(22, 145)
 		state.Size = UDim2.new(1, -220, 0, 28)
 		if server and server.Kind == "Private" and not server.Community then
+			local groupIdInput = Instance.new("TextBox")
+			groupIdInput.BackgroundColor3 = COLOURS.Sidebar
+			groupIdInput.BorderSizePixel = 0
+			groupIdInput.ClearTextOnFocus = false
+			groupIdInput.Font = Enum.Font.Gotham
+			groupIdInput.PlaceholderColor3 = COLOURS.Muted
+			groupIdInput.PlaceholderText = "Roblox group ID"
+			groupIdInput.Position = UDim2.fromOffset(22, 183)
+			groupIdInput.Size = UDim2.new(1, -220, 0, 38)
+			groupIdInput.Text = ""
+			groupIdInput.TextColor3 = COLOURS.Text
+			groupIdInput.TextSize = 13
+			groupIdInput.Parent = hero
+			corner(groupIdInput, 9)
 			local createCommunity = button(hero, "Create community", true)
 			createCommunity.AnchorPoint = Vector2.new(1, 1)
 			createCommunity.Position = UDim2.new(1, -20, 1, -18)
 			createCommunity.Size = UDim2.fromOffset(170, 42)
 			createCommunity.Activated:Connect(function()
-				local communityName = Players.LocalPlayer.DisplayName .. " Community"
+				local groupId = tonumber(groupIdInput.Text)
+				if not groupId or groupId <= 0 or groupId % 1 ~= 0 then
+					context.Controllers.NotificationController:Show(
+						"Enter the numeric ID of a Roblox group you own.",
+						"Group required"
+					)
+					return
+				end
 				createCommunity.Text = "Creating…"
-				local response =
-					context.Controllers.CommunityController:CreatePrivate(communityName)
+				local response = context.Controllers.CommunityController:CreatePrivate(groupId)
 				if response.Success then
 					context.Controllers.StartMenuController:Refresh()
 				else

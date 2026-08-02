@@ -27,6 +27,12 @@ local Config = {
 		AllowPrivateServerCommunities = true,
 		MaximumMembershipsPerPlayer = 20,
 		DefaultTemplateId = "RoleplayCommunity",
+		GroupRoleRanks = {
+			Owner = 255,
+			Administrator = 200,
+			Moderator = 100,
+			Member = 1,
+		},
 		Templates = {
 			RoleplayCommunity = {
 				Id = "RoleplayCommunity",
@@ -490,6 +496,7 @@ local Config = {
 	Network = {
 		MaximumPayloadBytes = 8192,
 		Endpoints = {
+			CreatePrivateCommunity = { Capacity = 1, RefillPerSecond = 0.02 },
 			GetStartMenu = { Capacity = 4, RefillPerSecond = 1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },

@@ -15,6 +15,7 @@ local Serialisation = require(Shared.Serialisation)
 local ProfileSchema = require(Shared.ProfileSchema)
 local Response = require(Shared.Response)
 local CommunityPolicy = require(Shared.CommunityPolicy)
+local CommunityGroupPolicy = require(Shared.CommunityGroupPolicy)
 local SpawnPolicy = require(Shared.SpawnPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
@@ -182,6 +183,16 @@ H.test("community hierarchy prevents peer management", function()
 		),
 		"peer management allowed"
 	)
+end)
+H.test("community group ranks map to the highest permitted role", function()
+	local ranks = Config.Communities.GroupRoleRanks
+	H.expect(CommunityGroupPolicy.resolveRole(0, ranks) == nil, "non-member received a role")
+	H.expect(CommunityGroupPolicy.resolveRole(1, ranks) == "Member", "member rank mapped badly")
+	H.expect(
+		CommunityGroupPolicy.resolveRole(150, ranks) == "Moderator",
+		"moderator rank mapped badly"
+	)
+	H.expect(CommunityGroupPolicy.resolveRole(255, ranks) == "Owner", "owner rank mapped badly")
 end)
 H.test("spawn policy binds role to exact station point", function()
 	local allowed = SpawnPolicy.validate(

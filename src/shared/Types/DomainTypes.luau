@@ -240,6 +240,12 @@ export type CommunityRecord = {
 	CommunityId: string,
 	Name: string,
 	OwnerUserId: number,
+	RobloxGroup: {
+		GroupId: number,
+		Name: string,
+		EmblemUrl: string?,
+		OwnerUserId: number,
+	}?,
 	TemplateId: string,
 	CreatedAt: number,
 	UpdatedAt: number,

@@ -9,9 +9,9 @@ end
 
 function CommunityController:Start() end
 
-function CommunityController:CreatePrivate(name: string): any
+function CommunityController:CreatePrivate(groupId: number): any
 	local response = self.context.Controllers.NetworkController:Request("CreatePrivateCommunity", {
-		Name = name,
+		GroupId = groupId,
 	})
 	if response.Success then
 		self.current = response.Data

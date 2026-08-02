@@ -114,6 +114,16 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			priorities[role.Priority] = true
 		end
 	end
+	for roleId, rank in config.Communities and config.Communities.GroupRoleRanks or {} do
+		if
+			not config.Communities.Templates[config.Communities.DefaultTemplateId].Roles[roleId]
+			or type(rank) ~= "number"
+			or rank < 1
+			or rank > 255
+		then
+			table.insert(errors, "Invalid community group role rank: " .. roleId)
+		end
+	end
 	return #errors == 0, errors
 end
 

@@ -1,7 +1,9 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
+local GroupService = game:GetService("GroupService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CommunityGroupPolicy = require(ReplicatedStorage.RoleplayOS.Shared.CommunityGroupPolicy)
 local CommunityPolicy = require(ReplicatedStorage.RoleplayOS.Shared.CommunityPolicy)
 
 local CommunityService = { cache = {}, activeCommunityId = nil }
@@ -24,12 +26,32 @@ function CommunityService:_privateServerCommunityId(): string?
 	return "private:" .. game.PrivateServerId
 end
 
-function CommunityService:Create(owner: Player, name: string, templateId: string?): (any?, string?)
+function CommunityService:Create(
+	owner: Player,
+	groupId: number,
+	templateId: string?
+): (any?, string?)
 	if not self.context.Configuration.Communities.Enabled then
 		return nil, "COMMUNITIES_DISABLED"
 	end
-	if type(name) ~= "string" or #name < 3 or #name > 48 or string.find(name, "[%c]") then
-		return nil, "INVALID_COMMUNITY_NAME"
+	if not self:_privateServerCommunityId() or game.PrivateServerOwnerId ~= owner.UserId then
+		return nil, "PRIVATE_SERVER_OWNER_REQUIRED"
+	end
+	if groupId <= 0 or groupId % 1 ~= 0 then
+		return nil, "INVALID_COMMUNITY_GROUP"
+	end
+	local groupOk, groupInfo = pcall(GroupService.GetGroupInfoAsync, GroupService, groupId)
+	if
+		not groupOk
+		or type(groupInfo) ~= "table"
+		or groupInfo.Id ~= groupId
+		or type(groupInfo.Name) ~= "string"
+	then
+		return nil, "COMMUNITY_GROUP_UNAVAILABLE"
+	end
+	local groupOwner = groupInfo.Owner
+	if type(groupOwner) ~= "table" or groupOwner.Id ~= owner.UserId then
+		return nil, "COMMUNITY_GROUP_OWNER_REQUIRED"
 	end
 	local selectedTemplateId = templateId
 		or self.context.Configuration.Communities.DefaultTemplateId
@@ -47,8 +69,14 @@ function CommunityService:Create(owner: Player, name: string, templateId: string
 			end
 			return {
 				CommunityId = communityId,
-				Name = name,
+				Name = groupInfo.Name,
 				OwnerUserId = owner.UserId,
+				RobloxGroup = {
+					GroupId = groupId,
+					Name = groupInfo.Name,
+					EmblemUrl = groupInfo.EmblemUrl,
+					OwnerUserId = owner.UserId,
+				},
 				TemplateId = selectedTemplateId,
 				CreatedAt = now,
 				UpdatedAt = now,
@@ -80,7 +108,7 @@ function CommunityService:Create(owner: Player, name: string, templateId: string
 		ActorUserId = owner.UserId,
 		Action = "Community.Created",
 		Target = communityId,
-		Metadata = { TemplateId = selectedTemplateId },
+		Metadata = { TemplateId = selectedTemplateId, GroupId = groupId },
 	})
 	return record, nil
 end
@@ -97,6 +125,28 @@ function CommunityService:Get(communityId: string): (any?, string?)
 end
 
 function CommunityService:GetMembership(player: Player, communityId: string): any?
+	local community = self.cache[communityId]
+	if community and community.RobloxGroup then
+		local membership = self.context.Services
+			:Get("GroupService")
+			:GetMembershipByGroupId(player, community.RobloxGroup.GroupId)
+		if membership.Failed or membership.NotConfigured or not membership.IsMember then
+			return nil
+		end
+		local selectedRoleId = CommunityGroupPolicy.resolveRole(
+			membership.HighestRank,
+			self.context.Configuration.Communities.GroupRoleRanks
+		)
+		if not selectedRoleId then
+			return nil
+		end
+		return {
+			CommunityId = communityId,
+			RoleId = selectedRoleId,
+			Status = "Active",
+			GroupRank = membership.HighestRank,
+		}
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	return session and session.Profile.Communities[communityId]
 end
@@ -127,6 +177,11 @@ function CommunityService:PublicSummary(player: Player): any?
 		CommunityId = community.CommunityId,
 		Name = community.Name,
 		TemplateId = community.TemplateId,
+		RobloxGroup = community.RobloxGroup and {
+			GroupId = community.RobloxGroup.GroupId,
+			Name = community.RobloxGroup.Name,
+			EmblemUrl = community.RobloxGroup.EmblemUrl,
+		} or nil,
 		Policies = community.Policies,
 		Membership = membership and { RoleId = membership.RoleId, Status = membership.Status }
 			or nil,
@@ -143,6 +198,9 @@ function CommunityService:Invite(
 	local community = communityId and self.cache[communityId]
 	if not community or not self:HasPermission(actor, "Members.Manage", communityId) then
 		return false, "COMMUNITY_PERMISSION_DENIED"
+	end
+	if community.RobloxGroup then
+		return false, "COMMUNITY_MEMBERSHIP_MANAGED_BY_ROBLOX_GROUP"
 	end
 	local template = self:_template(community.TemplateId)
 	local selectedRoleId = roleId or template.DefaultMemberRoleId
@@ -194,6 +252,9 @@ function CommunityService:RespondToInvite(
 	accept: boolean
 ): (boolean, string?)
 	local community = self:Get(communityId)
+	if community and community.RobloxGroup then
+		return false, "COMMUNITY_MEMBERSHIP_MANAGED_BY_ROBLOX_GROUP"
+	end
 	local invitation = community and community.Members[tostring(player.UserId)]
 	if not invitation or invitation.Status ~= "Invited" then
 		return false, "COMMUNITY_INVITE_NOT_FOUND"

@@ -15,51 +15,66 @@ function RobloxGroupService:GetMembership(player: Player, linkId: string): any
 	if not definition then
 		return { Failed = true, Reason = "GROUP_LINK_NOT_FOUND" }
 	end
+	return self:GetMembershipByGroupId(player, definition.GroupId, linkId, definition.MinimumRank)
+end
+
+function RobloxGroupService:GetMembershipByGroupId(
+	player: Player,
+	groupId: number,
+	cacheKey: string?,
+	minimumRank: number?
+): any
+	local key = cacheKey or "group:" .. tostring(groupId)
 	local playerCache = self.cache[player.UserId]
 	if not playerCache then
 		playerCache = {}
 		self.cache[player.UserId] = playerCache
 	end
-	if playerCache[linkId] then
-		return playerCache[linkId]
+	local cached = playerCache[key]
+	if cached and (not cached.RetryAfter or os.clock() < cached.RetryAfter) then
+		return cached
 	end
+	playerCache[key] = nil
 	if
 		RunService:IsStudio()
 		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio
 	then
 		local mock = {
-			GroupId = definition.GroupId,
+			GroupId = groupId,
 			IsMember = true,
 			HighestRank = 255,
-			MinimumRank = definition.MinimumRank,
+			MinimumRank = minimumRank or 1,
 			Roles = { { Id = 0, Name = "Studio Owner", Rank = 255 } },
 			Mock = true,
 		}
-		playerCache[linkId] = mock
+		playerCache[key] = mock
 		return mock
 	end
-	if definition.GroupId <= 0 then
+	if groupId <= 0 then
 		local unconfigured = {
-			GroupId = definition.GroupId,
-			MinimumRank = definition.MinimumRank,
+			GroupId = groupId,
+			MinimumRank = minimumRank or 1,
 			NotConfigured = true,
 		}
-		playerCache[linkId] = unconfigured
+		playerCache[key] = unconfigured
 		return unconfigured
 	end
 	local ok, result =
-		pcall(GroupService.GetRolesInGroupAsync, GroupService, player.UserId, definition.GroupId)
+		pcall(GroupService.GetRolesInGroupAsync, GroupService, player.UserId, groupId)
 	if not ok or type(result) ~= "table" then
 		self.context.Logger:Warning("Roblox group membership check failed", {
 			UserId = player.UserId,
-			GroupLinkId = linkId,
-			GroupId = definition.GroupId,
+			GroupLinkId = key,
+			GroupId = groupId,
 		})
-		return {
-			GroupId = definition.GroupId,
-			MinimumRank = definition.MinimumRank,
+		local failure = {
+			GroupId = groupId,
+			MinimumRank = minimumRank or 1,
 			Failed = true,
+			RetryAfter = os.clock() + 30,
 		}
+		playerCache[key] = failure
+		return failure
 	end
 	local highestRank = 0
 	local roles = if type(result.Roles) == "table" then result.Roles else {}
@@ -69,13 +84,13 @@ function RobloxGroupService:GetMembership(player: Player, linkId: string): any
 		end
 	end
 	local membership = {
-		GroupId = definition.GroupId,
+		GroupId = groupId,
 		IsMember = result.IsMember == true,
 		HighestRank = highestRank,
-		MinimumRank = definition.MinimumRank,
+		MinimumRank = minimumRank or 1,
 		Roles = roles,
 	}
-	playerCache[linkId] = membership
+	playerCache[key] = membership
 	return membership
 end
 
