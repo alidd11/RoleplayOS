@@ -98,6 +98,30 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("EnterCivilian", function(payload)
+		return type(payload) == "table"
+			and type(payload.CharacterId) == "string"
+			and type(payload.SpawnId) == "string"
+	end, function(player, payload, requestId)
+		local entered, reason = self.context.Services
+			:Get("SpawnService")
+			:EnterCivilian(player, payload.CharacterId, payload.SpawnId)
+		if not entered then
+			return {
+				Success = false,
+				Code = reason,
+				Message = "The civilian spawn could not be completed.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Welcome to the city.",
+			Data = { SpawnId = payload.SpawnId },
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetStartMenu",
 		tablePayload,

@@ -62,6 +62,23 @@ function DataService:Load(player: Player): (any?, string?)
 	end
 	if RunService:IsStudio() and self.context.Configuration.Framework.UseMockDataInStudio then
 		local profile = ProfileSchema.default(player.UserId)
+		if self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio then
+			profile.DutyProfiles.StudioPolice = {
+				ProfileId = "StudioPolice",
+				DepartmentId = "Police",
+				Rank = 1,
+				QualificationIds = {},
+				Callsign = "STUDIO-1",
+			}
+			table.insert(profile.Applications, {
+				ApplicationId = "StudioPoliceAccess",
+				FormId = "Police",
+				Status = "Accepted",
+				Answers = {},
+				SubmittedAt = os.time(),
+				UpdatedAt = os.time(),
+			})
+		end
 		self.sessions[player.UserId] = {
 			Profile = profile,
 			Dirty = false,

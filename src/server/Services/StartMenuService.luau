@@ -15,6 +15,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		table.insert(roles, {
 			Id = role.Id,
 			Name = role.Name,
+			DepartmentId = role.DepartmentId,
 			Visible = role.Access.DisplayWhenLocked ~= false or access.Allowed,
 			Locked = not access.Allowed,
 			LockType = role.Access.AccessType,
@@ -27,6 +28,15 @@ function StartMenuService:Build(player: Player): (any?, string?)
 				:GetAvailableSpawns(role.Id, role.DepartmentId),
 		})
 	end
+	local dutyProfiles = {}
+	for _, profile in session.Profile.DutyProfiles do
+		table.insert(dutyProfiles, {
+			ProfileId = profile.ProfileId,
+			DepartmentId = profile.DepartmentId,
+			Rank = profile.Rank,
+			Callsign = profile.Callsign,
+		})
+	end
 	local slotCount = self.context.Configuration.Characters.FreeSlots
 	return {
 		Framework = {
@@ -35,6 +45,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		},
 		Server = self.context.Services:Get("CommunityServerService"):GetServerContext(player),
 		Characters = self.context.Services:Get("CharacterService"):List(player),
+		DutyProfiles = dutyProfiles,
 		EmptySlots = math.max(0, slotCount - #session.Profile.CharacterSlots),
 		Roles = roles,
 		Stations = self.context.Configuration.Stations,

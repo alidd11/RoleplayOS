@@ -5,6 +5,7 @@ local Config = {
 		Environment = "Development",
 		SchemaVersion = 2,
 		UseMockDataInStudio = true,
+		GrantMockEmergencyAccessInStudio = true,
 		AutosaveSeconds = 120,
 		ShutdownSaveSeconds = 25,
 		MaxSaveAttempts = 4,
@@ -456,6 +457,7 @@ local Config = {
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			DispatchUpdate = { Capacity = 10, RefillPerSecond = 2 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
+			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 		},
 	},
 }

@@ -224,6 +224,7 @@ function App.mount(context: any): ScreenGui
 
 	local menuData: any = nil
 	local selectedCharacterId: string? = nil
+	local dismissToWorld: () -> ()
 
 	local function showModal()
 		local shade = Instance.new("TextButton")
@@ -305,9 +306,79 @@ function App.mount(context: any): ScreenGui
 			:Play()
 	end
 
+	local function showDutySelection(role: any, dutyProfile: any)
+		local shade = Instance.new("TextButton")
+		shade.Text = ""
+		shade.AutoButtonColor = false
+		shade.BackgroundColor3 = Color3.new(0, 0, 0)
+		shade.BackgroundTransparency = 0.25
+		shade.Size = UDim2.fromScale(1, 1)
+		shade.ZIndex = 20
+		shade.Parent = root
+		local modal = Instance.new("Frame")
+		modal.AnchorPoint = Vector2.new(0.5, 0.5)
+		modal.Position = UDim2.fromScale(0.5, 0.5)
+		modal.Size = UDim2.fromOffset(480, 390)
+		modal.BackgroundColor3 = COLOURS.Surface
+		modal.BorderSizePixel = 0
+		modal.ZIndex = 21
+		modal.Parent = shade
+		corner(modal, 15)
+		stroke(modal)
+		local padding = Instance.new("UIPadding")
+		padding.PaddingTop = UDim.new(0, 26)
+		padding.PaddingBottom = UDim.new(0, 26)
+		padding.PaddingLeft = UDim.new(0, 26)
+		padding.PaddingRight = UDim.new(0, 26)
+		padding.Parent = modal
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 10)
+		layout.Parent = modal
+		local title = text(modal, "Start " .. role.Name, 23, COLOURS.Text, true)
+		title.Size = UDim2.new(1, 0, 0, 34)
+		local copy =
+			text(modal, "Choose exactly where you want to report for duty.", 13, COLOURS.Muted)
+		copy.Size = UDim2.new(1, 0, 0, 30)
+		for _, spawnOption in role.Spawns or {} do
+			local displayName = string.gsub(spawnOption.SpawnId, "(%l)(%u)", "%1 %2")
+			local choice = button(modal, spawnOption.StationName .. "  ·  " .. displayName, false)
+			choice.Size = UDim2.new(1, 0, 0, 48)
+			choice.Activated:Connect(function()
+				choice.Text = "Starting duty…"
+				local response = context.Controllers.DutyController:Begin({
+					DutyProfileId = dutyProfile.ProfileId,
+					RoleId = role.Id,
+					StationId = spawnOption.StationId,
+					SpawnId = spawnOption.SpawnId,
+				})
+				if response.Success then
+					shade:Destroy()
+					dismissToWorld()
+				else
+					choice.Text = spawnOption.StationName .. "  ·  " .. displayName
+				end
+			end)
+		end
+		local cancel = button(modal, "Cancel", false)
+		cancel.Size = UDim2.new(1, 0, 0, 44)
+		cancel.Activated:Connect(function()
+			shade:Destroy()
+		end)
+	end
+
 	local renderPlay: () -> ()
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
+	dismissToWorld = function()
+		TweenService:Create(
+			root,
+			TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+			{ Position = UDim2.fromOffset(0, 8), BackgroundTransparency = 1 }
+		):Play()
+		task.delay(0.17, function()
+			gui.Enabled = false
+		end)
+	end
 
 	local function sectionHeading(titleValue: string, subtitle: string)
 		local wrapper = Instance.new("Frame")
@@ -408,6 +479,18 @@ function App.mount(context: any): ScreenGui
 					"Choose or create a character first.",
 					"Character required"
 				)
+				return
+			end
+			local spawnId = "CityCivilian"
+			for _, role in menuData.Roles do
+				if role.Id == "Civilian" and role.Spawns[1] then
+					spawnId = role.Spawns[1].SpawnId
+				end
+			end
+			local response =
+				context.Controllers.DutyController:EnterCivilian(selectedCharacterId, spawnId)
+			if response.Success then
+				dismissToWorld()
 			end
 		end)
 	end
@@ -461,6 +544,37 @@ function App.mount(context: any): ScreenGui
 				action.AnchorPoint = Vector2.new(1, 0.5)
 				action.Position = UDim2.new(1, -18, 0.5, 0)
 				action.Size = UDim2.fromOffset(150, 42)
+				action.Activated:Connect(function()
+					if role.Locked then
+						context.Controllers.NotificationController:Show(
+							role.LockMessage,
+							"Access required"
+						)
+						return
+					end
+					if not role.DepartmentId then
+						context.Controllers.NotificationController:Show(
+							"Select Civilian from the Play screen.",
+							"Public role"
+						)
+						return
+					end
+					local dutyProfile = nil
+					for _, profile in menuData.DutyProfiles or {} do
+						if profile.DepartmentId == role.DepartmentId then
+							dutyProfile = profile
+							break
+						end
+					end
+					if not dutyProfile or not role.Spawns or #role.Spawns == 0 then
+						context.Controllers.NotificationController:Show(
+							"No valid duty profile or station is available.",
+							"Duty unavailable"
+						)
+						return
+					end
+					showDutySelection(role, dutyProfile)
+				end)
 			end
 		end
 	end

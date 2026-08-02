@@ -96,6 +96,39 @@ function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
 	return true, nil
 end
 
+function SpawnService:EnterCivilian(
+	player: Player,
+	characterId: string,
+	spawnId: string
+): (boolean, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	if not session or session.ActiveCharacterId ~= characterId then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local definition = self.context.Configuration.Spawns[spawnId]
+	if not definition or definition.TeamName ~= "Civilian" then
+		return false, "INVALID_CIVILIAN_SPAWN"
+	end
+	local request = {
+		RoleId = "Civilian",
+		StationId = definition.StationId,
+		SpawnId = spawnId,
+	}
+	local previousTeam = player.Team
+	local assigned, roleReason = self.context.Services:Get("RoleService"):Assign(player, "Civilian")
+	if not assigned then
+		return false, roleReason
+	end
+	local spawned, spawnReason = self:Spawn(player, request)
+	if not spawned then
+		player.Team = previousTeam
+		return false, spawnReason
+	end
+	session.Profile.AuditMetadata.LastCharacterId = characterId
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return true, nil
+end
+
 function SpawnService:Destroy()
 	table.clear(self.points)
 end
