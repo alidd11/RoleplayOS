@@ -5,6 +5,7 @@ local events = {
 	DispatchChanged = Instance.new("BindableEvent"),
 	SettingsChanged = Instance.new("BindableEvent"),
 	CharacterChanged = Instance.new("BindableEvent"),
+	DutyChanged = Instance.new("BindableEvent"),
 }
 local controllers = {
 	NetworkController = require(script.Controllers.NetworkController),
@@ -13,6 +14,7 @@ local controllers = {
 	CharacterController = require(script.Controllers.CharacterController),
 	ProgressionController = require(script.Controllers.ProgressionController),
 	MinimapController = require(script.Controllers.MinimapController),
+	PhoneController = require(script.Controllers.PhoneController),
 	GamepassController = require(script.Controllers.GamepassController),
 	ApplicationController = require(script.Controllers.ApplicationController),
 	MDTController = require(script.Controllers.MDTController),
@@ -35,6 +37,7 @@ for _, name in
 		"CharacterController",
 		"ProgressionController",
 		"MinimapController",
+		"PhoneController",
 		"GamepassController",
 		"ApplicationController",
 		"MDTController",
@@ -60,6 +63,7 @@ for _, name in
 		"CharacterController",
 		"ProgressionController",
 		"MinimapController",
+		"PhoneController",
 		"GamepassController",
 		"ApplicationController",
 		"MDTController",

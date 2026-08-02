@@ -1,6 +1,6 @@
 --!strict
 local HttpService = game:GetService("HttpService")
-local CallService = { calls = {} }
+local CallService = { calls = {}, revision = 0 }
 function CallService:Init(context: any)
 	self.context = context
 end
@@ -22,8 +22,11 @@ function CallService:Create(data: any): (any?, string?)
 		UnitIds = {},
 		Status = "Open",
 		CreatedAt = os.time(),
+		Revision = 1,
 	}
 	self.calls[call.CallId] = call
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallCreated", call.CallId, self.revision)
 	return call, nil
 end
 function CallService:Assign(callId: string, unitId: string): (boolean, string?)
@@ -32,10 +35,17 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	if not call or not unit then
 		return false, "CALL_OR_UNIT_NOT_FOUND"
 	end
+	if unit.AssignedCallId and unit.AssignedCallId ~= callId then
+		return false, "UNIT_ALREADY_ASSIGNED"
+	end
 	if not table.find(call.UnitIds, unitId) then
 		table.insert(call.UnitIds, unitId)
 	end
 	unit.Status = "Assigned"
+	unit.AssignedCallId = callId
+	call.Revision += 1
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallAssigned", callId, self.revision)
 	return true, nil
 end
 function CallService:Close(callId: string): (boolean, string?)
@@ -44,12 +54,33 @@ function CallService:Close(callId: string): (boolean, string?)
 		return false, "CALL_NOT_FOUND"
 	end
 	call.Status = "Closed"
+	call.ClosedAt = os.time()
 	for _, unitId in call.UnitIds do
-		self.context.Services:Get("UnitService"):SetStatus(unitId, "Available")
+		local unit = self.context.Services:Get("UnitService").units[unitId]
+		if unit then
+			unit.AssignedCallId = nil
+			self.context.Services:Get("UnitService"):SetStatus(unitId, "Available")
+		end
 	end
+	call.Revision += 1
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallClosed", callId, self.revision)
 	return true, nil
+end
+function CallService:Snapshot(): { any }
+	local result = {}
+	for _, call in self.calls do
+		if call.Status ~= "Closed" then
+			table.insert(result, table.clone(call))
+		end
+	end
+	table.sort(result, function(a, b)
+		return a.CreatedAt < b.CreatedAt
+	end)
+	return result
 end
 function CallService:Destroy()
 	table.clear(self.calls)
+	self.revision = 0
 end
 return CallService

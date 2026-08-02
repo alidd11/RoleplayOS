@@ -14,7 +14,12 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 	if not backpack then
 		return false, "BACKPACK_UNAVAILABLE"
 	end
-	local tools = ServerStorage.RoleplayOSAssets.Tools
+	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
+	local tools = if assets then assets:FindFirstChild("Tools") else nil
+	if not tools then
+		self.context.Logger:Warning("Loadout assets are unavailable", { LoadoutId = loadoutId })
+		return true, nil
+	end
 	for _, toolName in definition.ToolNames do
 		local template = tools:FindFirstChild(toolName)
 		if template and template:IsA("Tool") then

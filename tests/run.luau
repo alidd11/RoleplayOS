@@ -20,6 +20,8 @@ local SpawnPolicy = require(Shared.SpawnPolicy)
 local SettingsValidator = require(Shared.SettingsValidator)
 local LevelProgression = require(Shared.LevelProgression)
 local ProgressionVisibility = require(Shared.ProgressionVisibility)
+local DispatchPolicy = require(Shared.DispatchPolicy)
+local PhoneValidator = require(Shared.PhoneValidator)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -146,7 +148,7 @@ end)
 H.test("migration reconciles missing fields", function()
 	local profile = ProfileSchema.migrate({ SchemaVersion = 0 }, 42)
 	H.expect(
-		profile.SchemaVersion == 3
+		profile.SchemaVersion == 4
 			and profile.UserId == 42
 			and type(profile.Characters) == "table"
 			and type(profile.Communities) == "table",
@@ -169,7 +171,8 @@ H.test("level progression handles boundaries and maximum level", function()
 	H.expect(levelTwo == 100, "level two threshold is wrong")
 	local summary = LevelProgression.fromXp(levelTwo, 100, 1.18, 100)
 	H.expect(summary.Level == 2 and summary.CurrentLevelXP == 0, "threshold did not level up")
-	local maximum = LevelProgression.fromXp(1000000000, 100, 1.18, 100)
+	local maximumXp = LevelProgression.xpForLevel(100, 100, 1.18)
+	local maximum = LevelProgression.fromXp(maximumXp, 100, 1.18, 100)
 	H.expect(maximum.Level == 100 and maximum.AtMaximumLevel, "maximum level was not capped")
 end)
 H.test("progression HUD is restricted to public non-whitelisted teams", function()
@@ -257,4 +260,30 @@ H.test("response envelope contains contract fields", function()
 		"bad response"
 	)
 end)
+H.test("dispatch policy requires authorised duty and a dispatch seat", function()
+	local duty = { DepartmentId = "Control" }
+	H.expect(
+		DispatchPolicy.canUseMdt(duty, { "Police", "Control" }),
+		"authorised duty was denied MDT access"
+	)
+	H.expect(
+		DispatchPolicy.canDispatch(duty, { "Control" }, true),
+		"controller in a dispatch seat was denied"
+	)
+	H.expect(
+		not DispatchPolicy.canDispatch(duty, { "Control" }, false),
+		"dispatch was available away from a console"
+	)
+end)
+H.test("phone validation normalises UK mobile numbers and bounds messages", function()
+	H.expect(PhoneValidator.number("07123 456 789") == "07123456789", "phone was not normalised")
+	H.expect(PhoneValidator.number("999") == nil, "emergency number was accepted as a mobile")
+	H.expect(PhoneValidator.message(" hello ", 20) == "hello", "message was not trimmed")
+	H.expect(PhoneValidator.message(string.rep("a", 21), 20) == nil, "long message accepted")
+	H.expect(
+		#PhoneValidator.numberFromCharacterId("abcdef12-3456") == 11,
+		"generated number invalid"
+	)
+end)
 H.finish()
+return true

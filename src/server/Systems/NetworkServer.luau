@@ -65,7 +65,11 @@ function NetworkServer:RegisterFunction(
 		end
 		local ok, result = pcall(handler, player, payload, requestId)
 		if not ok then
-			self.logger:Error("Remote handler failed", { Endpoint = name, RequestId = requestId })
+			self.logger:Error("Remote handler failed", {
+				Endpoint = name,
+				RequestId = requestId,
+				Error = tostring(result),
+			})
 			return {
 				Success = false,
 				Code = "SERVER_ERROR",

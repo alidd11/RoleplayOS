@@ -1,13 +1,14 @@
 --!strict
 
 local SettingsValidator = require(script.Parent.SettingsValidator)
+local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 3
+ProfileSchema.CURRENT_VERSION = 4
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 3,
+		SchemaVersion = 4,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -54,6 +55,16 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if data.SchemaVersion == 2 then
 		data.Settings = SettingsValidator.reconcile(data.Settings)
 		data.SchemaVersion = 3
+	end
+	if data.SchemaVersion == 3 then
+		for characterId, character in data.Characters or {} do
+			character.Phone = character.Phone
+				or {
+					Number = PhoneValidator.numberFromCharacterId(characterId),
+					Messages = {},
+				}
+		end
+		data.SchemaVersion = 4
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

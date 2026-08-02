@@ -13,6 +13,7 @@ function DutyController:Begin(request: any): any
 	local response = self.context.Controllers.NetworkController:Request("BeginDuty", request)
 	if response.Success then
 		self.active = response.Data
+		self.context.Events.DutyChanged:Fire(self.active)
 		self.context.Controllers.NotificationController:Show(response.Message, "On duty")
 	else
 		self.context.Controllers.NotificationController:Show(response.Message, "Duty unavailable")

@@ -1,12 +1,21 @@
 --!strict
 
+local Players = game:GetService("Players")
 local DutyService = { active = {} }
 
 function DutyService:Init(context: any)
 	self.context = context
 end
 
-function DutyService:Start() end
+function DutyService:Start()
+	self.connection = Players.PlayerRemoving:Connect(function(player)
+		self:End(player)
+	end)
+end
+
+function DutyService:Get(player: Player): any?
+	return self.active[player.UserId]
+end
 
 function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if self.active[player.UserId] then
@@ -59,7 +68,21 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		StationId = request.StationId,
 		SpawnId = request.SpawnId,
 		StartedAt = os.time(),
+		DepartmentId = role.DepartmentId,
 	}
+	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
+		then profile.Callsign
+		else string.format("%s-%d", role.DepartmentId, player.UserId % 100)
+	local unit, unitReason = self.context.Services:Get("UnitService"):Register(player, {
+		Callsign = callsign,
+		DepartmentId = role.DepartmentId,
+		StationId = request.StationId,
+	})
+	if not unit then
+		self.active[player.UserId] = nil
+		player.Team = previousTeam
+		return false, unitReason
+	end
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		Action = "Duty.Started",
@@ -72,6 +95,7 @@ end
 function DutyService:End(player: Player)
 	local duty = self.active[player.UserId]
 	self.active[player.UserId] = nil
+	self.context.Services:Get("UnitService"):Unregister(player)
 	if duty then
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
@@ -83,6 +107,9 @@ function DutyService:End(player: Player)
 end
 
 function DutyService:Destroy()
+	if self.connection then
+		self.connection:Disconnect()
+	end
 	table.clear(self.active)
 end
 

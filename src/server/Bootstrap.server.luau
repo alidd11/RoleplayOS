@@ -67,6 +67,7 @@ local serviceOrder = {
 	"UnitService",
 	"CallService",
 	"DispatchService",
+	"PhoneService",
 	"StartMenuService",
 	"NetworkService",
 }

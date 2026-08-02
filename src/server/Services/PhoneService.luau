@@ -1,0 +1,274 @@
+--!strict
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
+local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
+
+local PhoneService = { calls = {}, userCalls = {}, connections = {} }
+
+function PhoneService:Init(context: any)
+	self.context = context
+	self.event = context.Network:RegisterEvent("PhoneChanged")
+end
+
+function PhoneService:_character(player: Player): any?
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	return session
+		and session.ActiveCharacterId
+		and session.Profile.Characters[session.ActiveCharacterId]
+end
+
+function PhoneService:_ensurePhone(character: any): any
+	character.Phone = character.Phone
+		or {
+			Number = PhoneValidator.numberFromCharacterId(character.CharacterId),
+			Messages = {},
+		}
+	return character.Phone
+end
+
+function PhoneService:_findByNumber(number: string): (Player?, any?)
+	for _, player in Players:GetPlayers() do
+		local character = self:_character(player)
+		if character and self:_ensurePhone(character).Number == number then
+			return player, character
+		end
+	end
+	return nil, nil
+end
+
+function PhoneService:_filter(message: string, from: Player, to: Player): (string?, string?)
+	if RunService:IsStudio() then
+		return message, nil
+	end
+	local ok, result = pcall(
+		TextService.FilterStringAsync,
+		TextService,
+		message,
+		from.UserId,
+		Enum.TextFilterContext.PrivateChat
+	)
+	if not ok then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	local filteredOk, filtered = pcall(result.GetChatForUserAsync, result, to.UserId)
+	if not filteredOk then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	return filtered, nil
+end
+
+function PhoneService:_filterBroadcast(message: string, from: Player): (string?, string?)
+	if RunService:IsStudio() then
+		return message, nil
+	end
+	local ok, result = pcall(
+		TextService.FilterStringAsync,
+		TextService,
+		message,
+		from.UserId,
+		Enum.TextFilterContext.PublicChat
+	)
+	if not ok then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	local filteredOk, filtered = pcall(result.GetNonChatStringForBroadcastAsync, result)
+	if not filteredOk then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	return filtered, nil
+end
+
+function PhoneService:_append(player: Player, character: any, message: any)
+	local phone = self:_ensurePhone(character)
+	table.insert(phone.Messages, message)
+	local maximum = self.context.Configuration.Phone.MaximumMessages
+	while #phone.Messages > maximum do
+		table.remove(phone.Messages, 1)
+	end
+	self.context.Services:Get("DataService"):MarkDirty(player)
+end
+
+function PhoneService:Snapshot(player: Player): (any?, string?)
+	local character = self:_character(player)
+	if not character then
+		return nil, "ACTIVE_CHARACTER_REQUIRED"
+	end
+	local phone = self:_ensurePhone(character)
+	local contacts = {}
+	for _, other in Players:GetPlayers() do
+		if other ~= player then
+			local otherCharacter = self:_character(other)
+			if otherCharacter then
+				table.insert(contacts, {
+					Name = otherCharacter.Identity.FirstName
+						.. " "
+						.. otherCharacter.Identity.LastName,
+					Number = self:_ensurePhone(otherCharacter).Number,
+				})
+			end
+		end
+	end
+	return {
+		Number = phone.Number,
+		Messages = table.clone(phone.Messages),
+		Contacts = contacts,
+		EmergencyNumber = self.context.Configuration.Phone.EmergencyNumber,
+		ActiveCall = self.userCalls[player.UserId] and self.calls[self.userCalls[player.UserId]]
+			or nil,
+	},
+		nil
+end
+
+function PhoneService:SendText(player: Player, rawNumber: any, rawMessage: any): (any?, string?)
+	local number = PhoneValidator.number(rawNumber)
+	local message =
+		PhoneValidator.message(rawMessage, self.context.Configuration.Phone.MaximumMessageLength)
+	local senderCharacter = self:_character(player)
+	if not number or not message or not senderCharacter then
+		return nil, "INVALID_TEXT_MESSAGE"
+	end
+	local recipient, recipientCharacter = self:_findByNumber(number)
+	if not recipient or not recipientCharacter or recipient == player then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+	local forRecipient, filterReason = self:_filter(message, player, recipient)
+	if not forRecipient then
+		return nil, filterReason
+	end
+	local forSender = select(1, self:_filter(message, player, player)) or forRecipient
+	local senderPhone = self:_ensurePhone(senderCharacter)
+	local id = HttpService:GenerateGUID(false)
+	local timestamp = os.time()
+	local sent = {
+		MessageId = id,
+		FromNumber = senderPhone.Number,
+		ToNumber = number,
+		Body = forSender,
+		Direction = "Outgoing",
+		Timestamp = timestamp,
+	}
+	local received = table.clone(sent)
+	received.Body = forRecipient
+	received.Direction = "Incoming"
+	self:_append(player, senderCharacter, sent)
+	self:_append(recipient, recipientCharacter, received)
+	self.event:FireClient(recipient, { Kind = "Text", Message = received })
+	return sent, nil
+end
+
+function PhoneService:PlaceCall(player: Player, rawNumber: any): (any?, string?)
+	local number = PhoneValidator.number(rawNumber)
+	local callerCharacter = self:_character(player)
+	if not number or not callerCharacter or self.userCalls[player.UserId] then
+		return nil, "CALL_UNAVAILABLE"
+	end
+	local recipient, recipientCharacter = self:_findByNumber(number)
+	if
+		not recipient
+		or not recipientCharacter
+		or recipient == player
+		or self.userCalls[recipient.UserId]
+	then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+	local call = {
+		CallId = HttpService:GenerateGUID(false),
+		CallerUserId = player.UserId,
+		RecipientUserId = recipient.UserId,
+		CallerNumber = self:_ensurePhone(callerCharacter).Number,
+		RecipientNumber = number,
+		State = "Ringing",
+		StartedAt = os.time(),
+	}
+	self.calls[call.CallId] = call
+	self.userCalls[player.UserId] = call.CallId
+	self.userCalls[recipient.UserId] = call.CallId
+	self.event:FireClient(player, { Kind = "Call", Call = call })
+	self.event:FireClient(recipient, { Kind = "Call", Call = call })
+	return call, nil
+end
+
+function PhoneService:AnswerCall(player: Player, callId: string): (any?, string?)
+	local call = self.calls[callId]
+	if not call or call.RecipientUserId ~= player.UserId or call.State ~= "Ringing" then
+		return nil, "CALL_NOT_ANSWERABLE"
+	end
+	call.State = "Connected"
+	call.ConnectedAt = os.time()
+	for _, userId in { call.CallerUserId, call.RecipientUserId } do
+		local target = Players:GetPlayerByUserId(userId)
+		if target then
+			self.event:FireClient(target, { Kind = "Call", Call = call })
+		end
+	end
+	return call, nil
+end
+
+function PhoneService:EndCall(player: Player, callId: string): (boolean, string?)
+	local call = self.calls[callId]
+	if
+		not call or (call.CallerUserId ~= player.UserId and call.RecipientUserId ~= player.UserId)
+	then
+		return false, "CALL_NOT_FOUND"
+	end
+	call.State = "Ended"
+	call.EndedAt = os.time()
+	for _, userId in { call.CallerUserId, call.RecipientUserId } do
+		self.userCalls[userId] = nil
+		local target = Players:GetPlayerByUserId(userId)
+		if target then
+			self.event:FireClient(target, { Kind = "Call", Call = call })
+		end
+	end
+	task.delay(5, function()
+		self.calls[callId] = nil
+	end)
+	return true, nil
+end
+
+function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: any): (any?, string?)
+	local character = self:_character(player)
+	local summary = PhoneValidator.message(rawSummary, 120)
+	local location = PhoneValidator.message(rawLocation, 80)
+	if not character or not summary or not location then
+		return nil, "INVALID_EMERGENCY_CALL"
+	end
+	local filteredSummary, reason = self:_filterBroadcast(summary, player)
+	local filteredLocation = select(1, self:_filterBroadcast(location, player))
+	if not filteredSummary or not filteredLocation then
+		return nil, reason
+	end
+	return self.context.Services:Get("CallService"):Create({
+		Priority = "Immediate",
+		Summary = "999 · " .. filteredSummary,
+		Location = filteredLocation,
+		SourceNumber = self:_ensurePhone(character).Number,
+	})
+end
+
+function PhoneService:Start()
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			local callId = self.userCalls[player.UserId]
+			if callId then
+				self:EndCall(player, callId)
+			end
+		end)
+	)
+end
+
+function PhoneService:Destroy()
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+	table.clear(self.calls)
+	table.clear(self.userCalls)
+end
+
+return PhoneService

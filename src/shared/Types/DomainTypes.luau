@@ -293,6 +293,10 @@ export type CivilianCharacter = {
 	CriminalRecord: { string },
 	MedicalRecord: { string },
 	Progression: { [string]: any },
+	Phone: {
+		Number: string,
+		Messages: { any },
+	},
 	CreatedAt: number,
 	LastPlayedAt: number,
 }

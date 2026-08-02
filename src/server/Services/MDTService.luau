@@ -1,4 +1,6 @@
 --!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 local MDTService = {}
 function MDTService:Init(context: any)
 	self.context = context
@@ -7,6 +9,19 @@ function MDTService:Start() end
 function MDTService:HasPermission(departmentId: string, permission: string): boolean
 	local permissions = self.context.Configuration.MDT.PermissionByDepartment[departmentId] or {}
 	return table.find(permissions, permission) ~= nil
+end
+function MDTService:GetDuty(player: Player): any?
+	return self.context.Services:Get("DutyService"):Get(player)
+end
+function MDTService:CanUse(player: Player): boolean
+	return DispatchPolicy.canUseMdt(
+		self:GetDuty(player),
+		self.context.Configuration.MDT.AllowedDepartments
+	)
+end
+function MDTService:CanUsePermission(player: Player, permission: string): boolean
+	local duty = self:GetDuty(player)
+	return self:CanUse(player) and self:HasPermission(duty.DepartmentId, permission)
 end
 function MDTService:SanitiseQuery(query: any): (string?, string?)
 	if type(query) ~= "string" then
@@ -27,6 +42,19 @@ function MDTService:AuditSearch(player: Player, queryType: string, requestId: st
 		RequestId = requestId,
 		Metadata = {},
 	})
+end
+function MDTService:AccessSummary(player: Player): any
+	local duty = self:GetDuty(player)
+	if not self:CanUse(player) then
+		return { Allowed = false, Permissions = {} }
+	end
+	return {
+		Allowed = true,
+		DepartmentId = duty.DepartmentId,
+		RoleId = duty.RoleId,
+		Permissions = self.context.Configuration.MDT.PermissionByDepartment[duty.DepartmentId]
+			or {},
+	}
 end
 function MDTService:Destroy() end
 return MDTService

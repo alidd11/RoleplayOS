@@ -82,9 +82,24 @@ function DataService:Load(player: Player): (any?, string?)
 				QualificationIds = {},
 				Callsign = "STUDIO-1",
 			}
+			profile.DutyProfiles.StudioControl = {
+				ProfileId = "StudioControl",
+				DepartmentId = "Control",
+				Rank = 1,
+				QualificationIds = {},
+				Callsign = "CONTROL-1",
+			}
 			table.insert(profile.Applications, {
 				ApplicationId = "StudioPoliceAccess",
 				FormId = "Police",
+				Status = "Accepted",
+				Answers = {},
+				SubmittedAt = os.time(),
+				UpdatedAt = os.time(),
+			})
+			table.insert(profile.Applications, {
+				ApplicationId = "StudioControlAccess",
+				FormId = "Control",
 				Status = "Accepted",
 				Answers = {},
 				SubmittedAt = os.time(),

@@ -31,6 +31,7 @@ function NetworkService:Start()
 						"Properties and furniture",
 						"Emergency services",
 						"MDT and dispatch",
+						"Mobile phone",
 						"Private communities",
 					},
 				},
@@ -298,6 +299,15 @@ function NetworkService:Start()
 			and (payload.Type == "Person" or payload.Type == "Vehicle"),
 			"INVALID_SEARCH"
 	end, function(player, payload, requestId)
+		local permission = if payload.Type == "Person" then "PersonSearch" else "VehicleSearch"
+		if not self.context.Services:Get("MDTService"):CanUsePermission(player, permission) then
+			return {
+				Success = false,
+				Code = "MDT_NOT_AUTHORISED",
+				Message = "You must be on an authorised duty to use this search.",
+				RequestId = requestId,
+			}
+		end
 		local query, reason = self.context.Services:Get("MDTService"):SanitiseQuery(payload.Query)
 		if not query then
 			return {
@@ -314,6 +324,223 @@ function NetworkService:Start()
 					:Search(query, payload.Page or 1)
 			or { Items = self.context.Services:Get("VehicleRecordService"):Search(query), Page = 1 }
 		return { Success = true, Code = "OK", Message = "", Data = data, RequestId = requestId }
+	end)
+	self.context.Network:RegisterFunction(
+		"GetMDTAccess",
+		tablePayload,
+		function(player, _, requestId)
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = self.context.Services:Get("MDTService"):AccessSummary(player),
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"GetDispatchSnapshot",
+		tablePayload,
+		function(player, _, requestId)
+			local snapshot, reason = self.context.Services:Get("DispatchService"):Snapshot(player)
+			if not snapshot then
+				return {
+					Success = false,
+					Code = reason,
+					Message = "Dispatch is unavailable for this duty.",
+					RequestId = requestId,
+				}
+			end
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = snapshot,
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction("DispatchCreateCall", function(payload)
+		return type(payload) == "table"
+			and type(payload.Summary) == "string"
+			and type(payload.Priority) == "string"
+			and type(payload.Location) == "string"
+	end, function(player, payload, requestId)
+		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
+			return {
+				Success = false,
+				Code = "DISPATCH_CONSOLE_REQUIRED",
+				Message = "Sit at an authorised dispatch console first.",
+				RequestId = requestId,
+			}
+		end
+		local call, reason = self.context.Services:Get("CallService"):Create(payload)
+		if not call then
+			return {
+				Success = false,
+				Code = reason,
+				Message = "The call could not be created.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Call created.",
+			Data = call,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("DispatchAssignUnit", function(payload)
+		return type(payload) == "table"
+			and type(payload.CallId) == "string"
+			and type(payload.UnitId) == "string"
+	end, function(player, payload, requestId)
+		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
+			return {
+				Success = false,
+				Code = "DISPATCH_CONSOLE_REQUIRED",
+				Message = "Sit at an authorised dispatch console first.",
+				RequestId = requestId,
+			}
+		end
+		local assigned, reason =
+			self.context.Services:Get("CallService"):Assign(payload.CallId, payload.UnitId)
+		return {
+			Success = assigned,
+			Code = if assigned then "OK" else reason,
+			Message = if assigned then "Unit attached." else "The unit could not be attached.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("DispatchCloseCall", function(payload)
+		return type(payload) == "table" and type(payload.CallId) == "string"
+	end, function(player, payload, requestId)
+		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
+			return {
+				Success = false,
+				Code = "DISPATCH_CONSOLE_REQUIRED",
+				Message = "Sit at an authorised dispatch console first.",
+				RequestId = requestId,
+			}
+		end
+		local closed, reason = self.context.Services:Get("CallService"):Close(payload.CallId)
+		return {
+			Success = closed,
+			Code = if closed then "OK" else reason,
+			Message = if closed then "Call closed." else "The call could not be closed.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("DispatchSetUnitStatus", function(payload)
+		return type(payload) == "table" and type(payload.Status) == "string"
+	end, function(player, payload, requestId)
+		if not self.context.Services:Get("MDTService"):CanUse(player) then
+			return {
+				Success = false,
+				Code = "MDT_NOT_AUTHORISED",
+				Message = "You are not on an authorised duty.",
+				RequestId = requestId,
+			}
+		end
+		local changed, reason = self.context.Services
+			:Get("UnitService")
+			:SetStatus(tostring(player.UserId), payload.Status)
+		if changed then
+			self.context.Services
+				:Get("DispatchService")
+				:Publish("UnitChanged", tostring(player.UserId), 0)
+		end
+		return {
+			Success = changed,
+			Code = if changed then "OK" else reason,
+			Message = if changed then "Status updated." else "The status could not be updated.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("GetPhone", tablePayload, function(player, _, requestId)
+		local snapshot, reason = self.context.Services:Get("PhoneService"):Snapshot(player)
+		if not snapshot then
+			return {
+				Success = false,
+				Code = reason,
+				Message = "Select a character before using the phone.",
+				RequestId = requestId,
+			}
+		end
+		return { Success = true, Code = "OK", Message = "", Data = snapshot, RequestId = requestId }
+	end)
+	self.context.Network:RegisterFunction("PhoneSendText", function(payload)
+		return type(payload) == "table"
+			and type(payload.Number) == "string"
+			and type(payload.Message) == "string"
+	end, function(player, payload, requestId)
+		local message, reason = self.context.Services
+			:Get("PhoneService")
+			:SendText(player, payload.Number, payload.Message)
+		return {
+			Success = message ~= nil,
+			Code = if message then "OK" else reason,
+			Message = if message then "Message sent." else "The message could not be sent.",
+			Data = message,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhonePlaceCall", function(payload)
+		return type(payload) == "table" and type(payload.Number) == "string"
+	end, function(player, payload, requestId)
+		local call, reason =
+			self.context.Services:Get("PhoneService"):PlaceCall(player, payload.Number)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call then "Calling…" else "The call could not be placed.",
+			Data = call,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhoneAnswerCall", function(payload)
+		return type(payload) == "table" and type(payload.CallId) == "string"
+	end, function(player, payload, requestId)
+		local call, reason =
+			self.context.Services:Get("PhoneService"):AnswerCall(player, payload.CallId)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call then "Call connected." else "The call could not be answered.",
+			Data = call,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhoneEndCall", function(payload)
+		return type(payload) == "table" and type(payload.CallId) == "string"
+	end, function(player, payload, requestId)
+		local ended, reason =
+			self.context.Services:Get("PhoneService"):EndCall(player, payload.CallId)
+		return {
+			Success = ended,
+			Code = if ended then "OK" else reason,
+			Message = if ended then "Call ended." else "The call could not be ended.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhoneEmergency", function(payload)
+		return type(payload) == "table"
+			and type(payload.Summary) == "string"
+			and type(payload.Location) == "string"
+	end, function(player, payload, requestId)
+		local call, reason = self.context.Services
+			:Get("PhoneService")
+			:Emergency(player, payload.Summary, payload.Location)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call
+				then "Your 999 call has been sent to control."
+				else "The emergency call failed. Try again.",
+			Data = call,
+			RequestId = requestId,
+		}
 	end)
 end
 function NetworkService:Destroy() end

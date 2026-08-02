@@ -3,7 +3,7 @@
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 3,
+		SchemaVersion = 4,
 		Branding = {
 			GameName = "",
 			ShowRoleplayOSMark = true,
@@ -157,6 +157,12 @@ local Config = {
 			AutoAssignable = false,
 		},
 		Fire = { Id = "Fire", Name = "Fire", BrickColor = "Bright red", AutoAssignable = false },
+		Control = {
+			Id = "Control",
+			Name = "Control",
+			BrickColor = "Really black",
+			AutoAssignable = false,
+		},
 	},
 	GroupLinks = {
 		Police = { Id = "Police", GroupId = 0, MinimumRank = 1, DisplayName = "Police Group" },
@@ -249,6 +255,22 @@ local Config = {
 			LoadoutId = "FireStandard",
 			UniformId = "FireStandard",
 		},
+		Controller = {
+			Id = "Controller",
+			Name = "Emergency Control",
+			TeamName = "Control",
+			DepartmentId = "Control",
+			Access = {
+				AccessType = "Combined",
+				Match = "All",
+				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Control" },
+					{ AccessType = "Group", GroupLinkId = "Control", MinimumGroupRank = 1 },
+				},
+			},
+			LoadoutId = "ControlStandard",
+		},
 	},
 	Stations = {
 		CityCentre = {
@@ -261,6 +283,7 @@ local Config = {
 				"PoliceVehicleBay",
 				"AmbulanceLockerRoom",
 				"FireLockerRoom",
+				"ControlRoom",
 			},
 		},
 	},
@@ -300,6 +323,13 @@ local Config = {
 			RoleIds = { "Firefighter" },
 			DepartmentIds = { "Fire" },
 		},
+		ControlRoom = {
+			Id = "ControlRoom",
+			StationId = "CityCentre",
+			TeamName = "Control",
+			RoleIds = { "Controller" },
+			DepartmentIds = { "Control" },
+		},
 	},
 	Uniforms = {
 		PoliceStandard = { Id = "PoliceStandard", ShirtTemplate = "", TrousersTemplate = "" },
@@ -311,6 +341,7 @@ local Config = {
 		PoliceFrontline = { Id = "PoliceFrontline", ToolNames = { "Radio", "Notebook" } },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ToolNames = { "Radio", "MedicalBag" } },
 		FireStandard = { Id = "FireStandard", ToolNames = { "Radio" } },
+		ControlStandard = { Id = "ControlStandard", ToolNames = { "Radio" } },
 	},
 	Jobs = {
 		DeliveryDriver = {
@@ -501,15 +532,26 @@ local Config = {
 	MDT = {
 		PageSize = 25,
 		MaximumQueryLength = 64,
+		AllowedDepartments = { "Police", "Ambulance", "Fire", "Control" },
 		PermissionByDepartment = {
 			Police = { "PersonSearch", "VehicleSearch", "IncidentWrite", "WarrantRead" },
-			Control = { "PersonSearch", "VehicleSearch", "IncidentRead" },
+			Ambulance = { "PersonSearch" },
+			Fire = { "PersonSearch" },
+			Control = { "PersonSearch", "VehicleSearch", "IncidentRead", "Dispatch" },
 		},
 	},
 	Dispatch = {
+		SeatTag = "RoleplayOSDispatchSeat",
+		DispatcherDepartments = { "Control" },
 		UnitStatuses = { "Available", "Assigned", "OnScene", "Unavailable" },
 		CallPriorities = { "Immediate", "Prompt", "Routine" },
 		ActiveStateTtlSeconds = 300,
+	},
+	Phone = {
+		Enabled = true,
+		MaximumMessageLength = 240,
+		MaximumMessages = 200,
+		EmergencyNumber = "999",
 	},
 	Network = {
 		MaximumPayloadBytes = 8192,
@@ -524,7 +566,18 @@ local Config = {
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
 			EconomyTransfer = { Capacity = 3, RefillPerSecond = 0.2 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
-			DispatchUpdate = { Capacity = 10, RefillPerSecond = 2 },
+			GetMDTAccess = { Capacity = 4, RefillPerSecond = 1 },
+			GetDispatchSnapshot = { Capacity = 6, RefillPerSecond = 1 },
+			DispatchCreateCall = { Capacity = 4, RefillPerSecond = 0.5 },
+			DispatchAssignUnit = { Capacity = 8, RefillPerSecond = 1 },
+			DispatchCloseCall = { Capacity = 4, RefillPerSecond = 0.5 },
+			DispatchSetUnitStatus = { Capacity = 6, RefillPerSecond = 1 },
+			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
+			PhoneSendText = { Capacity = 5, RefillPerSecond = 0.5 },
+			PhonePlaceCall = { Capacity = 3, RefillPerSecond = 0.25 },
+			PhoneAnswerCall = { Capacity = 3, RefillPerSecond = 0.5 },
+			PhoneEndCall = { Capacity = 4, RefillPerSecond = 1 },
+			PhoneEmergency = { Capacity = 2, RefillPerSecond = 0.1 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 		},

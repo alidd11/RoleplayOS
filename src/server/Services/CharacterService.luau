@@ -3,6 +3,7 @@
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
+local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = {}
 function CharacterService:Init(context: any)
 	self.context = context
@@ -58,6 +59,10 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 		CriminalRecord = {},
 		MedicalRecord = {},
 		Progression = {},
+		Phone = {
+			Number = PhoneValidator.numberFromCharacterId(id),
+			Messages = {},
+		},
 		CreatedAt = now,
 		LastPlayedAt = now,
 	}
