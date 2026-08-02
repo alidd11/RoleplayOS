@@ -313,7 +313,10 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 		Priority = "Immediate",
 		Summary = "999 · " .. filteredSummary,
 		Location = filteredLocation,
-		SourceNumber = self:_ensurePhone(character).Number,
+		CallerNumber = self:_ensurePhone(character).Number,
+		DepartmentIds = { "Police", "Ambulance", "Fire", "Control" },
+		IncidentType = "Emergency",
+		CallerName = character.Identity.FirstName .. " " .. character.Identity.LastName,
 	})
 end
 

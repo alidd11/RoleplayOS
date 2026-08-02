@@ -15,6 +15,8 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Roles",
 			"Jobs",
 			"Vehicles",
+			"Tools",
+			"Divisions",
 			"Properties",
 			"Furniture",
 			"Network",
@@ -66,6 +68,22 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	for id, vehicle in config.Vehicles or {} do
 		if type(vehicle.Price) ~= "number" or vehicle.Price < 0 then
 			table.insert(errors, "Invalid vehicle price: " .. id)
+		end
+		if type(vehicle.AssetPath) ~= "table" or #vehicle.AssetPath < 2 then
+			table.insert(errors, "Invalid vehicle asset path: " .. id)
+		end
+		if vehicle.DepartmentId and not config.Departments[vehicle.DepartmentId] then
+			table.insert(errors, "Unknown vehicle department: " .. id)
+		end
+		if vehicle.DivisionId and not config.Divisions[vehicle.DivisionId] then
+			table.insert(errors, "Unknown vehicle division: " .. id)
+		end
+	end
+	for loadoutId, loadout in config.Loadouts or {} do
+		for _, toolId in loadout.ToolIds or {} do
+			if not config.Tools[toolId] then
+				table.insert(errors, "Unknown tool " .. toolId .. " in loadout " .. loadoutId)
+			end
 		end
 	end
 	local progression = config.Progression or {}

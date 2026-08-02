@@ -398,6 +398,30 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
+		return type(payload) == "table"
+			and type(payload.CharacterId) == "string"
+			and type(payload.DealershipId) == "string"
+			and type(payload.DefinitionId) == "string"
+			and type(payload.Colour) == "string"
+	end, function(player, payload, requestId)
+		local vehicle, reason = self.context.Services:Get("DealershipService"):Purchase(
+			player,
+			payload.CharacterId,
+			payload.DealershipId,
+			payload.DefinitionId,
+			payload.Colour
+		)
+		return {
+			Success = vehicle ~= nil,
+			Code = if vehicle then "OK" else reason,
+			Message = if vehicle
+				then "Vehicle purchased."
+				else "The purchase could not be completed.",
+			Data = vehicle,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SpawnServiceVehicle", function(payload)
 		return type(payload) == "table"
 			and type(payload.TerminalId) == "string"

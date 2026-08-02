@@ -6,7 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
-local DataService = { sessions = {}, running = false }
+local DataService = { sessions = {}, running = false, connections = {} }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
@@ -124,6 +124,22 @@ function DataService:_retry(operation: () -> any): (boolean, any)
 	return false, lastError
 end
 
+local function deepCopy(value: any, seen: { [any]: any }?): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local visited = seen or {}
+	if visited[value] then
+		return visited[value]
+	end
+	local copy = {}
+	visited[value] = copy
+	for key, child in value do
+		copy[deepCopy(key, visited)] = deepCopy(child, visited)
+	end
+	return copy
+end
+
 function DataService:Load(player: Player): (any?, string?)
 	if self.sessions[player.UserId] then
 		return nil, "SESSION_ALREADY_LOADED"
@@ -168,6 +184,7 @@ function DataService:Load(player: Player): (any?, string?)
 			Saving = false,
 			ActiveCharacterId = nil,
 			Mock = true,
+			Revision = 0,
 		}
 		self.context.Logger:Info("Loaded in-memory Studio profile", { UserId = player.UserId })
 		return profile, nil
@@ -200,7 +217,7 @@ function DataService:Load(player: Player): (any?, string?)
 		return nil, "PROFILE_LOAD_FAILED"
 	end
 	self.sessions[player.UserId] =
-		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil }
+		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil, Revision = 0 }
 	return loaded, nil
 end
 
@@ -212,6 +229,7 @@ function DataService:MarkDirty(player: Player)
 	local session = self.sessions[player.UserId]
 	if session then
 		session.Dirty = true
+		session.Revision = (session.Revision or 0) + 1
 	end
 end
 
@@ -228,13 +246,20 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 		return true, nil
 	end
 	if session.Saving then
-		return false, "SAVE_IN_PROGRESS"
-	end
-	if not session.Dirty and not release then
-		return true, nil
+		if not release then
+			return false, "SAVE_IN_PROGRESS"
+		end
+		local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
+		while session.Saving and os.clock() < deadline do
+			task.wait(0.05)
+		end
+		if session.Saving then
+			return false, "SAVE_IN_PROGRESS"
+		end
 	end
 	session.Saving = true
-	local snapshot = session.Profile
+	local revision = session.Revision or 0
+	local snapshot = deepCopy(session.Profile)
 	local now = os.time()
 	local ok, problem = self:_retry(function()
 		self.store:UpdateAsync(tostring(player.UserId), function(stored)
@@ -252,7 +277,9 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 	end)
 	session.Saving = false
 	if ok then
-		session.Dirty = false
+		if (session.Revision or 0) == revision then
+			session.Dirty = false
+		end
 		if release then
 			self.sessions[player.UserId] = nil
 		end
@@ -267,15 +294,27 @@ end
 
 function DataService:Start()
 	self.running = true
-	Players.PlayerAdded:Connect(function(player)
-		local profile = self:Load(player)
-		if not profile then
-			player:Kick("Your profile could not be loaded safely. Please rejoin shortly.")
-		end
-	end)
-	Players.PlayerRemoving:Connect(function(player)
-		self:Save(player, true)
-	end)
+	table.insert(
+		self.connections,
+		Players.PlayerAdded:Connect(function(player)
+			local profile = self:Load(player)
+			if not profile then
+				player:Kick("Your profile could not be loaded safely. Please rejoin shortly.")
+			end
+		end)
+	)
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			local ok = self:Save(player, true)
+			if not ok then
+				self.context.Logger:Warning(
+					"Final profile release failed",
+					{ UserId = player.UserId }
+				)
+			end
+		end)
+	)
 	for _, player in Players:GetPlayers() do
 		task.spawn(function()
 			self:Load(player)
@@ -283,7 +322,15 @@ function DataService:Start()
 	end
 	task.spawn(function()
 		while self.running do
-			task.wait(self.context.Configuration.Framework.AutosaveSeconds)
+			task.wait(
+				math.min(
+					self.context.Configuration.Framework.AutosaveSeconds,
+					math.max(
+						30,
+						math.floor(self.context.Configuration.Framework.SessionLeaseSeconds / 3)
+					)
+				)
+			)
 			for _, player in Players:GetPlayers() do
 				task.spawn(function()
 					self:Save(player, false)
@@ -295,6 +342,10 @@ end
 
 function DataService:Destroy()
 	self.running = false
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
 	local pending = 0
 	for _, player in Players:GetPlayers() do
 		pending += 1

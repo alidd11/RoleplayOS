@@ -9,11 +9,17 @@ function ANPRService:Init(context: any)
 	self.alertEvent = context.Network:RegisterEvent("ANPRAlert")
 end
 
-function ANPRService:_roadsPlayers(): { Player }
+function ANPRService:_alertPlayers(): { Player }
 	local result = {}
 	for _, player in Players:GetPlayers() do
 		local duty = self.context.Services:Get("DutyService"):Get(player)
-		if duty and duty.RoleId == self.context.Configuration.ANPR.RoadsRoleId then
+		if
+			duty
+			and (
+				duty.RoleId == self.context.Configuration.ANPR.RoadsRoleId
+				or duty.DepartmentId == "Control"
+			)
+		then
 			table.insert(result, player)
 		end
 	end
@@ -65,7 +71,7 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		Location = location,
 		Priority = "Immediate",
 		IncidentType = "Crime in progress",
-		DepartmentIds = { "Police" },
+		DepartmentIds = { "Police", "Control" },
 		Source = "ANPR",
 		CallerName = "Automatic Number Plate Recognition",
 	})
@@ -76,7 +82,7 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		CallId = if call then call.CallId else nil,
 		DetectedAt = os.time(),
 	}
-	for _, player in self:_roadsPlayers() do
+	for _, player in self:_alertPlayers() do
 		self.alertEvent:FireClient(player, payload)
 	end
 	self.context.Services:Get("AuditService"):Record({

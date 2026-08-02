@@ -141,9 +141,17 @@ function DispatchService:_watchSeat(instance: Instance)
 	changed()
 end
 
-function DispatchService:_fireAuthorised(payload: any)
+function DispatchService:_fireAuthorised(payload: any, callId: string?)
+	local call = callId and self.context.Services:Get("CallService").calls[callId] or nil
 	for _, player in Players:GetPlayers() do
-		if self.context.Services:Get("MDTService"):CanUse(player) then
+		local duty = self:_duty(player)
+		local relevant = duty
+			and (
+				duty.DepartmentId == "Control"
+				or not call
+				or table.find(call.DepartmentIds, duty.DepartmentId)
+			)
+		if relevant and self.context.Services:Get("MDTService"):CanUse(player) then
 			self.changedEvent:FireClient(player, payload)
 		end
 	end
@@ -151,7 +159,7 @@ end
 
 function DispatchService:Publish(kind: string, id: string, revision: number)
 	local payload = { Kind = kind, Id = id, Revision = revision, ServerId = game.JobId }
-	self:_fireAuthorised(payload)
+	self:_fireAuthorised(payload, id)
 end
 
 function DispatchService:Snapshot(player: Player): (any?, string?)
@@ -164,12 +172,29 @@ function DispatchService:Snapshot(player: Player): (any?, string?)
 	then
 		return nil, "DISPATCH_NOT_AUTHORISED"
 	end
+	local duty = self:_duty(player)
+	local calls = {}
+	for _, call in self.context.Services:Get("CallService"):Snapshot() do
+		if
+			duty
+			and (
+				duty.DepartmentId == "Control" or table.find(call.DepartmentIds, duty.DepartmentId)
+			)
+		then
+			table.insert(calls, call)
+		end
+	end
+	local units = {}
+	for _, unit in self.context.Services:Get("UnitService"):Snapshot() do
+		if duty and (duty.DepartmentId == "Control" or unit.DepartmentId == duty.DepartmentId) then
+			table.insert(units, unit)
+		end
+	end
 	return {
-		Calls = self.context.Services:Get("CallService"):Snapshot(),
-		Units = self.context.Services:Get("UnitService"):Snapshot(),
+		Calls = calls,
+		Units = units,
 		AtConsole = self:IsAtConsole(player),
-	},
-		nil
+	}, nil
 end
 
 function DispatchService:Start()

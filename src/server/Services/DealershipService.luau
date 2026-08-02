@@ -43,6 +43,16 @@ function DealershipService:Purchase(
 			"Paid vehicle creation failed",
 			{ TransactionId = transaction.TransactionId, Error = creationError }
 		)
+		self.context.Services:Get("EconomyService"):Apply(player, {
+			TransactionId = HttpService:GenerateGUID(false),
+			CharacterId = characterId,
+			Amount = definition.Price,
+			Direction = "Credit",
+			ReasonCode = "VEHICLE_PURCHASE_REFUND",
+			Description = "Automatic refund: " .. definition.Name,
+			RelatedEntityId = transaction.TransactionId,
+			Metadata = {},
+		})
 	end
 	return vehicle, creationError
 end

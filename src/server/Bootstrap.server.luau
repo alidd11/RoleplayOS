@@ -40,6 +40,7 @@ local serviceOrder = {
 	"JobService",
 	"ShiftService",
 	"QualificationService",
+	"ContentValidationService",
 	"VehicleOwnershipService",
 	"VehicleService",
 	"RoadSafetyService",

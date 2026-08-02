@@ -1,8 +1,9 @@
 --!strict
 
 local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 
-local VehicleUIController = { connections = {}, vehicleMode = false }
+local VehicleUIController = { connections = {}, vehicleMode = false, state = "OnFoot" }
 
 function VehicleUIController:Init(context: any)
 	self.context = context
@@ -19,13 +20,24 @@ function VehicleUIController:_broadcast()
 		)
 	end
 	self.context.Events.VehicleModeChanged:Fire(self.vehicleMode)
+	self.context.Events.UIStateChanged:Fire(self.state)
 end
 
-function VehicleUIController:_set(enabled: boolean)
-	if self.vehicleMode == enabled then
+function VehicleUIController:_setSeat(seatPart: BasePart?)
+	local state = "OnFoot"
+	if seatPart and CollectionService:HasTag(seatPart, "RoleplayOSDispatchSeat") then
+		state = "DispatchSeat"
+	elseif seatPart and seatPart:IsA("VehicleSeat") then
+		state = if seatPart.Occupant then "Driver" else "Passenger"
+	elseif seatPart then
+		state = "Passenger"
+	end
+	local enabled = state == "Driver" or state == "Passenger"
+	if self.vehicleMode == enabled and self.state == state then
 		return
 	end
 	self.vehicleMode = enabled
+	self.state = state
 	self:_broadcast()
 end
 
@@ -37,17 +49,17 @@ function VehicleUIController:_watchCharacter(character: Model)
 	table.insert(
 		self.connections,
 		humanoid.Seated:Connect(function(active, seatPart)
-			self:_set(active and seatPart ~= nil and seatPart:IsA("VehicleSeat"))
+			self:_setSeat(if active then seatPart else nil)
 		end)
 	)
 	table.insert(
 		self.connections,
 		humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
 			local seatPart = humanoid.SeatPart
-			self:_set(seatPart ~= nil and seatPart:IsA("VehicleSeat"))
+			self:_setSeat(seatPart)
 		end)
 	)
-	self:_set(humanoid.SeatPart ~= nil and humanoid.SeatPart:IsA("VehicleSeat"))
+	self:_setSeat(humanoid.SeatPart)
 end
 
 function VehicleUIController:Start()
@@ -59,7 +71,7 @@ function VehicleUIController:Start()
 	table.insert(
 		self.connections,
 		player.CharacterAdded:Connect(function(character)
-			self:_set(false)
+			self:_setSeat(nil)
 			self:_watchCharacter(character)
 		end)
 	)

@@ -2,6 +2,7 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TextService = game:GetService("TextService")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = {}
@@ -9,6 +10,20 @@ function CharacterService:Init(context: any)
 	self.context = context
 end
 function CharacterService:Start() end
+local function filterIdentity(player: Player, identity: any): (any?, string?)
+	local filtered = table.clone(identity)
+	for _, field in { "FirstName", "LastName" } do
+		local ok, result = pcall(function()
+			return TextService:FilterStringAsync(identity[field], player.UserId)
+				:GetNonChatStringForBroadcastAsync()
+		end)
+		if not ok or type(result) ~= "string" or #result < 1 then
+			return nil, "TEXT_FILTER_UNAVAILABLE"
+		end
+		filtered[field] = result
+	end
+	return filtered, nil
+end
 function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
@@ -22,6 +37,10 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	)
 	if not valid then
 		return nil, reason
+	end
+	local filteredIdentity, filterReason = filterIdentity(player, identity)
+	if not filteredIdentity then
+		return nil, filterReason
 	end
 	local count = 0
 	for _ in session.Profile.Characters do
@@ -42,7 +61,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	local now = os.time()
 	local character = {
 		CharacterId = id,
-		Identity = identity,
+		Identity = filteredIdentity,
 		Appearance = {},
 		Economy = {
 			Balance = self.context.Configuration.Economy.StartingBankBalance,

@@ -3,13 +3,50 @@
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local TextService = game:GetService("TextService")
 
-local CustodyService = { cuffed = {} }
+local CustodyService = { cuffed = {}, connections = {} }
 
 function CustodyService:Init(context: any)
 	self.context = context
 end
-function CustodyService:Start() end
+function CustodyService:_release(player: Player)
+	self.cuffed[player.UserId] = nil
+	player:SetAttribute("RoleplayOSCuffed", false)
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		humanoid.WalkSpeed = self.context.Configuration.Needs.WalkSpeed
+		humanoid.JumpPower = 50
+	end
+end
+
+function CustodyService:Start()
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			self.cuffed[player.UserId] = nil
+		end)
+	)
+	table.insert(
+		self.connections,
+		Players.PlayerAdded:Connect(function(player)
+			table.insert(
+				self.connections,
+				player.CharacterAdded:Connect(function()
+					self:_release(player)
+				end)
+			)
+		end)
+	)
+	for _, player in Players:GetPlayers() do
+		table.insert(
+			self.connections,
+			player.CharacterAdded:Connect(function()
+				self:_release(player)
+			end)
+		)
+	end
+end
 
 function CustodyService:_authorised(player: Player): boolean
 	local duty = self.context.Services:Get("DutyService"):Get(player)
@@ -25,6 +62,10 @@ end
 function CustodyService:Toggle(actor: Player, targetUserId: number): (any?, string?)
 	if not self:_authorised(actor) or actor.UserId == targetUserId then
 		return nil, "NOT_AUTHORISED"
+	end
+	local equipped = actor.Character and actor.Character:FindFirstChild("Handcuffs")
+	if not equipped or not equipped:IsA("Tool") then
+		return nil, "HANDCUFFS_MUST_BE_EQUIPPED"
 	end
 	local target = Players:GetPlayerByUserId(targetUserId)
 	if
@@ -94,6 +135,14 @@ function CustodyService:Book(actor: Player, targetUserId: number, reason: string
 	if #reason < 3 then
 		return nil, "INVALID_REASON"
 	end
+	local filteredOk, filteredReason = pcall(function()
+		return TextService:FilterStringAsync(reason, actor.UserId)
+			:GetNonChatStringForBroadcastAsync()
+	end)
+	if not filteredOk or type(filteredReason) ~= "string" or #filteredReason < 3 then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	reason = filteredReason
 	local session = self.context.Services:Get("DataService"):GetSession(target)
 	local character = session
 		and session.ActiveCharacterId
@@ -128,6 +177,10 @@ function CustodyService:Book(actor: Player, targetUserId: number, reason: string
 end
 
 function CustodyService:Destroy()
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
 	table.clear(self.cuffed)
 end
 return CustodyService

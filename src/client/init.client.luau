@@ -7,6 +7,7 @@ local events = {
 	CharacterChanged = Instance.new("BindableEvent"),
 	DutyChanged = Instance.new("BindableEvent"),
 	VehicleModeChanged = Instance.new("BindableEvent"),
+	UIStateChanged = Instance.new("BindableEvent"),
 }
 local controllers = {
 	NetworkController = require(script.Controllers.NetworkController),

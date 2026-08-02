@@ -64,6 +64,9 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	if unit.AssignedCallId and unit.AssignedCallId ~= callId then
 		return false, "UNIT_ALREADY_ASSIGNED"
 	end
+	if #call.DepartmentIds > 0 and not table.find(call.DepartmentIds, unit.DepartmentId) then
+		return false, "UNIT_DEPARTMENT_NOT_REQUESTED"
+	end
 	if not table.find(call.UnitIds, unitId) then
 		table.insert(call.UnitIds, unitId)
 	end

@@ -10,13 +10,22 @@ function VehicleOwnershipService:Init(context: any)
 end
 function VehicleOwnershipService:Start() end
 
-function VehicleOwnershipService:_generate(): string
-	local registration
-	repeat
-		registration = Registration.generate()
-	until not self.registrations[registration]
-	self.registrations[registration] = true
-	return registration
+function VehicleOwnershipService:_allocate(player: Player, vehicleId: string): (string?, string?)
+	for _ = 1, 12 do
+		local registration = Registration.generate()
+		if not self.registrations[registration] then
+			local reserved, reason = self.context.Services
+				:Get("DataService")
+				:ReserveCustomRegistration(registration, player.UserId, vehicleId)
+			if reserved then
+				self.registrations[registration] = true
+				return registration, nil
+			elseif reason ~= "REGISTRATION_ALREADY_USED" then
+				return nil, reason
+			end
+		end
+	end
+	return nil, "REGISTRATION_ALLOCATION_FAILED"
 end
 
 function VehicleOwnershipService:_find(player: Player, vehicleId: string): (any?, any?)
@@ -115,9 +124,20 @@ function VehicleOwnershipService:GetOrCreateTeamRegistration(
 	local key = teamName .. ":" .. definitionId
 	local existing = session.Profile.TeamVehicleRegistrations[key]
 	if type(existing) == "string" then
+		local marker = "team:" .. tostring(player.UserId) .. ":" .. key
+		local reserved, reason = self.context.Services
+			:Get("DataService")
+			:ReserveCustomRegistration(existing, player.UserId, marker)
+		if not reserved then
+			return nil, reason
+		end
 		return existing, nil
 	end
-	local registration = self:_generate()
+	local marker = "team:" .. tostring(player.UserId) .. ":" .. key
+	local registration, reason = self:_allocate(player, marker)
+	if not registration then
+		return nil, reason
+	end
 	session.Profile.TeamVehicleRegistrations[key] = registration
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return registration, nil
@@ -183,12 +203,11 @@ function VehicleOwnershipService:SetCustomRegistration(
 		return nil, reserveReason
 	end
 	local previousRegistration = vehicle.Registration
-	local previousWasCustom = vehicle.CustomRegistration == true
 	self.registrations[vehicle.Registration] = nil
 	vehicle.Registration = registration
 	vehicle.CustomRegistration = true
 	self.registrations[registration] = true
-	if previousWasCustom and previousRegistration ~= registration then
+	if previousRegistration ~= registration then
 		self.context.Services
 			:Get("DataService")
 			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
@@ -218,9 +237,13 @@ function VehicleOwnershipService:Create(
 	if not character then
 		return nil, "CHARACTER_NOT_OWNED"
 	end
-	local registration = self:_generate()
+	local vehicleId = HttpService:GenerateGUID(false)
+	local registration, registrationReason = self:_allocate(player, vehicleId)
+	if not registration then
+		return nil, registrationReason
+	end
 	local vehicle = {
-		VehicleId = HttpService:GenerateGUID(false),
+		VehicleId = vehicleId,
 		OwnerCharacterId = characterId,
 		DefinitionId = definitionId,
 		Registration = registration,

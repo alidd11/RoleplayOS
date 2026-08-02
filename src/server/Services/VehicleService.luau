@@ -206,7 +206,17 @@ end
 function VehicleService:_template(definition: any): Model?
 	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 	local models = assets and assets:FindFirstChild("Vehicles")
-	local template = models and models:FindFirstChild(definition.ModelName)
+	local template: Instance? = assets
+	if type(definition.AssetPath) == "table" then
+		for _, segment in definition.AssetPath do
+			template = template and template:FindFirstChild(segment) or nil
+		end
+	else
+		template = models and models:FindFirstChild(definition.ModelName)
+	end
+	if not template and models then
+		template = models:FindFirstChild(definition.ModelName)
+	end
 	return if template and template:IsA("Model") then template else nil
 end
 

@@ -1,6 +1,5 @@
 --!strict
 
-local GroupService = game:GetService("GroupService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
@@ -31,7 +30,7 @@ function RobloxGroupService:GetMembershipByGroupId(
 		self.cache[player.UserId] = playerCache
 	end
 	local cached = playerCache[key]
-	if cached and (not cached.RetryAfter or os.clock() < cached.RetryAfter) then
+	if cached and (not cached.ExpiresAt or os.clock() < cached.ExpiresAt) then
 		return cached
 	end
 	playerCache[key] = nil
@@ -59,9 +58,8 @@ function RobloxGroupService:GetMembershipByGroupId(
 		playerCache[key] = unconfigured
 		return unconfigured
 	end
-	local ok, result =
-		pcall(GroupService.GetRolesInGroupAsync, GroupService, player.UserId, groupId)
-	if not ok or type(result) ~= "table" then
+	local ok, rank = pcall(player.GetRankInGroup, player, groupId)
+	if not ok or type(rank) ~= "number" then
 		self.context.Logger:Warning("Roblox group membership check failed", {
 			UserId = player.UserId,
 			GroupLinkId = key,
@@ -71,24 +69,25 @@ function RobloxGroupService:GetMembershipByGroupId(
 			GroupId = groupId,
 			MinimumRank = minimumRank or 1,
 			Failed = true,
-			RetryAfter = os.clock() + 30,
+			ExpiresAt = os.clock() + 30,
 		}
 		playerCache[key] = failure
 		return failure
 	end
-	local highestRank = 0
-	local roles = if type(result.Roles) == "table" then result.Roles else {}
-	for _, role in roles do
-		if type(role.Rank) == "number" then
-			highestRank = math.max(highestRank, role.Rank)
+	local roleName = "Guest"
+	if rank > 0 then
+		local roleOk, resolvedRole = pcall(player.GetRoleInGroup, player, groupId)
+		if roleOk and type(resolvedRole) == "string" then
+			roleName = resolvedRole
 		end
 	end
 	local membership = {
 		GroupId = groupId,
-		IsMember = result.IsMember == true,
-		HighestRank = highestRank,
+		IsMember = rank > 0,
+		HighestRank = rank,
 		MinimumRank = minimumRank or 1,
-		Roles = roles,
+		Roles = if rank > 0 then { { Name = roleName, Rank = rank } } else {},
+		ExpiresAt = os.clock() + 300,
 	}
 	playerCache[key] = membership
 	return membership

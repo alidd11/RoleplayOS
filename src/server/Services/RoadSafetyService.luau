@@ -139,16 +139,21 @@ function RoadSafetyService:_average(sensor: BasePart, hit: BasePart, isEntry: bo
 end
 
 function RoadSafetyService:_connect(tag: string, callback: (BasePart, BasePart) -> ())
-	for _, sensor in CollectionService:GetTagged(tag) do
-		if sensor:IsA("BasePart") then
-			table.insert(
-				self.connections,
-				sensor.Touched:Connect(function(hit)
-					callback(sensor, hit)
-				end)
-			)
+	local function watch(sensor: Instance)
+		if not sensor:IsA("BasePart") then
+			return
 		end
+		table.insert(
+			self.connections,
+			sensor.Touched:Connect(function(hit)
+				callback(sensor, hit)
+			end)
+		)
 	end
+	for _, sensor in CollectionService:GetTagged(tag) do
+		watch(sensor)
+	end
+	table.insert(self.connections, CollectionService:GetInstanceAddedSignal(tag):Connect(watch))
 end
 
 function RoadSafetyService:Start()

@@ -143,8 +143,15 @@ function NeedsService:_step(player: Player, delta: number)
 	end
 	humanoid.WalkSpeed = speed
 	local now = os.clock()
-	if now - state.LastSent >= 0.25 then
+	local lastPayload = state.LastPayload
+	local materiallyChanged = not lastPayload
+		or lastPayload.Sprinting ~= state.Sprinting
+		or math.abs(lastPayload.Stamina - state.Stamina) >= 1
+		or math.abs(lastPayload.Hunger - state.Hunger) >= 1
+	if materiallyChanged and now - state.LastSent >= 0.5 then
 		state.LastSent = now
+		state.LastPayload =
+			{ Stamina = state.Stamina, Hunger = state.Hunger, Sprinting = state.Sprinting }
 		self.event:FireClient(
 			player,
 			{ Stamina = state.Stamina, Hunger = state.Hunger, Sprinting = state.Sprinting }
@@ -165,7 +172,7 @@ function NeedsService:Start()
 	task.spawn(function()
 		local last = os.clock()
 		while self.running do
-			task.wait(0.25)
+			task.wait(0.5)
 			local now = os.clock()
 			local delta = math.min(now - last, 1)
 			last = now
