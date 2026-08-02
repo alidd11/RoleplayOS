@@ -542,6 +542,43 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("SetSprintState", function(payload)
+		return type(payload) == "table" and type(payload.Sprinting) == "boolean"
+	end, function(player, payload, requestId)
+		local changed, reason =
+			self.context.Services:Get("NeedsService"):SetSprinting(player, payload.Sprinting)
+		return {
+			Success = changed,
+			Code = if changed then "OK" else reason,
+			Message = "",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhoneToggleFlashlight", function(payload)
+		return type(payload) == "table" and type(payload.Enabled) == "boolean"
+	end, function(player, payload, requestId)
+		local changed, reason =
+			self.context.Services:Get("PhoneService"):ToggleFlashlight(player, payload.Enabled)
+		return {
+			Success = changed,
+			Code = if changed then "OK" else reason,
+			Message = if changed then "Flashlight updated." else "Equip the phone first.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PurchaseFood", function(payload)
+		return type(payload) == "table" and type(payload.FoodId) == "string"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("NeedsService"):PurchaseFood(player, payload.FoodId)
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result then "Food consumed." else "The food could not be purchased.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
 end
 function NetworkService:Destroy() end
 return NetworkService

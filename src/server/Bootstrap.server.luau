@@ -67,7 +67,9 @@ local serviceOrder = {
 	"UnitService",
 	"CallService",
 	"DispatchService",
+	"EmergencyTriggerService",
 	"PhoneService",
+	"NeedsService",
 	"StartMenuService",
 	"NetworkService",
 }
@@ -87,6 +89,7 @@ end
 
 game:BindToClose(function()
 	registry:Destroy(context)
+	context.Network:Destroy()
 end)
 logger:Info("RoleplayOS started", {
 	ServiceCount = #serviceOrder,

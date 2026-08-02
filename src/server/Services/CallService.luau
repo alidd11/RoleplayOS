@@ -10,9 +10,22 @@ function CallService:Create(data: any): (any?, string?)
 		type(data.Summary) ~= "string"
 		or #data.Summary < 3
 		or #data.Summary > 160
+		or (data.Location ~= nil and (type(data.Location) ~= "string" or #data.Location > 120))
 		or not table.find(self.context.Configuration.Dispatch.CallPriorities, data.Priority)
 	then
 		return nil, "INVALID_CALL"
+	end
+	local departments = {}
+	if type(data.DepartmentIds) == "table" then
+		for _, departmentId in data.DepartmentIds do
+			if
+				type(departmentId) == "string"
+				and self.context.Configuration.Departments[departmentId]
+				and not table.find(departments, departmentId)
+			then
+				table.insert(departments, departmentId)
+			end
+		end
 	end
 	local call = {
 		CallId = HttpService:GenerateGUID(false),
@@ -23,6 +36,8 @@ function CallService:Create(data: any): (any?, string?)
 		Status = "Open",
 		CreatedAt = os.time(),
 		Revision = 1,
+		DepartmentIds = departments,
+		Source = tostring(data.Source or "Dispatch"),
 	}
 	self.calls[call.CallId] = call
 	self.revision += 1

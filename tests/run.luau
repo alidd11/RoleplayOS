@@ -22,6 +22,7 @@ local LevelProgression = require(Shared.LevelProgression)
 local ProgressionVisibility = require(Shared.ProgressionVisibility)
 local DispatchPolicy = require(Shared.DispatchPolicy)
 local PhoneValidator = require(Shared.PhoneValidator)
+local PayloadInspector = require(Shared.PayloadInspector)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -71,6 +72,17 @@ H.test("token bucket limits and refills", function()
 	H.expect(limiter:Allow("a") and limiter:Allow("a") and not limiter:Allow("a"), "capacity wrong")
 	now = 1
 	H.expect(limiter:Allow("a"), "did not refill")
+end)
+H.test("remote payload inspector rejects abusive structures", function()
+	H.expect(PayloadInspector.validate({ Message = "safe", Count = 2 }), "safe payload rejected")
+	H.expect(not PayloadInspector.validate({ Value = math.huge }), "infinite number accepted")
+	H.expect(
+		not PayloadInspector.validate({ Value = string.rep("x", 20) }, { MaximumStringBytes = 10 }),
+		"oversized string accepted"
+	)
+	local cyclic = {}
+	cyclic.Self = cyclic
+	H.expect(not PayloadInspector.validate(cyclic), "cyclic table accepted")
 end)
 H.test("economy rejects unsafe amounts", function()
 	H.expect(

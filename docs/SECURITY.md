@@ -1,6 +1,8 @@
 # Security
 
-The server owns money, rewards, prices, content definitions, permissions, roles, inventory and ownership. Every remote has explicit registration, payload type checks, JSON-size limits, per-player token-bucket limits, request IDs, protected execution and sanitised errors. Sensitive searches and mutations are audited without recording unnecessary answer or note text.
+The server owns money, rewards, prices, content definitions, permissions, roles, inventory and ownership. Every remote has explicit registration, payload type checks, byte limits, per-endpoint and global per-player token buckets, concurrency caps, request IDs, protected execution and sanitised errors. Payloads are rejected for excessive nesting, nodes or strings, non-finite numbers, unsupported Roblox instances, and cycles. Limiter state is removed when a player leaves. Sensitive searches and mutations are audited without recording unnecessary answer or note text.
+
+Emergency alarms, flashlight state, stamina, walk speed, hunger, food prices, economy debits, dispatch chair access, team duty, and MDT permissions are server-authoritative. Security-sensitive robbery systems should call `EmergencyTriggerService:Trigger()` from server code or use a tagged server-owned prompt; clients never select incident priority or food price.
 
 Community administrators are scoped actors, not trusted servers. A private community can only link a Roblox group whose verified owner matches the private-server owner. Community permissions use live multi-role group ranks, explicit roles and hierarchy checks; configuration may select only server-defined presets. Group API failures fail closed and use a short negative-cache cooldown to prevent request storms.
 

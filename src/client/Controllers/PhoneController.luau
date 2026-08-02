@@ -76,6 +76,7 @@ end
 function PhoneController:Init(context: any)
 	self.context = context
 	self.page = "Home"
+	self.watchedTools = setmetatable({}, { __mode = "k" })
 end
 
 function PhoneController:_mount()
@@ -162,24 +163,30 @@ function PhoneController:_mount()
 	dock.BorderSizePixel = 0
 	dock.Parent = screen
 	corner(dock, 16)
-	local home = button(dock, "HOME")
+	local home = button(dock, "⌂\nHOME")
 	home.Position = UDim2.fromOffset(5, 5)
-	home.Size = UDim2.new(0.25, -7, 1, -10)
-	local dial = button(dock, "CALL")
-	dial.Position = UDim2.new(0.25, 2, 0, 5)
-	dial.Size = UDim2.new(0.25, -7, 1, -10)
-	local messages = button(dock, "TEXT")
-	messages.Position = UDim2.new(0.5, 2, 0, 5)
-	messages.Size = UDim2.new(0.25, -7, 1, -10)
+	home.Size = UDim2.new(0.2, -6, 1, -10)
+	local contacts = button(dock, "●\nPEOPLE")
+	contacts.Position = UDim2.new(0.2, 1, 0, 5)
+	contacts.Size = UDim2.new(0.2, -6, 1, -10)
+	local dial = button(dock, "☎\nCALL")
+	dial.Position = UDim2.new(0.4, 1, 0, 5)
+	dial.Size = UDim2.new(0.2, -6, 1, -10)
+	local messages = button(dock, "✉\nTEXT")
+	messages.Position = UDim2.new(0.6, 1, 0, 5)
+	messages.Size = UDim2.new(0.2, -6, 1, -10)
 	local emergency = button(dock, "999", C.Red)
-	emergency.Position = UDim2.new(0.75, 2, 0, 5)
-	emergency.Size = UDim2.new(0.25, -7, 1, -10)
+	emergency.Position = UDim2.new(0.8, 1, 0, 5)
+	emergency.Size = UDim2.new(0.2, -6, 1, -10)
 	local function show(page: string)
 		self.page = page
 		self:_render()
 	end
 	home.Activated:Connect(function()
 		show("Home")
+	end)
+	contacts.Activated:Connect(function()
+		show("Contacts")
 	end)
 	dial.Activated:Connect(function()
 		show("Call")
@@ -221,6 +228,53 @@ function PhoneController:_render()
 		copy.Position = UDim2.fromOffset(0, 58)
 		copy.Size = UDim2.new(1, 0, 0, 80)
 		copy.TextColor3 = C.Muted
+		local flashlight = button(self.content, "FLASHLIGHT  ·  OFF", Color3.fromRGB(93, 83, 36))
+		flashlight.Position = UDim2.fromOffset(0, 150)
+		flashlight.Size = UDim2.new(1, 0, 0, 48)
+		flashlight.Activated:Connect(function()
+			self.flashlightEnabled = not self.flashlightEnabled
+			local response = self.context.Controllers.NetworkController:Request(
+				"PhoneToggleFlashlight",
+				{ Enabled = self.flashlightEnabled }
+			)
+			if not response.Success then
+				self.flashlightEnabled = false
+			end
+			flashlight.Text = "FLASHLIGHT  ·  " .. (self.flashlightEnabled and "ON" or "OFF")
+			self.context.Controllers.NotificationController:Show(response.Message, "Phone")
+		end)
+	elseif self.page == "Contacts" then
+		local contacts = if self.phoneData then self.phoneData.Contacts else {}
+		local list = Instance.new("ScrollingFrame")
+		list.BackgroundTransparency = 1
+		list.BorderSizePixel = 0
+		list.Size = UDim2.fromScale(1, 1)
+		list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		list.CanvasSize = UDim2.new()
+		list.ScrollBarThickness = 2
+		list.Parent = self.content
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 8)
+		layout.Parent = list
+		for _, contact in contacts do
+			local row = button(list, contact.Name .. "\n" .. contact.Number)
+			row.Size = UDim2.new(1, -4, 0, 54)
+			row.Activated:Connect(function()
+				local response = self.context.Controllers.NetworkController:Request(
+					"PhonePlaceCall",
+					{ Number = contact.Number }
+				)
+				if response.Success then
+					self.activeCall = response.Data
+					self:_renderCall()
+				end
+			end)
+		end
+		if #contacts == 0 then
+			local empty = label(list, "No other active characters are online in this server.", 12)
+			empty.Size = UDim2.new(1, 0, 0, 60)
+			empty.TextColor3 = C.Muted
+		end
 	elseif self.page == "Call" then
 		local number = input(self.content, "07xxx xxx xxx")
 		number.Size = UDim2.new(1, 0, 0, 48)
@@ -388,6 +442,29 @@ function PhoneController:Start()
 		end)
 	)
 	local event = self.context.Controllers.NetworkController.remotes:WaitForChild("PhoneChanged")
+	local function watchTool(tool: Instance)
+		if tool:IsA("Tool") and tool.Name == "Phone" and not self.watchedTools[tool] then
+			self.watchedTools[tool] = true
+			table.insert(
+				self.connections,
+				tool.Activated:Connect(function()
+					self.body.Visible = true
+					self:Refresh()
+				end)
+			)
+		end
+	end
+	local backpack = Players.LocalPlayer:WaitForChild("Backpack")
+	for _, item in backpack:GetChildren() do
+		watchTool(item)
+	end
+	table.insert(self.connections, backpack.ChildAdded:Connect(watchTool))
+	table.insert(
+		self.connections,
+		Players.LocalPlayer.CharacterAdded:Connect(function(character)
+			table.insert(self.connections, character.ChildAdded:Connect(watchTool))
+		end)
+	)
 	table.insert(
 		self.connections,
 		event.OnClientEvent:Connect(function(update)

@@ -1,10 +1,8 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
-local MessagingService = game:GetService("MessagingService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 
 local DispatchService = { Optional = true, connections = {}, occupied = {} }
@@ -74,22 +72,6 @@ end
 function DispatchService:Publish(kind: string, id: string, revision: number)
 	local payload = { Kind = kind, Id = id, Revision = revision, ServerId = game.JobId }
 	self:_fireAuthorised(payload)
-	if not RunService:IsStudio() then
-		task.spawn(function()
-			local ok, problem = pcall(
-				MessagingService.PublishAsync,
-				MessagingService,
-				"RoleplayOS.Dispatch.v1",
-				payload
-			)
-			if not ok then
-				self.context.Logger:Warning(
-					"Cross-server dispatch publish failed",
-					{ Error = tostring(problem) }
-				)
-			end
-		end)
-	end
 end
 
 function DispatchService:Snapshot(player: Player): (any?, string?)
@@ -116,28 +98,6 @@ function DispatchService:Start()
 				self:_watchSeat(seat)
 			end)
 	)
-	if RunService:IsStudio() then
-		return
-	end
-	task.spawn(function()
-		local ok, connection = pcall(
-			MessagingService.SubscribeAsync,
-			MessagingService,
-			"RoleplayOS.Dispatch.v1",
-			function(message)
-				if message.Data.ServerId ~= game.JobId then
-					self:_fireAuthorised(message.Data)
-				end
-			end
-		)
-		if ok and self.running then
-			self.subscription = connection
-		elseif ok then
-			connection:Disconnect()
-		else
-			self.context.Logger:Warning("Cross-server dispatch unavailable")
-		end
-	end)
 end
 
 function DispatchService:Destroy()
@@ -147,9 +107,6 @@ function DispatchService:Destroy()
 	end
 	table.clear(self.connections)
 	table.clear(self.occupied)
-	if self.subscription then
-		self.subscription:Disconnect()
-	end
 end
 
 return DispatchService

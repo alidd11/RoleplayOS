@@ -9,6 +9,72 @@ local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidato
 
 local PhoneService = { calls = {}, userCalls = {}, connections = {} }
 
+function PhoneService:_makeTool(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = "Phone"
+	tool.ToolTip = "RoleplayOS Mobile"
+	tool.CanBeDropped = false
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.new(0.62, 1.18, 0.12)
+	handle.Color = Color3.fromRGB(16, 18, 22)
+	handle.Material = Enum.Material.SmoothPlastic
+	handle.CanCollide = false
+	handle.Massless = true
+	handle.Parent = tool
+	local screen = Instance.new("Part")
+	screen.Name = "Screen"
+	screen.Size = Vector3.new(0.53, 0.97, 0.025)
+	screen.Color = Color3.fromRGB(40, 105, 180)
+	screen.Material = Enum.Material.Glass
+	screen.CanCollide = false
+	screen.Massless = true
+	screen.CFrame = handle.CFrame * CFrame.new(0, 0, -0.071)
+	screen.Parent = tool
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = handle
+	weld.Part1 = screen
+	weld.Parent = screen
+	local light = Instance.new("SpotLight")
+	light.Name = "PhoneFlashlight"
+	light.Enabled = false
+	light.Brightness = 2.5
+	light.Range = 28
+	light.Angle = 58
+	light.Face = Enum.NormalId.Back
+	light.Parent = handle
+	tool.Grip = CFrame.Angles(0, math.rad(90), math.rad(-10)) * CFrame.new(0, -0.25, 0)
+	return tool
+end
+
+function PhoneService:EnsureTool(player: Player)
+	if not self:_character(player) then
+		return
+	end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if
+		not backpack
+		or backpack:FindFirstChild("Phone")
+		or (player.Character and player.Character:FindFirstChild("Phone"))
+	then
+		return
+	end
+	self:_makeTool().Parent = backpack
+end
+
+function PhoneService:ToggleFlashlight(player: Player, enabled: any): (boolean, string?)
+	if type(enabled) ~= "boolean" then
+		return false, "INVALID_FLASHLIGHT_STATE"
+	end
+	local tool = player.Character and player.Character:FindFirstChild("Phone")
+	local light = tool and tool:FindFirstChild("PhoneFlashlight", true)
+	if not light or not light:IsA("SpotLight") then
+		return false, "PHONE_MUST_BE_EQUIPPED"
+	end
+	light.Enabled = enabled
+	return true, nil
+end
+
 function PhoneService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("PhoneChanged")
@@ -98,6 +164,7 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
 	end
 	local phone = self:_ensurePhone(character)
+	self:EnsureTool(player)
 	local contacts = {}
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
@@ -251,6 +318,29 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 end
 
 function PhoneService:Start()
+	for _, player in Players:GetPlayers() do
+		table.insert(
+			self.connections,
+			player.CharacterAdded:Connect(function()
+				task.delay(1, function()
+					self:EnsureTool(player)
+				end)
+			end)
+		)
+	end
+	table.insert(
+		self.connections,
+		Players.PlayerAdded:Connect(function(player)
+			table.insert(
+				self.connections,
+				player.CharacterAdded:Connect(function()
+					task.delay(1, function()
+						self:EnsureTool(player)
+					end)
+				end)
+			)
+		end)
+	)
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
