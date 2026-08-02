@@ -42,6 +42,10 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		Framework = {
 			Version = "0.1-dev",
 			Environment = self.context.Configuration.Framework.Environment,
+			GameName = self.context.Configuration.Framework.Branding.GameName ~= ""
+					and self.context.Configuration.Framework.Branding.GameName
+				or game.Name,
+			ShowRoleplayOSMark = self.context.Configuration.Framework.Branding.ShowRoleplayOSMark,
 		},
 		Server = self.context.Services:Get("CommunityServerService"):GetServerContext(player),
 		Characters = self.context.Services:Get("CharacterService"):List(player),

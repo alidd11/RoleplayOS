@@ -176,13 +176,10 @@ function App.mount(context: any): ScreenGui
 	sidebarStroke.BorderSizePixel = 0
 	sidebarStroke.Parent = sidebar
 
-	local brand = text(sidebar, "ROLEPLAY", 21, COLOURS.Text, true)
+	local brand = text(sidebar, game.Name, 21, COLOURS.Text, true)
 	brand.Position = UDim2.fromOffset(26, 28)
-	brand.Size = UDim2.fromOffset(150, 28)
-	local osMark = text(sidebar, "OS", 21, COLOURS.Accent, true)
-	osMark.Position = UDim2.fromOffset(133, 28)
-	osMark.Size = UDim2.fromOffset(40, 28)
-	local version = text(sidebar, "FOUNDATION  ·  0.1", 10, COLOURS.Muted, true)
+	brand.Size = UDim2.new(1, -52, 0, 28)
+	local version = text(sidebar, "POWERED BY ROLEPLAYOS  ·  0.1", 10, COLOURS.Muted, true)
 	version.Position = UDim2.fromOffset(27, 57)
 	version.Size = UDim2.fromOffset(180, 18)
 
@@ -731,6 +728,8 @@ function App.mount(context: any): ScreenGui
 
 	context.Events.StartMenuChanged.Event:Connect(function(data)
 		menuData = data
+		brand.Text = data.Framework.GameName
+		version.Visible = data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
 		renderPlay()
@@ -738,6 +737,8 @@ function App.mount(context: any): ScreenGui
 	local response = context.Controllers.StartMenuController:Refresh()
 	if response.Success then
 		menuData = response.Data
+		brand.Text = response.Data.Framework.GameName
+		version.Visible = response.Data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(response.Data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
 	else

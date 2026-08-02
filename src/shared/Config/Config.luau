@@ -4,6 +4,10 @@ local Config = {
 	Framework = {
 		Environment = "Development",
 		SchemaVersion = 2,
+		Branding = {
+			GameName = "",
+			ShowRoleplayOSMark = true,
+		},
 		UseMockDataInStudio = true,
 		GrantMockEmergencyAccessInStudio = true,
 		AutosaveSeconds = 120,
