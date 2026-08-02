@@ -620,7 +620,30 @@ function App.mount(context: any): ScreenGui
 			true
 		)
 		state.Position = UDim2.fromOffset(22, 151)
-		state.Size = UDim2.new(1, -44, 0, 28)
+		state.Size = UDim2.new(1, -220, 0, 28)
+		if server and server.Kind == "Private" and not server.Community then
+			local createCommunity = button(hero, "Create community", true)
+			createCommunity.AnchorPoint = Vector2.new(1, 1)
+			createCommunity.Position = UDim2.new(1, -20, 1, -18)
+			createCommunity.Size = UDim2.fromOffset(170, 42)
+			createCommunity.Activated:Connect(function()
+				local communityName = Players.LocalPlayer.DisplayName .. " Community"
+				createCommunity.Text = "Creating…"
+				local response =
+					context.Controllers.CommunityController:CreatePrivate(communityName)
+				if response.Success then
+					context.Controllers.StartMenuController:Refresh()
+				else
+					createCommunity.Text = "Create community"
+				end
+			end)
+		elseif server and server.Kind == "Public" then
+			local publicBadge = text(hero, "PRIVATE SERVER REQUIRED", 10, COLOURS.Muted, true)
+			publicBadge.AnchorPoint = Vector2.new(1, 1)
+			publicBadge.Position = UDim2.new(1, -22, 1, -21)
+			publicBadge.Size = UDim2.fromOffset(190, 24)
+			publicBadge.TextXAlignment = Enum.TextXAlignment.Right
+		end
 		sectionHeading(
 			"Included controls",
 			"A professional foundation for private roleplay operations."
