@@ -365,6 +365,7 @@ function NetworkService:Start()
 			and type(payload.Summary) == "string"
 			and type(payload.Priority) == "string"
 			and type(payload.Location) == "string"
+			and type(payload.IncidentType) == "string"
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
 			return {
@@ -374,7 +375,17 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
-		local call, reason = self.context.Services:Get("CallService"):Create(payload)
+		local prepared, prepareReason =
+			self.context.Services:Get("DispatchService"):PrepareCall(player, payload)
+		if not prepared then
+			return {
+				Success = false,
+				Code = prepareReason,
+				Message = "The call details could not be accepted.",
+				RequestId = requestId,
+			}
+		end
+		local call, reason = self.context.Services:Get("CallService"):Create(prepared)
 		if not call then
 			return {
 				Success = false,
@@ -383,10 +394,42 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
+		self.context.Services:Get("AuditService"):Record({
+			ActorUserId = player.UserId,
+			Action = "Dispatch.CallCreated",
+			Target = call.CallId,
+			Metadata = { Priority = call.Priority, IncidentType = call.IncidentType },
+		})
 		return {
 			Success = true,
 			Code = "OK",
 			Message = "Call created.",
+			Data = call,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("DispatchUpdateCall", function(payload)
+		return type(payload) == "table"
+			and type(payload.CallId) == "string"
+			and (payload.Status == nil or type(payload.Status) == "string")
+			and (payload.Priority == nil or type(payload.Priority) == "string")
+	end, function(player, payload, requestId)
+		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
+			return {
+				Success = false,
+				Code = "DISPATCH_CONSOLE_REQUIRED",
+				Message = "Sit at an authorised dispatch console first.",
+				RequestId = requestId,
+			}
+		end
+		local call, reason = self.context.Services:Get("CallService"):Update(
+			payload.CallId,
+			{ Status = payload.Status, Priority = payload.Priority }
+		)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call then "Call updated." else "The call could not be updated.",
 			Data = call,
 			RequestId = requestId,
 		}

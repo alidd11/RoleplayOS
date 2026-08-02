@@ -74,15 +74,15 @@ function MDTController:_mount()
 	shell.Name = "Terminal"
 	shell.AnchorPoint = Vector2.new(0.5, 0.5)
 	shell.Position = UDim2.fromScale(0.5, 0.5)
-	shell.Size = UDim2.fromScale(0.78, 0.78)
+	shell.Size = UDim2.fromScale(0.86, 0.82)
 	shell.BackgroundColor3 = C.Surface
 	shell.BorderSizePixel = 0
 	shell.Visible = false
 	shell.Parent = gui
 	corner(shell, 14)
 	local constraint = Instance.new("UISizeConstraint")
-	constraint.MinSize = Vector2.new(620, 430)
-	constraint.MaxSize = Vector2.new(980, 650)
+	constraint.MinSize = Vector2.new(720, 470)
+	constraint.MaxSize = Vector2.new(1120, 720)
 	constraint.Parent = shell
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
@@ -90,13 +90,20 @@ function MDTController:_mount()
 	stroke.Parent = shell
 	self.shell = shell
 
-	local title = text(shell, "MOBILE DATA TERMINAL", 16, true)
+	local title = text(shell, "ROLEPLAYOS  ·  MOBILE DATA TERMINAL", 16, true)
 	title.Position = UDim2.fromOffset(22, 15)
 	title.Size = UDim2.new(1, -110, 0, 24)
 	local subtitle = text(shell, "Secure operational records", 10)
 	subtitle.Position = UDim2.fromOffset(22, 39)
 	subtitle.Size = UDim2.new(1, -110, 0, 18)
 	subtitle.TextColor3 = C.Muted
+	local secure = text(shell, "●  SECURE SESSION", 9, true)
+	secure.AnchorPoint = Vector2.new(1, 0)
+	secure.Position = UDim2.new(1, -104, 0, 42)
+	secure.Size = UDim2.fromOffset(150, 16)
+	secure.TextXAlignment = Enum.TextXAlignment.Right
+	secure.TextColor3 = Color3.fromRGB(89, 215, 144)
+	self.secureLabel = secure
 	local close = button(shell, "CLOSE")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -16, 0, 15)
@@ -123,7 +130,7 @@ function MDTController:_mount()
 	input.TextSize = 13
 	input.TextXAlignment = Enum.TextXAlignment.Left
 	input.Position = UDim2.fromOffset(22, 119)
-	input.Size = UDim2.new(1, -138, 0, 42)
+	input.Size = UDim2.new(0.62, -34, 0, 42)
 	input.Parent = shell
 	corner(input, 9)
 	local padding = Instance.new("UIPadding")
@@ -132,20 +139,20 @@ function MDTController:_mount()
 	self.input = input
 	local search = button(shell, "SEARCH")
 	search.AnchorPoint = Vector2.new(1, 0)
-	search.Position = UDim2.new(1, -22, 0, 119)
+	search.Position = UDim2.new(0.62, -22, 0, 119)
 	search.Size = UDim2.fromOffset(86, 42)
 	search.BackgroundColor3 = C.Accent
 
 	local status = text(shell, "Enter at least two characters.", 11)
 	status.Position = UDim2.fromOffset(22, 170)
-	status.Size = UDim2.new(1, -44, 0, 20)
+	status.Size = UDim2.new(0.62, -44, 0, 20)
 	status.TextColor3 = C.Muted
 	self.status = status
 	local results = Instance.new("ScrollingFrame")
 	results.BackgroundTransparency = 1
 	results.BorderSizePixel = 0
 	results.Position = UDim2.fromOffset(22, 200)
-	results.Size = UDim2.new(1, -44, 1, -222)
+	results.Size = UDim2.new(0.62, -34, 1, -222)
 	results.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	results.CanvasSize = UDim2.new()
 	results.ScrollBarThickness = 3
@@ -154,6 +161,31 @@ function MDTController:_mount()
 	layout.Padding = UDim.new(0, 8)
 	layout.Parent = results
 	self.results = results
+
+	local detail = Instance.new("Frame")
+	detail.Position = UDim2.new(0.62, 0, 0, 73)
+	detail.Size = UDim2.new(0.38, -22, 1, -95)
+	detail.BackgroundColor3 = C.Raised
+	detail.BorderSizePixel = 0
+	detail.Parent = shell
+	corner(detail, 11)
+	local detailTitle = text(detail, "RECORD PREVIEW", 11, true)
+	detailTitle.Position = UDim2.fromOffset(16, 14)
+	detailTitle.Size = UDim2.new(1, -32, 0, 20)
+	detailTitle.TextColor3 = C.Accent
+	local detailName = text(detail, "Select a search result", 18, true)
+	detailName.Position = UDim2.fromOffset(16, 45)
+	detailName.Size = UDim2.new(1, -32, 0, 48)
+	detailName.TextWrapped = true
+	local detailMeta = text(detail, "Verified operational information will appear here.", 11)
+	detailMeta.Position = UDim2.fromOffset(16, 104)
+	detailMeta.Size = UDim2.new(1, -32, 1, -120)
+	detailMeta.TextWrapped = true
+	detailMeta.TextYAlignment = Enum.TextYAlignment.Top
+	detailMeta.TextColor3 = C.Muted
+	self.detailTitle = detailTitle
+	self.detailName = detailName
+	self.detailMeta = detailMeta
 
 	local function setOpen(open: boolean)
 		if self.allowed then
@@ -196,8 +228,13 @@ function MDTController:_renderResults(items: { any })
 			child:Destroy()
 		end
 	end
+	if #items == 0 then
+		self.detailName.Text = "No matching records"
+		self.detailMeta.Text =
+			"Check the spelling or try a broader search. Searches require at least two characters."
+	end
 	for _, record in items do
-		local row = Instance.new("Frame")
+		local row = button(self.results, "")
 		row.BackgroundColor3 = C.Raised
 		row.BorderSizePixel = 0
 		row.Size = UDim2.new(1, -5, 0, 62)
@@ -216,6 +253,42 @@ function MDTController:_renderResults(items: { any })
 		secondary.Position = UDim2.fromOffset(14, 33)
 		secondary.Size = UDim2.new(1, -28, 0, 18)
 		secondary.TextColor3 = C.Muted
+		local open = text(row, "VIEW  ›", 9, true)
+		open.AnchorPoint = Vector2.new(1, 0.5)
+		open.Position = UDim2.new(1, -14, 0.5, 0)
+		open.Size = UDim2.fromOffset(60, 18)
+		open.TextXAlignment = Enum.TextXAlignment.Right
+		open.TextColor3 = C.Accent
+		row.Activated:Connect(function()
+			self.detailTitle.Text = if record.FullName then "PERSON RECORD" else "VEHICLE RECORD"
+			self.detailName.Text = record.FullName or record.Registration or "Unknown record"
+			if record.FullName then
+				local licences = {}
+				for licenceId, value in record.Licences or {} do
+					if value then
+						table.insert(licences, tostring(licenceId))
+					end
+				end
+				self.detailMeta.Text = string.format(
+					"DATE OF BIRTH\n%s\n\nLICENCES\n%s\n\nFLAGS\n%s",
+					tostring(record.DateOfBirth or "Not recorded"),
+					if #licences > 0 then table.concat(licences, ", ") else "None recorded",
+					if #(record.Flags or {}) > 0
+						then table.concat(record.Flags, ", ")
+						else "No active flags"
+				)
+			else
+				self.detailMeta.Text = string.format(
+					"REGISTRATION\n%s\n\nVEHICLE TYPE\n%s\n\nOWNER RECORD\n%s\n\nFLAGS\n%s",
+					tostring(record.Registration or "Unknown"),
+					tostring(record.DefinitionId or "Unknown"),
+					tostring(record.OwnerCharacterId or "Unavailable"),
+					if #(record.Flags or {}) > 0
+						then table.concat(record.Flags, ", ")
+						else "No active flags"
+				)
+			end
+		end)
 	end
 end
 
@@ -234,6 +307,10 @@ end
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
+	if self.allowed then
+		self.secureLabel.Text = "●  "
+			.. tostring(response.Data.DepartmentId or "AUTHORISED"):upper()
+	end
 	self.gui.Enabled = self.allowed
 	self.launcher.Visible = self.allowed
 	if not self.allowed then

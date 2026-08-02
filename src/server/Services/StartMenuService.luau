@@ -4,6 +4,31 @@ function StartMenuService:Init(context: any)
 	self.context = context
 end
 function StartMenuService:Start() end
+
+function StartMenuService:_ensureDutyProfile(player: Player, session: any, departmentId: string)
+	if type(departmentId) ~= "string" or departmentId == "" then
+		return
+	end
+	for _, profile in session.Profile.DutyProfiles do
+		if profile.DepartmentId == departmentId then
+			return
+		end
+	end
+	local profileId = "Auto_" .. departmentId
+	session.Profile.DutyProfiles[profileId] = {
+		ProfileId = profileId,
+		DepartmentId = departmentId,
+		Rank = 1,
+		QualificationIds = {},
+		Callsign = string.format(
+			"%s-%02d",
+			string.upper(string.sub(departmentId, 1, 3)),
+			player.UserId % 100
+		),
+	}
+	self.context.Services:Get("DataService"):MarkDirty(player)
+end
+
 function StartMenuService:Build(player: Player): (any?, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
@@ -12,6 +37,9 @@ function StartMenuService:Build(player: Player): (any?, string?)
 	local roles = {}
 	for _, role in self.context.Configuration.Roles do
 		local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
+		if access.Allowed then
+			self:_ensureDutyProfile(player, session, role.DepartmentId)
+		end
 		table.insert(roles, {
 			Id = role.Id,
 			Name = role.Name,

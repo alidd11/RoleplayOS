@@ -4,6 +4,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TextService = game:GetService("TextService")
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 
 local DispatchService = { Optional = true, connections = {}, occupied = {} }
@@ -40,6 +41,79 @@ function DispatchService:_sendAccess(player: Player)
 	local allowed = self:IsAtConsole(player)
 	self.occupied[player.UserId] = if allowed then true else nil
 	self.accessEvent:FireClient(player, { Allowed = allowed })
+end
+
+function DispatchService:_filter(player: Player, value: string): (string?, string?)
+	value = string.sub(string.match(value, "^%s*(.-)%s*$") or "", 1, 300)
+	if value == "" then
+		return nil, "EMPTY_TEXT"
+	end
+	if RunService:IsStudio() then
+		return value, nil
+	end
+	local ok, result = pcall(
+		TextService.FilterStringAsync,
+		TextService,
+		value,
+		player.UserId,
+		Enum.TextFilterContext.PublicChat
+	)
+	if not ok then
+		return nil, "TEXT_FILTER_UNAVAILABLE"
+	end
+	local filteredOk, filtered = pcall(result.GetNonChatStringForBroadcastAsync, result)
+	return if filteredOk then filtered else nil,
+		if filteredOk then nil else "TEXT_FILTER_UNAVAILABLE"
+end
+
+function DispatchService:PrepareCall(player: Player, payload: any): (any?, string?)
+	if not table.find(self.context.Configuration.Dispatch.IncidentTypes, payload.IncidentType) then
+		return nil, "INVALID_INCIDENT_TYPE"
+	end
+	local summary, summaryReason = self:_filter(player, tostring(payload.Summary or ""))
+	local location, locationReason = self:_filter(player, tostring(payload.Location or ""))
+	if not summary or not location then
+		return nil, summaryReason or locationReason
+	end
+	local callerName = "Unknown caller"
+	if type(payload.CallerName) == "string" and payload.CallerName ~= "" then
+		callerName = select(1, self:_filter(player, string.sub(payload.CallerName, 1, 60)))
+			or callerName
+	end
+	local notes = ""
+	if type(payload.Notes) == "string" and payload.Notes ~= "" then
+		notes = select(1, self:_filter(player, string.sub(payload.Notes, 1, 300))) or ""
+	end
+	local departments = {}
+	for _, departmentId in
+		if type(payload.DepartmentIds) == "table" then payload.DepartmentIds else {}
+	do
+		if
+			type(departmentId) == "string"
+			and self.context.Configuration.Departments[departmentId]
+			and not table.find(departments, departmentId)
+		then
+			table.insert(departments, departmentId)
+		end
+	end
+	if #departments == 0 then
+		departments = { "Control" }
+	end
+	return {
+		Summary = string.sub(summary, 1, 160),
+		Location = string.sub(location, 1, 120),
+		Priority = payload.Priority,
+		IncidentType = payload.IncidentType,
+		CallerName = callerName,
+		CallerNumber = type(payload.CallerNumber) == "string"
+				and string.sub(payload.CallerNumber, 1, 20)
+			or "",
+		Notes = notes,
+		DepartmentIds = departments,
+		Source = "Dispatch",
+		CreatedByUserId = player.UserId,
+	},
+		nil
 end
 
 function DispatchService:_watchSeat(instance: Instance)
@@ -81,7 +155,13 @@ function DispatchService:Publish(kind: string, id: string, revision: number)
 end
 
 function DispatchService:Snapshot(player: Player): (any?, string?)
-	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "Dispatch") then
+	local studioConsole = RunService:IsStudio()
+		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio == true
+		and self:IsAtConsole(player)
+	if
+		not studioConsole
+		and not self.context.Services:Get("MDTService"):CanUsePermission(player, "Dispatch")
+	then
 		return nil, "DISPATCH_NOT_AUTHORISED"
 	end
 	return {

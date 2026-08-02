@@ -6,6 +6,12 @@ function CallService:Init(context: any)
 end
 function CallService:Start() end
 function CallService:Create(data: any): (any?, string?)
+	local incidentType = if table.find(
+			self.context.Configuration.Dispatch.IncidentTypes,
+			data.IncidentType
+		)
+		then data.IncidentType
+		else "Emergency"
 	if
 		type(data.Summary) ~= "string"
 		or #data.Summary < 3
@@ -32,6 +38,11 @@ function CallService:Create(data: any): (any?, string?)
 		Priority = data.Priority,
 		Summary = data.Summary,
 		Location = tostring(data.Location or "Unknown"),
+		IncidentType = incidentType,
+		CallerName = tostring(data.CallerName or "Unknown caller"),
+		CallerNumber = tostring(data.CallerNumber or ""),
+		Notes = tostring(data.Notes or ""),
+		CreatedByUserId = tonumber(data.CreatedByUserId) or 0,
 		UnitIds = {},
 		Status = "Open",
 		CreatedAt = os.time(),
@@ -58,17 +69,40 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	end
 	unit.Status = "Assigned"
 	unit.AssignedCallId = callId
+	call.Status = "Assigned"
 	call.Revision += 1
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallAssigned", callId, self.revision)
 	return true, nil
+end
+function CallService:Update(callId: string, data: any): (any?, string?)
+	local call = self.calls[callId]
+	if not call or call.Status == "Closed" then
+		return nil, "CALL_NOT_FOUND"
+	end
+	if data.Status ~= nil then
+		if not table.find(self.context.Configuration.Dispatch.CallStatuses, data.Status) then
+			return nil, "INVALID_CALL_STATUS"
+		end
+		call.Status = data.Status
+	end
+	if data.Priority ~= nil then
+		if not table.find(self.context.Configuration.Dispatch.CallPriorities, data.Priority) then
+			return nil, "INVALID_CALL_PRIORITY"
+		end
+		call.Priority = data.Priority
+	end
+	call.Revision += 1
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallUpdated", callId, self.revision)
+	return call, nil
 end
 function CallService:Close(callId: string): (boolean, string?)
 	local call = self.calls[callId]
 	if not call then
 		return false, "CALL_NOT_FOUND"
 	end
-	call.Status = "Closed"
+	call.Status = "Resolved"
 	call.ClosedAt = os.time()
 	for _, unitId in call.UnitIds do
 		local unit = self.context.Services:Get("UnitService").units[unitId]
@@ -85,7 +119,7 @@ end
 function CallService:Snapshot(): { any }
 	local result = {}
 	for _, call in self.calls do
-		if call.Status ~= "Closed" then
+		if call.Status ~= "Resolved" then
 			table.insert(result, table.clone(call))
 		end
 	end

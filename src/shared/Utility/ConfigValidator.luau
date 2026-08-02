@@ -127,6 +127,40 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	end
 	for roleId, role in config.Roles or {} do
 		validateAccessRule(role.Access, "role " .. roleId)
+		if not config.Teams[role.TeamName] then
+			table.insert(errors, "Unknown team in role " .. roleId)
+		end
+		if role.DepartmentId and not config.Departments[role.DepartmentId] then
+			table.insert(errors, "Unknown department in role " .. roleId)
+		end
+		if role.LoadoutId and not config.Loadouts[role.LoadoutId] then
+			table.insert(errors, "Unknown loadout in role " .. roleId)
+		end
+		if role.UniformId and not config.Uniforms[role.UniformId] then
+			table.insert(errors, "Unknown uniform in role " .. roleId)
+		end
+	end
+	for departmentId, department in config.Departments or {} do
+		for _, roleId in department.RoleIds or {} do
+			local role = config.Roles[roleId]
+			if not role or role.DepartmentId ~= departmentId then
+				table.insert(errors, "Invalid role " .. roleId .. " in department " .. departmentId)
+			end
+		end
+	end
+	for _, listName in { "CallPriorities", "IncidentTypes", "CallStatuses" } do
+		local seen = {}
+		local values = config.Dispatch and config.Dispatch[listName]
+		if type(values) ~= "table" or #values == 0 then
+			table.insert(errors, "Invalid dispatch list: " .. listName)
+		else
+			for _, value in values do
+				if type(value) ~= "string" or value == "" or seen[value] then
+					table.insert(errors, "Invalid or duplicate dispatch value in " .. listName)
+				end
+				seen[value] = true
+			end
+		end
 	end
 	for templateId, template in config.Communities and config.Communities.Templates or {} do
 		if template.Id ~= templateId or not template.Roles[template.DefaultMemberRoleId] then

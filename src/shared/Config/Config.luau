@@ -289,7 +289,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Police" },
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 				},
 			},
@@ -306,7 +305,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Police" },
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 				},
 			},
@@ -323,7 +321,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Police" },
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "ArmedResponse", MinimumGroupRank = 1 },
 				},
@@ -341,7 +338,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Police" },
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "RoadsPolicing", MinimumGroupRank = 1 },
 				},
@@ -359,7 +355,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Ambulance" },
 					{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
 				},
 			},
@@ -376,7 +371,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Fire" },
 					{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
 				},
 			},
@@ -409,7 +403,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Transport" },
 					{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
 				},
 			},
@@ -426,7 +419,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Highways" },
 					{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
 				},
 			},
@@ -443,7 +435,6 @@ local Config = {
 				Match = "All",
 				DisplayWhenLocked = true,
 				Rules = {
-					{ AccessType = "Application", DepartmentId = "Prison" },
 					{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
 				},
 			},
@@ -771,6 +762,17 @@ local Config = {
 		DispatcherDepartments = { "Control" },
 		UnitStatuses = { "Available", "Assigned", "OnScene", "Unavailable" },
 		CallPriorities = { "Immediate", "Prompt", "Routine" },
+		IncidentTypes = {
+			"Emergency",
+			"Crime in progress",
+			"Road traffic collision",
+			"Medical",
+			"Fire",
+			"Public assistance",
+			"Prison incident",
+			"Transport incident",
+		},
+		CallStatuses = { "Open", "Assigned", "OnScene" },
 		ActiveStateTtlSeconds = 300,
 	},
 	EmergencyTriggers = {
@@ -847,6 +849,7 @@ local Config = {
 			GetMDTAccess = { Capacity = 4, RefillPerSecond = 1 },
 			GetDispatchSnapshot = { Capacity = 6, RefillPerSecond = 1 },
 			DispatchCreateCall = { Capacity = 4, RefillPerSecond = 0.5 },
+			DispatchUpdateCall = { Capacity = 6, RefillPerSecond = 1 },
 			DispatchAssignUnit = { Capacity = 8, RefillPerSecond = 1 },
 			DispatchCloseCall = { Capacity = 4, RefillPerSecond = 0.5 },
 			DispatchSetUnitStatus = { Capacity = 6, RefillPerSecond = 1 },

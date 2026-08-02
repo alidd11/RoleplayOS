@@ -129,7 +129,7 @@ function DispatchController:_mount()
 	calls.BackgroundTransparency = 1
 	calls.BorderSizePixel = 0
 	calls.Position = UDim2.fromOffset(20, 96)
-	calls.Size = UDim2.new(0.58, -30, 1, -204)
+	calls.Size = UDim2.new(0.58, -30, 1, -176)
 	calls.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	calls.CanvasSize = UDim2.new()
 	calls.ScrollBarThickness = 3
@@ -146,7 +146,7 @@ function DispatchController:_mount()
 	units.BackgroundTransparency = 1
 	units.BorderSizePixel = 0
 	units.Position = UDim2.new(0.58, 0, 0, 96)
-	units.Size = UDim2.new(0.42, -20, 1, -116)
+	units.Size = UDim2.new(0.42, -20, 1, -170)
 	units.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	units.CanvasSize = UDim2.new()
 	units.ScrollBarThickness = 3
@@ -155,56 +155,206 @@ function DispatchController:_mount()
 	unitsLayout.Padding = UDim.new(0, 8)
 	unitsLayout.Parent = units
 	self.units = units
+	self.callsTitle = callsTitle
+	self.unitsTitle = unitsTitle
 
-	local create = Instance.new("Frame")
-	create.Position = UDim2.new(0, 20, 1, -96)
-	create.Size = UDim2.new(0.58, -30, 0, 76)
-	create.BackgroundColor3 = C.Raised
-	create.BorderSizePixel = 0
-	create.Parent = shell
-	corner(create, 10)
-	local summary = input(create, "Call summary")
-	summary.Position = UDim2.fromOffset(10, 9)
-	summary.Size = UDim2.new(0.5, -14, 0, 29)
-	local location = input(create, "Location")
-	location.Position = UDim2.new(0.5, 4, 0, 9)
-	location.Size = UDim2.new(0.32, -8, 0, 29)
-	local createButton = button(create, "CREATE")
-	createButton.Position = UDim2.new(0.82, 4, 0, 9)
-	createButton.Size = UDim2.new(0.18, -14, 0, 29)
+	local newCall = button(shell, "＋  NEW CONTROL CALL")
+	newCall.Position = UDim2.new(0, 20, 1, -64)
+	newCall.Size = UDim2.new(0.58, -30, 0, 44)
+	newCall.BackgroundColor3 = C.Accent
+
+	local actions = Instance.new("Frame")
+	actions.Position = UDim2.new(0.58, 0, 1, -64)
+	actions.Size = UDim2.new(0.42, -20, 0, 44)
+	actions.BackgroundTransparency = 1
+	actions.Parent = shell
+	local onScene = button(actions, "MARK ON SCENE")
+	onScene.Size = UDim2.new(0.5, -5, 1, 0)
+	local resolve = button(actions, "RESOLVE CALL")
+	resolve.Position = UDim2.new(0.5, 5, 0, 0)
+	resolve.Size = UDim2.new(0.5, -5, 1, 0)
+	resolve.BackgroundColor3 = Color3.fromRGB(124, 51, 58)
+
+	local shade = Instance.new("Frame")
+	shade.Name = "CallComposerShade"
+	shade.Size = UDim2.fromScale(1, 1)
+	shade.BackgroundColor3 = Color3.new()
+	shade.BackgroundTransparency = 0.18
+	shade.BorderSizePixel = 0
+	shade.Visible = false
+	shade.ZIndex = 20
+	shade.Parent = dim
+	self.composer = shade
+	local composer = Instance.new("Frame")
+	composer.Name = "CallComposer"
+	composer.AnchorPoint = Vector2.new(0.5, 0.5)
+	composer.Position = UDim2.fromScale(0.5, 0.5)
+	composer.Size = UDim2.fromOffset(560, 560)
+	composer.BackgroundColor3 = C.Surface
+	composer.BorderSizePixel = 0
+	composer.ZIndex = 21
+	composer.Parent = shade
+	corner(composer, 16)
+	local composerStroke = Instance.new("UIStroke")
+	composerStroke.Color = C.Border
+	composerStroke.Parent = composer
+	local composerTitle = label(composer, "CREATE CONTROL CALL", 18, true)
+	composerTitle.Position = UDim2.fromOffset(22, 18)
+	composerTitle.Size = UDim2.new(1, -44, 0, 28)
+	composerTitle.ZIndex = 22
+	local composerCopy =
+		label(composer, "Record verified information, select recipients, then deploy units.", 10)
+	composerCopy.Position = UDim2.fromOffset(22, 47)
+	composerCopy.Size = UDim2.new(1, -44, 0, 20)
+	composerCopy.TextColor3 = C.Muted
+	composerCopy.ZIndex = 22
+	local summary = input(composer, "Summary · what is happening?")
+	summary.Position = UDim2.fromOffset(22, 82)
+	summary.Size = UDim2.new(1, -44, 0, 44)
+	summary.ZIndex = 22
+	local location = input(composer, "Exact location")
+	location.Position = UDim2.fromOffset(22, 136)
+	location.Size = UDim2.new(1, -44, 0, 44)
+	location.ZIndex = 22
+	local caller = input(composer, "Caller name (optional)")
+	caller.Position = UDim2.fromOffset(22, 190)
+	caller.Size = UDim2.new(0.58, -6, 0, 42)
+	caller.ZIndex = 22
+	local callerNumber = input(composer, "Callback number")
+	callerNumber.Position = UDim2.new(0.58, 6, 0, 190)
+	callerNumber.Size = UDim2.new(0.42, -28, 0, 42)
+	callerNumber.ZIndex = 22
+	local incidentType = button(composer, "TYPE  ·  EMERGENCY")
+	incidentType.Position = UDim2.fromOffset(22, 244)
+	incidentType.Size = UDim2.new(0.62, -6, 0, 38)
+	incidentType.ZIndex = 22
+	local priority = button(composer, "PRIORITY  ·  PROMPT")
+	priority.Position = UDim2.new(0.62, 6, 0, 244)
+	priority.Size = UDim2.new(0.38, -28, 0, 38)
+	priority.ZIndex = 22
+	local recipientTitle = label(composer, "SEND TO DEPARTMENTS", 9, true)
+	recipientTitle.Position = UDim2.fromOffset(22, 296)
+	recipientTitle.Size = UDim2.new(1, -44, 0, 18)
+	recipientTitle.TextColor3 = C.Muted
+	recipientTitle.ZIndex = 22
+	local departmentIds =
+		{ "Police", "Ambulance", "Fire", "Highways", "Prison", "Transport", "Control" }
+	local selectedDepartments = { Control = true }
+	for index, departmentId in departmentIds do
+		local department = button(composer, departmentId:upper())
+		department.Position = UDim2.new(
+			(index - 1) % 4 * 0.25,
+			22 + ((index - 1) % 4) * 2,
+			0,
+			319 + math.floor((index - 1) / 4) * 37
+		)
+		department.Size = UDim2.new(0.25, -28, 0, 30)
+		department.ZIndex = 22
+		local function renderDepartment()
+			department.BackgroundColor3 = if selectedDepartments[departmentId]
+				then C.Accent
+				else C.Raised
+		end
+		renderDepartment()
+		department.Activated:Connect(function()
+			selectedDepartments[departmentId] = if selectedDepartments[departmentId]
+				then nil
+				else true
+			renderDepartment()
+		end)
+	end
+	local notes = input(composer, "Control notes (optional)")
+	notes.Position = UDim2.fromOffset(22, 397)
+	notes.Size = UDim2.new(1, -44, 0, 72)
+	notes.MultiLine = true
+	notes.TextYAlignment = Enum.TextYAlignment.Top
+	notes.ZIndex = 22
+	local cancel = button(composer, "CANCEL")
+	cancel.Position = UDim2.fromOffset(22, 492)
+	cancel.Size = UDim2.new(0.35, -6, 0, 46)
+	cancel.ZIndex = 22
+	local createButton = button(composer, "CREATE & BROADCAST CALL")
+	createButton.Position = UDim2.new(0.35, 6, 0, 492)
+	createButton.Size = UDim2.new(0.65, -28, 0, 46)
 	createButton.BackgroundColor3 = C.Accent
-	local priority = button(create, "PROMPT")
-	priority.Position = UDim2.fromOffset(10, 43)
-	priority.Size = UDim2.fromOffset(92, 24)
-	local hint = label(create, "Select a call, then select a unit to attach it.", 9)
-	hint.Position = UDim2.fromOffset(112, 44)
-	hint.Size = UDim2.new(1, -122, 0, 20)
-	hint.TextColor3 = C.Muted
-	self.summaryInput = summary
-	self.locationInput = location
-	self.priorityButton = priority
+	createButton.ZIndex = 22
 	self.priority = "Prompt"
-
+	self.incidentType = "Emergency"
+	local incidentTypes = {
+		"Emergency",
+		"Crime in progress",
+		"Road traffic collision",
+		"Medical",
+		"Fire",
+		"Public assistance",
+		"Prison incident",
+		"Transport incident",
+	}
+	incidentType.Activated:Connect(function()
+		local index = table.find(incidentTypes, self.incidentType) or 1
+		self.incidentType = incidentTypes[index % #incidentTypes + 1]
+		incidentType.Text = "TYPE  ·  " .. string.upper(self.incidentType)
+	end)
 	priority.Activated:Connect(function()
 		local order = { "Prompt", "Routine", "Immediate" }
 		local index = table.find(order, self.priority) or 1
 		self.priority = order[index % #order + 1]
-		priority.Text = string.upper(self.priority)
+		priority.Text = "PRIORITY  ·  " .. string.upper(self.priority)
 		priority.BackgroundColor3 = if self.priority == "Immediate" then C.Immediate else C.Raised
 	end)
+	newCall.Activated:Connect(function()
+		shade.Visible = true
+	end)
+	cancel.Activated:Connect(function()
+		shade.Visible = false
+	end)
 	createButton.Activated:Connect(function()
+		local departments = {}
+		for departmentId in selectedDepartments do
+			table.insert(departments, departmentId)
+		end
 		local response = self.context.Controllers.NetworkController:Request("DispatchCreateCall", {
 			Summary = summary.Text,
 			Location = location.Text,
+			CallerName = caller.Text,
+			CallerNumber = callerNumber.Text,
+			Notes = notes.Text,
+			IncidentType = self.incidentType,
 			Priority = self.priority,
+			DepartmentIds = departments,
 		})
 		self.context.Controllers.NotificationController:Show(
 			response.Message,
 			response.Success and "Dispatch" or "Dispatch unavailable"
 		)
 		if response.Success then
-			summary.Text = ""
-			location.Text = ""
+			for _, field in { summary, location, caller, callerNumber, notes } do
+				field.Text = ""
+			end
+			shade.Visible = false
+			self:Refresh()
+		end
+	end)
+	onScene.Activated:Connect(function()
+		if not self.selectedCallId then
+			return
+		end
+		self.context.Controllers.NetworkController:Request(
+			"DispatchUpdateCall",
+			{ CallId = self.selectedCallId, Status = "OnScene" }
+		)
+		self:Refresh()
+	end)
+	resolve.Activated:Connect(function()
+		if not self.selectedCallId then
+			return
+		end
+		local response = self.context.Controllers.NetworkController:Request(
+			"DispatchCloseCall",
+			{ CallId = self.selectedCallId }
+		)
+		if response.Success then
+			self.selectedCallId = nil
 			self:Refresh()
 		end
 	end)
@@ -220,32 +370,49 @@ end
 
 function DispatchController:_renderCalls(calls: { any })
 	self:_clear(self.calls)
+	self.callsTitle.Text = string.format("ACTIVE CALLS  ·  %d", #calls)
 	for _, call in calls do
 		local row = button(self.calls, "")
-		row.Size = UDim2.new(1, -5, 0, 72)
+		row.Size = UDim2.new(1, -5, 0, 94)
 		row.BackgroundColor3 = if call.CallId == self.selectedCallId
 			then Color3.fromRGB(29, 53, 82)
 			else C.Raised
 		local priority = label(row, string.upper(call.Priority), 9, true)
 		priority.Position = UDim2.fromOffset(12, 8)
-		priority.Size = UDim2.fromOffset(90, 16)
+		priority.Size = UDim2.fromOffset(100, 16)
 		priority.TextColor3 = if call.Priority == "Immediate" then C.Immediate else C.Accent
-		local summary = label(row, call.Summary, 12, true)
-		summary.Position = UDim2.fromOffset(12, 27)
+		local status = label(row, tostring(call.Status):upper(), 9, true)
+		status.AnchorPoint = Vector2.new(1, 0)
+		status.Position = UDim2.new(1, -12, 0, 8)
+		status.Size = UDim2.fromOffset(100, 16)
+		status.TextXAlignment = Enum.TextXAlignment.Right
+		status.TextColor3 = C.Muted
+		local summary = label(row, tostring(call.Summary), 12, true)
+		summary.Position = UDim2.fromOffset(12, 28)
 		summary.Size = UDim2.new(1, -24, 0, 18)
 		local meta = label(
 			row,
-			string.format(
-				"%s  ·  %d unit%s",
-				call.Location,
-				#call.UnitIds,
-				if #call.UnitIds == 1 then "" else "s"
-			),
+			string.format("%s  ·  %s", tostring(call.IncidentType), tostring(call.Location)),
 			9
 		)
-		meta.Position = UDim2.fromOffset(12, 48)
-		meta.Size = UDim2.new(1, -24, 0, 16)
+		meta.Position = UDim2.fromOffset(12, 50)
+		meta.Size = UDim2.new(1, -24, 0, 15)
 		meta.TextColor3 = C.Muted
+		local recipients = table.concat(call.DepartmentIds or {}, " · ")
+		local detail = label(
+			row,
+			string.format(
+				"%s  ·  %d unit%s  ·  Caller: %s",
+				recipients,
+				#call.UnitIds,
+				if #call.UnitIds == 1 then "" else "s",
+				tostring(call.CallerName or "Unknown")
+			),
+			8
+		)
+		detail.Position = UDim2.fromOffset(12, 70)
+		detail.Size = UDim2.new(1, -24, 0, 14)
+		detail.TextColor3 = C.Muted
 		row.Activated:Connect(function()
 			self.selectedCallId = call.CallId
 			self:_renderCalls(calls)
@@ -255,6 +422,7 @@ end
 
 function DispatchController:_renderUnits(units: { any })
 	self:_clear(self.units)
+	self.unitsTitle.Text = string.format("OPERATIONAL UNITS  ·  %d", #units)
 	for _, unit in units do
 		local row = button(self.units, "")
 		row.Size = UDim2.new(1, -5, 0, 58)
