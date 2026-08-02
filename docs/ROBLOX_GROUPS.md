@@ -8,6 +8,9 @@
 - Roads Policing: UP Constabulary Divisional Hub (`33815770`), combined with the main constabulary group.
 - Ambulance: UP East of England Ambulance (`33840360`).
 - Fire: UP Norfolk Fire and Rescue Service (`14293067`).
+- Transport: UK RP Linc Transit (`33360488`).
+- Highway Patrol: MPS Training Grounds (`34022475`).
+- Prison Service: Ministry of Justice HMCTS (`16361786`).
 
 Whitelisted roles also retain the accepted RoleplayOS application requirement. Studio mock access bypasses external membership checks only for local testing. Until a dedicated Control group is supplied, Control temporarily uses Universal Projects as its group layer.
 
