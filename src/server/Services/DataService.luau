@@ -212,8 +212,22 @@ end
 
 function DataService:Destroy()
 	self.running = false
+	local pending = 0
 	for _, player in Players:GetPlayers() do
-		self:Save(player, true)
+		pending += 1
+		task.spawn(function()
+			self:Save(player, true)
+			pending -= 1
+		end)
+	end
+	local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
+	while pending > 0 and os.clock() < deadline do
+		task.wait()
+	end
+	if pending > 0 then
+		self.context.Logger:Warning("Shutdown save deadline reached", {
+			PendingProfiles = pending,
+		})
 	end
 end
 

@@ -79,13 +79,16 @@ function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
 		return false, reason
 	end
 	player.RespawnLocation = point
-	player:LoadCharacter()
-	local deadline = os.clock() + 10
-	while not player.Character and os.clock() < deadline do
-		task.wait(0.05)
-	end
-	if not player.Character then
-		return false, "CHARACTER_SPAWN_TIMEOUT"
+	local loaded, loadError = pcall(function()
+		player:LoadCharacterAsync()
+	end)
+	if not loaded or not player.Character then
+		self.context.Logger:Error("Character spawn failed", {
+			UserId = player.UserId,
+			SpawnId = request.SpawnId,
+			Error = tostring(loadError),
+		})
+		return false, "CHARACTER_SPAWN_FAILED"
 	end
 	self.context.Logger:Info("Player spawned through native team pad", {
 		UserId = player.UserId,
