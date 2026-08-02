@@ -198,6 +198,12 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if role.DepartmentId and not config.Departments[role.DepartmentId] then
 			table.insert(errors, "Unknown department in role " .. roleId)
 		end
+		if role.DivisionId then
+			local division = config.Divisions[role.DivisionId]
+			if not division or division.DepartmentId ~= role.DepartmentId then
+				table.insert(errors, "Invalid division in role " .. roleId)
+			end
+		end
 		if role.LoadoutId and not config.Loadouts[role.LoadoutId] then
 			table.insert(errors, "Unknown loadout in role " .. roleId)
 		end

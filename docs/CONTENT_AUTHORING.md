@@ -2,6 +2,29 @@
 
 Vehicle and Tool authoring is folder-first. Put an inert template in the correct folder; the server discovers it before vehicle, dealership and loadout services start. Runtime scripts, remotes, bindables, prompts and click detectors are rejected inside templates.
 
+## Production asset certification
+
+RoleplayOS deliberately distinguishes functional staging fallbacks from production-quality models. Every inserted vehicle or Tool template must pass a human visual review and carry all of these attributes on its top-level `Model` or `Tool`; otherwise `ContentValidationService` aborts startup.
+
+| Attribute | Type | Requirement |
+|---|---|---|
+| `RoleplayOSAssetCertified` | Boolean | `true` only after the checklist below is complete. |
+| `RoleplayOSReviewVersion` | Number | Must equal `Config.ContentQuality.CertificationVersion`. |
+| `RoleplayOSAssetSource` | String | Creator/source and licence or “Universal Projects original”. Never claim ownership of an imported asset. |
+| `RoleplayOSRealWorldReference` | String | The specific UK object/vehicle/reference set used for proportions, markings and operation. |
+| `RoleplayOSReviewedBy` | String | Internal reviewer or review ticket identifier. |
+
+Certification means all of the following have been checked:
+
+1. The model has been compared from front, rear, both sides and three-quarter views against reliable UK references; silhouette, scale, mounting and functional parts match the intended object.
+2. Branding, badges, registrations and markings are original/licensed or fictionalised. A real decal is not automatically safe to reuse.
+3. Every imported script, remote, bindable, prompt and click detector has been removed. RoleplayOS supplies all behaviour.
+4. The model is correctly oriented, has intentional collision/query/touch properties, no loose parts, no hidden geometry and an appropriate pivot/driver seat/Tool grip.
+5. Part and descendant budgets in `Config.ContentQuality` pass. Texture resolution and mesh complexity are proportionate to the object’s screen size.
+6. The asset has been inspected in desktop, phone, gamepad and relevant vehicle/VR contexts before certification.
+
+Setting attributes without performing the review is not certification. Generated primitive cuffs are marked `RoleplayOSBuiltInFallback`; they keep staging functional but are not evidence that the final realistic cuff model is complete.
+
 ## Civilian vehicle pricing
 
 Select the vehicle `Model` in Studio and add attributes through the Properties window.
@@ -71,6 +94,17 @@ Tools mirror the service hierarchy. A Tool in `Tools/Shared` is eligible for eve
 - `Tools/Civilian` registers civilian Tools without assigning them to service loadouts.
 
 ## World objects
+
+Visible world artwork is certified separately from invisible functional sensors. Put the
+`RoleplayOSWorldAsset` tag on the top-level visible `Model` and set
+`RoleplayOSAssetKind` to one of the configured required kinds. The model must carry the
+same source, reference, reviewer, certification-version and certification attributes as
+vehicle and Tool templates. Imported scripts and interaction objects remain forbidden.
+
+Do not tag invisible trigger volumes as visual assets. Keep the functional tag on the
+invisible volume and the certification tag on its visible shell. A replacement is complete
+only after the old shell has been removed, the new shell is in the correct world folder,
+and the certification ledger in `docs/WORLD_ASSET_CERTIFICATION.md` has been updated.
 
 Folder placement does not configure world interaction points. Use CollectionService tags and stable attributes:
 

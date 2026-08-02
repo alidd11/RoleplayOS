@@ -163,6 +163,30 @@ function App.mount(context: any): ScreenGui
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
+	local menuToggleGui = Instance.new("ScreenGui")
+	menuToggleGui.Name = "RoleplayOSMenuToggle"
+	menuToggleGui:SetAttribute("RoleplayOSManagedUI", true)
+	menuToggleGui.ResetOnSpawn = false
+	menuToggleGui.ScreenInsets = Enum.ScreenInsets.None
+	menuToggleGui.ClipToDeviceSafeArea = true
+	menuToggleGui.DisplayOrder = 5
+	menuToggleGui.Parent = gui.Parent
+	local menuToggle = Instance.new("TextButton")
+	menuToggle.Name = "OpenMenu"
+	menuToggle.Size = UDim2.fromOffset(96, 40)
+	menuToggle.BackgroundColor3 = Color3.fromRGB(14, 21, 32)
+	menuToggle.BorderSizePixel = 0
+	menuToggle.AutoButtonColor = true
+	menuToggle.Font = Enum.Font.GothamBold
+	menuToggle.Text = "☰  MENU"
+	menuToggle.TextColor3 = COLOURS.Text
+	menuToggle.TextSize = 12
+	menuToggle.Visible = false
+	menuToggle.Selectable = true
+	menuToggle.Parent = menuToggleGui
+	corner(menuToggle, 12)
+	stroke(menuToggle, Color3.fromRGB(65, 80, 104), 0.2)
+
 	local root = Instance.new("Frame")
 	root.Size = UDim2.fromScale(1, 1)
 	root.Name = "Root"
@@ -252,6 +276,25 @@ function App.mount(context: any): ScreenGui
 		local settings = context.Controllers.SettingsController:Get()
 		return not settings or settings.InterfaceMotion ~= false
 	end
+
+	local function openFromWorld()
+		gui.Enabled = true
+		menuToggle.Visible = false
+		context.Controllers.StartMenuController:Refresh()
+		root.Position = UDim2.fromOffset(0, 0)
+		root.BackgroundTransparency = 0
+		if interfaceMotionEnabled() then
+			root.Position = UDim2.fromOffset(0, 8)
+			root.BackgroundTransparency = 1
+			TweenService:Create(
+				root,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{ Position = UDim2.fromOffset(0, 0), BackgroundTransparency = 0 }
+			):Play()
+		end
+	end
+
+	menuToggle.Activated:Connect(openFromWorld)
 
 	local function showModal()
 		local currentLayout = context.Controllers.UIOrchestrator:GetLayout()
@@ -420,6 +463,7 @@ function App.mount(context: any): ScreenGui
 	dismissToWorld = function()
 		if not interfaceMotionEnabled() then
 			gui.Enabled = false
+			menuToggle.Visible = true
 			return
 		end
 		TweenService:Create(
@@ -429,6 +473,7 @@ function App.mount(context: any): ScreenGui
 		):Play()
 		task.delay(0.17, function()
 			gui.Enabled = false
+			menuToggle.Visible = true
 		end)
 	end
 
@@ -879,6 +924,11 @@ function App.mount(context: any): ScreenGui
 	environment.Size = UDim2.new(1, -28, 0, 20)
 
 	context.Controllers.UIOrchestrator:Bind("DeveloperDashboard", function(layout)
+		local nativeControlWidth = if layout.Compact then 224 else 360
+		menuToggle.Position = UDim2.fromOffset(
+			math.min(nativeControlWidth, math.max(12, layout.Viewport.X - 108)),
+			math.max(8, math.floor((layout.NativeTop - menuToggle.AbsoluteSize.Y) / 2))
+		)
 		local horizontal = layout.Compact or layout.Viewport.Y < 520
 		local narrow = layout.Viewport.X < 600
 		if horizontal then

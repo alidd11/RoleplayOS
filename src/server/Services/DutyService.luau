@@ -14,7 +14,29 @@ function DutyService:Start()
 end
 
 function DutyService:Get(player: Player): any?
-	return self.active[player.UserId]
+	local duty = self.active[player.UserId]
+	if not duty then
+		return nil
+	end
+	local role = self.context.Configuration.Roles[duty.RoleId]
+	local expectedTeam = role and self.context.Services:Get("TeamService"):Get(role.TeamName)
+	if
+		not role
+		or role.DepartmentId ~= duty.DepartmentId
+		or role.TeamName ~= duty.TeamName
+		or role.DivisionId ~= duty.DivisionId
+		or not expectedTeam
+		or player.Team ~= expectedTeam
+	then
+		self:End(player)
+		return nil
+	end
+	local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
+	if not access.Allowed then
+		self:End(player)
+		return nil
+	end
+	return duty
 end
 
 function DutyService:Begin(player: Player, request: any): (boolean, string?)
@@ -72,6 +94,8 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		SpawnId = request.SpawnId,
 		StartedAt = os.time(),
 		DepartmentId = role.DepartmentId,
+		DivisionId = role.DivisionId,
+		TeamName = role.TeamName,
 	}
 	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
 		then profile.Callsign
@@ -79,6 +103,7 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	local unit, unitReason = self.context.Services:Get("UnitService"):Register(player, {
 		Callsign = callsign,
 		DepartmentId = role.DepartmentId,
+		DivisionId = role.DivisionId,
 		StationId = request.StationId,
 	})
 	if not unit then
@@ -100,6 +125,7 @@ function DutyService:End(player: Player)
 	local duty = self.active[player.UserId]
 	self.active[player.UserId] = nil
 	self.context.Services:Get("UnitService"):Unregister(player)
+	self.context.Services:Get("LoadoutService"):ClearIssued(player)
 	self.context.Services:Get("IdentificationService"):Refresh(player)
 	if duty then
 		self.context.Services:Get("AuditService"):Record({

@@ -99,6 +99,7 @@ function VehicleService:_trackVehicle(player: Player, active: any, elapsed: numb
 	if not model.Parent then
 		return
 	end
+	self:_authoriseServiceDriver(active)
 	local settings = self.context.Configuration.VehicleSpawning
 	local position = model:GetPivot().Position
 	local previous = active.LastPosition
@@ -322,6 +323,34 @@ function VehicleService:_serviceAccess(player: Player, definition: any): (boolea
 	return access.Allowed, if access.Allowed then nil else access.ReasonCode
 end
 
+function VehicleService:_authoriseServiceDriver(active: any)
+	if not active.IsTeam then
+		return
+	end
+	local seat = active.Seat
+	local humanoid = seat and seat.Occupant
+	if not humanoid then
+		return
+	end
+	local character = humanoid.Parent
+	local driver = if character and character:IsA("Model")
+		then Players:GetPlayerFromCharacter(character)
+		else nil
+	local allowed = driver and select(1, self:_serviceAccess(driver, active.Definition)) or false
+	if allowed then
+		return
+	end
+	humanoid.Sit = false
+	humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+end
+
+function VehicleService:_disconnectActive(active: any)
+	for _, connection in active.Connections or {} do
+		connection:Disconnect()
+	end
+	table.clear(active.Connections or {})
+end
+
 function VehicleService:Menu(player: Player, terminalId: string): (any?, string?)
 	local terminal, reason = self:_terminal(player, terminalId)
 	if not terminal then
@@ -451,8 +480,10 @@ function VehicleService:_spawn(
 		Model = model,
 		Summary = summary,
 		Vehicle = vehicle,
+		Definition = definition,
 		Seat = seat,
 		IsTeam = isTeam,
+		Connections = {},
 		LastPosition = model:GetPivot().Position,
 		LastPersistedAt = os.clock(),
 		Unsaved = false,
@@ -463,13 +494,30 @@ function VehicleService:_spawn(
 	self.activeByUserId[player.UserId] = active
 	self.activeByModel[model] = active
 	self.cooldowns[player.UserId] = os.clock()
-	model.AncestryChanged:Connect(function(_, parent)
-		local current = self.activeByUserId[player.UserId]
-		if parent == nil and current and current.Model == model then
-			self.activeByUserId[player.UserId] = nil
-			self.activeByModel[model] = nil
-		end
-	end)
+	table.insert(
+		active.Connections,
+		model.AncestryChanged:Connect(function(_, parent)
+			local current = self.activeByUserId[player.UserId]
+			if parent == nil and current and current.Model == model then
+				self:_disconnectActive(current)
+				self.activeByUserId[player.UserId] = nil
+				self.activeByModel[model] = nil
+			end
+		end)
+	)
+	if isTeam and seat then
+		table.insert(
+			active.Connections,
+			seat:GetPropertyChangedSignal("Occupant"):Connect(function()
+				task.defer(function()
+					if model.Parent then
+						self:_authoriseServiceDriver(active)
+					end
+				end)
+			end)
+		)
+		self:_authoriseServiceDriver(active)
+	end
 	return summary, nil
 end
 
@@ -567,6 +615,7 @@ function VehicleService:Despawn(player: Player)
 	local current = self.activeByUserId[player.UserId]
 	self.activeByUserId[player.UserId] = nil
 	if current then
+		self:_disconnectActive(current)
 		self.activeByModel[current.Model] = nil
 	end
 	if current and current.Unsaved and not current.IsTeam then
@@ -651,6 +700,7 @@ function VehicleService:Destroy()
 		if player and current.Unsaved and not current.IsTeam then
 			self.context.Services:Get("DataService"):MarkDirty(player)
 		end
+		self:_disconnectActive(current)
 		current.Model:Destroy()
 	end
 	for _, connection in self.connections do

@@ -123,6 +123,7 @@ function NetworkService:Start()
 			and type(payload.CharacterId) == "string"
 			and type(payload.SpawnId) == "string"
 	end, function(player, payload, requestId)
+		self.context.Services:Get("DutyService"):End(player)
 		local entered, reason = self.context.Services
 			:Get("SpawnService")
 			:EnterCivilian(player, payload.CharacterId, payload.SpawnId)
@@ -282,6 +283,7 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
+		self.context.Services:Get("DutyService"):End(player)
 		return {
 			Success = true,
 			Code = "OK",
@@ -339,8 +341,11 @@ function NetworkService:Start()
 			else 1
 		local data, searchReason
 		if payload.Type == "Person" then
-			data, searchReason =
-				self.context.Services:Get("PersonRecordService"):Search(query, page)
+			local includeWarrants =
+				self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
+			data, searchReason = self.context.Services
+				:Get("PersonRecordService")
+				:Search(query, page, includeWarrants)
 		else
 			data, searchReason =
 				self.context.Services:Get("VehicleRecordService"):Search(query, page)
@@ -501,6 +506,7 @@ function NetworkService:Start()
 	end)
 	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
 		return type(payload) == "table"
+			and type(payload.TerminalId) == "string"
 			and type(payload.CharacterId) == "string"
 			and type(payload.DealershipId) == "string"
 			and type(payload.DefinitionId) == "string"
@@ -508,6 +514,7 @@ function NetworkService:Start()
 	end, function(player, payload, requestId)
 		local vehicle, reason = self.context.Services:Get("DealershipService"):Purchase(
 			player,
+			payload.TerminalId,
 			payload.CharacterId,
 			payload.DealershipId,
 			payload.DefinitionId,
@@ -518,6 +525,12 @@ function NetworkService:Start()
 			Code = if vehicle then "OK" else reason,
 			Message = if vehicle
 				then "Vehicle purchased."
+				elseif
+					reason == "TERMINAL_TOO_FAR"
+					or reason == "TERMINAL_NOT_FOUND"
+					or reason == "DEALERSHIP_TERMINAL_REQUIRED"
+					or reason == "DEALERSHIP_TERMINAL_MISMATCH"
+				then "Vehicle purchases can only be made inside the selected dealership."
 				else "The purchase could not be completed.",
 			Data = vehicle,
 			RequestId = requestId,

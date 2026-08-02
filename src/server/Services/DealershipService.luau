@@ -7,11 +7,20 @@ end
 function DealershipService:Start() end
 function DealershipService:Purchase(
 	player: Player,
+	terminalId: string,
 	characterId: string,
 	dealershipId: string,
 	definitionId: string,
 	colour: string
 ): (any?, string?)
+	local terminal, terminalReason =
+		self.context.Services:Get("VehicleService"):AuthoriseDealershipTerminal(player, terminalId)
+	if not terminal then
+		return nil, terminalReason
+	end
+	if terminal.DealershipId ~= dealershipId then
+		return nil, "DEALERSHIP_TERMINAL_MISMATCH"
+	end
 	local dealership = self.context.Configuration.Dealerships[dealershipId]
 	local definition = self.context.Configuration.Vehicles[definitionId]
 	if not dealership or not definition or not table.find(dealership.VehicleIds, definitionId) then

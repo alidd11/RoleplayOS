@@ -114,7 +114,9 @@ function ToolFactory.handcuffs(): Tool
 		)
 		attach(handle, hinge, CFrame.new(side * 0.68, 0, 0))
 	end
-	tool:SetAttribute("RoleplayOSBuiltInPremium", true)
+	tool:SetAttribute("RoleplayOSBuiltInFallback", true)
+	tool:SetAttribute("RoleplayOSAssetSource", "RoleplayOS functional staging fallback")
+	tool:SetAttribute("RoleplayOSRealWorldReference", "UK rigid handcuff form")
 	return tool
 end
 
@@ -124,6 +126,8 @@ local function credentialBase(name: string, tooltip: string, width: number): (To
 	tool.ToolTip = tooltip
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
+	tool:SetAttribute("RoleplayOSAssetSource", "RoleplayOS generated credential")
+	tool:SetAttribute("RoleplayOSRealWorldReference", "Fictional UK-style roleplay credential")
 	tool.Grip = CFrame.new(0, -0.15, -0.82) * CFrame.Angles(math.rad(88), 0, math.rad(-7))
 	local handle = part(
 		tool,

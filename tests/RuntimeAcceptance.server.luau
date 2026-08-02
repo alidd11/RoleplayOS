@@ -118,7 +118,14 @@ if RunService:IsStudio() then
 				DrivingRecord = { Points = 0, Fines = {} },
 				CustodyRecord = { Bookings = {} },
 				CriminalRecord = {},
-				Warrants = {},
+				Warrants = {
+					{
+						WarrantId = "STUDIO_ACCEPTANCE_WARRANT",
+						Reason = "Acceptance privacy check",
+						Active = true,
+						CreatedAt = os.time(),
+					},
+				},
 				UpdatedAt = os.time(),
 			}
 		end)
@@ -139,6 +146,19 @@ if RunService:IsStudio() then
 			search ~= nil and search.Total == 1 and search.Items[1].CharacterId == characterId,
 			"mdt.offline-index",
 			"durable record search does not depend on a live Player"
+		)
+		check(
+			search ~= nil and search.Items[1].Warrants == nil and #search.Items[1].Flags == 0,
+			"mdt.warrant-redaction",
+			"person search hides warrant data without WarrantRead"
+		)
+		local warrantSearch = select(1, recordIndex:SearchPeople("zzacceptance", 1, true))
+		check(
+			warrantSearch ~= nil
+				and #warrantSearch.Items[1].Warrants == 1
+				and table.find(warrantSearch.Items[1].Flags, "WANTED") ~= nil,
+			"mdt.warrant-read",
+			"authorised person search includes active warrant data"
 		)
 		dataService:UpdateMdtRecord(personKey, function(_existing)
 			return nil

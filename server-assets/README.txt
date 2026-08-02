@@ -49,4 +49,15 @@ Optional vehicle attributes:
 Never insert scripts, remotes, bindables, prompts or click detectors into templates.
 RoleplayOS validates and rejects unsafe content at startup.
 
+PRODUCTION CERTIFICATION (required for every inserted Model/Tool)
+  RoleplayOSAssetCertified = true
+  RoleplayOSReviewVersion = 1
+  RoleplayOSAssetSource = creator/source/licence or "Universal Projects original"
+  RoleplayOSRealWorldReference = specific UK object/reference set
+  RoleplayOSReviewedBy = internal reviewer or review ticket
+
+Do not certify an asset merely because it looks plausible. Inspect all views, scale,
+orientation, grip/seat/pivot, collision, hidden geometry, markings, provenance,
+performance budgets and device behaviour. The server rejects uncertified content.
+
 Full guide: docs/CONTENT_AUTHORING.md in the RoleplayOS repository.

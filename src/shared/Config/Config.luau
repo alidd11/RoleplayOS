@@ -46,6 +46,29 @@ local Config = {
 		MaxSaveAttempts = 4,
 		SessionLeaseSeconds = 300,
 	},
+	ContentQuality = {
+		RequireCertification = true,
+		CertificationVersion = 1,
+		WorldAssetTag = "RoleplayOSWorldAsset",
+		RequiredWorldAssetKinds = {
+			"ANPRCamera",
+			"CCTVCamera",
+			"CustodyFurniture",
+			"DealershipNPC",
+			"DispatchFurniture",
+			"SpeedCamera",
+		},
+		MaximumVehicleParts = 350,
+		MaximumToolParts = 80,
+		MaximumWorldAssetParts = 250,
+		MaximumVehicleDescendants = 900,
+		MaximumToolDescendants = 180,
+		MaximumWorldAssetDescendants = 650,
+		MinimumVehicleExtentStuds = 2,
+		MaximumVehicleExtentStuds = 55,
+		MinimumWorldAssetExtentStuds = 0.1,
+		MaximumWorldAssetExtentStuds = 80,
+	},
 	ExperienceAccess = {
 		Enabled = true,
 		RequiredGroupLinkId = "UniversalProjects",
@@ -484,6 +507,7 @@ local Config = {
 			Name = "Frontline Policing",
 			TeamName = "Police",
 			DepartmentId = "Police",
+			DivisionId = "Frontline",
 			Access = publicOr({
 				AccessType = "Group",
 				GroupLinkId = "Police",
@@ -497,6 +521,7 @@ local Config = {
 			Name = "Armed Response Unit",
 			TeamName = "Police",
 			DepartmentId = "Police",
+			DivisionId = "ArmedResponse",
 			Access = publicPassOr({
 				AccessType = "Combined",
 				Match = "All",
@@ -513,6 +538,7 @@ local Config = {
 			Name = "Roads Policing Unit",
 			TeamName = "Police",
 			DepartmentId = "Police",
+			DivisionId = "RoadsPolicing",
 			Access = publicPassOr({
 				AccessType = "Combined",
 				Match = "All",

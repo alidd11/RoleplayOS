@@ -13,6 +13,12 @@ function LoadoutService:Init(context: any)
 	self.context = context
 end
 function LoadoutService:Start() end
+local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: string)
+	tool:SetAttribute("RoleplayOSDutyIssued", true)
+	tool:SetAttribute("RoleplayOSLoadoutId", loadoutId)
+	tool:SetAttribute("RoleplayOSToolId", toolId)
+	tool.Parent = backpack
+end
 function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, string?)
 	local definition = self.context.Configuration.Loadouts[loadoutId]
 	if not definition then
@@ -35,11 +41,11 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			else tools:FindFirstChild(toolId)
 		if
 			toolId == "Handcuffs"
-			and (not template or template:GetAttribute("RoleplayOSPremiumModel") ~= true)
+			and (not template or template:GetAttribute("RoleplayOSAssetCertified") ~= true)
 		then
-			ToolFactory.handcuffs().Parent = backpack
+			issue(ToolFactory.handcuffs(), backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
-			template:Clone().Parent = backpack
+			issue(template:Clone(), backpack, loadoutId, toolId)
 		else
 			self.context.Logger:Warning(
 				"Loadout tool is unavailable",
@@ -48,6 +54,17 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		end
 	end
 	return true, nil
+end
+function LoadoutService:ClearIssued(player: Player)
+	for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
+		if container then
+			for _, child in container:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("RoleplayOSDutyIssued") == true then
+					child:Destroy()
+				end
+			end
+		end
+	end
 end
 function LoadoutService:Destroy() end
 return LoadoutService

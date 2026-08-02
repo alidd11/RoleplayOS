@@ -42,8 +42,8 @@ local function activeWarrants(record: any): { any }
 	return active
 end
 
-local function personView(record: any): any
-	local warrants = activeWarrants(record)
+local function personView(record: any, includeWarrants: boolean): any
+	local warrants = if includeWarrants then activeWarrants(record) else {}
 	return {
 		CharacterId = record.CharacterId,
 		FullName = record.FullName,
@@ -52,8 +52,8 @@ local function personView(record: any): any
 		DrivingRecord = record.DrivingRecord,
 		CustodyRecord = record.CustodyRecord,
 		CriminalRecord = record.CriminalRecord,
-		Warrants = warrants,
-		Flags = if #warrants > 0 then { "WANTED" } else {},
+		Warrants = if includeWarrants then warrants else nil,
+		Flags = if includeWarrants and #warrants > 0 then { "WANTED" } else {},
 		UpdatedAt = record.UpdatedAt,
 	}
 end
@@ -331,7 +331,11 @@ function RecordIndexService:UpdatePerson(
 	return self:_updateRecord(recordKey("Person", characterId), transform)
 end
 
-function RecordIndexService:SearchPeople(query: string, page: number): (any?, string?)
+function RecordIndexService:SearchPeople(
+	query: string,
+	page: number,
+	includeWarrants: boolean?
+): (any?, string?)
 	local search = normalise(query)
 	local key = indexKey("Person", search)
 	if not key then
@@ -362,7 +366,7 @@ function RecordIndexService:SearchPeople(query: string, page: number): (any?, st
 			return nil, recordReason
 		end
 		if record then
-			table.insert(items, personView(record))
+			table.insert(items, personView(record, includeWarrants == true))
 		end
 	end
 	return { Items = items, Page = page, Total = #matches }, nil
