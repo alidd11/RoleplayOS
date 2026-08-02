@@ -19,6 +19,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Communities",
 			"Spawns",
 			"Teams",
+			"GroupLinks",
 		}
 	do
 		if type(config[section]) ~= "table" then
@@ -81,6 +82,25 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if not config.Teams[spawn.TeamName] then
 			table.insert(errors, "Unknown team in spawn " .. spawnId)
 		end
+	end
+	for linkId, link in config.GroupLinks or {} do
+		if link.Id ~= linkId or type(link.GroupId) ~= "number" or link.GroupId < 0 then
+			table.insert(errors, "Invalid Roblox group link: " .. linkId)
+		end
+		if type(link.MinimumRank) ~= "number" or link.MinimumRank < 1 or link.MinimumRank > 255 then
+			table.insert(errors, "Invalid minimum Roblox group rank: " .. linkId)
+		end
+	end
+	local function validateAccessRule(rule: any, ownerId: string)
+		if rule.AccessType == "Group" and not config.GroupLinks[rule.GroupLinkId] then
+			table.insert(errors, "Unknown Roblox group link in " .. ownerId)
+		end
+		for _, child in rule.Rules or {} do
+			validateAccessRule(child, ownerId)
+		end
+	end
+	for roleId, role in config.Roles or {} do
+		validateAccessRule(role.Access, "role " .. roleId)
 	end
 	for templateId, template in config.Communities and config.Communities.Templates or {} do
 		if template.Id ~= templateId or not template.Roles[template.DefaultMemberRoleId] then

@@ -17,6 +17,7 @@ export type AccessRule = {
 	AccessType: "Public"
 		| "Gamepass"
 		| "Application"
+		| "Group"
 		| "Rank"
 		| "Qualification"
 		| "Department"
@@ -25,6 +26,8 @@ export type AccessRule = {
 		| "Combined",
 	Id: string?,
 	GamepassId: number?,
+	GroupLinkId: string?,
+	MinimumGroupRank: number?,
 	DepartmentId: string?,
 	QualificationId: string?,
 	MinimumRank: number?,

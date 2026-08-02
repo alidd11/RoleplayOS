@@ -134,6 +134,22 @@ local Config = {
 		},
 		Fire = { Id = "Fire", Name = "Fire", BrickColor = "Bright red", AutoAssignable = false },
 	},
+	GroupLinks = {
+		Police = { Id = "Police", GroupId = 0, MinimumRank = 1, DisplayName = "Police Group" },
+		Ambulance = {
+			Id = "Ambulance",
+			GroupId = 0,
+			MinimumRank = 1,
+			DisplayName = "Ambulance Group",
+		},
+		Fire = { Id = "Fire", GroupId = 0, MinimumRank = 1, DisplayName = "Fire and Rescue Group" },
+		Control = {
+			Id = "Control",
+			GroupId = 0,
+			MinimumRank = 1,
+			DisplayName = "Dispatch and Control Group",
+		},
+	},
 	Roles = {
 		Civilian = {
 			Id = "Civilian",
@@ -147,9 +163,13 @@ local Config = {
 			TeamName = "Police",
 			DepartmentId = "Police",
 			Access = {
-				AccessType = "Application",
-				DepartmentId = "Police",
+				AccessType = "Combined",
+				Match = "All",
 				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Police" },
+					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+				},
 			},
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
@@ -160,9 +180,13 @@ local Config = {
 			TeamName = "Police",
 			DepartmentId = "Police",
 			Access = {
-				AccessType = "Application",
-				DepartmentId = "Police",
+				AccessType = "Combined",
+				Match = "All",
 				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Police" },
+					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+				},
 			},
 			LoadoutId = "PoliceFrontline",
 			UniformId = "PoliceStandard",
@@ -173,9 +197,13 @@ local Config = {
 			TeamName = "Ambulance",
 			DepartmentId = "Ambulance",
 			Access = {
-				AccessType = "Application",
-				DepartmentId = "Ambulance",
+				AccessType = "Combined",
+				Match = "All",
 				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Ambulance" },
+					{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
+				},
 			},
 			LoadoutId = "AmbulanceStandard",
 			UniformId = "AmbulanceStandard",
@@ -185,7 +213,15 @@ local Config = {
 			Name = "Firefighter",
 			TeamName = "Fire",
 			DepartmentId = "Fire",
-			Access = { AccessType = "Application", DepartmentId = "Fire", DisplayWhenLocked = true },
+			Access = {
+				AccessType = "Combined",
+				Match = "All",
+				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Fire" },
+					{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
+				},
+			},
 			LoadoutId = "FireStandard",
 			UniformId = "FireStandard",
 		},

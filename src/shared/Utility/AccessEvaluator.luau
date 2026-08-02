@@ -5,6 +5,10 @@ local AccessEvaluator = {}
 local messages = {
 	GAMEPASS_REQUIRED = "A gamepass is required.",
 	APPLICATION_REQUIRED = "An approved application is required.",
+	GROUP_REQUIRED = "Membership of the linked Roblox group is required.",
+	GROUP_RANK_REQUIRED = "A higher rank in the linked Roblox group is required.",
+	GROUP_CHECK_FAILED = "Roblox group membership could not be verified. Please try again.",
+	GROUP_NOT_CONFIGURED = "This department's Roblox group has not been configured.",
 	RANK_REQUIRED = "A higher rank is required.",
 	QUALIFICATION_REQUIRED = "A qualification is required.",
 	DEPARTMENT_REQUIRED = "Department membership is required.",
@@ -57,6 +61,30 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 			DepartmentId = rule.DepartmentId,
 			Status = subject.Applications and subject.Applications[rule.DepartmentId],
 		})
+	end
+	if kind == "Group" then
+		local membership = subject.Groups and subject.Groups[rule.GroupLinkId]
+		if not membership then
+			return denied("GROUP_CHECK_FAILED")
+		end
+		if membership.NotConfigured then
+			return denied("GROUP_NOT_CONFIGURED", nil, { GroupLinkId = rule.GroupLinkId })
+		end
+		if membership.Failed then
+			return denied("GROUP_CHECK_FAILED")
+		end
+		if not membership.IsMember then
+			return denied("GROUP_REQUIRED", nil, { GroupId = membership.GroupId })
+		end
+		local minimumRank = rule.MinimumGroupRank or membership.MinimumRank or 1
+		if membership.HighestRank < minimumRank then
+			return denied("GROUP_RANK_REQUIRED", nil, {
+				GroupId = membership.GroupId,
+				MinimumRank = minimumRank,
+				CurrentRank = membership.HighestRank,
+			})
+		end
+		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
 	end
 	if kind == "Rank" then
 		if

@@ -28,6 +28,29 @@ H.test("gamepass access returns useful denial", function()
 	)
 	H.expect(not result.Allowed and result.ReasonCode == "GAMEPASS_REQUIRED", "wrong denial")
 end)
+H.test("Roblox group access enforces membership and rank", function()
+	local rule = { AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 10 }
+	local denied = Access.evaluate(rule, {
+		Groups = { Police = { GroupId = 123, IsMember = true, HighestRank = 5 } },
+	})
+	H.expect(
+		not denied.Allowed and denied.ReasonCode == "GROUP_RANK_REQUIRED",
+		"low group rank allowed"
+	)
+	local allowed = Access.evaluate(rule, {
+		Groups = { Police = { GroupId = 123, IsMember = true, HighestRank = 10 } },
+	})
+	H.expect(allowed.Allowed, "qualifying group rank denied")
+end)
+H.test("unconfigured Roblox group fails closed", function()
+	local result = Access.evaluate({ AccessType = "Group", GroupLinkId = "Police" }, {
+		Groups = { Police = { GroupId = 0, NotConfigured = true } },
+	})
+	H.expect(
+		not result.Allowed and result.ReasonCode == "GROUP_NOT_CONFIGURED",
+		"unconfigured group allowed"
+	)
+end)
 H.test("suspension overrides public access", function()
 	H.expect(
 		Access.evaluate({ AccessType = "Public" }, { Suspended = true }).ReasonCode == "SUSPENDED",
