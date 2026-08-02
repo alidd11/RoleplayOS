@@ -12,6 +12,7 @@ local controllers = {
 	ApplicationController = require(script.Controllers.ApplicationController),
 	MDTController = require(script.Controllers.MDTController),
 	DispatchController = require(script.Controllers.DispatchController),
+	CommunityController = require(script.Controllers.CommunityController),
 	StartMenuController = require(script.Controllers.StartMenuController),
 }
 for _, name in
@@ -29,6 +30,7 @@ for _, name in
 		"ApplicationController",
 		"MDTController",
 		"DispatchController",
+		"CommunityController",
 		"AccessPromptsController",
 		"JobsController",
 		"VehiclesController",
@@ -49,6 +51,7 @@ for _, name in
 		"ApplicationController",
 		"MDTController",
 		"DispatchController",
+		"CommunityController",
 		"AccessPromptsController",
 		"JobsController",
 		"VehiclesController",

@@ -5,6 +5,15 @@ function CharacterController:Init(context: any)
 	self.activeCharacterId = nil
 end
 function CharacterController:Start() end
+function CharacterController:Create(identity: any): any
+	local response = self.context.Controllers.NetworkController:Request("CreateCharacter", {
+		Identity = identity,
+	})
+	if not response.Success then
+		self.context.Controllers.NotificationController:Show(response.Message, "Error")
+	end
+	return response
+end
 function CharacterController:Select(characterId: string): any
 	local response = self.context.Controllers.NetworkController:Request(
 		"SelectCharacter",

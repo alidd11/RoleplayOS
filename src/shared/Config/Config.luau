@@ -4,6 +4,7 @@ local Config = {
 	Framework = {
 		Environment = "Development",
 		SchemaVersion = 2,
+		UseMockDataInStudio = true,
 		AutosaveSeconds = 120,
 		ShutdownSaveSeconds = 25,
 		MaxSaveAttempts = 4,

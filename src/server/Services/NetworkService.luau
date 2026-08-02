@@ -83,6 +83,29 @@ function NetworkService:Start()
 			return { Success = true, Code = "OK", Message = "", Data = data, RequestId = requestId }
 		end
 	)
+	self.context.Network:RegisterFunction("CreateCharacter", function(payload)
+		return type(payload) == "table" and type(payload.Identity) == "table"
+	end, function(player, payload, requestId)
+		local summary, reason =
+			self.context.Services:Get("CharacterService"):Create(player, payload.Identity)
+		if not summary then
+			return {
+				Success = false,
+				Code = reason,
+				Message = reason == "INVALID_NAME" and "Enter a valid first and last name."
+					or reason == "AGE_OUT_OF_RANGE" and "This character does not meet the configured age requirement."
+					or "The character could not be created.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Character created.",
+			Data = summary,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SelectCharacter", function(payload)
 		return type(payload) == "table" and type(payload.CharacterId) == "string",
 			"INVALID_CHARACTER_ID"

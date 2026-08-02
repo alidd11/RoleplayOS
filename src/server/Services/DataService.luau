@@ -3,6 +3,7 @@
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
 local DataService = { sessions = {}, running = false }
@@ -59,6 +60,18 @@ function DataService:Load(player: Player): (any?, string?)
 	if self.sessions[player.UserId] then
 		return nil, "SESSION_ALREADY_LOADED"
 	end
+	if RunService:IsStudio() and self.context.Configuration.Framework.UseMockDataInStudio then
+		local profile = ProfileSchema.default(player.UserId)
+		self.sessions[player.UserId] = {
+			Profile = profile,
+			Dirty = false,
+			Saving = false,
+			ActiveCharacterId = nil,
+			Mock = true,
+		}
+		self.context.Logger:Info("Loaded in-memory Studio profile", { UserId = player.UserId })
+		return profile, nil
+	end
 	local now = os.time()
 	local loaded
 	local ok, problem = self:_retry(function()
@@ -106,6 +119,13 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 	local session = self.sessions[player.UserId]
 	if not session then
 		return false, "NO_SESSION"
+	end
+	if session.Mock then
+		session.Dirty = false
+		if release then
+			self.sessions[player.UserId] = nil
+		end
+		return true, nil
 	end
 	if session.Saving then
 		return false, "SAVE_IN_PROGRESS"

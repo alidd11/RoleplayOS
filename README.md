@@ -13,7 +13,7 @@ The same framework supports the public game and privately operated roleplay comm
 
 Core gameplay decisions are made on the server. Clients request actions and receive sanitised response envelopes; they never supply authoritative prices, rewards, permissions, balances, ownership, role grants, or model IDs.
 
-See [Architecture](docs/ARCHITECTURE.md), [Development](docs/DEVELOPMENT.md), [Testing](docs/TESTING.md), and the [Roadmap](docs/ROADMAP.md). This is an engineering foundation, not a production-ready game or final UI.
+See [Architecture](docs/ARCHITECTURE.md), [Interface system](docs/UI_SYSTEM.md), [Development](docs/DEVELOPMENT.md), [Testing](docs/TESTING.md), and the [Roadmap](docs/ROADMAP.md). This is an engineering foundation with a functional premium start experience, not a production-ready game.
 
 ## Repository layout
 
