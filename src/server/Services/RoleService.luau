@@ -1,5 +1,4 @@
 --!strict
-local Teams = game:GetService("Teams")
 local RoleService = {}
 function RoleService:Init(context: any)
 	self.context = context
@@ -14,11 +13,12 @@ function RoleService:Assign(player: Player, roleId: string): (boolean, string?)
 	if not result.Allowed then
 		return false, result.ReasonCode
 	end
-	local team = Teams:FindFirstChild(role.TeamName)
-	if not team or not team:IsA("Team") then
+	local team = self.context.Services:Get("TeamService"):Get(role.TeamName)
+	if not team then
 		return false, "TEAM_NOT_CONFIGURED"
 	end
 	player.Team = team
+	player.Neutral = false
 	return true, nil
 end
 function RoleService:Destroy() end

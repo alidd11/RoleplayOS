@@ -1,15 +1,6 @@
 --!strict
 
-local SpawnService = { points = {}, reservations = {} }
-local SPAWN_HEIGHT = 4
-local RESERVATION_SECONDS = 3
-local OFFSETS = {
-	Vector3.zero,
-	Vector3.new(4, 0, 0),
-	Vector3.new(-4, 0, 0),
-	Vector3.new(0, 0, 4),
-	Vector3.new(0, 0, -4),
-}
+local SpawnService = { points = {} }
 
 function SpawnService:Init(context: any)
 	self.context = context
@@ -17,26 +8,40 @@ end
 
 function SpawnService:_registerConfiguredPoints()
 	table.clear(self.points)
-	for spawnId, definition in self.context.Configuration.Spawns do
-		local matches = {}
-		for _, instance in workspace:GetDescendants() do
-			if instance.Name == definition.PartName and instance:IsA("BasePart") then
-				table.insert(matches, instance)
+	local found = {}
+	for _, instance in workspace:GetDescendants() do
+		if instance:IsA("SpawnLocation") then
+			local spawnId = instance:GetAttribute("SpawnId")
+			if type(spawnId) == "string" and self.context.Configuration.Spawns[spawnId] then
+				if found[spawnId] then
+					self.context.Logger:Error(
+						"SpawnId is assigned to multiple pads",
+						{ SpawnId = spawnId }
+					)
+					self.points[spawnId] = nil
+				else
+					found[spawnId] = true
+					self.points[spawnId] = instance
+				end
 			end
 		end
-		if #matches == 1 then
-			self.points[spawnId] = matches[1]
-		elseif #matches == 0 then
-			self.context.Logger:Warning("Configured spawn point is missing", {
-				SpawnId = spawnId,
-				PartName = definition.PartName,
-			})
+	end
+	for spawnId, definition in self.context.Configuration.Spawns do
+		local point = self.points[spawnId]
+		local team = self.context.Services:Get("TeamService"):Get(definition.TeamName)
+		if not point then
+			self.context.Logger:Warning(
+				"Configured native spawn pad is missing",
+				{ SpawnId = spawnId }
+			)
+		elseif not team then
+			self.context.Logger:Error("Spawn team is unavailable", { SpawnId = spawnId })
+			self.points[spawnId] = nil
 		else
-			self.context.Logger:Error("Configured spawn point is duplicated", {
-				SpawnId = spawnId,
-				PartName = definition.PartName,
-				Count = #matches,
-			})
+			point.Name = team.Name
+			point.TeamColor = team.TeamColor
+			point.Neutral = false
+			point.AllowTeamChangeOnTouch = false
 		end
 	end
 end
@@ -45,7 +50,7 @@ function SpawnService:Start()
 	self:_registerConfiguredPoints()
 end
 
-function SpawnService:Resolve(request: any): (BasePart?, string?)
+function SpawnService:Resolve(request: any): (SpawnLocation?, string?)
 	local role = self.context.Configuration.Roles[request.RoleId]
 	if not role then
 		return nil, "ROLE_NOT_FOUND"
@@ -61,21 +66,11 @@ function SpawnService:Resolve(request: any): (BasePart?, string?)
 	if not point or not point:IsDescendantOf(workspace) then
 		return nil, "SPAWN_POINT_UNAVAILABLE"
 	end
-	return point, nil
-end
-
-function SpawnService:_reserve(spawnId: string): Vector3
-	local now = os.clock()
-	local reservations = self.reservations[spawnId] or {}
-	local active = {}
-	for _, expiresAt in reservations do
-		if expiresAt > now then
-			table.insert(active, expiresAt)
-		end
+	local team = self.context.Services:Get("TeamService"):Get(role.TeamName)
+	if not team or point.TeamColor ~= team.TeamColor or point.Neutral then
+		return nil, "SPAWN_TEAM_MISMATCH"
 	end
-	table.insert(active, now + RESERVATION_SECONDS)
-	self.reservations[spawnId] = active
-	return OFFSETS[((#active - 1) % #OFFSETS) + 1]
+	return point, nil
 end
 
 function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
@@ -83,41 +78,26 @@ function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
 	if not point then
 		return false, reason
 	end
-	local offset = self:_reserve(request.SpawnId)
-	if point:IsA("SpawnLocation") then
-		player.RespawnLocation = point
-	else
-		player.RespawnLocation = nil
-	end
+	player.RespawnLocation = point
 	player:LoadCharacter()
 	local deadline = os.clock() + 10
-	local character = player.Character
-	while not character and os.clock() < deadline do
+	while not player.Character and os.clock() < deadline do
 		task.wait(0.05)
-		character = player.Character
 	end
-	if not character then
+	if not player.Character then
 		return false, "CHARACTER_SPAWN_TIMEOUT"
 	end
-	local root = character:WaitForChild("HumanoidRootPart", 10)
-	if not root or not root:IsA("BasePart") then
-		return false, "CHARACTER_ROOT_UNAVAILABLE"
-	end
-	character:PivotTo(point.CFrame * CFrame.new(offset + Vector3.new(0, SPAWN_HEIGHT, 0)))
-	root.AssemblyLinearVelocity = Vector3.zero
-	root.AssemblyAngularVelocity = Vector3.zero
-	self.context.Logger:Info("Player spawned at registered point", {
+	self.context.Logger:Info("Player spawned through native team pad", {
 		UserId = player.UserId,
 		SpawnId = request.SpawnId,
 		StationId = request.StationId,
-		RoleId = request.RoleId,
+		Team = point.Name,
 	})
 	return true, nil
 end
 
 function SpawnService:Destroy()
 	table.clear(self.points)
-	table.clear(self.reservations)
 end
 
 return SpawnService

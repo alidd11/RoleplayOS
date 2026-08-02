@@ -108,6 +108,27 @@ local Config = {
 			RoleIds = { "Controller" },
 		},
 	},
+	Teams = {
+		Civilian = {
+			Id = "Civilian",
+			Name = "Civilian",
+			BrickColor = "Medium stone grey",
+			AutoAssignable = true,
+		},
+		Police = {
+			Id = "Police",
+			Name = "Police",
+			BrickColor = "Navy blue",
+			AutoAssignable = false,
+		},
+		Ambulance = {
+			Id = "Ambulance",
+			Name = "Ambulance",
+			BrickColor = "Earth green",
+			AutoAssignable = false,
+		},
+		Fire = { Id = "Fire", Name = "Fire", BrickColor = "Bright red", AutoAssignable = false },
+	},
 	Roles = {
 		Civilian = {
 			Id = "Civilian",
@@ -182,35 +203,35 @@ local Config = {
 		CityCivilian = {
 			Id = "CityCivilian",
 			StationId = "CityCentre",
-			PartName = "RPSpawn_CityCivilian",
+			TeamName = "Civilian",
 			RoleIds = { "Civilian" },
 			DepartmentIds = {},
 		},
 		PoliceLockerRoom = {
 			Id = "PoliceLockerRoom",
 			StationId = "CityCentre",
-			PartName = "RPSpawn_PoliceLockerRoom",
+			TeamName = "Police",
 			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
 			DepartmentIds = { "Police" },
 		},
 		PoliceVehicleBay = {
 			Id = "PoliceVehicleBay",
 			StationId = "CityCentre",
-			PartName = "RPSpawn_PoliceVehicleBay",
+			TeamName = "Police",
 			RoleIds = { "PoliceFrontline" },
 			DepartmentIds = { "Police" },
 		},
 		AmbulanceLockerRoom = {
 			Id = "AmbulanceLockerRoom",
 			StationId = "CityCentre",
-			PartName = "RPSpawn_AmbulanceLockerRoom",
+			TeamName = "Ambulance",
 			RoleIds = { "Paramedic" },
 			DepartmentIds = { "Ambulance" },
 		},
 		FireLockerRoom = {
 			Id = "FireLockerRoom",
 			StationId = "CityCentre",
-			PartName = "RPSpawn_FireLockerRoom",
+			TeamName = "Fire",
 			RoleIds = { "Firefighter" },
 			DepartmentIds = { "Fire" },
 		},

@@ -18,6 +18,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Network",
 			"Communities",
 			"Spawns",
+			"Teams",
 		}
 	do
 		if type(config[section]) ~= "table" then
@@ -70,9 +71,15 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Invalid spawn definition: " .. spawnId)
 		end
 		for _, roleId in spawn.RoleIds or {} do
-			if not config.Roles[roleId] then
+			local role = config.Roles[roleId]
+			if not role then
 				table.insert(errors, "Unknown role " .. roleId .. " in spawn " .. spawnId)
+			elseif role.TeamName ~= spawn.TeamName then
+				table.insert(errors, "Role team mismatch in spawn " .. spawnId)
 			end
+		end
+		if not config.Teams[spawn.TeamName] then
+			table.insert(errors, "Unknown team in spawn " .. spawnId)
 		end
 	end
 	for templateId, template in config.Communities and config.Communities.Templates or {} do

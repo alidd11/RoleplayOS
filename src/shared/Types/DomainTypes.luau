@@ -192,7 +192,7 @@ export type Station = { Id: string, Name: string, DepartmentIds: { string }, Spa
 export type SpawnDefinition = {
 	Id: string,
 	StationId: string,
-	PartName: string,
+	TeamName: string,
 	RoleIds: { string },
 	DepartmentIds: { string },
 }

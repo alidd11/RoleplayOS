@@ -49,6 +49,7 @@ local serviceOrder = {
 	"InventoryService",
 	"BusinessService",
 	"DepartmentService",
+	"TeamService",
 	"RoleService",
 	"StationService",
 	"UniformService",
