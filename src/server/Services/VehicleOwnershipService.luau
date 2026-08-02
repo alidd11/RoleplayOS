@@ -55,12 +55,52 @@ function VehicleOwnershipService:List(player: Player): { any }
 		local definition = self.context.Configuration.Vehicles[vehicle.DefinitionId]
 		table.insert(result, {
 			VehicleId = vehicle.VehicleId,
+			DefinitionId = vehicle.DefinitionId,
 			Name = if definition then definition.Name else vehicle.DefinitionId,
 			Registration = vehicle.Registration,
+			Colour = vehicle.Colour,
+			Category = "Civilian",
 			CustomRegistration = vehicle.CustomRegistration == true,
 		})
 	end
 	return result
+end
+
+function VehicleOwnershipService:GrantStarter(player: Player, characterId: string): (any?, string?)
+	local settings = self.context.Configuration.VehicleSpawning
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not character then
+		return nil, "CHARACTER_NOT_OWNED"
+	end
+	if character.StarterVehicleGranted == true then
+		for _, vehicle in character.Vehicles do
+			if vehicle.DefinitionId == settings.StarterDefinitionId then
+				return vehicle, nil
+			end
+		end
+		return nil, "STARTER_ALREADY_GRANTED"
+	end
+	for _, vehicle in character.Vehicles do
+		if vehicle.DefinitionId == settings.StarterDefinitionId then
+			character.StarterVehicleGranted = true
+			self.context.Services:Get("DataService"):MarkDirty(player)
+			return vehicle, nil
+		end
+	end
+	local vehicle, reason = self:Create(
+		player,
+		characterId,
+		settings.StarterDefinitionId,
+		settings.StarterColour,
+		settings.StarterGarageId
+	)
+	if not vehicle then
+		return nil, reason
+	end
+	character.StarterVehicleGranted = true
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return vehicle, nil
 end
 
 function VehicleOwnershipService:GetOrCreateTeamRegistration(

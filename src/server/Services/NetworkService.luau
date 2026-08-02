@@ -369,6 +369,53 @@ function NetworkService:Start()
 			}
 		end
 	)
+	self.context.Network:RegisterFunction("GetVehicleSpawnMenu", function(payload)
+		return type(payload) == "table" and type(payload.TerminalId) == "string"
+	end, function(player, payload, requestId)
+		local menu, reason =
+			self.context.Services:Get("VehicleService"):Menu(player, payload.TerminalId)
+		return {
+			Success = menu ~= nil,
+			Code = if menu then "OK" else reason,
+			Message = if menu then "" else "This vehicle terminal is unavailable.",
+			Data = menu,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("SpawnOwnedVehicle", function(payload)
+		return type(payload) == "table"
+			and type(payload.TerminalId) == "string"
+			and type(payload.VehicleId) == "string"
+	end, function(player, payload, requestId)
+		local spawned, reason = self.context.Services
+			:Get("VehicleService")
+			:SpawnOwned(player, payload.TerminalId, payload.VehicleId)
+		return {
+			Success = spawned ~= nil,
+			Code = if spawned then "OK" else reason,
+			Message = if spawned then "Vehicle ready." else "The vehicle could not be spawned.",
+			Data = spawned,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("SpawnServiceVehicle", function(payload)
+		return type(payload) == "table"
+			and type(payload.TerminalId) == "string"
+			and type(payload.DefinitionId) == "string"
+	end, function(player, payload, requestId)
+		local spawned, reason = self.context.Services
+			:Get("VehicleService")
+			:SpawnService(player, payload.TerminalId, payload.DefinitionId)
+		return {
+			Success = spawned ~= nil,
+			Code = if spawned then "OK" else reason,
+			Message = if spawned
+				then "Service vehicle ready."
+				else "That service vehicle is unavailable.",
+			Data = spawned,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetCCTVCameras",
 		tablePayload,

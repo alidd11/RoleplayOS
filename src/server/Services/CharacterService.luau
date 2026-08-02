@@ -70,6 +70,13 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	}
 	session.Profile.Characters[id] = character
 	table.insert(session.Profile.CharacterSlots, id)
+	local starter, starterReason =
+		self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, id)
+	if not starter then
+		session.Profile.Characters[id] = nil
+		table.remove(session.Profile.CharacterSlots, #session.Profile.CharacterSlots)
+		return nil, starterReason or "STARTER_VEHICLE_UNAVAILABLE"
+	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return self:Summary(character), nil
 end
