@@ -76,6 +76,7 @@ local serviceOrder = {
 	"DispatchService",
 	"ANPRService",
 	"EmergencyTriggerService",
+	"PhoneVoiceService",
 	"PhoneService",
 	"NeedsService",
 	"StartMenuService",

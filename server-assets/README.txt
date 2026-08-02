@@ -1,5 +1,14 @@
 ROLEPLAYOS CONTENT — PLACE ASSETS IN THESE FOLDERS
 
+PRICING
+  For a new civilian vehicle, select its top-level Model and add a Number
+  attribute named Price. Example: Price = 25000. Standard and Premium vehicles
+  require Price >= 0. Starter vehicles may be free.
+
+  A vehicle already declared in src/shared/Config/Config.luau uses the Price in
+  that declaration. Do not try to override a configured vehicle with an
+  attribute. The server chooses and charges the price; clients never supply it.
+
 Vehicles/Civilian/Starter
   Starter vehicles. Model must contain a VehicleSeat.
 

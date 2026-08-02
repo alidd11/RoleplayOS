@@ -266,6 +266,18 @@ function PhoneService:AnswerCall(player: Player, callId: string): (any?, string?
 	end
 	call.State = "Connected"
 	call.ConnectedAt = os.time()
+	local caller = Players:GetPlayerByUserId(call.CallerUserId)
+	local recipient = Players:GetPlayerByUserId(call.RecipientUserId)
+	local voiceConnected = false
+	local voiceReason = "VOICE_NOT_AVAILABLE"
+	if caller and recipient then
+		voiceConnected, voiceReason =
+			self.context.Services:Get("PhoneVoiceService"):ConnectCall(callId, caller, recipient)
+	end
+	call.Voice = {
+		Connected = voiceConnected,
+		Reason = if voiceConnected then nil else voiceReason,
+	}
 	for _, userId in { call.CallerUserId, call.RecipientUserId } do
 		local target = Players:GetPlayerByUserId(userId)
 		if target then
@@ -284,6 +296,7 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 	end
 	call.State = "Ended"
 	call.EndedAt = os.time()
+	self.context.Services:Get("PhoneVoiceService"):DisconnectCall(callId)
 	for _, userId in { call.CallerUserId, call.RecipientUserId } do
 		self.userCalls[userId] = nil
 		local target = Players:GetPlayerByUserId(userId)

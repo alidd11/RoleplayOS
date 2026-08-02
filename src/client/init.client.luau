@@ -9,6 +9,10 @@ local events = {
 	VehicleModeChanged = Instance.new("BindableEvent"),
 	UIStateChanged = Instance.new("BindableEvent"),
 }
+for name, event in events do
+	event.Name = name
+	event.Parent = script
+end
 local controllers = {
 	UIOrchestrator = require(script.Controllers.UIOrchestrator),
 	NetworkController = require(script.Controllers.NetworkController),

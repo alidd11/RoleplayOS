@@ -4,6 +4,7 @@
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
+local SoundService = game:GetService("SoundService")
 
 type Result = {
 	Level: "PASS" | "WARN" | "FAIL",
@@ -54,7 +55,12 @@ local expectedFunctions = {
 	"BookCustody",
 	"GetPresentedId",
 	"GetPhone",
+	"PhoneSendText",
+	"PhonePlaceCall",
+	"PhoneAnswerCall",
+	"PhoneEndCall",
 	"PhoneEmergency",
+	"PhoneToggleFlashlight",
 	"SetSprintState",
 	"PurchaseFood",
 }
@@ -77,6 +83,13 @@ if remotes then
 		)
 	end
 end
+
+local phoneVoice = SoundService:WaitForChild("RoleplayOSPhoneVoice", 10)
+check(
+	phoneVoice ~= nil and phoneVoice:IsA("Folder"),
+	"phone.voice-router",
+	"optional Audio API call router initialised"
+)
 
 local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 check(assets ~= nil, "content.root", "ServerStorage.RoleplayOSAssets exists")

@@ -24,7 +24,6 @@ local UIOrchestrator = {
 
 function UIOrchestrator:Init(context: any)
 	self.context = context
-	self.changed = Instance.new("BindableEvent")
 end
 
 function UIOrchestrator:_layout(): Layout
@@ -67,7 +66,6 @@ function UIOrchestrator:_publish()
 			warn("RoleplayOS UI layout binding failed: " .. tostring(problem))
 		end
 	end
-	self.changed:Fire(layout)
 end
 
 function UIOrchestrator:Bind(key: string, callback: (Layout) -> ()): () -> ()
@@ -133,7 +131,6 @@ function UIOrchestrator:Destroy()
 	end
 	table.clear(self.connections)
 	table.clear(self.bindings)
-	self.changed:Destroy()
 end
 
 return UIOrchestrator
