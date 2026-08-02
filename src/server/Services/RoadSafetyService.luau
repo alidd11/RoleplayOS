@@ -4,7 +4,12 @@ local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
-local RoadSafetyService = { connections = {}, cooldowns = {}, journeys = {} }
+local RoadSafetyService = {
+	connections = {},
+	sensorConnections = {},
+	cooldowns = {},
+	journeys = {},
+}
 
 function RoadSafetyService:Init(context: any)
 	self.context = context
@@ -50,14 +55,14 @@ function RoadSafetyService:_issue(
 	mph: number,
 	limit: number,
 	kind: string
-)
+): boolean
 	local player, character = self:_owner(vehicle)
 	if not player or not character then
-		return
+		return false
 	end
 	local excess = math.floor(mph - limit + 0.5)
 	if excess <= self.context.Configuration.RoadSafety.ToleranceMph then
-		return
+		return false
 	end
 	character.DrivingRecord = character.DrivingRecord or { Points = 0, Fines = {} }
 	local points = self:_points(excess)
@@ -88,6 +93,7 @@ function RoadSafetyService:_issue(
 		Target = character.CharacterId,
 		Metadata = record,
 	})
+	return true
 end
 
 function RoadSafetyService:_fixed(sensor: BasePart, hit: BasePart)
@@ -101,11 +107,19 @@ function RoadSafetyService:_fixed(sensor: BasePart, hit: BasePart)
 	if (self.cooldowns[key] or 0) > now then
 		return
 	end
-	self.cooldowns[key] = now + self.context.Configuration.RoadSafety.SensorCooldownSeconds
-	local primary = vehicle.PrimaryPart or hit
-	local mph = primary.AssemblyLinearVelocity.Magnitude
-		* self.context.Configuration.RoadSafety.StudsPerSecondToMph
-	self:_issue(vehicle, sensor, mph, sensor:GetAttribute("SpeedLimitMph") or 30, "Fixed")
+	local telemetry = self.context.Services:Get("VehicleService"):GetTelemetry(vehicle)
+	if not telemetry then
+		return
+	end
+	local issued = self:_issue(
+		vehicle,
+		sensor,
+		telemetry.SpeedMph,
+		sensor:GetAttribute("SpeedLimitMph") or 30,
+		"Fixed"
+	)
+	self.cooldowns[key] = now
+		+ (if issued then self.context.Configuration.RoadSafety.SensorCooldownSeconds else 1)
 end
 
 function RoadSafetyService:_average(sensor: BasePart, hit: BasePart, isEntry: boolean)
@@ -140,23 +154,43 @@ end
 
 function RoadSafetyService:_connect(tag: string, callback: (BasePart, BasePart) -> ())
 	local function watch(sensor: Instance)
-		if not sensor:IsA("BasePart") then
+		if not sensor:IsA("BasePart") or self.sensorConnections[sensor] then
 			return
 		end
-		table.insert(
-			self.connections,
-			sensor.Touched:Connect(function(hit)
-				callback(sensor, hit)
-			end)
-		)
+		self.sensorConnections[sensor] = sensor.Touched:Connect(function(hit)
+			callback(sensor, hit)
+		end)
+	end
+	local function unwatch(sensor: Instance)
+		local connection = self.sensorConnections[sensor]
+		if connection then
+			connection:Disconnect()
+			self.sensorConnections[sensor] = nil
+		end
 	end
 	for _, sensor in CollectionService:GetTagged(tag) do
 		watch(sensor)
 	end
 	table.insert(self.connections, CollectionService:GetInstanceAddedSignal(tag):Connect(watch))
+	table.insert(self.connections, CollectionService:GetInstanceRemovedSignal(tag):Connect(unwatch))
+end
+
+function RoadSafetyService:_cleanup(now: number)
+	for key, expiresAt in self.cooldowns do
+		if expiresAt <= now then
+			self.cooldowns[key] = nil
+		end
+	end
+	local maximumJourneyAge = self.context.Configuration.RoadSafety.AverageJourneyExpirySeconds
+	for key, journey in self.journeys do
+		if now - journey.Time > maximumJourneyAge then
+			self.journeys[key] = nil
+		end
+	end
 end
 
 function RoadSafetyService:Start()
+	self.running = true
 	local config = self.context.Configuration.RoadSafety
 	self:_connect(config.SpeedCameraTag, function(sensor, hit)
 		self:_fixed(sensor, hit)
@@ -167,13 +201,24 @@ function RoadSafetyService:Start()
 	self:_connect(config.AverageExitTag, function(sensor, hit)
 		self:_average(sensor, hit, false)
 	end)
+	task.spawn(function()
+		while self.running do
+			task.wait(config.StateCleanupSeconds)
+			self:_cleanup(os.clock())
+		end
+	end)
 end
 
 function RoadSafetyService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for _, connection in self.sensorConnections do
+		connection:Disconnect()
+	end
 	table.clear(self.connections)
+	table.clear(self.sensorConnections)
 	table.clear(self.journeys)
 	table.clear(self.cooldowns)
 end

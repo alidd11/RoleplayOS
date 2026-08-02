@@ -70,6 +70,11 @@ function VehicleOwnershipService:List(player: Player): { any }
 			Colour = vehicle.Colour,
 			Category = "Civilian",
 			CustomRegistration = vehicle.CustomRegistration == true,
+			Mileage = vehicle.Mileage,
+			Fuel = vehicle.Fuel,
+			Condition = vehicle.Condition,
+			Insured = vehicle.Insured,
+			Taxed = vehicle.Taxed,
 		})
 	end
 	return result

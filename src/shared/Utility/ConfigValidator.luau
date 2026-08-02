@@ -79,6 +79,36 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Unknown vehicle division: " .. id)
 		end
 	end
+	local vehicleSpawning = config.VehicleSpawning or {}
+	for _, field in
+		{
+			"TrackingIntervalSeconds",
+			"StudsToMiles",
+			"MaximumTrackedSpeedStudsPerSecond",
+			"FuelPercentPerMile",
+			"PersistenceIntervalSeconds",
+		}
+	do
+		if type(vehicleSpawning[field]) ~= "number" or vehicleSpawning[field] <= 0 then
+			table.insert(errors, "Invalid vehicle spawning field: " .. field)
+		end
+	end
+	if
+		type(vehicleSpawning.IdleFuelPercentPerMinute) ~= "number"
+		or vehicleSpawning.IdleFuelPercentPerMinute < 0
+		or type(vehicleSpawning.StopVehicleWhenFuelEmpty) ~= "boolean"
+	then
+		table.insert(errors, "Invalid vehicle fuel configuration")
+	end
+	if
+		type(config.RoadSafety) ~= "table"
+		or type(config.RoadSafety.StateCleanupSeconds) ~= "number"
+		or config.RoadSafety.StateCleanupSeconds < 10
+		or type(config.RoadSafety.AverageJourneyExpirySeconds) ~= "number"
+		or config.RoadSafety.AverageJourneyExpirySeconds <= 0
+	then
+		table.insert(errors, "Invalid road safety state lifetime configuration")
+	end
 	for loadoutId, loadout in config.Loadouts or {} do
 		for _, toolId in loadout.ToolIds or {} do
 			if not config.Tools[toolId] then

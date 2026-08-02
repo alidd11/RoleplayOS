@@ -2,9 +2,16 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ServerStorage = game:GetService("ServerStorage")
 
-local VehicleService = { activeByUserId = {}, cooldowns = {}, connections = {} }
+local VehicleService = {
+	activeByUserId = {},
+	activeByModel = {},
+	cooldowns = {},
+	connections = {},
+	accumulator = 0,
+}
 
 local function worldPosition(instance: Instance): Vector3?
 	if instance:IsA("BasePart") then
@@ -66,6 +73,108 @@ function VehicleService:Start()
 			self.cooldowns[player.UserId] = nil
 		end)
 	)
+	table.insert(
+		self.connections,
+		RunService.Heartbeat:Connect(function(dt)
+			self.accumulator += dt
+			if self.accumulator < settings.TrackingIntervalSeconds then
+				return
+			end
+			local elapsed = self.accumulator
+			self.accumulator = 0
+			for userId, active in self.activeByUserId do
+				local player = Players:GetPlayerByUserId(userId)
+				if player then
+					self:_trackVehicle(player, active, elapsed)
+				end
+			end
+		end)
+	)
+end
+
+function VehicleService:_trackVehicle(player: Player, active: any, elapsed: number)
+	local model = active.Model
+	if not model.Parent then
+		return
+	end
+	local settings = self.context.Configuration.VehicleSpawning
+	local position = model:GetPivot().Position
+	local previous = active.LastPosition
+	active.LastPosition = position
+	if not previous then
+		return
+	end
+	local distanceStuds = (position - previous).Magnitude
+	local maximumDistance = settings.MaximumTrackedSpeedStudsPerSecond * elapsed + 12
+	if distanceStuds > maximumDistance then
+		-- Treat implausible jumps as teleports, not mileage. Vehicle physics can be
+		-- client-owned, so persistent economy values never trust an unbounded delta.
+		active.TelemetryValid = false
+		active.LastSpeedMph = 0
+		active.LastSampleAt = os.clock()
+		return
+	end
+	active.TelemetryValid = true
+	active.LastSpeedMph = distanceStuds
+		/ elapsed
+		* self.context.Configuration.RoadSafety.StudsPerSecondToMph
+	active.LastSampleAt = os.clock()
+	local vehicle = active.Vehicle
+	local distanceMiles = distanceStuds * settings.StudsToMiles
+	vehicle.Mileage = math.max(0, (vehicle.Mileage or 0) + distanceMiles)
+	local seat = active.Seat
+	local occupied = seat and seat.Occupant ~= nil
+	local idling = occupied and distanceStuds < 0.5
+	local fuelUsed = if occupied
+		then distanceMiles * settings.FuelPercentPerMile + (if idling
+			then settings.IdleFuelPercentPerMinute * elapsed / 60
+			else 0)
+		else 0
+	vehicle.Fuel = math.clamp((vehicle.Fuel or 100) - fuelUsed, 0, 100)
+	model:SetAttribute("RoleplayOSMileage", vehicle.Mileage)
+	model:SetAttribute("RoleplayOSFuel", vehicle.Fuel)
+	model:SetAttribute("RoleplayOSFuelEmpty", vehicle.Fuel <= 0)
+	active.Summary.Mileage = vehicle.Mileage
+	active.Summary.Fuel = vehicle.Fuel
+	if seat then
+		seat:SetAttribute("RoleplayOSFuel", vehicle.Fuel)
+		if settings.StopVehicleWhenFuelEmpty and vehicle.Fuel <= 0 then
+			if seat:GetAttribute("RoleplayOSOriginalMaxSpeed") == nil then
+				seat:SetAttribute("RoleplayOSOriginalMaxSpeed", seat.MaxSpeed)
+			end
+			seat.MaxSpeed = 0
+		elseif vehicle.Fuel > 0 then
+			local original = seat:GetAttribute("RoleplayOSOriginalMaxSpeed")
+			if type(original) == "number" then
+				seat.MaxSpeed = original
+				seat:SetAttribute("RoleplayOSOriginalMaxSpeed", nil)
+			end
+		end
+	end
+	if not active.IsTeam then
+		active.Unsaved = true
+		local now = os.clock()
+		if now - active.LastPersistedAt >= settings.PersistenceIntervalSeconds then
+			self.context.Services:Get("DataService"):MarkDirty(player)
+			active.LastPersistedAt = now
+			active.Unsaved = false
+		end
+	end
+end
+
+function VehicleService:GetTelemetry(model: Model): any?
+	local active = self.activeByModel[model]
+	if not active or not active.TelemetryValid then
+		return nil
+	end
+	local maximumAge = self.context.Configuration.VehicleSpawning.TrackingIntervalSeconds * 2.5
+	if os.clock() - active.LastSampleAt > maximumAge then
+		return nil
+	end
+	return {
+		SpeedMph = active.LastSpeedMph,
+		SampledAt = active.LastSampleAt,
+	}
 end
 
 function VehicleService:_terminal(player: Player, terminalId: string): (Instance?, string?)
@@ -241,6 +350,11 @@ function VehicleService:_spawn(
 	local model = template:Clone()
 	model:PivotTo(spawnPart.CFrame)
 	self:_applyIdentity(model, vehicle, player.UserId)
+	vehicle.Mileage = math.max(0, vehicle.Mileage or 0)
+	vehicle.Fuel = math.clamp(vehicle.Fuel or 100, 0, 100)
+	model:SetAttribute("RoleplayOSMileage", vehicle.Mileage)
+	model:SetAttribute("RoleplayOSFuel", vehicle.Fuel)
+	model:SetAttribute("RoleplayOSFuelEmpty", vehicle.Fuel <= 0)
 	if isTeam then
 		model:SetAttribute("RoleplayOSTeamVehicle", true)
 		model:SetAttribute("RoleplayOSTeamName", definition.TeamName)
@@ -251,13 +365,42 @@ function VehicleService:_spawn(
 		DefinitionId = definition.Id,
 		Registration = vehicle.Registration,
 		TeamVehicle = isTeam,
+		Mileage = vehicle.Mileage,
+		Fuel = vehicle.Fuel,
 	}
-	self.activeByUserId[player.UserId] = { Model = model, Summary = summary }
+	local seat = model:FindFirstChildWhichIsA("VehicleSeat", true)
+	if seat then
+		seat:SetAttribute("RoleplayOSRegistration", vehicle.Registration)
+		seat:SetAttribute("RoleplayOSFuel", vehicle.Fuel)
+		if
+			self.context.Configuration.VehicleSpawning.StopVehicleWhenFuelEmpty
+			and vehicle.Fuel <= 0
+		then
+			seat:SetAttribute("RoleplayOSOriginalMaxSpeed", seat.MaxSpeed)
+			seat.MaxSpeed = 0
+		end
+	end
+	local active = {
+		Model = model,
+		Summary = summary,
+		Vehicle = vehicle,
+		Seat = seat,
+		IsTeam = isTeam,
+		LastPosition = model:GetPivot().Position,
+		LastPersistedAt = os.clock(),
+		Unsaved = false,
+		TelemetryValid = false,
+		LastSpeedMph = 0,
+		LastSampleAt = 0,
+	}
+	self.activeByUserId[player.UserId] = active
+	self.activeByModel[model] = active
 	self.cooldowns[player.UserId] = os.clock()
 	model.AncestryChanged:Connect(function(_, parent)
 		local current = self.activeByUserId[player.UserId]
 		if parent == nil and current and current.Model == model then
 			self.activeByUserId[player.UserId] = nil
+			self.activeByModel[model] = nil
 		end
 	end)
 	return summary, nil
@@ -336,6 +479,8 @@ function VehicleService:SpawnService(
 		),
 		Registration = registration,
 		OwnerCharacterId = nil,
+		Mileage = 0,
+		Fuel = 100,
 	}
 	return self:_spawn(player, vehicle, definition, spawnPoint, true)
 end
@@ -343,6 +488,12 @@ end
 function VehicleService:Despawn(player: Player)
 	local current = self.activeByUserId[player.UserId]
 	self.activeByUserId[player.UserId] = nil
+	if current then
+		self.activeByModel[current.Model] = nil
+	end
+	if current and current.Unsaved and not current.IsTeam then
+		self.context.Services:Get("DataService"):MarkDirty(player)
+	end
 	if current and current.Model.Parent then
 		current.Model:Destroy()
 	end
@@ -417,7 +568,11 @@ function VehicleService:_applyIdentity(model: Model, vehicle: any, ownerUserId: 
 end
 
 function VehicleService:Destroy()
-	for _, current in self.activeByUserId do
+	for userId, current in self.activeByUserId do
+		local player = Players:GetPlayerByUserId(userId)
+		if player and current.Unsaved and not current.IsTeam then
+			self.context.Services:Get("DataService"):MarkDirty(player)
+		end
 		current.Model:Destroy()
 	end
 	for _, connection in self.connections do
@@ -425,6 +580,7 @@ function VehicleService:Destroy()
 	end
 	table.clear(self.connections)
 	table.clear(self.activeByUserId)
+	table.clear(self.activeByModel)
 	table.clear(self.cooldowns)
 end
 
