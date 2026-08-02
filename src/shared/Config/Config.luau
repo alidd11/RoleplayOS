@@ -19,6 +19,18 @@ local function publicPassOr(existingRule: any, gamepassId: number): any
 	}
 end
 
+local function publicOr(existingRule: any): any
+	return {
+		AccessType = "Combined",
+		Match = "Any",
+		DisplayWhenLocked = true,
+		Rules = {
+			existingRule,
+			{ AccessType = "ServerKind", Kind = "Public" },
+		},
+	}
+end
+
 local Config = {
 	Framework = {
 		Environment = "Development",
@@ -164,11 +176,17 @@ local Config = {
 			Name = "Civilian Rifle Access",
 			Description = "Unlocks approved civilian rifle items.",
 		},
-		PublicPoliceTeam = {
-			Id = "PublicPoliceTeam",
+		PublicArmedResponse = {
+			Id = "PublicArmedResponse",
 			GamepassId = 1933635353,
-			Name = "Public Police Team",
-			Description = "Unlocks the Police team in public servers.",
+			Name = "Public Armed Response Division",
+			Description = "Unlocks Armed Response in public servers.",
+		},
+		PublicRoadsPolicing = {
+			Id = "PublicRoadsPolicing",
+			GamepassId = 1933455264,
+			Name = "Public Roads Policing Division",
+			Description = "Unlocks Roads Policing in public servers.",
 		},
 		PublicAmbulanceTeam = {
 			Id = "PublicAmbulanceTeam",
@@ -397,10 +415,11 @@ local Config = {
 			Name = "Police Officer",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-				1933635353
-			),
+			Access = publicOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}),
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -409,10 +428,11 @@ local Config = {
 			Name = "Frontline Policing",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-				1933635353
-			),
+			Access = publicOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}),
 			LoadoutId = "PoliceFrontline",
 			UniformId = "PoliceStandard",
 		},
@@ -421,15 +441,14 @@ local Config = {
 			Name = "Armed Response Unit",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = {
+			Access = publicPassOr({
 				AccessType = "Combined",
 				Match = "All",
-				DisplayWhenLocked = true,
 				Rules = {
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "ArmedResponse", MinimumGroupRank = 1 },
 				},
-			},
+			}, 1933635353),
 			LoadoutId = "ArmedResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -438,15 +457,14 @@ local Config = {
 			Name = "Roads Policing Unit",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = {
+			Access = publicPassOr({
 				AccessType = "Combined",
 				Match = "All",
-				DisplayWhenLocked = true,
 				Rules = {
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "RoadsPolicing", MinimumGroupRank = 1 },
 				},
-			},
+			}, 1933455264),
 			LoadoutId = "RoadsPolicing",
 			UniformId = "PoliceStandard",
 		},
