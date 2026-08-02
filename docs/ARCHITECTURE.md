@@ -6,4 +6,4 @@ The context exposes the logger, immutable configuration, network gateway and ser
 
 Data flows from a validated client request into one domain service. That service re-evaluates access and ownership, obtains server-defined content and prices, mutates the in-memory profile through the relevant authority, marks it dirty, and writes an audit event. `DataService` batches persistence. Response DTOs contain only required fields.
 
-Persistent profile state lives in DataStore. Per-server sessions, active shifts, units, calls, spawned vehicles and interiors remain runtime state. Dispatch uses local events and compact MessagingService messages; a production MemoryStore adapter may extend the same interface.
+Persistent profile state and the bounded MDT operational projection live in DataStore. Per-server sessions, active shifts, units, calls, spawned vehicles and interiors remain runtime state. Dispatch uses local events only: active call data is deliberately never placed on MessagingService or another cross-server transport. Closing a call may create a durable historical incident, but it does not replicate the active queue.

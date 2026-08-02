@@ -100,9 +100,9 @@ function CallService:Update(callId: string, data: any): (any?, string?)
 	self.context.Services:Get("DispatchService"):Publish("CallUpdated", callId, self.revision)
 	return call, nil
 end
-function CallService:Close(callId: string): (boolean, string?)
+function CallService:Close(callId: string, closedByUserId: number?): (boolean, string?)
 	local call = self.calls[callId]
-	if not call then
+	if not call or call.Status == "Resolved" then
 		return false, "CALL_NOT_FOUND"
 	end
 	call.Status = "Resolved"
@@ -115,6 +115,7 @@ function CallService:Close(callId: string): (boolean, string?)
 		end
 	end
 	call.Revision += 1
+	self.context.Services:Get("IncidentService"):ScheduleFromCall(call, closedByUserId or 0)
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallClosed", callId, self.revision)
 	return true, nil

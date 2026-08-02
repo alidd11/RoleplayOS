@@ -121,6 +121,8 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or config.MDT.MaximumWarrantReasonLength < 20
 		or type(config.MDT.MaximumWarrantDurationDays) ~= "number"
 		or config.MDT.MaximumWarrantDurationDays < 1
+		or type(config.MDT.MaximumIncidentIndexEntries) ~= "number"
+		or config.MDT.MaximumIncidentIndexEntries < config.MDT.PageSize
 	then
 		table.insert(errors, "Invalid MDT index configuration")
 	end

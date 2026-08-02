@@ -48,6 +48,7 @@ local expectedFunctions = {
 	"GetMDTAccess",
 	"MDTCreateWarrant",
 	"MDTRevokeWarrant",
+	"MDTGetIncidents",
 	"GetDispatchSnapshot",
 	"DispatchCreateCall",
 	"DispatchAssignUnit",

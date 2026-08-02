@@ -121,8 +121,12 @@ function MDTController:_mount()
 	local vehicle = button(shell, "VEHICLES")
 	vehicle.Position = UDim2.fromOffset(122, 73)
 	vehicle.Size = UDim2.fromOffset(92, 34)
+	local incidents = button(shell, "INCIDENTS")
+	incidents.Position = UDim2.fromOffset(222, 73)
+	incidents.Size = UDim2.fromOffset(98, 34)
 	self.personTab = person
 	self.vehicleTab = vehicle
+	self.incidentTab = incidents
 
 	local input = Instance.new("TextBox")
 	input.BackgroundColor3 = C.Raised
@@ -319,6 +323,11 @@ function MDTController:_mount()
 		self.recordType = "Vehicle"
 		self:_renderTabs()
 	end)
+	incidents.Activated:Connect(function()
+		self.recordType = "Incident"
+		self:_renderTabs()
+		self:_performSearch()
+	end)
 	search.Activated:Connect(function()
 		self:_performSearch()
 	end)
@@ -333,6 +342,7 @@ end
 function MDTController:_renderTabs()
 	self.personTab.BackgroundColor3 = if self.recordType == "Person" then C.Accent else C.Raised
 	self.vehicleTab.BackgroundColor3 = if self.recordType == "Vehicle" then C.Accent else C.Raised
+	self.incidentTab.BackgroundColor3 = if self.recordType == "Incident" then C.Accent else C.Raised
 end
 
 function MDTController:_renderResults(items: { any })
@@ -356,13 +366,18 @@ function MDTController:_renderResults(items: { any })
 		row.Size = UDim2.new(1, -5, 0, 62)
 		row.Parent = self.results
 		corner(row, 9)
-		local primary =
-			text(row, record.FullName or record.Registration or "Unknown record", 13, true)
+		local primary = text(
+			row,
+			record.FullName or record.Registration or record.Title or "Unknown record",
+			13,
+			true
+		)
 		primary.Position = UDim2.fromOffset(14, 10)
 		primary.Size = UDim2.new(1, -28, 0, 20)
 		local secondary = text(
 			row,
 			record.DateOfBirth and ("Date of birth  ·  " .. record.DateOfBirth)
+				or record.Title and ("Incident  ·  " .. tostring(record.Status or "Unknown"))
 				or ("Vehicle  ·  " .. tostring(record.DefinitionId or "Unknown")),
 			10
 		)
@@ -383,8 +398,14 @@ function MDTController:_renderResults(items: { any })
 				and #(record.Warrants or {}) > 0
 			self.revokeAction.Text = "REVOKE WARRANT"
 			self.revokeConfirmationId = nil
-			self.detailTitle.Text = if record.FullName then "PERSON RECORD" else "VEHICLE RECORD"
-			self.detailName.Text = record.FullName or record.Registration or "Unknown record"
+			self.detailTitle.Text = if record.FullName
+				then "PERSON RECORD"
+				elseif record.Title then "INCIDENT RECORD"
+				else "VEHICLE RECORD"
+			self.detailName.Text = record.FullName
+				or record.Registration
+				or record.Title
+				or "Unknown record"
 			if record.FullName then
 				local licences = {}
 				for licenceId, value in record.Licences or {} do
@@ -407,6 +428,18 @@ function MDTController:_renderResults(items: { any })
 						then table.concat(record.Flags, ", ")
 						else "No active flags",
 					if #warrants > 0 then table.concat(warrants, "\n") else "None"
+				)
+			elseif record.Title then
+				self.detailMeta.Text = string.format(
+					"STATUS\n%s\n\nTYPE\n%s\n\nLOCATION\n%s\n\nPRIORITY\n%s\n\nCREATED\n%s\n\nUNITS\n%s",
+					tostring(record.Status or "Unknown"),
+					tostring(record.IncidentType or "General"),
+					tostring(record.Location or "Not recorded"),
+					tostring(record.Priority or "Not recorded"),
+					os.date("!%Y-%m-%d %H:%M UTC", record.CreatedAt or 0),
+					if #(record.UnitIds or {}) > 0
+						then table.concat(record.UnitIds, ", ")
+						else "None recorded"
 				)
 			else
 				self.detailMeta.Text = string.format(
@@ -477,7 +510,9 @@ end
 
 function MDTController:_performSearch()
 	self.status.Text = "Searching secure records…"
-	local response = self:Search(self.recordType, self.input.Text, 1)
+	local response = if self.recordType == "Incident"
+		then self.context.Controllers.NetworkController:Request("MDTGetIncidents", { Page = 1 })
+		else self:Search(self.recordType, self.input.Text, 1)
 	if response.Success then
 		local items = response.Data.Items or {}
 		self.status.Text = string.format("%d result%s", #items, if #items == 1 then "" else "s")

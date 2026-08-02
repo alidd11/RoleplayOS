@@ -384,6 +384,33 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("MDTGetIncidents", function(payload)
+		return type(payload) == "table" and (payload.Page == nil or type(payload.Page) == "number")
+	end, function(player, payload, requestId)
+		local mdt = self.context.Services:Get("MDTService")
+		if
+			not mdt:CanUsePermission(player, "IncidentRead")
+			and not mdt:CanUsePermission(player, "IncidentWrite")
+		then
+			return {
+				Success = false,
+				Code = "MDT_NOT_AUTHORISED",
+				Message = "This duty cannot view incident records.",
+				RequestId = requestId,
+			}
+		end
+		local page = if type(payload.Page) == "number"
+			then math.clamp(math.floor(payload.Page), 1, 1000)
+			else 1
+		local incidents, reason = self.context.Services:Get("IncidentService"):Recent(player, page)
+		return {
+			Success = incidents ~= nil,
+			Code = if incidents then "OK" else reason,
+			Message = if incidents then "" else "Incident records are temporarily unavailable.",
+			Data = incidents,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SetCustomRegistration", function(payload)
 		return type(payload) == "table"
 			and type(payload.VehicleId) == "string"
@@ -629,7 +656,8 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
-		local closed, reason = self.context.Services:Get("CallService"):Close(payload.CallId)
+		local closed, reason =
+			self.context.Services:Get("CallService"):Close(payload.CallId, player.UserId)
 		return {
 			Success = closed,
 			Code = if closed then "OK" else reason,

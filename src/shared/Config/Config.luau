@@ -1074,6 +1074,7 @@ local Config = {
 		IndexWriteSpacingSeconds = 0.25,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
+		MaximumIncidentIndexEntries = 2000,
 		AllowedDepartments = { "Police", "Ambulance", "Fire", "Control", "Highways", "Prison" },
 		PermissionByDepartment = {
 			Police = {
@@ -1083,8 +1084,8 @@ local Config = {
 				"WarrantRead",
 				"WarrantWrite",
 			},
-			Ambulance = { "PersonSearch" },
-			Fire = { "PersonSearch" },
+			Ambulance = { "PersonSearch", "IncidentRead" },
+			Fire = { "PersonSearch", "IncidentRead" },
 			Control = { "PersonSearch", "VehicleSearch", "IncidentRead", "Dispatch" },
 			Highways = { "PersonSearch", "VehicleSearch", "IncidentWrite" },
 			Prison = { "PersonSearch", "WarrantRead" },
@@ -1181,6 +1182,7 @@ local Config = {
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
 			MDTRevokeWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
+			MDTGetIncidents = { Capacity = 4, RefillPerSecond = 0.25 },
 			GetMDTAccess = { Capacity = 4, RefillPerSecond = 1 },
 			GetDispatchSnapshot = { Capacity = 6, RefillPerSecond = 1 },
 			DispatchCreateCall = { Capacity = 4, RefillPerSecond = 0.5 },
