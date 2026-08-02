@@ -49,6 +49,7 @@ function UIOrchestrator:_layout(): Layout
 		elseif viewport.X < 1050 then "Tablet"
 		else "Desktop"
 	local vehicle = self.state == "Driver" or self.state == "Passenger"
+	local measuredTop = math.max(0, math.floor(GuiService.TopbarInset.Height + 0.5))
 	return {
 		Breakpoint = breakpoint,
 		State = self.state,
@@ -56,7 +57,7 @@ function UIOrchestrator:_layout(): Layout
 		Compact = breakpoint == "Compact" or vr,
 		Vehicle = vehicle,
 		Dispatch = self.state == "DispatchSeat",
-		NativeTop = if vr then 72 else 48,
+		NativeTop = math.max(if vr then 72 else 48, measuredTop),
 		HotbarBottom = if vr then 124 else if vehicle then 112 else 76,
 		RightReserve = if vr
 			then 64
@@ -133,6 +134,12 @@ function UIOrchestrator:Start()
 	table.insert(
 		self.connections,
 		GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
+			self:_publish()
+		end)
+	)
+	table.insert(
+		self.connections,
+		GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(function()
 			self:_publish()
 		end)
 	)

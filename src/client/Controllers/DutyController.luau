@@ -26,7 +26,10 @@ function DutyController:EnterCivilian(characterId: string, spawnId: string): any
 		CharacterId = characterId,
 		SpawnId = spawnId,
 	})
-	if not response.Success then
+	if response.Success then
+		self.active = nil
+		self.context.Events.DutyChanged:Fire(nil)
+	elseif not response.Success then
 		self.context.Controllers.NotificationController:Show(response.Message, "Spawn unavailable")
 	end
 	return response

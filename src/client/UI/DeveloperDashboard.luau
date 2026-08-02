@@ -158,8 +158,15 @@ function App.mount(context: any): ScreenGui
 	gui.Name = "RoleplayOS"
 	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
-	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-	gui.ClipToDeviceSafeArea = true
+	-- The visual canvas deliberately renders behind Roblox's top bar and device
+	-- cutouts. Interactive content is positioned inside the safe region by the
+	-- responsive binding below, so the experience stays full bleed without
+	-- competing with native Roblox controls.
+	gui.IgnoreGuiInset = true
+	-- Set ScreenInsets after the legacy IgnoreGuiInset compatibility property;
+	-- assigning the legacy property may otherwise rewrite the inset mode.
+	gui.ScreenInsets = Enum.ScreenInsets.None
+	gui.ClipToDeviceSafeArea = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
@@ -186,6 +193,23 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Parent = menuToggleGui
 	corner(menuToggle, 12)
 	stroke(menuToggle, Color3.fromRGB(65, 80, 104), 0.2)
+
+	-- A dedicated non-interactive backdrop extends above the legacy GUI origin.
+	-- This keeps the visual treatment full bleed even on clients which still
+	-- apply the historical top-bar offset to an inset-free ScreenGui.
+	local bleedBackdrop = Instance.new("Frame")
+	bleedBackdrop.Name = "FullBleedBackdrop"
+	bleedBackdrop.BackgroundColor3 = COLOURS.Canvas
+	bleedBackdrop.BorderSizePixel = 0
+	bleedBackdrop.ZIndex = -10
+	bleedBackdrop.Parent = gui
+	local bleedGradient = Instance.new("UIGradient")
+	bleedGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 12, 20)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 20, 32)),
+	})
+	bleedGradient.Rotation = 28
+	bleedGradient.Parent = bleedBackdrop
 
 	local root = Instance.new("Frame")
 	root.Size = UDim2.fromScale(1, 1)
@@ -924,6 +948,9 @@ function App.mount(context: any): ScreenGui
 	environment.Size = UDim2.new(1, -28, 0, 20)
 
 	context.Controllers.UIOrchestrator:Bind("DeveloperDashboard", function(layout)
+		local safeTop = layout.NativeTop
+		bleedBackdrop.Position = UDim2.fromOffset(0, -safeTop)
+		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop)
 		local nativeControlWidth = if layout.Compact then 224 else 360
 		menuToggle.Position = UDim2.fromOffset(
 			math.min(nativeControlWidth, math.max(12, layout.Viewport.X - 108)),
@@ -932,19 +959,19 @@ function App.mount(context: any): ScreenGui
 		local horizontal = layout.Compact or layout.Viewport.Y < 520
 		local narrow = layout.Viewport.X < 600
 		if horizontal then
-			local barHeight = if narrow then 112 else 82
+			local barHeight = safeTop + (if narrow then 112 else 82)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
-			brand.Position = UDim2.fromOffset(18, 8)
+			brand.Position = UDim2.fromOffset(18, safeTop + 8)
 			brand.Size = UDim2.fromOffset(if narrow then layout.Viewport.X - 36 else 270, 30)
 			brand.TextSize = 15
 			brand.TextWrapped = false
 			brand.TextTruncate = Enum.TextTruncate.AtEnd
-			version.Position = UDim2.fromOffset(19, 37)
+			version.Position = UDim2.fromOffset(19, safeTop + 37)
 			navigation.Position = if narrow
-				then UDim2.fromOffset(18, 66)
-				else UDim2.fromOffset(300, 18)
+				then UDim2.fromOffset(18, safeTop + 66)
+				else UDim2.fromOffset(300, safeTop + 18)
 			navigation.Size = if narrow then UDim2.new(1, -36, 0, 38) else UDim2.new(1, -318, 0, 46)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
@@ -970,13 +997,13 @@ function App.mount(context: any): ScreenGui
 			sidebar.Size = UDim2.new(0, 250, 1, 0)
 			content.Position = UDim2.fromOffset(250, 0)
 			content.Size = UDim2.new(1, -250, 1, 0)
-			brand.Position = UDim2.fromOffset(26, 20)
+			brand.Position = UDim2.fromOffset(26, safeTop + 20)
 			brand.Size = UDim2.new(1, -52, 0, 42)
 			brand.TextSize = 17
 			brand.TextWrapped = true
 			brand.TextTruncate = Enum.TextTruncate.None
-			version.Position = UDim2.fromOffset(27, 66)
-			navigation.Position = UDim2.fromOffset(18, 112)
+			version.Position = UDim2.fromOffset(27, safeTop + 66)
+			navigation.Position = UDim2.fromOffset(18, safeTop + 112)
 			navigation.Size = UDim2.new(1, -36, 0, 190)
 			navLayout.FillDirection = Enum.FillDirection.Vertical
 			navLayout.Padding = UDim.new(0, 7)
@@ -991,13 +1018,13 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = true
-			header.Position = UDim2.fromOffset(44, 30)
+			header.Position = UDim2.fromOffset(44, safeTop + 30)
 			header.Size = UDim2.new(1, -88, 0, 76)
 			pageTitle.TextSize = 30
 			pageDescription.Visible = true
 			status.Position = UDim2.new(1, 0, 0, 9)
-			scroll.Position = UDim2.fromOffset(44, 118)
-			scroll.Size = UDim2.new(1, -88, 1, -146)
+			scroll.Position = UDim2.fromOffset(44, safeTop + 118)
+			scroll.Size = UDim2.new(1, -88, 1, -(safeTop + 146))
 		end
 	end)
 

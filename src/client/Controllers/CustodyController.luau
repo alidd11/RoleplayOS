@@ -107,6 +107,16 @@ function CustodyController:_updateSentenceHud()
 	end
 end
 
+function CustodyController:_refreshAccess(duty: any?)
+	local activeDuty = duty or self.context.Controllers.DutyController.active
+	local authorised = activeDuty ~= nil and activeDuty.DepartmentId == "Police"
+	self.launcher.Visible = authorised
+	if not authorised then
+		self.panel.Visible = false
+		self.targetUserId = nil
+	end
+end
+
 function CustodyController:_mount()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSCustodyBooking"
@@ -119,6 +129,7 @@ function CustodyController:_mount()
 
 	local launcher = button(gui, "CUSTODY")
 	launcher.Size = UDim2.fromOffset(104, 36)
+	launcher.Visible = false
 	self.launcher = launcher
 
 	local panel = Instance.new("Frame")
@@ -321,6 +332,13 @@ function CustodyController:Start()
 		end)
 	)
 	self:_updateSentenceHud()
+	self:_refreshAccess(nil)
+	table.insert(
+		self.connections,
+		self.context.Events.DutyChanged.Event:Connect(function(duty)
+			self:_refreshAccess(duty)
+		end)
+	)
 
 	local remote = ReplicatedStorage.RoleplayOS.Network.Remotes:WaitForChild("CustodyChanged")
 	table.insert(
