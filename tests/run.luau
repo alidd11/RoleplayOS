@@ -114,6 +114,18 @@ H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
 end)
+H.test("Universal Projects production group links are configured", function()
+	H.expect(
+		Config.ExperienceAccess.RequiredGroupLinkId == "UniversalProjects",
+		"entry group missing"
+	)
+	H.expect(Config.GroupLinks.UniversalProjects.GroupId == 33809042, "wrong main group")
+	H.expect(Config.GroupLinks.Police.GroupId == 34720334, "wrong police group")
+	H.expect(Config.GroupLinks.ArmedResponse.GroupId == 16985274, "wrong armed response group")
+	H.expect(Config.GroupLinks.RoadsPolicing.GroupId == 33815770, "wrong roads policing group")
+	H.expect(Config.GroupLinks.Ambulance.GroupId == 33840360, "wrong ambulance group")
+	H.expect(Config.GroupLinks.Fire.GroupId == 14293067, "wrong fire group")
+end)
 H.test("registration has stable display shape", function()
 	H.expect(
 		string.match(Registration.generate(Random.new(42)), "^%u%u%d%d %u%u%u$") ~= nil,

@@ -7,6 +7,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	for _, section in
 		{
 			"Framework",
+			"ExperienceAccess",
 			"Characters",
 			"Economy",
 			"Progression",
@@ -105,6 +106,16 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if type(link.MinimumRank) ~= "number" or link.MinimumRank < 1 or link.MinimumRank > 255 then
 			table.insert(errors, "Invalid minimum Roblox group rank: " .. linkId)
 		end
+	end
+	local experienceAccess = config.ExperienceAccess
+	if
+		type(experienceAccess) ~= "table"
+		or type(experienceAccess.Enabled) ~= "boolean"
+		or not config.GroupLinks[experienceAccess.RequiredGroupLinkId]
+		or type(experienceAccess.KickMessage) ~= "string"
+		or #experienceAccess.KickMessage < 10
+	then
+		table.insert(errors, "Invalid experience access configuration")
 	end
 	local function validateAccessRule(rule: any, ownerId: string)
 		if rule.AccessType == "Group" and not config.GroupLinks[rule.GroupLinkId] then

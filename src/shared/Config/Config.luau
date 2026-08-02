@@ -15,6 +15,11 @@ local Config = {
 		MaxSaveAttempts = 4,
 		SessionLeaseSeconds = 300,
 	},
+	ExperienceAccess = {
+		Enabled = true,
+		RequiredGroupLinkId = "UniversalProjects",
+		KickMessage = "This experience is restricted to members of the Universal Projects Roblox community.",
+	},
 	Characters = {
 		FreeSlots = 2,
 		MaximumSlots = 6,
@@ -116,7 +121,12 @@ local Config = {
 			Id = "Police",
 			Name = "Police",
 			Ranks = { "Constable", "Sergeant", "Inspector" },
-			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
+			RoleIds = {
+				"PoliceOfficer",
+				"PoliceFrontline",
+				"ArmedResponseOfficer",
+				"RoadsPolicingOfficer",
+			},
 		},
 		Ambulance = {
 			Id = "Ambulance",
@@ -165,19 +175,47 @@ local Config = {
 		},
 	},
 	GroupLinks = {
-		Police = { Id = "Police", GroupId = 0, MinimumRank = 1, DisplayName = "Police Group" },
+		UniversalProjects = {
+			Id = "UniversalProjects",
+			GroupId = 33809042,
+			MinimumRank = 1,
+			DisplayName = "Universal Projects",
+		},
+		Police = {
+			Id = "Police",
+			GroupId = 34720334,
+			MinimumRank = 1,
+			DisplayName = "UP Hampshire & Isle of Wight Constabulary",
+		},
+		ArmedResponse = {
+			Id = "ArmedResponse",
+			GroupId = 16985274,
+			MinimumRank = 1,
+			DisplayName = "UP Armed Response Unit",
+		},
+		RoadsPolicing = {
+			Id = "RoadsPolicing",
+			GroupId = 33815770,
+			MinimumRank = 1,
+			DisplayName = "UP Constabulary Divisional Hub",
+		},
 		Ambulance = {
 			Id = "Ambulance",
-			GroupId = 0,
+			GroupId = 33840360,
 			MinimumRank = 1,
-			DisplayName = "Ambulance Group",
+			DisplayName = "UP East of England Ambulance",
 		},
-		Fire = { Id = "Fire", GroupId = 0, MinimumRank = 1, DisplayName = "Fire and Rescue Group" },
+		Fire = {
+			Id = "Fire",
+			GroupId = 14293067,
+			MinimumRank = 1,
+			DisplayName = "UP Norfolk Fire and Rescue Service",
+		},
 		Control = {
 			Id = "Control",
-			GroupId = 0,
+			GroupId = 33809042,
 			MinimumRank = 1,
-			DisplayName = "Dispatch and Control Group",
+			DisplayName = "Universal Projects (temporary Control link)",
 		},
 	},
 	Roles = {
@@ -219,6 +257,42 @@ local Config = {
 				},
 			},
 			LoadoutId = "PoliceFrontline",
+			UniformId = "PoliceStandard",
+		},
+		ArmedResponseOfficer = {
+			Id = "ArmedResponseOfficer",
+			Name = "Armed Response Unit",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			Access = {
+				AccessType = "Combined",
+				Match = "All",
+				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Police" },
+					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+					{ AccessType = "Group", GroupLinkId = "ArmedResponse", MinimumGroupRank = 1 },
+				},
+			},
+			LoadoutId = "ArmedResponse",
+			UniformId = "PoliceStandard",
+		},
+		RoadsPolicingOfficer = {
+			Id = "RoadsPolicingOfficer",
+			Name = "Roads Policing Unit",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			Access = {
+				AccessType = "Combined",
+				Match = "All",
+				DisplayWhenLocked = true,
+				Rules = {
+					{ AccessType = "Application", DepartmentId = "Police" },
+					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+					{ AccessType = "Group", GroupLinkId = "RoadsPolicing", MinimumGroupRank = 1 },
+				},
+			},
+			LoadoutId = "RoadsPolicing",
 			UniformId = "PoliceStandard",
 		},
 		Paramedic = {
@@ -299,14 +373,19 @@ local Config = {
 			Id = "PoliceLockerRoom",
 			StationId = "CityCentre",
 			TeamName = "Police",
-			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
+			RoleIds = {
+				"PoliceOfficer",
+				"PoliceFrontline",
+				"ArmedResponseOfficer",
+				"RoadsPolicingOfficer",
+			},
 			DepartmentIds = { "Police" },
 		},
 		PoliceVehicleBay = {
 			Id = "PoliceVehicleBay",
 			StationId = "CityCentre",
 			TeamName = "Police",
-			RoleIds = { "PoliceFrontline" },
+			RoleIds = { "PoliceFrontline", "ArmedResponseOfficer", "RoadsPolicingOfficer" },
 			DepartmentIds = { "Police" },
 		},
 		AmbulanceLockerRoom = {
@@ -339,6 +418,8 @@ local Config = {
 	Loadouts = {
 		PoliceResponse = { Id = "PoliceResponse", ToolNames = { "Radio" } },
 		PoliceFrontline = { Id = "PoliceFrontline", ToolNames = { "Radio", "Notebook" } },
+		ArmedResponse = { Id = "ArmedResponse", ToolNames = { "Radio", "Notebook" } },
+		RoadsPolicing = { Id = "RoadsPolicing", ToolNames = { "Radio", "Notebook" } },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ToolNames = { "Radio", "MedicalBag" } },
 		FireStandard = { Id = "FireStandard", ToolNames = { "Radio" } },
 		ControlStandard = { Id = "ControlStandard", ToolNames = { "Radio" } },

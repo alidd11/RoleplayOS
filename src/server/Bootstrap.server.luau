@@ -29,6 +29,7 @@ local serviceOrder = {
 	"CommunityService",
 	"CommunityServerService",
 	"GroupService",
+	"ExperienceAccessService",
 	"AccessService",
 	"GamepassService",
 	"CharacterService",

@@ -1,6 +1,17 @@
 # Roblox group integration
 
-Whitelisted departments use server-side Roblox Group membership in addition to RoleplayOS application and suspension state. Each `GroupLinks` entry contains the real Roblox group ID, minimum accepted rank and display name. Development values remain `0` and fail closed outside the explicit Studio mock environment.
+## Universal Projects production links
+
+- Experience entry: Universal Projects (`33809042`). Rank 1 or above is required in production.
+- Standard policing: UP Hampshire & Isle of Wight Constabulary (`34720334`). This includes Student Constable through Chief Constable.
+- Armed Response: UP Armed Response Unit (`16985274`), combined with the main constabulary group.
+- Roads Policing: UP Constabulary Divisional Hub (`33815770`), combined with the main constabulary group.
+- Ambulance: UP East of England Ambulance (`33840360`).
+- Fire: UP Norfolk Fire and Rescue Service (`14293067`).
+
+Whitelisted roles also retain the accepted RoleplayOS application requirement. Studio mock access bypasses external membership checks only for local testing. Until a dedicated Control group is supplied, Control temporarily uses Universal Projects as its group layer.
+
+Whitelisted departments use server-side Roblox Group membership in addition to RoleplayOS application and suspension state. Each `GroupLinks` entry contains the real Roblox group ID, minimum accepted rank and display name.
 
 RoleplayOS uses `GroupService:GetRolesInGroupAsync`, which supports Roblox's multi-role group memberships. It calculates the highest public rank returned for the configured group. Results are cached for the player session and discarded when the player leaves; menus and repeated role checks do not repeatedly call Roblox APIs.
 
