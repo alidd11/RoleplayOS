@@ -109,6 +109,21 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	then
 		table.insert(errors, "Invalid road safety state lifetime configuration")
 	end
+	if
+		type(config.MDT) ~= "table"
+		or type(config.MDT.MaximumIndexBucketEntries) ~= "number"
+		or config.MDT.MaximumIndexBucketEntries < config.MDT.PageSize
+		or type(config.MDT.RecordCacheSeconds) ~= "number"
+		or config.MDT.RecordCacheSeconds < 0
+		or type(config.MDT.IndexWriteSpacingSeconds) ~= "number"
+		or config.MDT.IndexWriteSpacingSeconds < 0.05
+		or type(config.MDT.MaximumWarrantReasonLength) ~= "number"
+		or config.MDT.MaximumWarrantReasonLength < 20
+		or type(config.MDT.MaximumWarrantDurationDays) ~= "number"
+		or config.MDT.MaximumWarrantDurationDays < 1
+	then
+		table.insert(errors, "Invalid MDT index configuration")
+	end
 	for loadoutId, loadout in config.Loadouts or {} do
 		for _, toolId in loadout.ToolIds or {} do
 			if not config.Tools[toolId] then

@@ -10,18 +10,92 @@ local DataService = { sessions = {}, running = false, connections = {} }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
+local MDT_RECORD_STORE_NAME = "RoleplayOS_MDTRecords_v1"
+local MDT_INDEX_STORE_NAME = "RoleplayOS_MDTIndexes_v1"
+
+local function deepCopy(value: any, seen: { [any]: any }?): any
+	if type(value) ~= "table" then
+		return value
+	end
+	local visited = seen or {}
+	if visited[value] then
+		return visited[value]
+	end
+	local copy = {}
+	visited[value] = copy
+	for key, child in value do
+		copy[deepCopy(key, visited)] = deepCopy(child, visited)
+	end
+	return copy
+end
 
 function DataService:Init(context: any)
 	self.context = context
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockCommunities = {}
 	self.mockRegistrations = {}
+	self.mockMdtRecords = {}
+	self.mockMdtIndexes = {}
 	if not self.mock then
 		self.store = DataStoreService:GetDataStore(STORE_NAME)
 		self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
 		self.registrationStore = DataStoreService:GetDataStore(REGISTRATION_STORE_NAME)
+		self.mdtRecordStore = DataStoreService:GetDataStore(MDT_RECORD_STORE_NAME)
+		self.mdtIndexStore = DataStoreService:GetDataStore(MDT_INDEX_STORE_NAME)
 	end
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
+end
+
+function DataService:GetMdtRecord(key: string): (any?, string?)
+	if self.mock then
+		return deepCopy(self.mockMdtRecords[key]), nil
+	end
+	local ok, result = self:_retry(function()
+		return self.mdtRecordStore:GetAsync(key)
+	end)
+	return if ok then result else nil, if ok then nil else "MDT_RECORD_STORE_UNAVAILABLE"
+end
+
+function DataService:UpdateMdtRecord(key: string, transform: (any?) -> any): (any?, string?)
+	if self.mock then
+		local updated = transform(deepCopy(self.mockMdtRecords[key]))
+		self.mockMdtRecords[key] = deepCopy(updated)
+		return deepCopy(updated), nil
+	end
+	local updated
+	local ok = self:_retry(function()
+		return self.mdtRecordStore:UpdateAsync(key, function(stored)
+			updated = transform(stored)
+			return updated
+		end)
+	end)
+	return if ok then updated else nil, if ok then nil else "MDT_RECORD_STORE_UNAVAILABLE"
+end
+
+function DataService:GetMdtIndex(key: string): (any?, string?)
+	if self.mock then
+		return deepCopy(self.mockMdtIndexes[key]), nil
+	end
+	local ok, result = self:_retry(function()
+		return self.mdtIndexStore:GetAsync(key)
+	end)
+	return if ok then result else nil, if ok then nil else "MDT_INDEX_STORE_UNAVAILABLE"
+end
+
+function DataService:UpdateMdtIndex(key: string, transform: (any?) -> any): (any?, string?)
+	if self.mock then
+		local updated = transform(deepCopy(self.mockMdtIndexes[key]))
+		self.mockMdtIndexes[key] = deepCopy(updated)
+		return deepCopy(updated), nil
+	end
+	local updated
+	local ok = self:_retry(function()
+		return self.mdtIndexStore:UpdateAsync(key, function(stored)
+			updated = transform(stored)
+			return updated
+		end)
+	end)
+	return if ok then updated else nil, if ok then nil else "MDT_INDEX_STORE_UNAVAILABLE"
 end
 
 function DataService:ReserveCustomRegistration(
@@ -122,22 +196,6 @@ function DataService:_retry(operation: () -> any): (boolean, any)
 		task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25)
 	end
 	return false, lastError
-end
-
-local function deepCopy(value: any, seen: { [any]: any }?): any
-	if type(value) ~= "table" then
-		return value
-	end
-	local visited = seen or {}
-	if visited[value] then
-		return visited[value]
-	end
-	local copy = {}
-	visited[value] = copy
-	for key, child in value do
-		copy[deepCopy(key, visited)] = deepCopy(child, visited)
-	end
-	return copy
 end
 
 function DataService:Load(player: Player): (any?, string?)

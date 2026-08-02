@@ -3,6 +3,8 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 local SoundService = game:GetService("SoundService")
 
@@ -44,6 +46,8 @@ local expectedFunctions = {
 	"CreateCharacter",
 	"SelectCharacter",
 	"GetMDTAccess",
+	"MDTCreateWarrant",
+	"MDTRevokeWarrant",
 	"GetDispatchSnapshot",
 	"DispatchCreateCall",
 	"DispatchAssignUnit",
@@ -90,6 +94,57 @@ check(
 	"phone.voice-router",
 	"optional Audio API call router initialised"
 )
+
+if RunService:IsStudio() then
+	local services = ServerScriptService:WaitForChild("RoleplayOS", 10)
+		and ServerScriptService.RoleplayOS:WaitForChild("Services", 10)
+	if services then
+		local dataService = require(services.DataService)
+		local recordIndex = require(services.RecordIndexService)
+		local characterId = "STUDIO_ACCEPTANCE_OFFLINE_RECORD"
+		local personKey = "Person:" .. characterId
+		dataService:UpdateMdtRecord(personKey, function(_existing)
+			return {
+				RecordType = "Person",
+				CharacterId = characterId,
+				FullName = "Zzacceptance Offline",
+				DateOfBirth = "2000-01-01",
+				Licences = {},
+				DrivingRecord = { Points = 0, Fines = {} },
+				CustodyRecord = { Bookings = {} },
+				CriminalRecord = {},
+				Warrants = {},
+				UpdatedAt = os.time(),
+			}
+		end)
+		dataService:UpdateMdtIndex("Person:zz", function(_existing)
+			return {
+				Entries = {
+					[characterId] = {
+						CharacterId = characterId,
+						FullName = "Zzacceptance Offline",
+						SearchText = "zzacceptance offline|offline zzacceptance",
+						UpdatedAt = os.time(),
+					},
+				},
+			}
+		end)
+		local search = select(1, recordIndex:SearchPeople("zzacceptance", 1))
+		check(
+			search ~= nil and search.Total == 1 and search.Items[1].CharacterId == characterId,
+			"mdt.offline-index",
+			"durable record search does not depend on a live Player"
+		)
+		dataService:UpdateMdtRecord(personKey, function(_existing)
+			return nil
+		end)
+		dataService:UpdateMdtIndex("Person:zz", function(_existing)
+			return nil
+		end)
+	else
+		check(false, "mdt.offline-index", "server service folder unavailable")
+	end
+end
 
 local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 check(assets ~= nil, "content.root", "ServerStorage.RoleplayOSAssets exists")

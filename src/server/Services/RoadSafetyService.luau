@@ -87,6 +87,7 @@ function RoadSafetyService:_issue(
 	table.insert(character.DrivingRecord.Fines, record)
 	character.DrivingRecord.Points = math.min(99, (character.DrivingRecord.Points or 0) + points)
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = 0,
 		Action = "RoadSafety.OffenceIssued",

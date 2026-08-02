@@ -167,6 +167,7 @@ function CustodyService:Book(actor: Player, targetUserId: number, reason: string
 		Reason = reason,
 	})
 	self.context.Services:Get("DataService"):MarkDirty(target)
+	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(target, character)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = actor.UserId,
 		Action = "Custody.Booked",

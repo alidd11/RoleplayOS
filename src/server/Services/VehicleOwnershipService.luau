@@ -189,7 +189,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 	if not owned then
 		return nil, ownershipReason or "GAMEPASS_REQUIRED"
 	end
-	local vehicle = self:_find(player, vehicleId)
+	local vehicle, character = self:_find(player, vehicleId)
 	if not vehicle then
 		return nil, "VEHICLE_NOT_OWNED"
 	end
@@ -218,6 +218,9 @@ function VehicleOwnershipService:SetCustomRegistration(
 			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
 	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services
+		:Get("RecordIndexService")
+		:ScheduleVehicle(player, character, vehicle, previousRegistration)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		Action = "Vehicle.CustomRegistrationSet",
@@ -262,6 +265,7 @@ function VehicleOwnershipService:Create(
 	}
 	table.insert(character.Vehicles, vehicle)
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("RecordIndexService"):ScheduleVehicle(player, character, vehicle, nil)
 	return vehicle, nil
 end
 function VehicleOwnershipService:Destroy()

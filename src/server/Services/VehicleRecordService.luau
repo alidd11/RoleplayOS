@@ -1,37 +1,11 @@
 --!strict
-local Players = game:GetService("Players")
 local VehicleRecordService = {}
 function VehicleRecordService:Init(context: any)
 	self.context = context
 end
 function VehicleRecordService:Start() end
-function VehicleRecordService:Search(query: string): { any }
-	local results = {}
-	for _, player in Players:GetPlayers() do
-		local session = self.context.Services:Get("DataService"):GetSession(player)
-		if session then
-			for _, character in session.Profile.Characters do
-				for _, vehicle in character.Vehicles do
-					if string.find(string.lower(vehicle.Registration), query, 1, true) then
-						local wanted = self.context.Services
-							:Get("WarrantService")
-							:HasActiveForCharacter(vehicle.OwnerCharacterId)
-						table.insert(results, {
-							VehicleId = vehicle.VehicleId,
-							Registration = vehicle.Registration,
-							DefinitionId = vehicle.DefinitionId,
-							OwnerCharacterId = vehicle.OwnerCharacterId,
-							OwnerName = character.Identity.FirstName
-								.. " "
-								.. character.Identity.LastName,
-							Flags = if wanted then { "WANTED" } else {},
-						})
-					end
-				end
-			end
-		end
-	end
-	return results
+function VehicleRecordService:Search(query: string, page: number): (any?, string?)
+	return self.context.Services:Get("RecordIndexService"):SearchVehicles(query, page)
 end
 function VehicleRecordService:Destroy() end
 return VehicleRecordService

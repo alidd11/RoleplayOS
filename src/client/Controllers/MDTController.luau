@@ -49,6 +49,8 @@ function MDTController:Init(context: any)
 	self.context = context
 	self.recordType = "Person"
 	self.allowed = false
+	self.canWriteWarrants = false
+	self.selectedRecord = nil
 end
 
 function MDTController:_mount()
@@ -183,13 +185,105 @@ function MDTController:_mount()
 	detailName.TextWrapped = true
 	local detailMeta = text(detail, "Verified operational information will appear here.", 11)
 	detailMeta.Position = UDim2.fromOffset(16, 104)
-	detailMeta.Size = UDim2.new(1, -32, 1, -120)
+	detailMeta.Size = UDim2.new(1, -32, 1, -174)
 	detailMeta.TextWrapped = true
 	detailMeta.TextYAlignment = Enum.TextYAlignment.Top
 	detailMeta.TextColor3 = C.Muted
 	self.detailTitle = detailTitle
 	self.detailName = detailName
 	self.detailMeta = detailMeta
+	local warrantAction = button(detail, "ISSUE WARRANT")
+	warrantAction.AnchorPoint = Vector2.new(0, 1)
+	warrantAction.Position = UDim2.new(0, 16, 1, -16)
+	warrantAction.Size = UDim2.new(0.5, -20, 0, 40)
+	warrantAction.BackgroundColor3 = C.Accent
+	warrantAction.Visible = false
+	self.warrantAction = warrantAction
+	local revokeAction = button(detail, "REVOKE WARRANT")
+	revokeAction.AnchorPoint = Vector2.new(1, 1)
+	revokeAction.Position = UDim2.new(1, -16, 1, -16)
+	revokeAction.Size = UDim2.new(0.5, -20, 0, 40)
+	revokeAction.BackgroundColor3 = Color3.fromRGB(148, 55, 65)
+	revokeAction.Visible = false
+	self.revokeAction = revokeAction
+
+	local warrantModal = Instance.new("Frame")
+	warrantModal.Name = "WarrantModal"
+	warrantModal.AnchorPoint = Vector2.new(0.5, 0.5)
+	warrantModal.Position = UDim2.fromScale(0.5, 0.5)
+	warrantModal.Size = UDim2.fromOffset(440, 286)
+	warrantModal.BackgroundColor3 = C.Surface
+	warrantModal.BorderSizePixel = 0
+	warrantModal.Visible = false
+	warrantModal.ZIndex = 20
+	warrantModal.Parent = shell
+	corner(warrantModal, 12)
+	local modalStroke = Instance.new("UIStroke")
+	modalStroke.Color = C.Border
+	modalStroke.Parent = warrantModal
+	local modalTitle = text(warrantModal, "ISSUE WARRANT", 15, true)
+	modalTitle.Position = UDim2.fromOffset(20, 17)
+	modalTitle.Size = UDim2.new(1, -40, 0, 24)
+	modalTitle.ZIndex = 21
+	local modalCopy =
+		text(warrantModal, "The reason is filtered and the action is written to the audit log.", 10)
+	modalCopy.Position = UDim2.fromOffset(20, 43)
+	modalCopy.Size = UDim2.new(1, -40, 0, 30)
+	modalCopy.TextWrapped = true
+	modalCopy.TextColor3 = C.Muted
+	modalCopy.ZIndex = 21
+	local reasonInput = Instance.new("TextBox")
+	reasonInput.Position = UDim2.fromOffset(20, 82)
+	reasonInput.Size = UDim2.new(1, -40, 0, 76)
+	reasonInput.BackgroundColor3 = C.Raised
+	reasonInput.BorderSizePixel = 0
+	reasonInput.ClearTextOnFocus = false
+	reasonInput.Font = Enum.Font.Gotham
+	reasonInput.MultiLine = true
+	reasonInput.PlaceholderText = "Operational reason"
+	reasonInput.PlaceholderColor3 = C.Muted
+	reasonInput.Text = ""
+	reasonInput.TextColor3 = C.Text
+	reasonInput.TextSize = 12
+	reasonInput.TextWrapped = true
+	reasonInput.TextXAlignment = Enum.TextXAlignment.Left
+	reasonInput.TextYAlignment = Enum.TextYAlignment.Top
+	reasonInput.ZIndex = 21
+	reasonInput.Parent = warrantModal
+	corner(reasonInput, 8)
+	local reasonPadding = Instance.new("UIPadding")
+	reasonPadding.PaddingTop = UDim.new(0, 10)
+	reasonPadding.PaddingLeft = UDim.new(0, 10)
+	reasonPadding.PaddingRight = UDim.new(0, 10)
+	reasonPadding.Parent = reasonInput
+	local expiryInput = Instance.new("TextBox")
+	expiryInput.Position = UDim2.fromOffset(20, 168)
+	expiryInput.Size = UDim2.new(1, -40, 0, 38)
+	expiryInput.BackgroundColor3 = C.Raised
+	expiryInput.BorderSizePixel = 0
+	expiryInput.ClearTextOnFocus = false
+	expiryInput.Font = Enum.Font.Gotham
+	expiryInput.PlaceholderText = "Expiry in days (blank for no expiry)"
+	expiryInput.PlaceholderColor3 = C.Muted
+	expiryInput.Text = ""
+	expiryInput.TextColor3 = C.Text
+	expiryInput.TextSize = 11
+	expiryInput.ZIndex = 21
+	expiryInput.Parent = warrantModal
+	corner(expiryInput, 8)
+	local cancelWarrant = button(warrantModal, "CANCEL")
+	cancelWarrant.Position = UDim2.fromOffset(20, 224)
+	cancelWarrant.Size = UDim2.fromOffset(110, 42)
+	cancelWarrant.ZIndex = 21
+	local confirmWarrant = button(warrantModal, "ISSUE WARRANT")
+	confirmWarrant.AnchorPoint = Vector2.new(1, 0)
+	confirmWarrant.Position = UDim2.new(1, -20, 0, 224)
+	confirmWarrant.Size = UDim2.fromOffset(150, 42)
+	confirmWarrant.BackgroundColor3 = C.Accent
+	confirmWarrant.ZIndex = 21
+	self.warrantModal = warrantModal
+	self.warrantReason = reasonInput
+	self.warrantExpiry = expiryInput
 
 	local function setOpen(open: boolean)
 		if self.allowed then
@@ -201,6 +295,21 @@ function MDTController:_mount()
 	end)
 	close.Activated:Connect(function()
 		setOpen(false)
+	end)
+	warrantAction.Activated:Connect(function()
+		if self.canWriteWarrants and self.selectedRecord then
+			warrantModal.Visible = true
+			reasonInput:CaptureFocus()
+		end
+	end)
+	revokeAction.Activated:Connect(function()
+		self:_revokeWarrant()
+	end)
+	cancelWarrant.Activated:Connect(function()
+		warrantModal.Visible = false
+	end)
+	confirmWarrant.Activated:Connect(function()
+		self:_issueWarrant()
 	end)
 	person.Activated:Connect(function()
 		self.recordType = "Person"
@@ -227,6 +336,9 @@ function MDTController:_renderTabs()
 end
 
 function MDTController:_renderResults(items: { any })
+	self.selectedRecord = nil
+	self.warrantAction.Visible = false
+	self.revokeAction.Visible = false
 	for _, child in self.results:GetChildren() do
 		if not child:IsA("UIListLayout") then
 			child:Destroy()
@@ -264,6 +376,13 @@ function MDTController:_renderResults(items: { any })
 		open.TextXAlignment = Enum.TextXAlignment.Right
 		open.TextColor3 = C.Accent
 		row.Activated:Connect(function()
+			self.selectedRecord = record
+			self.warrantAction.Visible = record.FullName ~= nil and self.canWriteWarrants
+			self.revokeAction.Visible = record.FullName ~= nil
+				and self.canWriteWarrants
+				and #(record.Warrants or {}) > 0
+			self.revokeAction.Text = "REVOKE WARRANT"
+			self.revokeConfirmationId = nil
 			self.detailTitle.Text = if record.FullName then "PERSON RECORD" else "VEHICLE RECORD"
 			self.detailName.Text = record.FullName or record.Registration or "Unknown record"
 			if record.FullName then
@@ -273,13 +392,21 @@ function MDTController:_renderResults(items: { any })
 						table.insert(licences, tostring(licenceId))
 					end
 				end
+				local bookings = record.CustodyRecord and record.CustodyRecord.Bookings or {}
+				local warrants = {}
+				for _, warrant in record.Warrants or {} do
+					table.insert(warrants, tostring(warrant.Reason or "Active warrant"))
+				end
 				self.detailMeta.Text = string.format(
-					"DATE OF BIRTH\n%s\n\nLICENCES\n%s\n\nFLAGS\n%s",
+					"DATE OF BIRTH\n%s\n\nLICENCES\n%s\n\nDRIVING POINTS · %d   CUSTODY BOOKINGS · %d\n\nFLAGS\n%s\n\nACTIVE WARRANTS\n%s",
 					tostring(record.DateOfBirth or "Not recorded"),
 					if #licences > 0 then table.concat(licences, ", ") else "None recorded",
+					record.DrivingRecord and record.DrivingRecord.Points or 0,
+					#bookings,
 					if #(record.Flags or {}) > 0
 						then table.concat(record.Flags, ", ")
-						else "No active flags"
+						else "No active flags",
+					if #warrants > 0 then table.concat(warrants, "\n") else "None"
 				)
 			else
 				self.detailMeta.Text = string.format(
@@ -293,6 +420,58 @@ function MDTController:_renderResults(items: { any })
 				)
 			end
 		end)
+	end
+end
+
+function MDTController:_issueWarrant()
+	local record = self.selectedRecord
+	if not record or not self.canWriteWarrants then
+		return
+	end
+	local days = tonumber(self.warrantExpiry.Text)
+	if self.warrantExpiry.Text ~= "" and (not days or days < 1 or days > 365) then
+		self.status.Text = "Expiry must be between 1 and 365 days."
+		return
+	end
+	local response = self.context.Controllers.NetworkController:Request("MDTCreateWarrant", {
+		CharacterId = record.CharacterId,
+		Reason = self.warrantReason.Text,
+		ExpiresAt = days and (os.time() + math.floor(days) * 86400) or nil,
+	})
+	self.status.Text = response.Message
+	if response.Success then
+		self.warrantModal.Visible = false
+		self.warrantReason.Text = ""
+		self.warrantExpiry.Text = ""
+		self:_performSearch()
+	end
+end
+
+function MDTController:_revokeWarrant()
+	local record = self.selectedRecord
+	local warrant = record and (record.Warrants or {})[1]
+	if not record or not warrant or not self.canWriteWarrants then
+		return
+	end
+	if self.revokeConfirmationId ~= warrant.WarrantId then
+		self.revokeConfirmationId = warrant.WarrantId
+		self.revokeAction.Text = "CONFIRM REVOKE"
+		task.delay(5, function()
+			if self.revokeConfirmationId == warrant.WarrantId then
+				self.revokeConfirmationId = nil
+				self.revokeAction.Text = "REVOKE WARRANT"
+			end
+		end)
+		return
+	end
+	self.revokeConfirmationId = nil
+	local response = self.context.Controllers.NetworkController:Request("MDTRevokeWarrant", {
+		CharacterId = record.CharacterId,
+		WarrantId = warrant.WarrantId,
+	})
+	self.status.Text = response.Message
+	if response.Success then
+		self:_performSearch()
 	end
 end
 
@@ -311,6 +490,8 @@ end
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
+	self.canWriteWarrants = self.allowed
+		and table.find(response.Data.Permissions or {}, "WarrantWrite") ~= nil
 	if self.allowed then
 		self.secureLabel.Text = "●  "
 			.. tostring(response.Data.DepartmentId or "AUTHORISED"):upper()
@@ -319,6 +500,14 @@ function MDTController:RefreshAccess()
 	self.launcher.Visible = self.allowed
 	if not self.allowed then
 		self.shell.Visible = false
+	end
+	if self.warrantAction then
+		self.warrantAction.Visible = self.selectedRecord ~= nil and self.canWriteWarrants
+	end
+	if self.revokeAction then
+		self.revokeAction.Visible = self.selectedRecord ~= nil
+			and self.canWriteWarrants
+			and #((self.selectedRecord and self.selectedRecord.Warrants) or {}) > 0
 	end
 end
 

@@ -24,6 +24,7 @@ local context = {
 
 local serviceOrder = {
 	"DataService",
+	"RecordIndexService",
 	"SettingsService",
 	"AuditService",
 	"CommunityService",

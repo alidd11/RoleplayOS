@@ -318,12 +318,24 @@ function NetworkService:Start()
 			}
 		end
 		self.context.Services:Get("MDTService"):AuditSearch(player, payload.Type, requestId)
-		local data = payload.Type == "Person"
-				and self.context.Services
-					:Get("PersonRecordService")
-					:Search(query, payload.Page or 1)
-			or { Items = self.context.Services:Get("VehicleRecordService"):Search(query), Page = 1 }
-		return { Success = true, Code = "OK", Message = "", Data = data, RequestId = requestId }
+		local page = if type(payload.Page) == "number"
+			then math.clamp(math.floor(payload.Page), 1, 1000)
+			else 1
+		local data, searchReason
+		if payload.Type == "Person" then
+			data, searchReason =
+				self.context.Services:Get("PersonRecordService"):Search(query, page)
+		else
+			data, searchReason =
+				self.context.Services:Get("VehicleRecordService"):Search(query, page)
+		end
+		return {
+			Success = data ~= nil,
+			Code = if data then "OK" else searchReason or "MDT_SEARCH_UNAVAILABLE",
+			Message = if data then "" else "Persistent records are temporarily unavailable.",
+			Data = data,
+			RequestId = requestId,
+		}
 	end)
 	self.context.Network:RegisterFunction(
 		"GetMDTAccess",
@@ -338,6 +350,40 @@ function NetworkService:Start()
 			}
 		end
 	)
+	self.context.Network:RegisterFunction("MDTCreateWarrant", function(payload)
+		return type(payload) == "table"
+			and type(payload.CharacterId) == "string"
+			and type(payload.Reason) == "string"
+			and (payload.ExpiresAt == nil or type(payload.ExpiresAt) == "number")
+	end, function(player, payload, requestId)
+		local warrant, reason =
+			self.context.Services
+				:Get("WarrantService")
+				:Create(player, payload.CharacterId, payload.Reason, payload.ExpiresAt)
+		return {
+			Success = warrant ~= nil,
+			Code = if warrant then "OK" else reason,
+			Message = if warrant then "Warrant issued." else "The warrant could not be issued.",
+			Data = warrant,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("MDTRevokeWarrant", function(payload)
+		return type(payload) == "table"
+			and type(payload.CharacterId) == "string"
+			and type(payload.WarrantId) == "string"
+	end, function(player, payload, requestId)
+		local warrant, reason = self.context.Services
+			:Get("WarrantService")
+			:Revoke(player, payload.CharacterId, payload.WarrantId)
+		return {
+			Success = warrant ~= nil,
+			Code = if warrant then "OK" else reason,
+			Message = if warrant then "Warrant revoked." else "The warrant could not be revoked.",
+			Data = warrant,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SetCustomRegistration", function(payload)
 		return type(payload) == "table"
 			and type(payload.VehicleId) == "string"

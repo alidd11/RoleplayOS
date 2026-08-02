@@ -97,6 +97,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 		return nil, starterReason or "STARTER_VEHICLE_UNAVAILABLE"
 	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
 	return self:Summary(character), nil
 end
 function CharacterService:Summary(character: any): any
