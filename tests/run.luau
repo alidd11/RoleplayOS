@@ -17,6 +17,8 @@ local Response = require(Shared.Response)
 local CommunityPolicy = require(Shared.CommunityPolicy)
 local CommunityGroupPolicy = require(Shared.CommunityGroupPolicy)
 local SpawnPolicy = require(Shared.SpawnPolicy)
+local SettingsValidator = require(Shared.SettingsValidator)
+local LevelProgression = require(Shared.LevelProgression)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("public access is granted", function()
@@ -143,12 +145,31 @@ end)
 H.test("migration reconciles missing fields", function()
 	local profile = ProfileSchema.migrate({ SchemaVersion = 0 }, 42)
 	H.expect(
-		profile.SchemaVersion == 2
+		profile.SchemaVersion == 3
 			and profile.UserId == 42
 			and type(profile.Characters) == "table"
 			and type(profile.Communities) == "table",
 		"migration failed"
 	)
+end)
+H.test("settings reject unknown and invalid values", function()
+	H.expect(
+		SettingsValidator.validatePatch({ InterfaceScale = "Large" }) ~= nil,
+		"valid scale rejected"
+	)
+	H.expect(
+		SettingsValidator.validatePatch({ InterfaceScale = "Huge" }) == nil,
+		"invalid scale accepted"
+	)
+	H.expect(SettingsValidator.validatePatch({ Exploit = true }) == nil, "unknown setting accepted")
+end)
+H.test("level progression handles boundaries and maximum level", function()
+	local levelTwo = LevelProgression.xpForLevel(2, 100, 1.18)
+	H.expect(levelTwo == 100, "level two threshold is wrong")
+	local summary = LevelProgression.fromXp(levelTwo, 100, 1.18, 100)
+	H.expect(summary.Level == 2 and summary.CurrentLevelXP == 0, "threshold did not level up")
+	local maximum = LevelProgression.fromXp(1000000000, 100, 1.18, 100)
+	H.expect(maximum.Level == 100 and maximum.AtMaximumLevel, "maximum level was not capped")
 end)
 H.test("community permissions honour active role", function()
 	local template = Config.Communities.Templates.RoleplayCommunity

@@ -60,6 +60,23 @@ export type EmploymentRecord = {
 	StartedAt: number,
 	EndedAt: number?,
 }
+export type PlayerSettings = {
+	InterfaceScale: "Small" | "Standard" | "Large",
+	InterfaceMotion: boolean,
+	HighContrast: boolean,
+	ReducedEffects: boolean,
+	CameraShake: boolean,
+	ShowHints: boolean,
+}
+export type ProgressionSummary = {
+	Level: number,
+	TotalXP: number,
+	CurrentLevelXP: number,
+	RequiredLevelXP: number,
+	Progress: number,
+	AtMaximumLevel: boolean,
+	Tracks: { [string]: any },
+}
 export type ShiftRecord = {
 	ShiftId: string,
 	EmploymentId: string,
@@ -275,14 +292,14 @@ export type CivilianCharacter = {
 	Licences: { string },
 	CriminalRecord: { string },
 	MedicalRecord: { string },
-	Progression: { [string]: number },
+	Progression: { [string]: any },
 	CreatedAt: number,
 	LastPlayedAt: number,
 }
 export type PlayerProfile = {
 	SchemaVersion: number,
 	UserId: number,
-	Settings: { [string]: any },
+	Settings: PlayerSettings,
 	CharacterSlots: { string },
 	Characters: { [string]: CivilianCharacter },
 	DutyProfiles: { [string]: DutyProfile },

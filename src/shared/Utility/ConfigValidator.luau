@@ -9,6 +9,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Framework",
 			"Characters",
 			"Economy",
+			"Progression",
 			"Departments",
 			"Roles",
 			"Jobs",
@@ -65,6 +66,20 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if type(vehicle.Price) ~= "number" or vehicle.Price < 0 then
 			table.insert(errors, "Invalid vehicle price: " .. id)
 		end
+	end
+	local progression = config.Progression or {}
+	if
+		type(progression.BaseXP) ~= "number"
+		or progression.BaseXP < 1
+		or type(progression.GrowthFactor) ~= "number"
+		or progression.GrowthFactor < 1
+		or type(progression.MaximumLevel) ~= "number"
+		or progression.MaximumLevel < 1
+		or progression.MaximumLevel > 1000
+		or type(progression.MaximumGrant) ~= "number"
+		or progression.MaximumGrant < 1
+	then
+		table.insert(errors, "Invalid progression configuration")
 	end
 	for spawnId, spawn in config.Spawns or {} do
 		local station = config.Stations[spawn.StationId]

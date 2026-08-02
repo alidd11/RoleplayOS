@@ -54,6 +54,38 @@ function ShiftService:CompleteTask(
 	self.taskNonces[player.UserId][taskId] = nil
 	table.insert(shift.TaskIds, taskId)
 	shift.LastActivityAt = os.time()
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[shift.CharacterId]
+	local employment = nil
+	for _, item in character and character.Employment or {} do
+		if item.EmploymentId == shift.EmploymentId then
+			employment = item
+			break
+		end
+	end
+	local job = employment and self.context.Configuration.Jobs[employment.JobId]
+	if job then
+		local trackId = "Job:" .. job.Id
+		local xpAmount = job.TaskXP or self.context.Configuration.Progression.DefaultTaskXP
+		local summary, progressionReason = self.context.Services:Get("ProgressionService"):Grant(
+			player,
+			shift.CharacterId,
+			"job-task:" .. shift.ShiftId .. ":" .. taskId,
+			trackId,
+			xpAmount,
+			"JOB_TASK_COMPLETED"
+		)
+		if summary then
+			employment.Experience = summary.Tracks[trackId].TotalXP
+			employment.Grade = summary.Tracks[trackId].Level
+		else
+			self.context.Logger:Warning("Job task XP was not granted", {
+				UserId = player.UserId,
+				JobId = job.Id,
+				Reason = progressionReason,
+			})
+		end
+	end
 	return true, nil
 end
 function ShiftService:ClockOut(player: Player): (any?, string?)

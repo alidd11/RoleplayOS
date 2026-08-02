@@ -55,7 +55,15 @@ end
 local function pressable(button: GuiButton)
 	local scale = Instance.new("UIScale")
 	scale.Parent = button
+	local function motionEnabled(): boolean
+		local gui = button:FindFirstAncestorWhichIsA("ScreenGui")
+		return not gui or gui:GetAttribute("RoleplayOSInterfaceMotion") ~= false
+	end
 	button.MouseButton1Down:Connect(function()
+		if not motionEnabled() then
+			scale.Scale = 0.97
+			return
+		end
 		TweenService
 			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 				Scale = 0.97,
@@ -63,6 +71,10 @@ local function pressable(button: GuiButton)
 			:Play()
 	end)
 	button.MouseButton1Up:Connect(function()
+		if not motionEnabled() then
+			scale.Scale = 1
+			return
+		end
 		TweenService
 			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
 				Scale = 1,
@@ -144,6 +156,7 @@ end
 function App.mount(context: any): ScreenGui
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOS"
+	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.ClipToDeviceSafeArea = true
@@ -152,6 +165,7 @@ function App.mount(context: any): ScreenGui
 
 	local root = Instance.new("Frame")
 	root.Size = UDim2.fromScale(1, 1)
+	root.Name = "Root"
 	root.BackgroundColor3 = COLOURS.Canvas
 	root.BorderSizePixel = 0
 	root.Parent = gui
@@ -231,6 +245,10 @@ function App.mount(context: any): ScreenGui
 	local menuData: any = nil
 	local selectedCharacterId: string? = nil
 	local dismissToWorld: () -> ()
+	local function interfaceMotionEnabled(): boolean
+		local settings = context.Controllers.SettingsController:Get()
+		return not settings or settings.InterfaceMotion ~= false
+	end
 
 	local function showModal()
 		local shade = Instance.new("TextButton")
@@ -303,14 +321,20 @@ function App.mount(context: any): ScreenGui
 			end
 		end)
 		elevate(modal, 22)
-		modal.Size = UDim2.fromOffset(438, 442)
-		modal.BackgroundTransparency = 1
-		TweenService
-			:Create(modal, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-				Size = UDim2.fromOffset(460, 465),
-				BackgroundTransparency = 0,
-			})
-			:Play()
+		if interfaceMotionEnabled() then
+			modal.Size = UDim2.fromOffset(438, 442)
+			modal.BackgroundTransparency = 1
+			TweenService
+				:Create(
+					modal,
+					TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+					{
+						Size = UDim2.fromOffset(460, 465),
+						BackgroundTransparency = 0,
+					}
+				)
+				:Play()
+		end
 	end
 
 	local function showDutySelection(role: any, dutyProfile: any)
@@ -377,7 +401,12 @@ function App.mount(context: any): ScreenGui
 	local renderPlay: () -> ()
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
+	local renderSettings: () -> ()
 	dismissToWorld = function()
+		if not interfaceMotionEnabled() then
+			gui.Enabled = false
+			return
+		end
 		TweenService:Create(
 			root,
 			TweenInfo.new(0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
@@ -587,6 +616,93 @@ function App.mount(context: any): ScreenGui
 		end
 	end
 
+	renderSettings = function()
+		clear(scroll)
+		pageTitle.Text = "Advanced settings"
+		pageDescription.Text = "Accessible, responsive controls for this experience."
+		sectionHeading(
+			"Interface and accessibility",
+			"Roblox-native volume, graphics and controls remain in the Roblox menu."
+		)
+		local settings = context.Controllers.SettingsController:Get()
+		if not settings then
+			local unavailable = card(scroll, 80)
+			local message = text(unavailable, "Settings are still loading.", 14, COLOURS.Muted)
+			message.Position = UDim2.fromOffset(18, 18)
+			message.Size = UDim2.new(1, -36, 0, 40)
+			return
+		end
+		local function settingRow(
+			titleValue: string,
+			description: string,
+			buttonText: string,
+			onActivate: () -> ()
+		)
+			local row = card(scroll, 88)
+			local titleItem = text(row, titleValue, 15, COLOURS.Text, true)
+			titleItem.Position = UDim2.fromOffset(18, 12)
+			titleItem.Size = UDim2.new(1, -210, 0, 25)
+			local detail = text(row, description, 12, COLOURS.Muted)
+			detail.Position = UDim2.fromOffset(18, 39)
+			detail.Size = UDim2.new(1, -210, 0, 32)
+			detail.TextWrapped = true
+			local action = button(row, buttonText, false)
+			action.AnchorPoint = Vector2.new(1, 0.5)
+			action.Position = UDim2.new(1, -16, 0.5, 0)
+			action.Size = UDim2.fromOffset(160, 40)
+			action.Activated:Connect(onActivate)
+		end
+		settingRow(
+			"Interface scale",
+			"Combines with your Roblox preferred text size.",
+			settings.InterfaceScale,
+			function()
+				local nextValue = if settings.InterfaceScale == "Small"
+					then "Standard"
+					elseif settings.InterfaceScale == "Standard" then "Large"
+					else "Small"
+				context.Controllers.SettingsController:Update("InterfaceScale", nextValue)
+				renderSettings()
+			end
+		)
+		for _, definition in
+			{
+				{
+					"Interface motion",
+					"Interface transitions and button motion.",
+					"InterfaceMotion",
+				},
+				{
+					"High contrast",
+					"Increases scene contrast and reduces colour wash.",
+					"HighContrast",
+				},
+				{
+					"Reduced effects",
+					"Disables decorative particles, trails and beams locally.",
+					"ReducedEffects",
+				},
+				{
+					"Camera shake",
+					"Allows game camera shake effects when implemented.",
+					"CameraShake",
+				},
+				{ "Gameplay hints", "Shows contextual help and onboarding prompts.", "ShowHints" },
+			}
+		do
+			local key = definition[3]
+			settingRow(
+				definition[1],
+				definition[2],
+				settings[key] and "Enabled" or "Disabled",
+				function()
+					context.Controllers.SettingsController:Update(key, not settings[key])
+					renderSettings()
+				end
+			)
+		end
+	end
+
 	renderCommunity = function()
 		clear(scroll)
 		pageTitle.Text = "Community"
@@ -731,6 +847,7 @@ function App.mount(context: any): ScreenGui
 	local playNav = addNav("Play", renderPlay)
 	addNav("Careers", renderCareers)
 	addNav("Community", renderCommunity)
+	addNav("Settings", renderSettings)
 	activeNav = playNav
 	playNav.BackgroundColor3 = COLOURS.AccentSoft
 	playNav.TextColor3 = COLOURS.Text
@@ -767,14 +884,17 @@ function App.mount(context: any): ScreenGui
 		renderPlay()
 	end
 
-	root.Position = UDim2.fromOffset(0, 12)
-	root.BackgroundTransparency = 1
-	TweenService
-		:Create(root, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Position = UDim2.fromOffset(0, 0),
-			BackgroundTransparency = 0,
-		})
-		:Play()
+	if interfaceMotionEnabled() then
+		root.Position = UDim2.fromOffset(0, 12)
+		root.BackgroundTransparency = 1
+		TweenService
+			:Create(root, TweenInfo.new(0.24, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Position = UDim2.fromOffset(0, 0),
+				BackgroundTransparency = 0,
+			})
+			:Play()
+	end
+	context.Controllers.SettingsController:Apply()
 	return gui
 end
 

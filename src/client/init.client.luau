@@ -3,10 +3,12 @@ local FeatureController = require(script.Controllers.FeatureController)
 local events = {
 	StartMenuChanged = Instance.new("BindableEvent"),
 	DispatchChanged = Instance.new("BindableEvent"),
+	SettingsChanged = Instance.new("BindableEvent"),
 }
 local controllers = {
 	NetworkController = require(script.Controllers.NetworkController),
 	NotificationController = require(script.Controllers.NotificationController),
+	SettingsController = require(script.Controllers.SettingsController),
 	CharacterController = require(script.Controllers.CharacterController),
 	GamepassController = require(script.Controllers.GamepassController),
 	ApplicationController = require(script.Controllers.ApplicationController),
@@ -26,6 +28,7 @@ for _, name in
 	{
 		"NetworkController",
 		"NotificationController",
+		"SettingsController",
 		"CharacterController",
 		"GamepassController",
 		"ApplicationController",
@@ -48,6 +51,7 @@ for _, name in
 	{
 		"NetworkController",
 		"NotificationController",
+		"SettingsController",
 		"CharacterController",
 		"GamepassController",
 		"ApplicationController",

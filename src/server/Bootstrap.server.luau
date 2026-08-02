@@ -24,6 +24,7 @@ local context = {
 
 local serviceOrder = {
 	"DataService",
+	"SettingsService",
 	"AuditService",
 	"CommunityService",
 	"CommunityServerService",
@@ -32,6 +33,7 @@ local serviceOrder = {
 	"GamepassService",
 	"CharacterService",
 	"EconomyService",
+	"ProgressionService",
 	"ApplicationService",
 	"EmploymentService",
 	"JobService",

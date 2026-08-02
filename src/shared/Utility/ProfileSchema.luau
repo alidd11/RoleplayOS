@@ -1,13 +1,15 @@
 --!strict
 
+local SettingsValidator = require(script.Parent.SettingsValidator)
+
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 2
+ProfileSchema.CURRENT_VERSION = 3
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 2,
+		SchemaVersion = 3,
 		UserId = userId,
-		Settings = {},
+		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
 		Characters = {},
 		DutyProfiles = {},
@@ -48,6 +50,10 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if data.SchemaVersion == 1 then
 		data.Communities = data.Communities or {}
 		data.SchemaVersion = 2
+	end
+	if data.SchemaVersion == 2 then
+		data.Settings = SettingsValidator.reconcile(data.Settings)
+		data.SchemaVersion = 3
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

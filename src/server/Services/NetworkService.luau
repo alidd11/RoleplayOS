@@ -126,6 +126,77 @@ function NetworkService:Start()
 		}
 	end)
 	self.context.Network:RegisterFunction(
+		"GetSettings",
+		tablePayload,
+		function(player, _, requestId)
+			local settings, reason = self.context.Services:Get("SettingsService"):Get(player)
+			if not settings then
+				return {
+					Success = false,
+					Code = reason,
+					Message = "Settings are unavailable.",
+					RequestId = requestId,
+				}
+			end
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = settings,
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"GetProgression",
+		tablePayload,
+		function(player, payload, requestId)
+			local characterId = if type(payload.CharacterId) == "string"
+				then payload.CharacterId
+				else nil
+			local summary, reason =
+				self.context.Services:Get("ProgressionService"):Get(player, characterId)
+			if not summary then
+				return {
+					Success = false,
+					Code = reason,
+					Message = "Progression is unavailable.",
+					RequestId = requestId,
+				}
+			end
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "",
+				Data = summary,
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"UpdateSettings",
+		tablePayload,
+		function(player, payload, requestId)
+			local settings, reason =
+				self.context.Services:Get("SettingsService"):Update(player, payload)
+			if not settings then
+				return {
+					Success = false,
+					Code = reason,
+					Message = "That setting could not be saved.",
+					RequestId = requestId,
+				}
+			end
+			return {
+				Success = true,
+				Code = "OK",
+				Message = "Settings saved.",
+				Data = settings,
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
 		"GetStartMenu",
 		tablePayload,
 		function(player, _, requestId)

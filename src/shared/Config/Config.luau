@@ -3,7 +3,7 @@
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 2,
+		SchemaVersion = 3,
 		Branding = {
 			GameName = "",
 			ShowRoleplayOSMark = true,
@@ -78,6 +78,15 @@ local Config = {
 		StartingCashBalance = 100,
 		MaximumTransactionHistory = 200,
 		TransferMaximum = 100000,
+	},
+	Progression = {
+		BaseXP = 100,
+		GrowthFactor = 1.18,
+		MaximumLevel = 100,
+		MaximumGrant = 1000,
+		MaximumHistory = 100,
+		MaximumRewardIds = 500,
+		DefaultTaskXP = 25,
 	},
 	Gamepasses = {
 		PremiumVehicles = {
@@ -498,6 +507,9 @@ local Config = {
 		Endpoints = {
 			CreatePrivateCommunity = { Capacity = 1, RefillPerSecond = 0.02 },
 			GetStartMenu = { Capacity = 4, RefillPerSecond = 1 },
+			GetSettings = { Capacity = 4, RefillPerSecond = 1 },
+			GetProgression = { Capacity = 4, RefillPerSecond = 1 },
+			UpdateSettings = { Capacity = 6, RefillPerSecond = 1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
 			EconomyTransfer = { Capacity = 3, RefillPerSecond = 0.2 },
