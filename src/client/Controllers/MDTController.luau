@@ -714,6 +714,17 @@ function MDTController:_revokeWarrant()
 end
 
 function MDTController:_performSearch()
+	-- Home and the map have no record type to search. Their controls are hidden,
+	-- so this is unreachable today, but sending the page name as a record type
+	-- would be rejected by the server and reported to the officer as a failed
+	-- search rather than as a page that simply has none.
+	if
+		self.recordType ~= "Person"
+		and self.recordType ~= "Vehicle"
+		and self.recordType ~= "Incident"
+	then
+		return
+	end
 	self.status.Text = "Searching secure records…"
 	local response = if self.recordType == "Incident"
 		then self.context.Controllers.NetworkController:Request("MDTGetIncidents", { Page = 1 })

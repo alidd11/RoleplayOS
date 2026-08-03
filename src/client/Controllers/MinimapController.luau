@@ -123,10 +123,10 @@ function MinimapController:_clearGeometry()
 	end
 end
 
-function MinimapController:_drawRoad(part: BasePart, centre: Vector3, radius: number)
+function MinimapController:_drawRoad(part: BasePart, centre: Vector3, radius: number): boolean
 	local point = MapProjection.window(part.Position, centre, radius)
 	if not point then
-		return
+		return false
 	end
 	local road = Instance.new("Frame")
 	road.Name = "Road"
@@ -145,9 +145,10 @@ function MinimapController:_drawRoad(part: BasePart, centre: Vector3, radius: nu
 	edge.Transparency = 0.5
 	edge.Thickness = 1
 	edge.Parent = road
+	return true
 end
 
-function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: number)
+function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: number): boolean
 	local position: Vector3? = nil
 	if item:IsA("BasePart") then
 		position = item.Position
@@ -155,11 +156,11 @@ function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: n
 		position = item.WorldPosition
 	end
 	if not position then
-		return
+		return false
 	end
 	local point = MapProjection.window(position, centre, radius)
 	if not point then
-		return
+		return false
 	end
 	local dot = Instance.new("Frame")
 	dot.Name = "PointOfInterest"
@@ -180,6 +181,7 @@ function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: n
 		caption.Size = UDim2.fromOffset(100, 16)
 		caption.ZIndex = 4
 	end
+	return true
 end
 
 -- Collects the tagged geometry once. This is the only pass that is proportional
@@ -214,12 +216,8 @@ function MinimapController:_redraw(centre: Vector3)
 		end
 		-- Streaming can remove a part after it was collected, so presence is
 		-- rechecked here rather than trusted from collection time.
-		if part.Parent then
-			local before = #self.viewport:GetChildren()
-			self:_drawRoad(part, centre, radius)
-			if #self.viewport:GetChildren() > before then
-				drawn += 1
-			end
+		if part.Parent and self:_drawRoad(part, centre, radius) then
+			drawn += 1
 		end
 	end
 	local points = 0
@@ -227,12 +225,8 @@ function MinimapController:_redraw(centre: Vector3)
 		if points >= self.settings.MaximumPoints then
 			break
 		end
-		if item.Parent then
-			local before = #self.viewport:GetChildren()
-			self:_drawPoint(item, centre, radius)
-			if #self.viewport:GetChildren() > before then
-				points += 1
-			end
+		if item.Parent and self:_drawPoint(item, centre, radius) then
+			points += 1
 		end
 	end
 	self.drawnAt = centre

@@ -1089,6 +1089,10 @@ local Config = {
 		SpawnCooldownSeconds = 8,
 		PromptHoldDuration = 0.35,
 		TrackingIntervalSeconds = 1,
+		-- Preview models held for one player while browsing a depot. Each is a
+		-- copy of a real vehicle, so this bounds what a player accumulates
+		-- scrolling a large fleet.
+		MaximumPreviewsPerPlayer = 6,
 		StudsToMiles = 0.000173984,
 		MaximumTrackedSpeedStudsPerSecond = 350,
 		FuelPercentPerMile = 0.2,
