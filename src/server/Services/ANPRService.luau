@@ -2,6 +2,8 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local ANPRService = { connections = {}, cooldowns = {} }
 
 function ANPRService:Init(context: any)
@@ -69,6 +71,10 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 	local call = self.context.Services:Get("CallService"):Create({
 		Summary = "ANPR hit: wanted vehicle " .. registration,
 		Location = location,
+		-- The camera's position, not the vehicle's. A wanted vehicle is not
+		-- tracked across the map: it is seen where a camera saw it, and the
+		-- sighting stays at that camera even as the vehicle drives on.
+		Position = MapProjection.serialise(sensor.Position),
 		Priority = "Immediate",
 		IncidentType = "Crime in progress",
 		DepartmentIds = { "Police", "Control" },

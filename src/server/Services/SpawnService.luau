@@ -1,16 +1,34 @@
 --!strict
 
+local CollectionService = game:GetService("CollectionService")
+
 local SpawnService = { points = {} }
 
 function SpawnService:Init(context: any)
 	self.context = context
 end
 
+-- Spawn pads to consider. Walking every descendant of the workspace is fine on
+-- a baseplate and slow on a region-sized map, where it blocks the rest of
+-- startup, so a tagged set is preferred when the map provides one and the walk
+-- remains as the fallback for maps that have not been tagged yet.
+function SpawnService:_candidatePads(): { Instance }
+	local tag = self.context.Configuration.Spawning and self.context.Configuration.Spawning.PadTag
+	local tagged = if type(tag) == "string" then CollectionService:GetTagged(tag) else {}
+	if #tagged > 0 then
+		return tagged
+	end
+	self.context.Logger:Warning("Spawn pads are untagged; scanning the workspace instead", {
+		Tag = tag,
+	})
+	return workspace:GetDescendants()
+end
+
 function SpawnService:_registerConfiguredPoints()
 	table.clear(self.points)
 	local found = {}
-	for _, instance in workspace:GetDescendants() do
-		if instance:IsA("SpawnLocation") then
+	for _, instance in self:_candidatePads() do
+		if instance:IsA("SpawnLocation") and instance:IsDescendantOf(workspace) then
 			local spawnId = instance:GetAttribute("SpawnId")
 			if type(spawnId) == "string" and self.context.Configuration.Spawns[spawnId] then
 				if found[spawnId] then

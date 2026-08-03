@@ -1083,6 +1083,12 @@ local Config = {
 			),
 		},
 	},
+	Spawning = {
+		-- Tag applied to the SpawnLocation pads the framework manages. Tagging
+		-- lets startup ask for the pads directly; without it every descendant of
+		-- the workspace is walked, which blocks startup on a large map.
+		PadTag = "RoleplayOSSpawnPad",
+	},
 	VehicleSpawning = {
 		TerminalTag = "RoleplayOSVehicleTerminal",
 		SpawnPointTag = "RoleplayOSVehicleSpawn",
