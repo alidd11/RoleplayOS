@@ -1074,18 +1074,33 @@ function App.mount(context: any): ScreenGui
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
-			brand.Position = UDim2.fromOffset(safeLeft + 18, safeTop + 8)
-			brand.Size = UDim2.fromOffset(if narrow then layout.SafeViewport.X - 36 else 270, 30)
+			-- In this stacked layout the title shares its row with Roblox's own
+			-- controls, which sit at the top left. safeLeft only describes a
+			-- device cutout, so clearing that alone left the title underneath
+			-- them in portrait, where the control cluster is proportionally much
+			-- wider. NativeLeft is where Roblox reports its controls end.
+			local headerLeft = math.max(safeLeft, layout.NativeLeft) + 18
+			brand.Position = UDim2.fromOffset(headerLeft, safeTop + 8)
+			brand.Size = UDim2.fromOffset(
+				if narrow
+					then math.max(80, layout.SafeViewport.X - headerLeft - safeRight - 18)
+					else 270,
+				30
+			)
 			brand.TextSize = 15
 			brand.TextWrapped = false
 			brand.TextTruncate = Enum.TextTruncate.AtEnd
-			version.Position = UDim2.fromOffset(safeLeft + 19, safeTop + 37)
+			version.Position = UDim2.fromOffset(headerLeft + 1, safeTop + 37)
+			-- Wide enough for the navigation to share the title's row, so it
+			-- starts past the title rather than at a fixed offset that could
+			-- land on top of it once the title has been pushed right.
+			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
 				then UDim2.fromOffset(safeLeft + 18, safeTop + 66)
-				else UDim2.fromOffset(safeLeft + 300, safeTop + 18)
+				else UDim2.fromOffset(navLeft, safeTop + 18)
 			navigation.Size = if narrow
 				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 38)
-				else UDim2.new(1, -(318 + safeLeft + safeRight), 0, 46)
+				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 46)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
 			for _, item in navigation:GetChildren() do
