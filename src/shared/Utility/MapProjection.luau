@@ -22,6 +22,33 @@ function MapProjection.project(position: Vector3, boundsCFrame: CFrame, boundsSi
 	}
 end
 
+-- Projects into a square window of the given radius centred on a point, rather
+-- than into the whole mapped area. A region-sized map projected whole leaves
+-- every road a few thousandths of the surface wide, so they collapse into an
+-- unreadable smear; a window keeps scale constant however large the world is.
+-- Returns nil when the position falls outside the window, so callers can skip
+-- it rather than pinning it to an edge.
+function MapProjection.window(position: Vector3, centre: Vector3, radius: number): Point?
+	if radius <= 0 then
+		return nil
+	end
+	local dx = position.X - centre.X
+	local dz = position.Z - centre.Z
+	if math.abs(dx) > radius or math.abs(dz) > radius then
+		return nil
+	end
+	return { X = dx / (radius * 2) + 0.5, Y = dz / (radius * 2) + 0.5 }
+end
+
+-- Normalised footprint of a part within a window of the given radius.
+function MapProjection.windowFootprint(partSize: Vector3, radius: number, minimum: number): Point
+	local span = math.max(1, radius * 2)
+	return {
+		X = math.clamp(partSize.X / span, minimum, 1),
+		Y = math.clamp(partSize.Z / span, minimum, 1),
+	}
+end
+
 -- True when the position lies inside the mapped area. project clamps, so this
 -- is the only way to distinguish "on the edge" from "beyond the edge".
 function MapProjection.contains(

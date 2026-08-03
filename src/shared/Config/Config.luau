@@ -155,8 +155,20 @@ local Config = {
 		RoadTag = "RoleplayOSMinimapRoad",
 		PointTag = "RoleplayOSMinimapPOI",
 		UpdateHz = 8,
+		-- Caps apply to the window around the player, not the whole world, so
+		-- they bound what is drawn rather than arbitrarily truncating a
+		-- region-sized map to whichever parts happened to be enumerated first.
 		MaximumRoads = 300,
 		MaximumPoints = 80,
+		-- Studs either side of the player shown on the minimap. Projecting a
+		-- region-sized world whole leaves every road a few thousandths of the
+		-- surface wide, which reads as a smear.
+		WindowRadius = 900,
+		-- How far the player moves before the window is redrawn.
+		RedrawDistance = 60,
+		-- Minimum gap between full passes over the tagged geometry. Only this
+		-- pass scales with the size of the map.
+		RecollectSeconds = 3,
 	},
 	Gamepasses = {
 		PremiumVehicles = {

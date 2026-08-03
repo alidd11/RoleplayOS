@@ -123,15 +123,18 @@ function MinimapController:_clearGeometry()
 	end
 end
 
-function MinimapController:_drawRoad(part: BasePart, bounds: BasePart)
-	local point = self:_project(part.Position, bounds)
+function MinimapController:_drawRoad(part: BasePart, centre: Vector3, radius: number)
+	local point = MapProjection.window(part.Position, centre, radius)
+	if not point then
+		return
+	end
 	local road = Instance.new("Frame")
 	road.Name = "Road"
 	road.AnchorPoint = Vector2.new(0.5, 0.5)
 	road.Position = UDim2.fromScale(point.X, point.Y)
-	local footprint = MapProjection.footprint(part.Size, bounds.Size, 0.003)
+	local footprint = MapProjection.windowFootprint(part.Size, radius, 0.006)
 	road.Size = UDim2.fromScale(footprint.X, footprint.Y)
-	road.Rotation = -part.Orientation.Y + bounds.Orientation.Y
+	road.Rotation = -part.Orientation.Y
 	road.BackgroundColor3 = C.Road
 	road.BorderSizePixel = 0
 	road.ZIndex = 2
@@ -144,8 +147,8 @@ function MinimapController:_drawRoad(part: BasePart, bounds: BasePart)
 	edge.Parent = road
 end
 
-function MinimapController:_drawPoint(item: Instance, bounds: BasePart)
-	local position: Vector3?
+function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: number)
+	local position: Vector3? = nil
 	if item:IsA("BasePart") then
 		position = item.Position
 	elseif item:IsA("Attachment") then
@@ -154,7 +157,10 @@ function MinimapController:_drawPoint(item: Instance, bounds: BasePart)
 	if not position then
 		return
 	end
-	local point = self:_project(position, bounds)
+	local point = MapProjection.window(position, centre, radius)
+	if not point then
+		return
+	end
 	local dot = Instance.new("Frame")
 	dot.Name = "PointOfInterest"
 	dot.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -176,50 +182,89 @@ function MinimapController:_drawPoint(item: Instance, bounds: BasePart)
 	end
 end
 
+-- Collects the tagged geometry once. This is the only pass that is proportional
+-- to the size of the map, so it is deliberately separated from drawing and run
+-- rarely: on a region-sized world it walks tens of thousands of parts.
+function MinimapController:_collect()
+	self.roads = {}
+	self.points = {}
+	for _, item in CollectionService:GetTagged(self.settings.RoadTag) do
+		if item:IsA("BasePart") then
+			table.insert(self.roads, item)
+		end
+	end
+	for _, item in CollectionService:GetTagged(self.settings.PointTag) do
+		if item:IsA("BasePart") or item:IsA("Attachment") then
+			table.insert(self.points, item)
+		end
+	end
+	self.collectedAt = os.clock()
+end
+
+-- Draws the window around the player. Cost is bounded by what is near, not by
+-- how large the world is, and the caps now trim a set that was already sorted
+-- by distance rather than taking an arbitrary slice of the whole map.
+function MinimapController:_redraw(centre: Vector3)
+	self:_clearGeometry()
+	local radius = self.settings.WindowRadius or 900
+	local drawn = 0
+	for _, part in self.roads do
+		if drawn >= self.settings.MaximumRoads then
+			break
+		end
+		-- Streaming can remove a part after it was collected, so presence is
+		-- rechecked here rather than trusted from collection time.
+		if part.Parent then
+			local before = #self.viewport:GetChildren()
+			self:_drawRoad(part, centre, radius)
+			if #self.viewport:GetChildren() > before then
+				drawn += 1
+			end
+		end
+	end
+	local points = 0
+	for _, item in self.points do
+		if points >= self.settings.MaximumPoints then
+			break
+		end
+		if item.Parent then
+			local before = #self.viewport:GetChildren()
+			self:_drawPoint(item, centre, radius)
+			if #self.viewport:GetChildren() > before then
+				points += 1
+			end
+		end
+	end
+	self.drawnAt = centre
+end
+
 function MinimapController:_rebuild()
 	local bounds = self:_bounds()
 	self.bounds = bounds
-	self:_clearGeometry()
-	if not bounds then
-		self.gui.Enabled = false
-		return
-	end
-	local roadCount = 0
-	for _, item in CollectionService:GetTagged(self.settings.RoadTag) do
-		if roadCount >= self.settings.MaximumRoads then
-			break
-		end
-		if item:IsA("BasePart") and item:IsDescendantOf(workspace) then
-			self:_drawRoad(item, bounds)
-			roadCount += 1
-		end
-	end
-	local pointCount = 0
-	for _, item in CollectionService:GetTagged(self.settings.PointTag) do
-		if pointCount >= self.settings.MaximumPoints then
-			break
-		end
-		if item:IsDescendantOf(workspace) then
-			self:_drawPoint(item, bounds)
-			pointCount += 1
-		end
-	end
+	self:_collect()
+	self.drawnAt = nil
 	self.gui.Enabled = self.settings.Enabled
 end
 
 function MinimapController:_updateMarker()
-	local bounds = self.bounds
 	local character = Players.LocalPlayer.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
-	if not bounds or not root or not root:IsA("BasePart") then
+	if not root or not root:IsA("BasePart") then
 		self.marker.Visible = false
 		return
 	end
-	local point = self:_project(root.Position, bounds)
-	self.marker.Position = UDim2.fromScale(point.X, point.Y)
-	local localLook = bounds.CFrame:VectorToObjectSpace(root.CFrame.LookVector)
-	self.marker.Rotation = math.deg(math.atan2(-localLook.X, -localLook.Z))
+	-- The window follows the player, so the marker is always centred and only
+	-- its heading changes. Geometry is redrawn once the player has left the
+	-- centre far enough for the offset to show, rather than every frame.
+	self.marker.Position = UDim2.fromScale(0.5, 0.5)
+	self.marker.Rotation =
+		math.deg(math.atan2(-root.CFrame.LookVector.X, -root.CFrame.LookVector.Z))
 	self.marker.Visible = true
+	local threshold = self.settings.RedrawDistance or 60
+	local previous = self.drawnAt
+	if not previous or (root.Position - previous).Magnitude >= threshold then
+		self:_redraw(root.Position)
+	end
 end
 
 function MinimapController:Start()
@@ -238,20 +283,34 @@ function MinimapController:Start()
 		playerGui:GetAttributeChangedSignal("RoleplayOSDeviceOpen"):Connect(followDeviceState)
 	)
 	followDeviceState()
+	-- Streaming a region-sized world adds and removes tagged parts continuously,
+	-- and each collect walks every tagged instance. Rebuilding per signal meant
+	-- dozens of full passes a second while driving, so changes are coalesced
+	-- into at most one pass per interval.
+	local pending = false
+	local function requestRebuild()
+		if pending then
+			return
+		end
+		pending = true
+		task.delay(self.settings.RecollectSeconds or 3, function()
+			pending = false
+			if self.running then
+				self:_rebuild()
+			end
+		end)
+	end
 	for _, tag in { self.settings.BoundsTag, self.settings.RoadTag, self.settings.PointTag } do
 		table.insert(
 			self.connections,
-			CollectionService:GetInstanceAddedSignal(tag):Connect(function()
-				self:_rebuild()
-			end)
+			CollectionService:GetInstanceAddedSignal(tag):Connect(requestRebuild)
 		)
 		table.insert(
 			self.connections,
-			CollectionService:GetInstanceRemovedSignal(tag):Connect(function()
-				self:_rebuild()
-			end)
+			CollectionService:GetInstanceRemovedSignal(tag):Connect(requestRebuild)
 		)
 	end
+	self.running = true
 	self:_rebuild()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Minimap", function(layout)
 		self.shell.Visible = not layout.Vehicle or not layout.Compact
