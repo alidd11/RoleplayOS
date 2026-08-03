@@ -8,6 +8,7 @@
 -- never decides where a unit or an incident is.
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
@@ -40,6 +41,16 @@ local STATUS: { [string]: Color3 } = {
 	Unavailable = Color3.fromRGB(132, 146, 166),
 }
 
+-- Control needs the whole picture, but a region-sized world drawn whole leaves
+-- every road a few thousandths of the surface wide and every label on top of
+-- its neighbour. Closer levels follow the officer and keep the geometry
+-- readable. A radius of zero means the whole mapped area.
+local ZOOM = {
+	{ Name = "REGION", Radius = 0 },
+	{ Name = "DISTRICT", Radius = 2600 },
+	{ Name = "LOCAL", Radius = 800 },
+}
+
 local function corner(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
 	value.CornerRadius = UDim.new(0, radius)
@@ -61,6 +72,10 @@ end
 function TacticalMap.new(parent: Instance)
 	local self = setmetatable({}, TacticalMap)
 	self.settings = Config.Minimap
+	-- Control opens on the whole picture; an officer can close in from there.
+	self.zoomIndex = 1
+	self.roads = {}
+	self.points = {}
 
 	local root = Instance.new("Frame")
 	root.Name = "TacticalMap"
@@ -126,10 +141,40 @@ function TacticalMap.new(parent: Instance)
 	counts.TextColor3 = C.Muted
 	self.counts = counts
 
+	-- Zoom controls sit with the legend rather than over the map, so they never
+	-- cover the picture they change.
+	local zoomRow = Instance.new("Frame")
+	zoomRow.Name = "Zoom"
+	zoomRow.BackgroundTransparency = 1
+	zoomRow.Position = UDim2.fromOffset(4, 62)
+	zoomRow.Size = UDim2.new(1, -8, 0, 26)
+	zoomRow.Parent = side
+	self.zoomButtons = {}
+	for index, level in ZOOM do
+		local option = Instance.new("TextButton")
+		option.AutoButtonColor = false
+		option.BackgroundColor3 = C.Grid
+		option.BorderSizePixel = 0
+		option.Font = Enum.Font.GothamBold
+		option.Text = string.sub(level.Name, 1, 3)
+		option.TextColor3 = C.Text
+		option.TextSize = 9
+		option.Size = UDim2.new(1 / #ZOOM, -4, 1, 0)
+		option.Position = UDim2.new((index - 1) / #ZOOM, 2, 0, 0)
+		option.Parent = zoomRow
+		corner(option, 6)
+		option.Activated:Connect(function()
+			self.zoomIndex = index
+			self:_paintZoom()
+			self:Redraw()
+		end)
+		self.zoomButtons[index] = option
+	end
+
 	local key = Instance.new("Frame")
 	key.BackgroundTransparency = 1
-	key.Position = UDim2.fromOffset(4, 62)
-	key.Size = UDim2.new(1, -8, 1, -66)
+	key.Position = UDim2.fromOffset(4, 94)
+	key.Size = UDim2.new(1, -8, 1, -98)
 	key.Parent = side
 	local keyLayout = Instance.new("UIListLayout")
 	keyLayout.Padding = UDim.new(0, 5)
@@ -163,7 +208,14 @@ function TacticalMap.new(parent: Instance)
 	keyRow(STATUS.Unavailable, "UNIT UNAVAILABLE", "unit")
 	keyRow(C.Accent, "POINT OF INTEREST", "call")
 
+	self:_paintZoom()
 	return self
+end
+
+function TacticalMap:_paintZoom()
+	for index, option in self.zoomButtons do
+		option.BackgroundColor3 = if index == self.zoomIndex then C.Accent else C.Grid
+	end
 end
 
 function TacticalMap:_bounds(): BasePart?
@@ -195,24 +247,70 @@ function TacticalMap:_marker(
 	return dot
 end
 
--- Rebuilds road and point-of-interest geometry. Static between map edits, so
--- this is deliberately not called on the live refresh path.
+-- Collects the tagged geometry. This is the only pass proportional to the size
+-- of the world, so it is separated from drawing and run only when asked.
 function TacticalMap:Rebuild()
-	self.static:ClearAllChildren()
-	local bounds = self:_bounds()
-	self.empty.Visible = bounds == nil
-	if not bounds then
-		return
-	end
-	local roads = 0
+	self.roads = {}
+	self.points = {}
 	for _, item in CollectionService:GetTagged(self.settings.RoadTag) do
-		if item:IsA("BasePart") and item:IsDescendantOf(workspace) then
-			roads += 1
-			if roads > self.settings.MaximumRoads then
-				break
-			end
-			local point = MapProjection.project(item.Position, bounds.CFrame, bounds.Size)
-			local footprint = MapProjection.footprint(item.Size, bounds.Size, 0.003)
+		if item:IsA("BasePart") then
+			table.insert(self.roads, item)
+		end
+	end
+	for _, item in CollectionService:GetTagged(self.settings.PointTag) do
+		if item:IsA("BasePart") or item:IsA("Attachment") then
+			table.insert(self.points, item)
+		end
+	end
+	self:Redraw()
+end
+
+-- Where the view is centred. The region view frames the whole mapped area;
+-- closer levels follow the officer carrying the terminal.
+function TacticalMap:_centre(bounds: BasePart): Vector3
+	local character = Players.LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if ZOOM[self.zoomIndex].Radius > 0 and root and root:IsA("BasePart") then
+		return root.Position
+	end
+	return bounds.Position
+end
+
+-- Projects a world position for the current zoom. The region view clamps, so
+-- everything appears somewhere; closer levels return nil outside the window so
+-- the caller can skip rather than pin it to an edge.
+function TacticalMap:_place(
+	position: Vector3,
+	bounds: BasePart,
+	centre: Vector3
+): MapProjection.Point?
+	local radius = ZOOM[self.zoomIndex].Radius
+	if radius <= 0 then
+		return MapProjection.project(position, bounds.CFrame, bounds.Size)
+	end
+	return MapProjection.window(position, centre, radius)
+end
+
+function TacticalMap:_footprint(partSize: Vector3, bounds: BasePart): MapProjection.Point
+	local radius = ZOOM[self.zoomIndex].Radius
+	if radius <= 0 then
+		return MapProjection.footprint(partSize, bounds.Size, 0.002)
+	end
+	return MapProjection.windowFootprint(partSize, radius, 0.006)
+end
+
+function TacticalMap:_drawStatic(bounds: BasePart, centre: Vector3)
+	self.static:ClearAllChildren()
+	local drawn = 0
+	for _, item in self.roads do
+		if drawn >= self.settings.MaximumRoads then
+			break
+		end
+		-- Streaming can remove a part after it was collected.
+		local point = if item.Parent then self:_place(item.Position, bounds, centre) else nil
+		if point then
+			drawn += 1
+			local footprint = self:_footprint(item.Size, bounds)
 			local road = Instance.new("Frame")
 			road.AnchorPoint = Vector2.new(0.5, 0.5)
 			road.Position = UDim2.fromScale(point.X, point.Y)
@@ -231,19 +329,19 @@ function TacticalMap:Rebuild()
 		end
 	end
 	local points = 0
-	for _, item in CollectionService:GetTagged(self.settings.PointTag) do
+	for _, item in self.points do
+		if points >= self.settings.MaximumPoints then
+			break
+		end
 		local position: Vector3? = nil
-		if item:IsA("BasePart") then
+		if item.Parent and item:IsA("BasePart") then
 			position = item.Position
-		elseif item:IsA("Attachment") then
+		elseif item.Parent and item:IsA("Attachment") then
 			position = item.WorldPosition
 		end
-		if position then
+		local point = if position then self:_place(position, bounds, centre) else nil
+		if point then
 			points += 1
-			if points > self.settings.MaximumPoints then
-				break
-			end
-			local point = MapProjection.project(position, bounds.CFrame, bounds.Size)
 			local colour = item:GetAttribute("MinimapColour")
 			local dot = self:_marker(
 				self.static,
@@ -254,7 +352,13 @@ function TacticalMap:Rebuild()
 				3
 			)
 			local caption = item:GetAttribute("MinimapLabel")
-			if typeof(caption) == "string" and caption ~= "" then
+			-- Labels are omitted on the region view, where they would overlap
+			-- into an unreadable mass.
+			if
+				typeof(caption) == "string"
+				and caption ~= ""
+				and ZOOM[self.zoomIndex].Radius > 0
+			then
 				local text = label(dot, caption, 9)
 				text.Position = UDim2.fromOffset(9, -4)
 				text.Size = UDim2.fromOffset(120, 15)
@@ -265,24 +369,22 @@ function TacticalMap:Rebuild()
 	end
 end
 
--- Redraws incidents and units from a server dispatch snapshot.
-function TacticalMap:Update(snapshot: any)
+function TacticalMap:_drawOverlay(bounds: BasePart, centre: Vector3)
 	self.overlay:ClearAllChildren()
-	local bounds = self:_bounds()
-	if not bounds or type(snapshot) ~= "table" then
-		self.counts.Text = "Awaiting dispatch feed."
-		return
-	end
-	local calls = if type(snapshot.Calls) == "table" then snapshot.Calls else {}
-	local units = if type(snapshot.Units) == "table" then snapshot.Units else {}
+	local snapshot = self.snapshot
+	local calls = if type(snapshot) == "table" and type(snapshot.Calls) == "table"
+		then snapshot.Calls
+		else {}
+	local units = if type(snapshot) == "table" and type(snapshot.Units) == "table"
+		then snapshot.Units
+		else {}
 	local plotted = 0
-
 	for _, call in calls do
 		local position = MapProjection.deserialise(call.Position)
-		if position then
+		local point = if position then self:_place(position, bounds, centre) else nil
+		if point then
 			plotted += 1
 			local colour = PRIORITY[call.Priority] or PRIORITY.Routine
-			local point = MapProjection.project(position, bounds.CFrame, bounds.Size)
 			-- A halo keeps a live incident readable against road geometry.
 			local halo = self:_marker(self.overlay, point, 20, colour, true, 5)
 			halo.BackgroundTransparency = 0.72
@@ -295,14 +397,13 @@ function TacticalMap:Update(snapshot: any)
 			caption.TextColor3 = colour
 		end
 	end
-
 	local located = 0
 	for _, unit in units do
 		local position = MapProjection.deserialise(unit.Position)
-		if position then
+		local point = if position then self:_place(position, bounds, centre) else nil
+		if point then
 			located += 1
 			local colour = STATUS[unit.Status] or STATUS.Unavailable
-			local point = MapProjection.project(position, bounds.CFrame, bounds.Size)
 			local dot = self:_marker(self.overlay, point, 9, colour, true, 7)
 			local edge = Instance.new("UIStroke")
 			edge.Color = Color3.fromRGB(10, 20, 32)
@@ -315,9 +416,9 @@ function TacticalMap:Update(snapshot: any)
 			caption.TextColor3 = colour
 		end
 	end
-
 	self.counts.Text = string.format(
-		"%d incident%s (%d mapped)\n%d unit%s (%d located)",
+		"%s\n%d incident%s (%d shown)\n%d unit%s (%d shown)",
+		ZOOM[self.zoomIndex].Name,
 		#calls,
 		if #calls == 1 then "" else "s",
 		plotted,
@@ -325,6 +426,32 @@ function TacticalMap:Update(snapshot: any)
 		if #units == 1 then "" else "s",
 		located
 	)
+end
+
+-- Redraws both layers at the current zoom without recollecting the world.
+function TacticalMap:Redraw()
+	local bounds = self:_bounds()
+	self.empty.Visible = bounds == nil
+	if not bounds then
+		self.static:ClearAllChildren()
+		self.overlay:ClearAllChildren()
+		self.counts.Text = "No mapped area."
+		return
+	end
+	local centre = self:_centre(bounds)
+	self:_drawStatic(bounds, centre)
+	self:_drawOverlay(bounds, centre)
+end
+
+-- Stores the latest server picture and redraws the live layer.
+function TacticalMap:Update(snapshot: any)
+	self.snapshot = snapshot
+	local bounds = self:_bounds()
+	if not bounds then
+		self.counts.Text = "No mapped area."
+		return
+	end
+	self:_drawOverlay(bounds, self:_centre(bounds))
 end
 
 function TacticalMap:SetVisible(visible: boolean)
