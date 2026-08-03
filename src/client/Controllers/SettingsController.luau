@@ -54,16 +54,50 @@ function SettingsController:_applyContrast()
 	(effect :: ColorCorrectionEffect).Enabled = self.settings.HighContrast
 end
 
+local function isDecorative(item: Instance): boolean
+	return item:IsA("ParticleEmitter") or item:IsA("Trail") or item:IsA("Beam")
+end
+
+-- Only ever walks the world when the setting is switched on, and only watches
+-- for new effects while it stays on. Walking every descendant on each apply,
+-- and running a callback for every instance that streams in, both scale with
+-- the size of the world rather than with the number of effects in it, which a
+-- region-sized map makes very expensive.
 function SettingsController:_applyReducedEffects()
-	local reduced = self.settings.ReducedEffects
-	for _, item in workspace:GetDescendants() do
-		if item:IsA("ParticleEmitter") or item:IsA("Trail") or item:IsA("Beam") then
-			if self.effectStates[item] == nil then
-				self.effectStates[item] = item.Enabled
+	local reduced = self.settings.ReducedEffects == true
+	if reduced == self.reducedApplied then
+		return
+	end
+	self.reducedApplied = reduced
+	if reduced then
+		for _, item in workspace:GetDescendants() do
+			if isDecorative(item) then
+				if self.effectStates[item] == nil then
+					self.effectStates[item] = item.Enabled
+				end
+				item.Enabled = false
 			end
-			item.Enabled = if reduced then false else self.effectStates[item]
+		end
+		self.effectWatcher = workspace.DescendantAdded:Connect(function(item)
+			if isDecorative(item) then
+				self.effectStates[item] = item.Enabled
+				item.Enabled = false
+			end
+		end)
+		return
+	end
+	if self.effectWatcher then
+		self.effectWatcher:Disconnect()
+		self.effectWatcher = nil
+	end
+	-- Restore from what was recorded rather than walking the world again. The
+	-- record is weak keyed, so effects already collected simply drop out.
+	for item, enabled in self.effectStates do
+		if item.Parent then
+			item.Enabled = enabled
 		end
 	end
+	table.clear(self.effectStates)
 end
 
 function SettingsController:Apply()
@@ -81,19 +115,6 @@ function SettingsController:Start()
 		self.connections,
 		GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
 			self:_applyInterfaceScale()
-		end)
-	)
-	table.insert(
-		self.connections,
-		workspace.DescendantAdded:Connect(function(item)
-			if
-				self.settings
-				and self.settings.ReducedEffects
-				and (item:IsA("ParticleEmitter") or item:IsA("Trail") or item:IsA("Beam"))
-			then
-				self.effectStates[item] = item.Enabled
-				item.Enabled = false
-			end
 		end)
 	)
 	-- Deferred so a not-yet-registered endpoint cannot stall the serial client
@@ -125,6 +146,10 @@ function SettingsController:Update(key: string, value: any): any
 end
 
 function SettingsController:Destroy()
+	if self.effectWatcher then
+		self.effectWatcher:Disconnect()
+		self.effectWatcher = nil
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
