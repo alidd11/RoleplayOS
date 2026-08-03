@@ -3,9 +3,8 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local PhoneService = { calls = {}, userCalls = {}, connections = {} }
 
@@ -107,45 +106,11 @@ function PhoneService:_findByNumber(number: string): (Player?, any?)
 end
 
 function PhoneService:_filter(message: string, from: Player, to: Player): (string?, string?)
-	if RunService:IsStudio() then
-		return message, nil
-	end
-	local ok, result = pcall(
-		TextService.FilterStringAsync,
-		TextService,
-		message,
-		from.UserId,
-		Enum.TextFilterContext.PrivateChat
-	)
-	if not ok then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	local filteredOk, filtered = pcall(result.GetChatForUserAsync, result, to.UserId)
-	if not filteredOk then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	return filtered, nil
+	return TextFilter.forUser(message, from.UserId, to.UserId, Enum.TextFilterContext.PrivateChat)
 end
 
 function PhoneService:_filterBroadcast(message: string, from: Player): (string?, string?)
-	if RunService:IsStudio() then
-		return message, nil
-	end
-	local ok, result = pcall(
-		TextService.FilterStringAsync,
-		TextService,
-		message,
-		from.UserId,
-		Enum.TextFilterContext.PublicChat
-	)
-	if not ok then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	local filteredOk, filtered = pcall(result.GetNonChatStringForBroadcastAsync, result)
-	if not filteredOk then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	return filtered, nil
+	return TextFilter.forBroadcast(message, from.UserId, Enum.TextFilterContext.PublicChat)
 end
 
 function PhoneService:_append(player: Player, character: any, message: any)

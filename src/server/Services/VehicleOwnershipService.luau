@@ -1,9 +1,8 @@
 --!strict
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
 local Registration = require(ReplicatedStorage.RoleplayOS.Shared.RegistrationGenerator)
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local VehicleOwnershipService = { registrations = {} }
 function VehicleOwnershipService:Init(context: any)
 	self.context = context
@@ -158,21 +157,14 @@ function VehicleOwnershipService:_moderate(player: Player, proposed: string): (s
 	then
 		return nil, "INVALID_REGISTRATION_LENGTH"
 	end
-	if RunService:IsStudio() then
-		return normalised, nil
+	local filtered, reason =
+		TextFilter.forBroadcast(normalised, player.UserId, Enum.TextFilterContext.PublicChat)
+	if not filtered then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 	end
-	local ok, result = pcall(
-		TextService.FilterStringAsync,
-		TextService,
-		normalised,
-		player.UserId,
-		Enum.TextFilterContext.PublicChat
-	)
-	if not ok then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	local filteredOk, filtered = pcall(result.GetNonChatStringForBroadcastAsync, result)
-	if not filteredOk or filtered ~= normalised or string.find(filtered, "#", 1, true) then
+	-- Any rewrite or hash means the plate was moderated, so reject rather than
+	-- silently registering a censored variant.
+	if filtered ~= normalised or string.find(filtered, "#", 1, true) then
 		return nil, "REGISTRATION_NOT_PERMITTED"
 	end
 	return normalised, nil

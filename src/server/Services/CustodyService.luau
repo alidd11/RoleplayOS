@@ -3,9 +3,8 @@
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
-local TextService = game:GetService("TextService")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local CustodyService = { cuffed = {}, connections = {}, commands = {}, running = false }
 
@@ -229,15 +228,9 @@ function CustodyService:_filter(actor: Player, raw: any, maximum: number): (stri
 	if #value < 5 then
 		return nil, "GROUNDS_REQUIRED"
 	end
-	if RunService:IsStudio() then
-		return value, nil
-	end
-	local ok, filtered = pcall(function()
-		return TextService:FilterStringAsync(value, actor.UserId)
-			:GetNonChatStringForBroadcastAsync()
-	end)
-	if not ok or type(filtered) ~= "string" or #filtered < 5 then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
+	local filtered, reason = TextFilter.forBroadcast(value, actor.UserId)
+	if not filtered or #filtered < 5 then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 	end
 	return filtered, nil
 end

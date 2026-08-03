@@ -1,8 +1,7 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local WarrantService = { warrants = {}, byCharacter = {} }
 
@@ -56,15 +55,9 @@ function WarrantService:_filter(actor: Player, raw: string): (string?, string?)
 	if #reason < 3 then
 		return nil, "INVALID_WARRANT_REASON"
 	end
-	if RunService:IsStudio() then
-		return reason, nil
-	end
-	local ok, filtered = pcall(function()
-		return TextService:FilterStringAsync(reason, actor.UserId)
-			:GetNonChatStringForBroadcastAsync()
-	end)
-	if not ok or type(filtered) ~= "string" or #filtered < 3 then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
+	local filtered, filterReason = TextFilter.forBroadcast(reason, actor.UserId)
+	if not filtered or #filtered < 3 then
+		return nil, filterReason or "TEXT_FILTER_UNAVAILABLE"
 	end
 	return filtered, nil
 end

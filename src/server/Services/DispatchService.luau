@@ -4,8 +4,8 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TextService = game:GetService("TextService")
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local DispatchService = { Optional = true, connections = {}, occupied = {} }
 
@@ -48,22 +48,7 @@ function DispatchService:_filter(player: Player, value: string): (string?, strin
 	if value == "" then
 		return nil, "EMPTY_TEXT"
 	end
-	if RunService:IsStudio() then
-		return value, nil
-	end
-	local ok, result = pcall(
-		TextService.FilterStringAsync,
-		TextService,
-		value,
-		player.UserId,
-		Enum.TextFilterContext.PublicChat
-	)
-	if not ok then
-		return nil, "TEXT_FILTER_UNAVAILABLE"
-	end
-	local filteredOk, filtered = pcall(result.GetNonChatStringForBroadcastAsync, result)
-	return if filteredOk then filtered else nil,
-		if filteredOk then nil else "TEXT_FILTER_UNAVAILABLE"
+	return TextFilter.forBroadcast(value, player.UserId, Enum.TextFilterContext.PublicChat)
 end
 
 function DispatchService:PrepareCall(player: Player, payload: any): (any?, string?)

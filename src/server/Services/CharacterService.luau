@@ -13,7 +13,7 @@ function CharacterService:Start() end
 local function filterIdentity(player: Player, identity: any): (any?, string?)
 	local filtered = table.clone(identity)
 	for _, field in { "FirstName", "LastName" } do
-		local result, reason = TextFilter.filter(identity[field], player.UserId)
+		local result, reason = TextFilter.forBroadcast(identity[field], player.UserId)
 		if not result then
 			return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 		end
