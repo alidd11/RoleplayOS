@@ -173,6 +173,23 @@ local Config = {
 		-- pass scales with the size of the map.
 		RecollectSeconds = 3,
 	},
+	Locations = {
+		Enabled = true,
+		-- Streets and districts are invisible parts in the map carrying this tag.
+		-- Each holds a StreetName attribute, optionally a DistrictName, and
+		-- optionally a numeric Priority so an enclosing district does not mask
+		-- the street inside it: the highest priority overlapping the player wins.
+		ZoneTag = "RoleplayOSZone",
+		-- How often the player's zone is resolved. This is a spatial query, not a
+		-- pass over every zone, so it stays cheap as the map grows.
+		UpdateSeconds = 0.4,
+		-- Minimum gap between rebuilds of the query filter, which is the only
+		-- work proportional to the number of zones.
+		RecollectSeconds = 5,
+		-- Overlapping zones considered at one point. Beyond a handful the map has
+		-- been authored with zones stacked on each other rather than beside.
+		MaximumOverlaps = 12,
+	},
 	Gamepasses = {
 		PremiumVehicles = {
 			Id = "PremiumVehicles",
