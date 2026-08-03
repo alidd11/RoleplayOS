@@ -96,11 +96,15 @@ function SettingsController:Start()
 			end
 		end)
 	)
-	local response = self.context.Controllers.NetworkController:Request("GetSettings", {})
-	if response.Success then
-		self.settings = response.Data
-		self:Apply()
-	end
+	-- Deferred so a not-yet-registered endpoint cannot stall the serial client
+	-- Start sequence; Apply re-runs against the interface once settings arrive.
+	task.spawn(function()
+		local response = self.context.Controllers.NetworkController:Request("GetSettings", {})
+		if response.Success then
+			self.settings = response.Data
+			self:Apply()
+		end
+	end)
 end
 
 function SettingsController:Get(): any

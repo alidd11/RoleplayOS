@@ -65,7 +65,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Callsign = profile.Callsign,
 		})
 	end
-	local slotCount = self.context.Configuration.Characters.FreeSlots
+	local slotCount = self.context.Services:Get("CharacterService"):SlotAllowance(session)
 	return {
 		Framework = {
 			Version = "0.1-dev",

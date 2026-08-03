@@ -547,7 +547,7 @@ function PhoneController:Start()
 		self.connections,
 		UserInputService.LastInputTypeChanged:Connect(updateShortcutLabel)
 	)
-	local event = self.context.Controllers.NetworkController.remotes:WaitForChild("PhoneChanged")
+	local event = self.context.Controllers.NetworkController:ResolveEvent("PhoneChanged")
 	local function watchTool(tool: Instance)
 		if tool:IsA("Tool") and tool.Name == "Phone" and not self.watchedTools[tool] then
 			self.watchedTools[tool] = true
@@ -571,26 +571,28 @@ function PhoneController:Start()
 			table.insert(self.connections, character.ChildAdded:Connect(watchTool))
 		end)
 	)
-	table.insert(
-		self.connections,
-		event.OnClientEvent:Connect(function(update)
-			if update.Kind == "Text" then
-				self:Refresh()
-				self.context.Controllers.NotificationController:Show(
-					"New message received.",
-					"Messages"
-				)
-			elseif update.Kind == "Call" then
-				self.activeCall = if update.Call.State == "Ended" then nil else update.Call
-				self.body.Visible = true
-				if self.activeCall then
-					self:_renderCall()
-				else
-					self:_render()
+	if event then
+		table.insert(
+			self.connections,
+			event.OnClientEvent:Connect(function(update)
+				if update.Kind == "Text" then
+					self:Refresh()
+					self.context.Controllers.NotificationController:Show(
+						"New message received.",
+						"Messages"
+					)
+				elseif update.Kind == "Call" then
+					self.activeCall = if update.Call.State == "Ended" then nil else update.Call
+					self.body.Visible = true
+					if self.activeCall then
+						self:_renderCall()
+					else
+						self:_render()
+					end
 				end
-			end
-		end)
-	)
+			end)
+		)
+	end
 	table.insert(
 		self.connections,
 		self.context.Events.CharacterChanged.Event:Connect(function()

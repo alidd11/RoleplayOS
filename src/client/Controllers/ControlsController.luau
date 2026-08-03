@@ -108,6 +108,10 @@ local ControlsController = {
 	mode = "KeyboardMouse" :: InputMode,
 	open = false,
 	previousSelection = nil :: GuiObject?,
+	openedAt = 0,
+	-- The launcher is kept mounted so mode hints stay current, but it is not shown
+	-- during play; the start menu's Controls entry and F1 / D-pad Down open it.
+	launcherEnabled = false,
 }
 
 local function corner(parent: Instance, radius: number)
@@ -206,8 +210,11 @@ end
 
 function ControlsController:_setOpen(value: boolean)
 	self.open = value
+	if value then
+		self.openedAt = os.clock()
+	end
 	self.backdrop.Visible = value
-	self.launcher.Visible = not value
+	self.launcher.Visible = self.launcherEnabled and not value
 	self.backdrop.Modal = value
 	if value then
 		self.previousSelection = GuiService.SelectedObject
@@ -246,6 +253,7 @@ function ControlsController:_mount()
 	launcher.TextColor3 = Color3.fromRGB(234, 240, 249)
 	launcher.TextSize = 13
 	launcher.Selectable = true
+	launcher.Visible = self.launcherEnabled
 	launcher.Parent = gui
 	corner(launcher, 9)
 	self.launcher = launcher
@@ -360,9 +368,23 @@ function ControlsController:_mount()
 	table.insert(
 		self.connections,
 		backdrop.Activated:Connect(function()
+			-- The press that opened this panel can land on the backdrop as it
+			-- appears; ignore dismissals that arrive in that same interaction.
+			if os.clock() - (self.openedAt or 0) < 0.25 then
+				return
+			end
 			self:_setOpen(false)
 		end)
 	)
+end
+
+function ControlsController:Open()
+	-- Start runs concurrently with the interface mount, so the panel may not exist
+	-- yet on a very early click.
+	if not self.backdrop then
+		return
+	end
+	self:_setOpen(true)
 end
 
 function ControlsController:Start()

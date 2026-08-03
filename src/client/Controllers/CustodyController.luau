@@ -1,7 +1,6 @@
 --!strict
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CustodyController = {
 	connections = {},
@@ -317,12 +316,16 @@ end
 
 function CustodyController:Start()
 	self:_mount()
-	local policyResponse =
-		self.context.Controllers.NetworkController:Request("GetCustodyPolicy", {})
-	if policyResponse.Success and policyResponse.Data then
-		self.policy = policyResponse.Data.Offences or {}
-	end
-	self:_refreshPolicy()
+	-- Deferred: the serial client Start sequence must not block on an endpoint
+	-- the server may not have registered yet.
+	task.spawn(function()
+		local policyResponse =
+			self.context.Controllers.NetworkController:Request("GetCustodyPolicy", {})
+		if policyResponse.Success and policyResponse.Data then
+			self.policy = policyResponse.Data.Offences or {}
+		end
+		self:_refreshPolicy()
+	end)
 
 	local player = Players.LocalPlayer
 	table.insert(
@@ -340,23 +343,25 @@ function CustodyController:Start()
 		end)
 	)
 
-	local remote = ReplicatedStorage.RoleplayOS.Network.Remotes:WaitForChild("CustodyChanged")
-	table.insert(
-		self.connections,
-		remote.OnClientEvent:Connect(function(payload)
-			if payload.Kind == "Caution" then
-				self.context.Controllers.NotificationController:Show(
-					payload.Text .. "\n\n" .. payload.SimulationNotice,
-					"Arrest caution"
-				)
-			elseif payload.Kind == "SearchNotice" then
-				self.context.Controllers.NotificationController:Show(
-					"An officer has recorded a search under " .. tostring(payload.Power) .. ".",
-					"Search"
-				)
-			end
-		end)
-	)
+	local remote = self.context.Controllers.NetworkController:ResolveEvent("CustodyChanged")
+	if remote then
+		table.insert(
+			self.connections,
+			remote.OnClientEvent:Connect(function(payload)
+				if payload.Kind == "Caution" then
+					self.context.Controllers.NotificationController:Show(
+						payload.Text .. "\n\n" .. payload.SimulationNotice,
+						"Arrest caution"
+					)
+				elseif payload.Kind == "SearchNotice" then
+					self.context.Controllers.NotificationController:Show(
+						"An officer has recorded a search under " .. tostring(payload.Power) .. ".",
+						"Search"
+					)
+				end
+			end)
+		)
+	end
 
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Custody", function(layout)
 		self.launcher.AnchorPoint = Vector2.new(1, 1)

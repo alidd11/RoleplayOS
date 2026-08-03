@@ -3,7 +3,6 @@
 local ContextActionService = game:GetService("ContextActionService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local NeedsController = {}
 
@@ -63,12 +62,16 @@ function NeedsController:Start()
 	blur.Size = 0
 	blur.Parent = Lighting
 	self.blur = blur
-	local remote = ReplicatedStorage.RoleplayOS.Network.Remotes:WaitForChild("NeedsChanged")
-	self.connection = remote.OnClientEvent:Connect(function(state)
-		self.stamina.Fill.Size = UDim2.fromScale(math.clamp(state.Stamina / 100, 0, 1), 1)
-		self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
-		self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
-	end)
+	-- The live feed is optional: the bars must still mount and lay out even if the
+	-- server has not registered the event, otherwise the HUD never appears at all.
+	local remote = self.context.Controllers.NetworkController:ResolveEvent("NeedsChanged")
+	if remote then
+		self.connection = remote.OnClientEvent:Connect(function(state)
+			self.stamina.Fill.Size = UDim2.fromScale(math.clamp(state.Stamina / 100, 0, 1), 1)
+			self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
+			self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
+		end)
+	end
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
 		self.blur.Enabled = not layout.VR
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)

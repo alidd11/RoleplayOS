@@ -1,6 +1,5 @@
 --!strict
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local EmergencyAlertController = {}
 
 function EmergencyAlertController:Init(context: any)
@@ -8,7 +7,10 @@ function EmergencyAlertController:Init(context: any)
 end
 
 function EmergencyAlertController:Start()
-	local remote = ReplicatedStorage.RoleplayOS.Network.Remotes:WaitForChild("EmergencyAlert")
+	local remote = self.context.Controllers.NetworkController:ResolveEvent("EmergencyAlert")
+	if not remote then
+		return
+	end
 	self.connection = remote.OnClientEvent:Connect(function(payload)
 		local call = type(payload) == "table" and payload.Call or nil
 		if type(call) == "table" then

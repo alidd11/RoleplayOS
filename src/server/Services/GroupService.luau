@@ -105,6 +105,18 @@ function RobloxGroupService:GetMembershipByGroupId(
 	return membership
 end
 
+-- Populates the membership cache for every configured link. Without this the
+-- first StartMenu build performs one live GetRankInGroup per link inside the
+-- request, because AccessService evaluates each role in turn.
+function RobloxGroupService:Warm(player: Player)
+	for linkId in self.context.Configuration.GroupLinks do
+		if not player:IsDescendantOf(Players) then
+			return
+		end
+		self:GetMembership(player, linkId)
+	end
+end
+
 function RobloxGroupService:Start()
 	table.insert(
 		self.connections,
@@ -112,6 +124,19 @@ function RobloxGroupService:Start()
 			self.cache[player.UserId] = nil
 		end)
 	)
+	table.insert(
+		self.connections,
+		Players.PlayerAdded:Connect(function(player)
+			task.spawn(function()
+				self:Warm(player)
+			end)
+		end)
+	)
+	for _, player in Players:GetPlayers() do
+		task.spawn(function()
+			self:Warm(player)
+		end)
+	end
 end
 
 function RobloxGroupService:Destroy()

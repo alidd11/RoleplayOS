@@ -168,6 +168,9 @@ function App.mount(context: any): ScreenGui
 	gui.ScreenInsets = Enum.ScreenInsets.None
 	gui.ClipToDeviceSafeArea = false
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	-- Above the gameplay HUD (minimap, needs, progression) which would otherwise
+	-- draw over the menu, but below the controls overlay at 90.
+	gui.DisplayOrder = 50
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 
 	local menuToggleGui = Instance.new("ScreenGui")
@@ -906,7 +909,9 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local activeNav: TextButton? = nil
-	local function addNav(labelValue: string, render: () -> ())
+	-- isAction entries run their callback without taking the selected-page
+	-- highlight, so overlays like Controls do not blank the content area.
+	local function addNav(labelValue: string, render: () -> (), isAction: boolean?)
 		local item = Instance.new("TextButton")
 		item.AutoButtonColor = false
 		item.BackgroundColor3 = COLOURS.Sidebar
@@ -924,6 +929,10 @@ function App.mount(context: any): ScreenGui
 		itemPadding.Parent = item
 		pressable(item)
 		item.Activated:Connect(function()
+			if isAction then
+				render()
+				return
+			end
 			if activeNav then
 				activeNav.BackgroundColor3 = COLOURS.Sidebar
 				activeNav.TextColor3 = COLOURS.Muted
@@ -939,6 +948,9 @@ function App.mount(context: any): ScreenGui
 	local playNav = addNav("Play", renderPlay)
 	addNav("Careers", renderCareers)
 	addNav("Community", renderCommunity)
+	addNav("Controls", function()
+		context.Controllers.ControlsController:Open()
+	end, true)
 	addNav("Settings", renderSettings)
 	activeNav = playNav
 	playNav.BackgroundColor3 = COLOURS.AccentSoft
@@ -955,13 +967,31 @@ function App.mount(context: any): ScreenGui
 	environment.Position = UDim2.fromOffset(14, 35)
 	environment.Size = UDim2.new(1, -28, 0, 20)
 
+	local function navCount(): number
+		local count = 0
+		for _, item in navigation:GetChildren() do
+			if item:IsA("TextButton") then
+				count += 1
+			end
+		end
+		return math.max(1, count)
+	end
+
 	context.Controllers.UIOrchestrator:Bind("DeveloperDashboard", function(layout)
 		local safeTop = layout.NativeTop
+		local navItems = navCount()
 		bleedBackdrop.Position = UDim2.fromOffset(0, -safeTop)
 		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop)
-		local nativeControlWidth = if layout.Compact then 224 else 360
+		-- Clear the measured native control cluster, falling back to the historical
+		-- estimate only when Roblox reports no inset. Without this the toggle can
+		-- render underneath Roblox's own topbar buttons and become unreachable.
+		local nativeControlWidth =
+			math.max(layout.NativeLeft + 12, if layout.Compact then 224 else 360)
 		menuToggle.Position = UDim2.fromOffset(
-			math.min(nativeControlWidth, math.max(12, layout.Viewport.X - 108)),
+			math.min(
+				nativeControlWidth,
+				math.max(12, layout.Viewport.X - menuToggle.AbsoluteSize.X - 12)
+			),
 			math.max(8, math.floor((layout.NativeTop - menuToggle.AbsoluteSize.Y) / 2))
 		)
 		local horizontal = layout.Compact or layout.Viewport.Y < 520
@@ -985,7 +1015,7 @@ function App.mount(context: any): ScreenGui
 			navLayout.Padding = UDim.new(0, 6)
 			for _, item in navigation:GetChildren() do
 				if item:IsA("TextButton") then
-					item.Size = UDim2.new(0.25, -5, 1, 0)
+					item.Size = UDim2.new(1 / navItems, -5, 1, 0)
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
@@ -1012,7 +1042,7 @@ function App.mount(context: any): ScreenGui
 			brand.TextTruncate = Enum.TextTruncate.None
 			version.Position = UDim2.fromOffset(27, safeTop + 66)
 			navigation.Position = UDim2.fromOffset(18, safeTop + 112)
-			navigation.Size = UDim2.new(1, -36, 0, 190)
+			navigation.Size = UDim2.new(1, -36, 0, navItems * 44 + (navItems - 1) * 7)
 			navLayout.FillDirection = Enum.FillDirection.Vertical
 			navLayout.Padding = UDim.new(0, 7)
 			for _, item in navigation:GetChildren() do
@@ -1044,18 +1074,16 @@ function App.mount(context: any): ScreenGui
 		status.TextColor3 = COLOURS.Success
 		renderPlay()
 	end)
-	local response = context.Controllers.StartMenuController:Refresh()
-	if response.Success then
-		menuData = response.Data
-		brand.Text = response.Data.Framework.GameName
-		version.Visible = response.Data.Framework.ShowRoleplayOSMark
-		status.Text = "●  ONLINE  ·  " .. string.upper(response.Data.Server.Kind)
-		status.TextColor3 = COLOURS.Success
-	else
-		status.Text = "●  CONNECTION ERROR"
-		status.TextColor3 = COLOURS.Danger
-		renderPlay()
-	end
+	-- Paint immediately so the menu is on screen while the first request is still
+	-- in flight. The StartMenuChanged handler above fills in real data on success.
+	renderPlay()
+	task.spawn(function()
+		local response = context.Controllers.StartMenuController:Refresh()
+		if not response.Success then
+			status.Text = "●  CONNECTION ERROR"
+			status.TextColor3 = COLOURS.Danger
+		end
+	end)
 
 	if interfaceMotionEnabled() then
 		root.Position = UDim2.fromOffset(0, 12)

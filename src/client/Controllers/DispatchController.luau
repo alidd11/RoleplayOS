@@ -512,25 +512,31 @@ function DispatchController:Start()
 		watchCharacter(Players.LocalPlayer.Character)
 	end
 	table.insert(self.connections, Players.LocalPlayer.CharacterAdded:Connect(watchCharacter))
-	local remotes = self.context.Controllers.NetworkController.remotes
-	table.insert(
-		self.connections,
-		remotes:WaitForChild("DispatchChanged").OnClientEvent:Connect(function(update)
-			self.context.Events.DispatchChanged:Fire(update)
-			if self.gui.Enabled then
-				self:Refresh()
-			end
-		end)
-	)
-	table.insert(
-		self.connections,
-		remotes:WaitForChild("DispatchConsoleAccess").OnClientEvent:Connect(function(data)
-			self.gui.Enabled = data.Allowed == true
-			if self.gui.Enabled then
-				self:Refresh()
-			end
-		end)
-	)
+	local network = self.context.Controllers.NetworkController
+	local changed = network:ResolveEvent("DispatchChanged")
+	if changed then
+		table.insert(
+			self.connections,
+			changed.OnClientEvent:Connect(function(update)
+				self.context.Events.DispatchChanged:Fire(update)
+				if self.gui.Enabled then
+					self:Refresh()
+				end
+			end)
+		)
+	end
+	local consoleAccess = network:ResolveEvent("DispatchConsoleAccess")
+	if consoleAccess then
+		table.insert(
+			self.connections,
+			consoleAccess.OnClientEvent:Connect(function(data)
+				self.gui.Enabled = data.Allowed == true
+				if self.gui.Enabled then
+					self:Refresh()
+				end
+			end)
+		)
+	end
 end
 
 function DispatchController:Destroy()

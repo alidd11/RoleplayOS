@@ -202,20 +202,21 @@ end
 
 function ProgressionController:Start()
 	self:_mount()
-	local event =
-		self.context.Controllers.NetworkController.remotes:WaitForChild("ProgressionChanged")
-	table.insert(
-		self.connections,
-		event.OnClientEvent:Connect(function(data)
-			self:Render(data)
-			if data.Grant then
-				self.context.Controllers.NotificationController:Show(
-					"+" .. tostring(data.Grant.Amount) .. " XP",
-					data.Grant.LevelsGained > 0 and "Level up" or "Progression"
-				)
-			end
-		end)
-	)
+	local event = self.context.Controllers.NetworkController:ResolveEvent("ProgressionChanged")
+	if event then
+		table.insert(
+			self.connections,
+			event.OnClientEvent:Connect(function(data)
+				self:Render(data)
+				if data.Grant then
+					self.context.Controllers.NotificationController:Show(
+						"+" .. tostring(data.Grant.Amount) .. " XP",
+						data.Grant.LevelsGained > 0 and "Level up" or "Progression"
+					)
+				end
+			end)
+		)
+	end
 	table.insert(
 		self.connections,
 		Players.LocalPlayer:GetPropertyChangedSignal("Team"):Connect(function()

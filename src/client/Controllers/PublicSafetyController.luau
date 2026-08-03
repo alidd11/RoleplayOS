@@ -451,15 +451,17 @@ end
 function PublicSafetyController:Start()
 	self:_mount()
 	local credentialEvent =
-		self.context.Controllers.NetworkController.remotes:WaitForChild("CredentialPresented")
-	table.insert(
-		self.connections,
-		credentialEvent.OnClientEvent:Connect(function(card)
-			if type(card) == "table" then
-				self:_showCard(card)
-			end
-		end)
-	)
+		self.context.Controllers.NetworkController:ResolveEvent("CredentialPresented")
+	if credentialEvent then
+		table.insert(
+			self.connections,
+			credentialEvent.OnClientEvent:Connect(function(card)
+				if type(card) == "table" then
+					self:_showCard(card)
+				end
+			end)
+		)
+	end
 	ContextActionService:BindAction(CLOSE_ACTION, function(_, state)
 		if state ~= Enum.UserInputState.Begin or not self.actionPanel.Visible then
 			return Enum.ContextActionResult.Pass

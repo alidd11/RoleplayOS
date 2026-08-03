@@ -943,6 +943,7 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:MarkReady()
 end
 function NetworkService:Destroy() end
 return NetworkService

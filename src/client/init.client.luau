@@ -46,79 +46,67 @@ do
 	controllers[name .. "Controller"] = FeatureController.new(name)
 end
 local context = { Controllers = controllers, Events = events }
-for _, name in
-	{
-		"UIOrchestrator",
-		"ControlsController",
-		"NetworkController",
-		"NotificationController",
-		"SettingsController",
-		"CharacterController",
-		"ProgressionController",
-		"MinimapController",
-		"PhoneController",
-		"GamepassController",
-		"ApplicationController",
-		"MDTController",
-		"DispatchController",
-		"EmergencyAlertController",
-		"CCTVController",
-		"ANPRAlertController",
-		"NeedsController",
-		"VehicleUIController",
-		"DealershipController",
-		"SpeedometerController",
-		"PublicSafetyController",
-		"CustodyController",
-		"CommunityController",
-		"DutyController",
-		"AccessPromptsController",
-		"JobsController",
-		"VehiclesController",
-		"PropertiesController",
-		"FurnitureController",
-		"EmergencyServicesController",
-		"StartMenuController",
-	}
-do
+
+-- One ordered list drives both lifecycle phases. Keeping two copies in sync by
+-- hand risks a controller being initialised but never started, or vice versa.
+local ORDER = {
+	"UIOrchestrator",
+	"ControlsController",
+	"NetworkController",
+	"NotificationController",
+	"SettingsController",
+	"CharacterController",
+	"ProgressionController",
+	"MinimapController",
+	"PhoneController",
+	"GamepassController",
+	"ApplicationController",
+	"MDTController",
+	"DispatchController",
+	"EmergencyAlertController",
+	"CCTVController",
+	"ANPRAlertController",
+	"NeedsController",
+	"VehicleUIController",
+	"DealershipController",
+	"SpeedometerController",
+	"PublicSafetyController",
+	"CustodyController",
+	"CommunityController",
+	"DutyController",
+	"AccessPromptsController",
+	"JobsController",
+	"VehiclesController",
+	"PropertiesController",
+	"FurnitureController",
+	"EmergencyServicesController",
+	"StartMenuController",
+}
+
+-- Init must stay serial and in order: controllers read each other's stored
+-- dependencies. It does no networking, so it cannot yield indefinitely.
+for _, name in ORDER do
 	controllers[name]:Init(context)
 end
-for _, name in
-	{
-		"UIOrchestrator",
-		"ControlsController",
-		"NetworkController",
-		"NotificationController",
-		"SettingsController",
-		"CharacterController",
-		"ProgressionController",
-		"MinimapController",
-		"PhoneController",
-		"GamepassController",
-		"ApplicationController",
-		"MDTController",
-		"DispatchController",
-		"EmergencyAlertController",
-		"CCTVController",
-		"ANPRAlertController",
-		"NeedsController",
-		"VehicleUIController",
-		"DealershipController",
-		"SpeedometerController",
-		"PublicSafetyController",
-		"CustodyController",
-		"CommunityController",
-		"DutyController",
-		"AccessPromptsController",
-		"JobsController",
-		"VehiclesController",
-		"PropertiesController",
-		"FurnitureController",
-		"EmergencyServicesController",
-		"StartMenuController",
-	}
-do
-	controllers[name]:Start()
+
+-- Start connects events and issues first requests, so it can yield on remotes
+-- the server has not registered yet. Each one is isolated: a controller that
+-- hangs or errors must not prevent the rest of the interface from starting.
+for _, name in ORDER do
+	task.spawn(function()
+		local ok, problem = pcall(function()
+			controllers[name]:Start()
+		end)
+		if not ok then
+			warn(
+				string.format(
+					"RoleplayOS controller %s failed to start: %s",
+					name,
+					tostring(problem)
+				)
+			)
+		end
+	end)
 end
 
 require(script.UI.DeveloperDashboard).mount(context)

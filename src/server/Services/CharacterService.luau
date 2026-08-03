@@ -24,6 +24,19 @@ local function filterIdentity(player: Player, identity: any): (any?, string?)
 	end
 	return filtered, nil
 end
+-- Single authority for how many character slots a profile may occupy. The start
+-- menu and creation path must agree, otherwise a purchased slot is unreachable.
+function CharacterService:SlotAllowance(session: any): number
+	local slots = self.context.Configuration.Characters.FreeSlots
+	if
+		session.Profile.GamepassCache[tostring(
+			self.context.Configuration.Gamepasses.ExtraCharacterSlot.GamepassId
+		)]
+	then
+		slots += 1
+	end
+	return math.min(slots, self.context.Configuration.Characters.MaximumSlots)
+end
 function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
@@ -46,15 +59,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	for _ in session.Profile.Characters do
 		count += 1
 	end
-	local slots = self.context.Configuration.Characters.FreeSlots
-	if
-		session.Profile.GamepassCache[tostring(
-			self.context.Configuration.Gamepasses.ExtraCharacterSlot.GamepassId
-		)]
-	then
-		slots += 1
-	end
-	if count >= math.min(slots, self.context.Configuration.Characters.MaximumSlots) then
+	if count >= self:SlotAllowance(session) then
 		return nil, "NO_CHARACTER_SLOT"
 	end
 	local id = HttpService:GenerateGUID(false)

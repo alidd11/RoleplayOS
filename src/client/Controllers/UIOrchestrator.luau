@@ -13,6 +13,7 @@ export type Layout = {
 	Vehicle: boolean,
 	Dispatch: boolean,
 	NativeTop: number,
+	NativeLeft: number,
 	HotbarBottom: number,
 	RightReserve: number,
 	InputMode: string,
@@ -50,6 +51,10 @@ function UIOrchestrator:_layout(): Layout
 		else "Desktop"
 	local vehicle = self.state == "Driver" or self.state == "Passenger"
 	local measuredTop = math.max(0, math.floor(GuiService.TopbarInset.Height + 0.5))
+	-- TopbarInset describes the region Roblox leaves free for experience content.
+	-- Its left edge moves as Roblox changes the native control cluster, so it must
+	-- be measured rather than assumed, otherwise our controls render underneath it.
+	local measuredLeft = math.max(0, math.floor(GuiService.TopbarInset.Min.X + 0.5))
 	return {
 		Breakpoint = breakpoint,
 		State = self.state,
@@ -58,6 +63,7 @@ function UIOrchestrator:_layout(): Layout
 		Vehicle = vehicle,
 		Dispatch = self.state == "DispatchSeat",
 		NativeTop = math.max(if vr then 72 else 48, measuredTop),
+		NativeLeft = measuredLeft,
 		HotbarBottom = if vr then 124 else if vehicle then 112 else 76,
 		RightReserve = if vr
 			then 64

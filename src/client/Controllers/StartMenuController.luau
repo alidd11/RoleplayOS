@@ -4,8 +4,12 @@ function StartMenuController:Init(context: any)
 	self.context = context
 	self.viewModel = nil
 end
+-- Endpoints may not exist yet, so Refresh can yield. The client Start sequence
+-- is serial: blocking here delays every later controller and the interface mount.
 function StartMenuController:Start()
-	self:Refresh()
+	task.spawn(function()
+		self:Refresh()
+	end)
 end
 function StartMenuController:Refresh(): any
 	local response = self.context.Controllers.NetworkController:Request("GetStartMenu", {})

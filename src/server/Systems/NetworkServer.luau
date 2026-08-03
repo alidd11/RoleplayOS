@@ -141,6 +141,12 @@ function NetworkServer:RegisterFunction(
 	end
 end
 
+-- Published once every endpoint is registered so clients can distinguish "the
+-- server is still starting" from "this endpoint genuinely does not exist".
+function NetworkServer:MarkReady()
+	self.folder:SetAttribute("Ready", true)
+end
+
 function NetworkServer:Destroy()
 	if self.playerRemoving then
 		self.playerRemoving:Disconnect()
