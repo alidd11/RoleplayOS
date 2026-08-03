@@ -52,7 +52,7 @@ end
 
 function MDTController:Init(context: any)
 	self.context = context
-	self.recordType = "Person"
+	self.recordType = "Home"
 	self.allowed = false
 	self.canWriteWarrants = false
 	self.selectedRecord = nil
@@ -191,28 +191,48 @@ function MDTController:_mount()
 	local tabRail = Instance.new("Frame")
 	tabRail.Name = "Tabs"
 	tabRail.Position = UDim2.fromOffset(18, 70)
-	tabRail.Size = UDim2.fromOffset(398, 40)
+	tabRail.Size = UDim2.fromOffset(446, 40)
 	tabRail.BackgroundColor3 = Color3.fromRGB(10, 24, 38)
 	tabRail.BorderSizePixel = 0
 	tabRail.Parent = shell
 	corner(tabRail, 11)
 
+	local homeTab = button(tabRail, "HOME")
+	homeTab.Position = UDim2.fromOffset(4, 3)
+	homeTab.Size = UDim2.fromOffset(74, 34)
 	local person = button(tabRail, "PEOPLE")
-	person.Position = UDim2.fromOffset(4, 3)
-	person.Size = UDim2.fromOffset(92, 34)
+	person.Position = UDim2.fromOffset(82, 3)
+	person.Size = UDim2.fromOffset(88, 34)
 	local vehicle = button(tabRail, "VEHICLES")
-	vehicle.Position = UDim2.fromOffset(100, 3)
+	vehicle.Position = UDim2.fromOffset(174, 3)
 	vehicle.Size = UDim2.fromOffset(92, 34)
 	local incidents = button(tabRail, "INCIDENTS")
-	incidents.Position = UDim2.fromOffset(196, 3)
-	incidents.Size = UDim2.fromOffset(98, 34)
+	incidents.Position = UDim2.fromOffset(270, 3)
+	incidents.Size = UDim2.fromOffset(96, 34)
 	local mapTab = button(tabRail, "MAP")
-	mapTab.Position = UDim2.fromOffset(298, 3)
-	mapTab.Size = UDim2.fromOffset(96, 34)
+	mapTab.Position = UDim2.fromOffset(370, 3)
+	mapTab.Size = UDim2.fromOffset(72, 34)
+	self.homeTab = homeTab
 	self.personTab = person
 	self.vehicleTab = vehicle
 	self.incidentTab = incidents
 	self.mapTab = mapTab
+
+	-- The home screen the terminal opens on. Every page is reachable from here
+	-- as well as from the rail, so an officer who has just picked the terminal
+	-- up is not required to already know which tab they want.
+	local home = Instance.new("Frame")
+	home.Name = "Home"
+	home.BackgroundTransparency = 1
+	home.Position = UDim2.fromOffset(22, 124)
+	home.Size = UDim2.new(1, -44, 1, -146)
+	home.Parent = shell
+	self.home = home
+	local homeGrid = Instance.new("UIGridLayout")
+	homeGrid.CellSize = UDim2.fromOffset(232, 96)
+	homeGrid.CellPadding = UDim2.fromOffset(14, 14)
+	homeGrid.SortOrder = Enum.SortOrder.LayoutOrder
+	homeGrid.Parent = home
 
 	local input = Instance.new("TextBox")
 	input.BackgroundColor3 = C.Raised
@@ -432,6 +452,10 @@ function MDTController:_mount()
 		self:_renderTabs()
 		self:_performSearch()
 	end)
+	homeTab.Activated:Connect(function()
+		self.recordType = "Home"
+		self:_renderTabs()
+	end)
 	mapTab.Activated:Connect(function()
 		self.recordType = "Map"
 		self:_renderTabs()
@@ -445,23 +469,66 @@ function MDTController:_mount()
 			self:_performSearch()
 		end
 	end)
+	self:_buildHome()
 	self:_renderTabs()
 end
 
 function MDTController:_renderTabs()
+	self.homeTab.BackgroundColor3 = if self.recordType == "Home" then C.Accent else C.Raised
 	self.personTab.BackgroundColor3 = if self.recordType == "Person" then C.Accent else C.Raised
 	self.vehicleTab.BackgroundColor3 = if self.recordType == "Vehicle" then C.Accent else C.Raised
 	self.incidentTab.BackgroundColor3 = if self.recordType == "Incident" then C.Accent else C.Raised
 	self.mapTab.BackgroundColor3 = if self.recordType == "Map" then C.Accent else C.Raised
-	-- The map replaces the records surface rather than sharing it, so the
-	-- search controls cannot be used against a record type that has no search.
+	-- Home and the map each replace the records surface rather than sharing it,
+	-- so the search controls cannot be used against a page that has no search.
 	local mapping = self.recordType == "Map"
-	self.input.Visible = not mapping
-	self.searchAction.Visible = not mapping
-	self.status.Visible = not mapping
-	self.results.Visible = not mapping
-	self.detail.Visible = not mapping
+	local home = self.recordType == "Home"
+	local records = not mapping and not home
+	self.input.Visible = records
+	self.searchAction.Visible = records
+	self.status.Visible = records
+	self.results.Visible = records
+	self.detail.Visible = records
+	self.home.Visible = home
 	self.map:SetVisible(mapping)
+end
+
+-- One home tile: a titled card describing what the page is for, so the terminal
+-- explains itself rather than relying on four unlabelled tabs.
+function MDTController:_homeTile(order: number, name: string, detail: string, page: string)
+	local tile = button(self.home, "")
+	tile.LayoutOrder = order
+	tile.BackgroundColor3 = C.Raised
+	corner(tile, 12)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = C.Border
+	stroke.Transparency = 0.4
+	stroke.Parent = tile
+	local title = text(tile, name, 16, true)
+	title.Position = UDim2.fromOffset(16, 16)
+	title.Size = UDim2.new(1, -32, 0, 24)
+	local body = text(tile, detail, 11)
+	body.Position = UDim2.fromOffset(16, 42)
+	body.Size = UDim2.new(1, -32, 0, 40)
+	body.TextWrapped = true
+	body.TextYAlignment = Enum.TextYAlignment.Top
+	body.TextColor3 = C.Muted
+	tile.Activated:Connect(function()
+		self.recordType = page
+		self:_renderTabs()
+		if page == "Map" then
+			self:RefreshMap()
+		elseif page == "Incident" then
+			self:_performSearch()
+		end
+	end)
+end
+
+function MDTController:_buildHome()
+	self:_homeTile(1, "People", "Search person records, warnings and warrants.", "Person")
+	self:_homeTile(2, "Vehicles", "Look up a registration, keeper and markers.", "Vehicle")
+	self:_homeTile(3, "Incidents", "Review recent incidents recorded by control.", "Incident")
+	self:_homeTile(4, "Map", "Live picture of incidents, units and premises.", "Map")
 end
 
 -- Pulls a fresh server snapshot. The map only ever renders what the server
