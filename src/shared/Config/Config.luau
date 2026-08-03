@@ -1106,6 +1106,29 @@ local Config = {
 		-- the workspace is walked, which blocks startup on a large map.
 		PadTag = "RoleplayOSSpawnPad",
 	},
+	-- Vehicles are driven by a third-party chassis. RoleplayOS presents the
+	-- readouts itself so they match the rest of the interface, scale with the
+	-- device and respect the safe area, which a chassis's own interface does not.
+	Chassis = {
+		-- Interfaces cloned into PlayerGui by the chassis, disabled on sight so
+		-- two sets of gauges are never on screen at once. Names differ between
+		-- A-Chassis forks, so check what actually appears in PlayerGui while
+		-- seated and add it here rather than assuming this list is complete.
+		SuppressGuiNames = {
+			"A-Chassis Interface",
+			"AC6_Interface",
+			"ACGUI",
+			"Gauges",
+			"GaugesGUI",
+		},
+		-- Where the chassis publishes its live values, searched under the seat
+		-- and then the vehicle model. Fuel is deliberately not read from here:
+		-- RoleplayOS owns fuel on the server, and a client value could not be
+		-- trusted anyway.
+		ValuesFolderName = "Values",
+		GearValueName = "Gear",
+		RpmValueName = "RPM",
+	},
 	VehicleSpawning = {
 		TerminalTag = "RoleplayOSVehicleTerminal",
 		SpawnPointTag = "RoleplayOSVehicleSpawn",

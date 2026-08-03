@@ -1,11 +1,32 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+
+local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
 local SpeedometerController = { connections = {}, seat = nil, accumulator = 0 }
 function SpeedometerController:Init(context: any)
 	self.context = context
+	self.settings = Config.Chassis
+end
+
+-- The chassis publishes its live state in a folder of values. Searched under
+-- the seat and then the vehicle model, because forks disagree on where it sits,
+-- and absent entirely on a vehicle without a chassis.
+function SpeedometerController:_chassisValues(seat: BasePart): Folder?
+	local name = self.settings.ValuesFolderName
+	local found = seat:FindFirstChild(name)
+	if not found and seat.Parent then
+		found = seat.Parent:FindFirstChild(name)
+	end
+	return if found and found:IsA("Folder") then found else nil
+end
+
+local function readValue(folder: Folder?, name: string): any?
+	local item = if folder then folder:FindFirstChild(name) else nil
+	return if item and item:IsA("ValueBase") then (item :: any).Value else nil
 end
 
 function SpeedometerController:_mount()
@@ -134,12 +155,23 @@ function SpeedometerController:Start()
 			end
 			local mph = math.floor(seat.AssemblyLinearVelocity.Magnitude * 0.626 + 0.5)
 			self.speed.Text = string.format("%03d", math.min(mph, 999))
-			self.gear.Text = (
-				if seat.ThrottleFloat < -0.05
+			-- The chassis knows its own gear, including reverse and each ratio,
+			-- which throttle direction alone cannot tell apart. Fall back to
+			-- throttle only where no chassis is present.
+			local values = self:_chassisValues(seat)
+			local gear = readValue(values, self.settings.GearValueName)
+			local label = if type(gear) == "number"
+				then (if gear < 0 then "R" elseif gear == 0 then "N" else tostring(gear))
+				elseif type(gear) == "string" and gear ~= "" then gear
+				else (if seat.ThrottleFloat < -0.05
 					then "R"
 					elseif math.abs(seat.ThrottleFloat) > 0.05 then "D"
-					else "N"
-			)
+					else "N")
+			local rpm = readValue(values, self.settings.RpmValueName)
+			if type(rpm) == "number" and rpm > 0 then
+				label ..= string.format("  ·  %d RPM", math.floor(rpm + 0.5))
+			end
+			self.gear.Text = label
 				.. "  ·  "
 				.. (seat:GetAttribute("RoleplayOSRegistration") or "VEHICLE")
 			local fuel = seat:GetAttribute("RoleplayOSFuel")

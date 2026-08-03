@@ -2,11 +2,33 @@
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
 local VehicleUIController = { connections = {}, vehicleMode = false, state = "OnFoot" }
 
 function VehicleUIController:Init(context: any)
 	self.context = context
+	self.settings = Config.Chassis
+end
+
+-- The chassis clones its own gauges into PlayerGui when a player takes a seat.
+-- RoleplayOS presents the readouts itself, so the chassis interface is disabled
+-- on sight rather than left to sit alongside a second set of gauges. It is
+-- disabled rather than destroyed: the chassis may still be driving it, and
+-- removing something another system owns invites errors that are hard to trace
+-- back here.
+function VehicleUIController:_suppress(instance: Instance)
+	if not instance:IsA("ScreenGui") then
+		return
+	end
+	if instance:GetAttribute("RoleplayOSManagedUI") then
+		return
+	end
+	if table.find(self.settings.SuppressGuiNames, instance.Name) then
+		instance.Enabled = false
+	end
 end
 
 function VehicleUIController:_broadcast()
@@ -58,6 +80,16 @@ function VehicleUIController:_watchCharacter(character: Model)
 end
 
 function VehicleUIController:Start()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	for _, child in playerGui:GetChildren() do
+		self:_suppress(child)
+	end
+	table.insert(
+		self.connections,
+		playerGui.ChildAdded:Connect(function(child)
+			self:_suppress(child)
+		end)
+	)
 	local player = Players.LocalPlayer
 	self:_broadcast()
 	if player.Character then
