@@ -1109,6 +1109,13 @@ local Config = {
 	-- Vehicles are driven by a third-party chassis. RoleplayOS presents the
 	-- readouts itself so they match the rest of the interface, scale with the
 	-- device and respect the safe area, which a chassis's own interface does not.
+	DrivingControls = {
+		Enabled = true,
+		-- Accelerator size in pixels before the interface scale is applied. The
+		-- brake is drawn shorter above it, as a pedal pair rather than two equal
+		-- buttons.
+		PedalSize = 92,
+	},
 	Chassis = {
 		-- Interfaces cloned into PlayerGui by the chassis, disabled on sight so
 		-- two sets of gauges are never on screen at once. Names differ between

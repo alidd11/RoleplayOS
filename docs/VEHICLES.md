@@ -22,3 +22,14 @@ Road speed is measured from the seat's own velocity rather than read from the ch
 Fuel is not read from the chassis. RoleplayOS owns fuel on the server and publishes it as an attribute; a client-side value could not be trusted in any case.
 
 Emergency lighting and siren systems are left alone. They are part of the vehicle and are presented in the world rather than on screen, so they do not compete with the interface for space.
+
+
+## Driving on a phone
+
+Roblox gives a touch driver the same thumbstick it gives a pedestrian. One control cannot hold full throttle and steer at the same time, so a phone player is at a standing disadvantage to anyone on a keyboard.
+
+RoleplayOS adds separate throttle and brake pedals, shown only to a touch player who is actually driving: a passenger has nothing to drive, and a keyboard or gamepad player already has both. They are held rather than tapped, and release when the finger lifts anywhere, so a vehicle is never left accelerating because a touch ended off the button.
+
+The pedals drive the seat's own throttle rather than speaking to the chassis, so they work with any chassis or none. That property is also written by Roblox's control module from the thumbstick, and whichever writes last in a frame wins; the pedals write every frame while held, so they take precedence while in use and the thumbstick still works when they are not. If a chassis reads its own input rather than the seat, the pedals will not reach it and the chassis's own touch controls should be used instead.
+
+Steering is deliberately left to the thumbstick, which already does it well and is where a player expects it.
