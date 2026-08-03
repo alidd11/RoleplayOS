@@ -69,6 +69,7 @@ function ProgressionController:_mount()
 	gui.ClipToDeviceSafeArea = true
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Enabled = false
+	gui.DisplayOrder = 10
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 

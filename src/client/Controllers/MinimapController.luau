@@ -52,6 +52,7 @@ function MinimapController:_mount()
 	gui.ClipToDeviceSafeArea = true
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Enabled = false
+	gui.DisplayOrder = 10
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
@@ -226,6 +227,17 @@ function MinimapController:Start()
 	if not self.settings.Enabled then
 		return
 	end
+	-- The handset and the terminal occupy the same corner as the minimap, so it
+	-- steps aside while either is open instead of showing through the device.
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local function followDeviceState()
+		self.shell.Visible = playerGui:GetAttribute("RoleplayOSDeviceOpen") ~= true
+	end
+	table.insert(
+		self.connections,
+		playerGui:GetAttributeChangedSignal("RoleplayOSDeviceOpen"):Connect(followDeviceState)
+	)
+	followDeviceState()
 	for _, tag in { self.settings.BoundsTag, self.settings.RoadTag, self.settings.PointTag } do
 		table.insert(
 			self.connections,

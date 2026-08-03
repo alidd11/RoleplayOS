@@ -50,6 +50,7 @@ function NeedsController:Start()
 	-- Anchored to a screen edge, so it must stay clear of notches, rounded
 	-- corners and home indicators rather than being clipped by them.
 	gui.ClipToDeviceSafeArea = true
+	gui.DisplayOrder = 10
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local hud = Instance.new("Frame")
 	hud.AnchorPoint = Vector2.new(0.5, 1)

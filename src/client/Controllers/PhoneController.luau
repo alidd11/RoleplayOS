@@ -82,6 +82,16 @@ function PhoneController:Init(context: any)
 	self.watchedTools = setmetatable({}, { __mode = "k" })
 end
 
+-- Announces that a full device is on screen. The ambient heads-up display
+-- occupies the same corner as the handset, so it stands down rather than
+-- fighting it for space; layering alone would leave it visibly underneath.
+function PhoneController:_announce(open: boolean)
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui:SetAttribute("RoleplayOSDeviceOpen", open)
+	end
+end
+
 function PhoneController:_mount()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSPhone"
@@ -89,6 +99,7 @@ function PhoneController:_mount()
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.ClipToDeviceSafeArea = true
+	gui.DisplayOrder = 40
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
@@ -117,6 +128,7 @@ function PhoneController:_mount()
 	body.BorderSizePixel = 0
 	body.SelectionGroup = true
 	body.Visible = false
+	self:_announce(false)
 	body.Parent = gui
 	corner(body, 34)
 	local stroke = Instance.new("UIStroke")
@@ -234,12 +246,14 @@ function PhoneController:_mount()
 	end)
 	launcher.Activated:Connect(function()
 		body.Visible = not body.Visible
+		self:_announce(body.Visible)
 		if body.Visible then
 			self:Refresh()
 		end
 	end)
 	close.Activated:Connect(function()
 		body.Visible = false
+		self:_announce(false)
 	end)
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Phone", function(layout)
 		if layout.Compact then
@@ -252,11 +266,14 @@ function PhoneController:_mount()
 			body.Size = UDim2.fromOffset(286, math.min(520, layout.SafeViewport.Y - 90))
 		else
 			body.AnchorPoint = Vector2.new(1, 1)
-			body.Position = UDim2.new(1, -18, 1, -76)
-			-- The handset is anchored 76 pixels above the bottom of the usable
-			-- area, so its height must leave that offset plus a top margin free;
-			-- measuring the raw viewport ran the handset off the top of the screen.
-			body.Size = UDim2.fromOffset(326, math.min(610, layout.SafeViewport.Y - 94))
+			body.Position = UDim2.new(1, -(layout.RightReserve + 18), 1, -76)
+			-- Scale with the screen rather than sitting at a fixed size: a handset
+			-- that reads well on a laptop is overbearing on a large monitor. The
+			-- aspect ratio is held so it stays phone-shaped at any height, and the
+			-- 76 pixel bottom anchor plus a top margin are left free.
+			local height = math.clamp(layout.SafeViewport.Y * 0.54, 400, 610)
+			height = math.min(height, layout.SafeViewport.Y - 94)
+			body.Size = UDim2.fromOffset(math.floor(height * 0.535), math.floor(height))
 		end
 		launcher.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(1, 1)
 		launcher.Position = if layout.Vehicle
@@ -655,6 +672,7 @@ function PhoneController:Start()
 				return Enum.ContextActionResult.Pass
 			end
 			self.body.Visible = false
+			self:_announce(false)
 			GuiService.SelectedObject = self.launcher
 			return Enum.ContextActionResult.Sink
 		end
@@ -701,6 +719,7 @@ function PhoneController:Start()
 				self.connections,
 				tool.Activated:Connect(function()
 					self.body.Visible = true
+					self:_announce(true)
 					self:Refresh()
 				end)
 			)
@@ -730,6 +749,7 @@ function PhoneController:Start()
 				elseif update.Kind == "Call" then
 					self.activeCall = if update.Call.State == "Ended" then nil else update.Call
 					self.body.Visible = true
+					self:_announce(true)
 					if self.activeCall then
 						self:_renderCall()
 					else
@@ -754,6 +774,7 @@ function PhoneController:Start()
 			self.launcher.Visible = self.hasCharacter == true and not active
 			if active then
 				self.body.Visible = false
+				self:_announce(false)
 			end
 		end)
 	)

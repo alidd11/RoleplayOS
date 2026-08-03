@@ -66,6 +66,7 @@ function MDTController:_mount()
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.ClipToDeviceSafeArea = true
 	gui.Enabled = false
+	gui.DisplayOrder = 35
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
@@ -385,6 +386,12 @@ function MDTController:_mount()
 			return
 		end
 		chassis.Visible = open
+		-- The ambient heads-up display stands down while a full device is on
+		-- screen rather than showing through it.
+		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		if playerGui then
+			playerGui:SetAttribute("RoleplayOSDeviceOpen", open)
+		end
 		if open then
 			-- Map geometry is static, so rebuild on open rather than per refresh.
 			self.map:Rebuild()
