@@ -142,13 +142,24 @@ function PhoneController:_mount()
 	island.BorderSizePixel = 0
 	island.Parent = screen
 	corner(island, 12)
-	local time = label(screen, "09:41", 10, true)
-	time.Position = UDim2.fromOffset(18, 12)
-	time.Size = UDim2.fromOffset(55, 18)
+	-- Status bar: clock on the left of the island, indicators on the right, as
+	-- on the device being imitated. The clock follows in-game UK time rather
+	-- than a fixed marketing time.
+	local time = label(screen, "09:41", 11, true)
+	time.Position = UDim2.fromOffset(20, 11)
+	time.Size = UDim2.fromOffset(58, 18)
+	time.TextXAlignment = Enum.TextXAlignment.Center
+	self.statusTime = time
+	local indicators = label(screen, "▮▮▮  ᯤ  ▰", 10, true)
+	indicators.AnchorPoint = Vector2.new(1, 0)
+	indicators.Position = UDim2.new(1, -20, 0, 11)
+	indicators.Size = UDim2.fromOffset(74, 18)
+	indicators.TextXAlignment = Enum.TextXAlignment.Right
 	local close = button(screen, "×")
 	close.AnchorPoint = Vector2.new(1, 0)
-	close.Position = UDim2.new(1, -12, 0, 10)
+	close.Position = UDim2.new(1, -12, 0, 34)
 	close.Size = UDim2.fromOffset(28, 24)
+	close.BackgroundTransparency = 0.35
 	self.close = close
 
 	local heading = label(screen, "Phone", 24, true)
@@ -168,48 +179,58 @@ function PhoneController:_mount()
 	content.Parent = screen
 	self.content = content
 
-	local dock = Instance.new("Frame")
-	dock.AnchorPoint = Vector2.new(0.5, 1)
-	dock.Position = UDim2.new(0.5, 0, 1, -10)
-	dock.Size = UDim2.new(1, -28, 0, 48)
-	dock.BackgroundColor3 = Color3.fromRGB(27, 35, 49)
-	dock.BackgroundTransparency = 0.08
-	dock.BorderSizePixel = 0
-	dock.Parent = screen
-	corner(dock, 16)
-	local home = button(dock, "⌂\nHOME")
-	home.Position = UDim2.fromOffset(5, 5)
-	home.Size = UDim2.new(0.2, -6, 1, -10)
-	local contacts = button(dock, "●\nPEOPLE")
-	contacts.Position = UDim2.new(0.2, 1, 0, 5)
-	contacts.Size = UDim2.new(0.2, -6, 1, -10)
-	local dial = button(dock, "☎\nCALL")
-	dial.Position = UDim2.new(0.4, 1, 0, 5)
-	dial.Size = UDim2.new(0.2, -6, 1, -10)
-	local messages = button(dock, "✉\nTEXT")
-	messages.Position = UDim2.new(0.6, 1, 0, 5)
-	messages.Size = UDim2.new(0.2, -6, 1, -10)
-	local emergency = button(dock, "999", C.Red)
-	emergency.Position = UDim2.new(0.8, 1, 0, 5)
-	emergency.Size = UDim2.new(0.2, -6, 1, -10)
 	local function show(page: string)
 		self.page = page
 		self:_render()
 	end
-	home.Activated:Connect(function()
+	self.show = show
+
+	-- Dock: four pinned apps on a translucent rounded slab, sitting above the
+	-- home indicator rather than filling the bottom edge.
+	local dock = Instance.new("Frame")
+	dock.AnchorPoint = Vector2.new(0.5, 1)
+	dock.Position = UDim2.new(0.5, 0, 1, -26)
+	dock.Size = UDim2.new(1, -28, 0, 74)
+	dock.BackgroundColor3 = Color3.fromRGB(38, 46, 62)
+	dock.BackgroundTransparency = 0.32
+	dock.BorderSizePixel = 0
+	dock.Parent = screen
+	corner(dock, 22)
+	self.dock = dock
+	for index, app in
+		{
+			{ Page = "Call", Glyph = "☎", Name = "Phone", Colour = Color3.fromRGB(52, 199, 89) },
+			{
+				Page = "Messages",
+				Glyph = "✉",
+				Name = "Messages",
+				Colour = Color3.fromRGB(48, 176, 199),
+			},
+			{
+				Page = "Contacts",
+				Glyph = "●",
+				Name = "Contacts",
+				Colour = Color3.fromRGB(120, 132, 158),
+			},
+			{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
+		}
+	do
+		local tile = self:_appIcon(dock, app)
+		tile.AnchorPoint = Vector2.new(0.5, 0.5)
+		tile.Position = UDim2.fromScale((index - 0.5) / 4, 0.5)
+	end
+
+	-- Home indicator. Tapping it returns to the home screen, which is the
+	-- gesture equivalent available with a cursor.
+	local indicator = button(screen, "")
+	indicator.AnchorPoint = Vector2.new(0.5, 1)
+	indicator.Position = UDim2.new(0.5, 0, 1, -8)
+	indicator.Size = UDim2.fromOffset(124, 5)
+	indicator.BackgroundColor3 = Color3.fromRGB(226, 232, 242)
+	indicator.BackgroundTransparency = 0.25
+	corner(indicator, 3)
+	indicator.Activated:Connect(function()
 		show("Home")
-	end)
-	contacts.Activated:Connect(function()
-		show("Contacts")
-	end)
-	dial.Activated:Connect(function()
-		show("Call")
-	end)
-	messages.Activated:Connect(function()
-		show("Messages")
-	end)
-	emergency.Activated:Connect(function()
-		show("Emergency")
 	end)
 	launcher.Activated:Connect(function()
 		body.Visible = not body.Visible
@@ -244,6 +265,156 @@ function PhoneController:_mount()
 	end)
 end
 
+function PhoneController:_toggleTorch()
+	self.flashlightEnabled = not self.flashlightEnabled
+	local response = self.context.Controllers.NetworkController:Request(
+		"PhoneToggleFlashlight",
+		{ Enabled = self.flashlightEnabled }
+	)
+	if not response.Success then
+		-- The server refuses unless the handset is actually equipped, so the
+		-- local state must follow the server rather than the button press.
+		self.flashlightEnabled = false
+	end
+	self.context.Controllers.NotificationController:Show(response.Message, "Phone")
+end
+
+-- A rounded-square app tile with its label beneath, as on a home screen.
+-- Returns the tile so the caller decides where it sits.
+function PhoneController:_appIcon(parent: Instance, app: any): Frame
+	local tile = Instance.new("Frame")
+	tile.BackgroundTransparency = 1
+	tile.Size = UDim2.fromOffset(54, 68)
+	tile.Parent = parent
+
+	local glyph = Instance.new("TextButton")
+	glyph.AutoButtonColor = true
+	glyph.BackgroundColor3 = app.Colour
+	glyph.BorderSizePixel = 0
+	glyph.Font = Enum.Font.GothamBold
+	glyph.Text = app.Glyph
+	glyph.TextColor3 = Color3.fromRGB(255, 255, 255)
+	glyph.TextSize = if #app.Glyph > 2 then 15 else 24
+	glyph.Size = UDim2.fromOffset(50, 50)
+	glyph.Position = UDim2.fromOffset(2, 0)
+	glyph.Parent = tile
+	-- Roblox has no squircle, so a generous radius is the closest match.
+	corner(glyph, 14)
+	glyph.Activated:Connect(function()
+		-- An app either opens a page or performs an action in place, as the
+		-- torch does; it never does both.
+		if app.Action then
+			app.Action(glyph)
+			return
+		end
+		self.show(app.Page)
+	end)
+
+	local name = label(tile, app.Name, 9)
+	name.Position = UDim2.fromOffset(0, 52)
+	name.Size = UDim2.new(1, 0, 0, 14)
+	name.TextXAlignment = Enum.TextXAlignment.Center
+	return tile
+end
+
+-- Home screen: a four-column grid of apps, the wallet included so a character
+-- can read their own credentials without equipping the physical card.
+function PhoneController:_renderHome()
+	local grid = Instance.new("Frame")
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.fromScale(1, 1)
+	grid.Parent = self.content
+	local layout = Instance.new("UIGridLayout")
+	layout.CellSize = UDim2.fromOffset(54, 68)
+	layout.CellPadding = UDim2.fromOffset(16, 14)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = grid
+	for order, app in
+		{
+			{ Page = "Call", Glyph = "☎", Name = "Phone", Colour = Color3.fromRGB(52, 199, 89) },
+			{
+				Page = "Messages",
+				Glyph = "✉",
+				Name = "Messages",
+				Colour = Color3.fromRGB(48, 176, 199),
+			},
+			{
+				Page = "Contacts",
+				Glyph = "●",
+				Name = "Contacts",
+				Colour = Color3.fromRGB(120, 132, 158),
+			},
+			{
+				Page = "Wallet",
+				Glyph = "▤",
+				Name = "Wallet",
+				Colour = Color3.fromRGB(58, 92, 168),
+			},
+			{
+				Name = "Torch",
+				Glyph = "✦",
+				Colour = Color3.fromRGB(95, 98, 107),
+				Action = function()
+					self:_toggleTorch()
+				end,
+			},
+			{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
+		}
+	do
+		local tile = self:_appIcon(grid, app)
+		tile.LayoutOrder = order
+	end
+end
+
+-- Wallet: the holder's own identification, rendered as a card.
+function PhoneController:_renderWallet()
+	local identity = self.phoneData and self.phoneData.Identity
+	if not identity then
+		local empty = label(self.content, "No identification available.", 12)
+		empty.Size = UDim2.new(1, 0, 0, 40)
+		empty.TextColor3 = C.Muted
+		return
+	end
+	local card = Instance.new("Frame")
+	card.BackgroundColor3 = Color3.fromRGB(30, 44, 78)
+	card.BorderSizePixel = 0
+	card.Size = UDim2.new(1, 0, 0, 172)
+	card.Parent = self.content
+	corner(card, 16)
+
+	local kind = label(card, "IDENTITY CARD", 9, true)
+	kind.Position = UDim2.fromOffset(16, 14)
+	kind.Size = UDim2.new(1, -32, 0, 14)
+	kind.TextColor3 = Color3.fromRGB(150, 178, 236)
+
+	local name = label(
+		card,
+		string.format("%s %s", tostring(identity.FirstName), tostring(identity.LastName)),
+		19,
+		true
+	)
+	name.Position = UDim2.fromOffset(16, 34)
+	name.Size = UDim2.new(1, -32, 0, 28)
+
+	local born = label(card, "DATE OF BIRTH  " .. tostring(identity.DateOfBirth), 11)
+	born.Position = UDim2.fromOffset(16, 66)
+	born.Size = UDim2.new(1, -32, 0, 18)
+	born.TextColor3 = C.Muted
+
+	local number = label(card, "MOBILE  " .. tostring(self.phoneData.Number), 11)
+	number.Position = UDim2.fromOffset(16, 88)
+	number.Size = UDim2.new(1, -32, 0, 18)
+	number.TextColor3 = C.Muted
+
+	local notice =
+		label(card, "Showing this card to somebody still requires the physical card in hand.", 10)
+	notice.Position = UDim2.fromOffset(16, 118)
+	notice.Size = UDim2.new(1, -32, 0, 40)
+	notice.TextWrapped = true
+	notice.TextColor3 = Color3.fromRGB(126, 146, 186)
+end
+
 function PhoneController:_clear()
 	for _, child in self.content:GetChildren() do
 		child:Destroy()
@@ -253,55 +424,18 @@ end
 function PhoneController:_render()
 	self:_clear()
 	self.heading.Text = self.page
+	-- The home screen is the app grid itself, so the heading and dock only make
+	-- sense inside an app, exactly as on the device.
+	local home = self.page == "Home"
+	self.heading.Visible = not home
+	self.number.Visible = not home
+	self.dock.Visible = home
+	self.content.Position = if home then UDim2.fromOffset(14, 48) else UDim2.fromOffset(14, 112)
+	self.content.Size = if home then UDim2.new(1, -28, 1, -158) else UDim2.new(1, -28, 1, -134)
 	if self.page == "Home" then
-		local greeting = label(self.content, "RoleplayOS Mobile", 15, true)
-		greeting.Size = UDim2.new(1, 0, 0, 28)
-		local function appTile(
-			name: string,
-			symbol: string,
-			colour: Color3,
-			column: number,
-			row: number
-		): TextButton
-			local tile = button(self.content, symbol .. "\n" .. name, colour)
-			tile.Position = UDim2.new(column * 0.25, column * 3, 0, 38 + row * 92)
-			tile.Size = UDim2.new(0.25, -9, 0, 76)
-			tile.TextSize = 12
-			return tile
-		end
-		local phone = appTile("Phone", "☎", C.Green, 0, 0)
-		local messages = appTile("Messages", "✉", Color3.fromRGB(70, 190, 92), 1, 0)
-		local contacts = appTile("Contacts", "●", Color3.fromRGB(95, 151, 235), 2, 0)
-		local flashlight = appTile("Torch", "✦", Color3.fromRGB(95, 98, 107), 3, 0)
-		local emergency = appTile("999", "✚", C.Red, 0, 1)
-		phone.Activated:Connect(function()
-			self.page = "Call"
-			self:_render()
-		end)
-		messages.Activated:Connect(function()
-			self.page = "Messages"
-			self:_render()
-		end)
-		contacts.Activated:Connect(function()
-			self.page = "Contacts"
-			self:_render()
-		end)
-		emergency.Activated:Connect(function()
-			self.page = "Emergency"
-			self:_render()
-		end)
-		flashlight.Activated:Connect(function()
-			self.flashlightEnabled = not self.flashlightEnabled
-			local response = self.context.Controllers.NetworkController:Request(
-				"PhoneToggleFlashlight",
-				{ Enabled = self.flashlightEnabled }
-			)
-			if not response.Success then
-				self.flashlightEnabled = false
-			end
-			flashlight.Text = "✦\n" .. (self.flashlightEnabled and "Torch On" or "Torch")
-			self.context.Controllers.NotificationController:Show(response.Message, "Phone")
-		end)
+		self:_renderHome()
+	elseif self.page == "Wallet" then
+		self:_renderWallet()
 	elseif self.page == "Contacts" then
 		local contacts = if self.phoneData then self.phoneData.Contacts else {}
 		local list = Instance.new("ScrollingFrame")
@@ -466,7 +600,16 @@ function PhoneController:_renderCall()
 	end)
 end
 
+-- Mirrors the lock-screen clock. Uses the player's local time, since the
+-- handset belongs to the character rather than to the server.
+function PhoneController:_updateClock()
+	if self.statusTime then
+		self.statusTime.Text = os.date("%H:%M")
+	end
+end
+
 function PhoneController:Refresh()
+	self:_updateClock()
 	local response = self.context.Controllers.NetworkController:Request("GetPhone", {})
 	if response.Success then
 		self.phoneData = response.Data

@@ -149,6 +149,15 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 		Number = phone.Number,
 		Messages = table.clone(phone.Messages),
 		Contacts = contacts,
+		-- The wallet renders the holder's own credentials only. Presenting them
+		-- to somebody else still goes through IdentificationService, which
+		-- enforces the equipped card and proximity rules.
+		Identity = {
+			FirstName = character.Identity.FirstName,
+			LastName = character.Identity.LastName,
+			DateOfBirth = character.Identity.DateOfBirth,
+			CharacterId = character.CharacterId,
+		},
 		EmergencyNumber = self.context.Configuration.Phone.EmergencyNumber,
 		ActiveCall = self.userCalls[player.UserId] and self.calls[self.userCalls[player.UserId]]
 			or nil,
