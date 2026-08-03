@@ -2,7 +2,7 @@
 
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TextService = game:GetService("TextService")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = {}
@@ -13,12 +13,9 @@ function CharacterService:Start() end
 local function filterIdentity(player: Player, identity: any): (any?, string?)
 	local filtered = table.clone(identity)
 	for _, field in { "FirstName", "LastName" } do
-		local ok, result = pcall(function()
-			return TextService:FilterStringAsync(identity[field], player.UserId)
-				:GetNonChatStringForBroadcastAsync()
-		end)
-		if not ok or type(result) ~= "string" or #result < 1 then
-			return nil, "TEXT_FILTER_UNAVAILABLE"
+		local result, reason = TextFilter.filter(identity[field], player.UserId)
+		if not result then
+			return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 		end
 		filtered[field] = result
 	end
