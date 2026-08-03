@@ -45,6 +45,9 @@ function LocationController:_mount()
 	holder.Visible = false
 	holder.Parent = gui
 	self.holder = holder
+	local holderScale = Instance.new("UIScale")
+	holderScale.Parent = holder
+	self.holderScale = holderScale
 
 	local street = Instance.new("TextLabel")
 	street.Name = "Street"
@@ -158,6 +161,7 @@ function LocationController:Start()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Location", function(layout)
 		-- Sits under Roblox's own top bar, centred, and steps down further while
 		-- driving so it does not sit on the vehicle readouts.
+		self.holderScale.Scale = layout.HudScale
 		self.top = layout.NativeTop + (if layout.Vehicle then 12 else 6)
 		self.holder.Position = UDim2.new(0.5, 0, 0, self.top)
 		self.holder.Size = UDim2.fromOffset(

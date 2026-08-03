@@ -65,6 +65,11 @@ function MinimapController:_mount()
 	shell.BorderSizePixel = 0
 	shell.Parent = gui
 	self.shell = shell
+	-- Scaling the shell keeps every offset inside it in proportion, rather than
+	-- each one having to be adjusted for device size individually.
+	local shellScale = Instance.new("UIScale")
+	shellScale.Parent = shell
+	self.shellScale = shellScale
 	corner(shell, 13)
 	local shellStroke = Instance.new("UIStroke")
 	shellStroke.Color = Color3.fromRGB(52, 66, 88)
@@ -307,6 +312,7 @@ function MinimapController:Start()
 	self.running = true
 	self:_rebuild()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Minimap", function(layout)
+		self.shellScale.Scale = layout.HudScale
 		self.shell.Visible = not layout.Vehicle or not layout.Compact
 		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 		-- Sits above centre on touch, where a sprint pad shares the right edge and

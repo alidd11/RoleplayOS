@@ -7,6 +7,10 @@ local UserInputService = game:GetService("UserInputService")
 
 local PhoneController = { connections = {}, activeCall = nil }
 local PHONE_ACTION = "RoleplayOSTogglePhone"
+-- The size the handset's screen contents are measured against. Other layouts
+-- vary the body's height, but the compact one scales this shape to fit rather
+-- than reshaping it.
+local DESIGN = Vector2.new(326, 610)
 local C = {
 	Body = Color3.fromRGB(9, 12, 18),
 	Screen = Color3.fromRGB(18, 24, 35),
@@ -139,6 +143,9 @@ function PhoneController:_mount()
 	stroke.Thickness = 2
 	stroke.Parent = body
 	self.body = body
+	local bodyScale = Instance.new("UIScale")
+	bodyScale.Parent = body
+	self.bodyScale = bodyScale
 
 	local screen = Instance.new("Frame")
 	screen.Position = UDim2.fromOffset(7, 7)
@@ -262,12 +269,20 @@ function PhoneController:_mount()
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0.5, 0.5)
 			body.Position = UDim2.fromScale(0.5, 0.5)
-			body.Size = UDim2.new(1, -24, 1, -28)
+			-- Scaled to fit rather than stretched to fill. The screen's contents
+			-- are laid out against a fixed handset size, so stretching the body
+			-- to the viewport would leave the dock, icons and status bar spread
+			-- across a shape they were never measured for.
+			body.Size = UDim2.fromOffset(DESIGN.X, DESIGN.Y)
+			self.bodyScale.Scale =
+				self.context.Controllers.UIOrchestrator:FitScale(layout, DESIGN, 24)
 		elseif layout.Vehicle then
+			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(0, 0.5)
 			body.Position = UDim2.new(0, 18, 0.5, 0)
 			body.Size = UDim2.fromOffset(286, math.min(520, layout.SafeViewport.Y - 90))
 		else
+			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(1, 1)
 			body.Position = UDim2.new(1, -(layout.RightReserve + 18), 1, -76)
 			-- Scale with the screen rather than sitting at a fixed size: a handset

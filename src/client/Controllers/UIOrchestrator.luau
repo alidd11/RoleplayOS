@@ -19,6 +19,7 @@ export type Layout = {
 	SafeLeft: number,
 	SafeRight: number,
 	SafeViewport: Vector2,
+	HudScale: number,
 	HotbarBottom: number,
 	RightReserve: number,
 	InputMode: string,
@@ -121,6 +122,17 @@ function UIOrchestrator:_layout(): Layout
 		SafeViewport = Vector2.new(
 			math.max(1, viewport.X - safeLeft - safeRight),
 			math.max(1, viewport.Y - safeTop - safeBottom)
+		),
+		-- One factor for the ambient heads-up display. Its elements are laid out
+		-- in fixed pixels, which leaves them proportionally overbearing on a
+		-- phone and small on a large monitor, so they are scaled against the
+		-- usable area instead. Clamped at both ends: below the lower bound they
+		-- stop being readable, above the upper one they crowd the view rather
+		-- than filling it.
+		HudScale = math.clamp(
+			math.min(viewport.X / 1280, viewport.Y / 720),
+			if vr then 1 else 0.72,
+			1.25
 		),
 		HotbarBottom = if vr then 124 else if vehicle then 112 else 76,
 		RightReserve = if vr

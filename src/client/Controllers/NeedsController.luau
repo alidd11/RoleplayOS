@@ -58,6 +58,9 @@ function NeedsController:Start()
 	hud.Size = UDim2.fromOffset(270, 15)
 	hud.BackgroundTransparency = 1
 	hud.Parent = gui
+	local hudScale = Instance.new("UIScale")
+	hudScale.Parent = hud
+	self.hudScale = hudScale
 	self.stamina = bar(hud, "STAMINA", Color3.fromRGB(67, 175, 255), 0)
 	self.hunger = bar(hud, "HUNGER", Color3.fromRGB(255, 174, 66), 0.52)
 	self.hud = hud
@@ -94,6 +97,9 @@ function NeedsController:Start()
 	sprintPad.Size = UDim2.fromOffset(84, 84)
 	sprintPad.Visible = false
 	sprintPad.Parent = gui
+	local padScale = Instance.new("UIScale")
+	padScale.Parent = sprintPad
+	self.padScale = padScale
 	local padCorner = Instance.new("UICorner")
 	padCorner.CornerRadius = UDim.new(0, 42)
 	padCorner.Parent = sprintPad
@@ -137,6 +143,8 @@ function NeedsController:Start()
 
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
 		self.blur.Enabled = not layout.VR
+		self.hudScale.Scale = layout.HudScale
+		self.padScale.Scale = layout.HudScale
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
 		self.hud.Position = if layout.Vehicle
 			then UDim2.new(0, 18, 1, -18)
