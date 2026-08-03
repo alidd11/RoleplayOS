@@ -228,11 +228,14 @@ function PhoneController:_mount()
 		elseif layout.Vehicle then
 			body.AnchorPoint = Vector2.new(0, 0.5)
 			body.Position = UDim2.new(0, 18, 0.5, 0)
-			body.Size = UDim2.fromOffset(286, math.min(520, layout.Viewport.Y - 90))
+			body.Size = UDim2.fromOffset(286, math.min(520, layout.SafeViewport.Y - 90))
 		else
 			body.AnchorPoint = Vector2.new(1, 1)
 			body.Position = UDim2.new(1, -18, 1, -76)
-			body.Size = UDim2.fromOffset(326, math.min(610, layout.Viewport.Y - 38))
+			-- The handset is anchored 76 pixels above the bottom of the usable
+			-- area, so its height must leave that offset plus a top margin free;
+			-- measuring the raw viewport ran the handset off the top of the screen.
+			body.Size = UDim2.fromOffset(326, math.min(610, layout.SafeViewport.Y - 94))
 		end
 		launcher.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(1, 1)
 		launcher.Position = if layout.Vehicle

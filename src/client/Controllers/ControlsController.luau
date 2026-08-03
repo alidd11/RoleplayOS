@@ -414,9 +414,11 @@ function ControlsController:Start()
 		self.launcher.Size = UDim2.fromOffset(if layout.Compact then 112 else 150, 38)
 		local maximumWidth = if layout.VR then 520 else 620
 		local maximumHeight = if layout.VR then 500 else 610
+		-- Size against the usable area: a lower bound taller than the screen would
+		-- push the panel edges under the top bar or a device cutout.
 		self.panel.Size = UDim2.fromOffset(
-			math.clamp(layout.Viewport.X - 28, 300, maximumWidth),
-			math.clamp(layout.Viewport.Y - 34, 360, maximumHeight)
+			math.clamp(layout.SafeViewport.X - 28, 1, maximumWidth),
+			math.clamp(layout.SafeViewport.Y - 34, 1, maximumHeight)
 		)
 	end)
 end

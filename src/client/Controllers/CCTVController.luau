@@ -47,6 +47,11 @@ function CCTVController:_mount()
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 12)
 	corner.Parent = bar
+	-- The control bar is authored at a fixed width, so on a phone the exit
+	-- control fell outside the usable area and the viewer could not be left.
+	local scale = Instance.new("UIScale")
+	scale.Parent = bar
+	self.barScale = scale
 	local previous = button(bar, "‹ PREVIOUS")
 	previous.Position = UDim2.fromOffset(12, 12)
 	previous.Size = UDim2.fromOffset(120, 40)
@@ -145,6 +150,10 @@ end
 
 function CCTVController:Start()
 	self:_mount()
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("CCTV", function(layout)
+		self.barScale.Scale =
+			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(620, 64), 36)
+	end)
 	ContextActionService:BindActionAtPriority(EXIT_ACTION, function(_, inputState)
 		if self.viewing and inputState == Enum.UserInputState.Begin then
 			self:Exit()
@@ -177,6 +186,9 @@ end
 function CCTVController:Destroy()
 	ContextActionService:UnbindAction(EXIT_ACTION)
 	ContextActionService:UnbindAction(NAVIGATE_ACTION)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	self:Exit()
 	for _, connection in self.connections do
 		connection:Disconnect()

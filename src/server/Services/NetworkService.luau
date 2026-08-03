@@ -475,6 +475,21 @@ function NetworkService:Start()
 			}
 		end
 	)
+	self.context.Network:RegisterFunction("RequestVehiclePreview", function(payload)
+		return type(payload) == "table" and type(payload.DefinitionId) == "string"
+	end, function(player, payload, requestId)
+		-- The client asks for a picture of a vehicle it can already see listed;
+		-- the server still decides whether a model exists and what it looks like.
+		local preview, reason =
+			self.context.Services:Get("VehiclePreviewService"):Request(player, payload.DefinitionId)
+		return {
+			Success = preview ~= nil,
+			Code = if preview then "OK" else reason,
+			Message = if preview then "" else "No preview is available for that vehicle.",
+			Data = if preview then { DefinitionId = payload.DefinitionId } else nil,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("GetVehicleSpawnMenu", function(payload)
 		return type(payload) == "table" and type(payload.TerminalId) == "string"
 	end, function(player, payload, requestId)

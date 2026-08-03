@@ -1266,6 +1266,9 @@ local Config = {
 			GetCCTVCameras = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetOwnedVehicles = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetVehicleSpawnMenu = { Capacity = 4, RefillPerSecond = 0.75 },
+			-- Browsing a large depot legitimately requests many previews in
+			-- succession, so this is more generous than a purchase endpoint.
+			RequestVehiclePreview = { Capacity = 12, RefillPerSecond = 4 },
 			SpawnOwnedVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
 			PurchaseVehicle = { Capacity = 2, RefillPerSecond = 0.08 },
 			SpawnServiceVehicle = { Capacity = 2, RefillPerSecond = 0.15 },

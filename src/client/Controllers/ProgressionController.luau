@@ -239,6 +239,15 @@ function ProgressionController:Start()
 		self.card.Size = if layout.Vehicle
 			then UDim2.fromOffset(if layout.Compact then 210 else 280, 48)
 			else UDim2.fromOffset(if layout.Compact then 260 else 330, 56)
+		-- The catalogue sits directly above the card and scrolls, so it is given
+		-- whatever height is left inside the usable area instead of a fixed one
+		-- that ran off the top of short or heavily inset screens.
+		local catalogueBase = layout.HotbarBottom + 84
+		self.panel.Position = UDim2.new(0.5, 0, 1, -catalogueBase)
+		self.panel.Size = UDim2.fromOffset(
+			if layout.Compact then 300 else 360,
+			math.clamp(layout.SafeViewport.Y - catalogueBase - 12, 120, 360)
+		)
 	end)
 	self:Refresh()
 end

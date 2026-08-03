@@ -367,8 +367,11 @@ function CustodyController:Start()
 		self.launcher.AnchorPoint = Vector2.new(1, 1)
 		self.launcher.Position = UDim2.new(1, -layout.RightReserve, 1, -layout.HotbarBottom)
 		self.panelScale.Scale =
-			math.clamp(math.min(layout.Viewport.X / 590, layout.Viewport.Y / 600), 0.58, 1)
-		self.sentenceHud.Position = UDim2.new(0.5, 0, 0, layout.NativeTop + 10)
+			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(540, 550), 32)
+		-- This interface is mounted with CoreUISafeInsets, so its own origin is
+		-- already below the native top bar. Adding NativeTop again pushed the
+		-- sentence banner a whole top bar further down the screen.
+		self.sentenceHud.Position = UDim2.new(0.5, 0, 0, 10)
 	end)
 end
 

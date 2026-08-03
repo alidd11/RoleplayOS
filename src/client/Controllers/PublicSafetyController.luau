@@ -421,10 +421,9 @@ function PublicSafetyController:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind(
 		"PublicSafety",
 		function(layout)
-			scale.Scale =
-				math.clamp(math.min(layout.Viewport.X / 540, layout.Viewport.Y / 355), 0.67, 1)
-			actionScale.Scale =
-				math.clamp(math.min(layout.Viewport.X / 470, layout.Viewport.Y / 500), 0.62, 1)
+			local orchestrator = self.context.Controllers.UIOrchestrator
+			scale.Scale = orchestrator:FitScale(layout, Vector2.new(480, 303), 40)
+			actionScale.Scale = orchestrator:FitScale(layout, Vector2.new(410, 430), 40)
 			actionPanel.AnchorPoint = if layout.Compact or layout.VR
 				then Vector2.new(0.5, 0.5)
 				else Vector2.new(1, 0.5)

@@ -155,13 +155,15 @@ function DealershipController:_applyPlate()
 	end
 end
 
-function DealershipController:_setScale()
-	local camera = workspace.CurrentCamera
-	if not camera or not self.scale then
+-- The panel is authored at a fixed size, so it is scaled against the area the
+-- device actually leaves usable. Measuring the raw viewport pushed the panel
+-- under the top bar and device cutouts on phones and notched displays.
+function DealershipController:_setScale(layout: any)
+	if not self.scale then
 		return
 	end
-	local viewport = camera.ViewportSize
-	self.scale.Scale = math.clamp(math.min(viewport.X / 920, viewport.Y / 700), 0.62, 1)
+	self.scale.Scale =
+		self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(760, 580), 28)
 end
 
 function DealershipController:_setOpen(open: boolean)
@@ -550,7 +552,6 @@ function DealershipController:_buildUI()
 			self:_render()
 		end)
 	)
-	self:_setScale()
 end
 
 function DealershipController:Start()
@@ -583,15 +584,11 @@ function DealershipController:Start()
 			end
 		end)
 	)
-	local camera = workspace.CurrentCamera
-	if camera then
-		table.insert(
-			self.connections,
-			camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-				self:_setScale()
-			end)
-		)
-	end
+	-- The orchestrator already tracks camera, top bar and input changes, so the
+	-- panel follows one responsive source instead of watching the camera itself.
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Dealership", function(layout)
+		self:_setScale(layout)
+	end)
 	table.insert(
 		self.connections,
 		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
@@ -604,6 +601,9 @@ end
 
 function DealershipController:Destroy()
 	ContextActionService:UnbindAction(CLOSE_ACTION)
+	if self.unbindLayout then
+		self.unbindLayout()
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

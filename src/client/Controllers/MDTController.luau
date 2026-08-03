@@ -706,17 +706,11 @@ function MDTController:Start()
 		self.launcher.Position = if layout.Vehicle
 			then UDim2.new(0, 18, 1, -(layout.HotbarBottom + 8))
 			else UDim2.new(0, 18, 0.62, 0)
-		if layout.Compact then
-			self.constraint.MinSize = Vector2.new(720, 470)
-			self.scale.Scale = math.clamp(
-				math.min((layout.Viewport.X - 20) / 720, (layout.Viewport.Y - 28) / 470),
-				0.44,
-				1
-			)
-		else
-			self.constraint.MinSize = Vector2.new(720, 470)
-			self.scale.Scale = 1
-		end
+		-- The shell never shrinks below its minimum size, so it is scaled against
+		-- the usable area on every device class. Measuring the raw viewport
+		-- instead let the terminal spill under the top bar and device cutouts.
+		self.scale.Scale =
+			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(720, 470), 24)
 		if layout.Vehicle then
 			self.shell.Visible = false
 		end

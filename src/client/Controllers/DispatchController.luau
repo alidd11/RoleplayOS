@@ -477,13 +477,11 @@ end
 function DispatchController:Start()
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Dispatch", function(layout)
-		self.scale.Scale = if layout.Compact
-			then math.clamp(
-				math.min((layout.Viewport.X - 20) / 760, (layout.Viewport.Y - 28) / 500),
-				0.42,
-				1
-			)
-			else 1
+		-- The console has a minimum size, so it is scaled against the usable area
+		-- on every device class rather than only when compact; the raw viewport
+		-- ignored the top bar and device cutouts and clipped the console edges.
+		self.scale.Scale =
+			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(760, 500), 24)
 	end)
 	local function watchCharacter(character: Model)
 		for _, connection in self.characterConnections do

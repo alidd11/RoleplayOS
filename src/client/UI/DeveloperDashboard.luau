@@ -1,7 +1,18 @@
 --!strict
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+
+-- Roblox's unified top bar is a 36px band on an unscaled desktop client and
+-- carries 32px square icon controls inside it, leaving a 2px gutter above and
+-- below. The world menu toggle mirrors those proportions so it reads as one of
+-- the native controls; the responsive binding rescales them whenever Roblox
+-- reports a taller band (touch, high DPI, VR).
+local NATIVE_BAND_HEIGHT = 36
+local NATIVE_CONTROL_SIZE = 32
+-- Gap Roblox leaves between adjacent top-bar clusters.
+local NATIVE_CONTROL_GAP = 8
 
 local App = {}
 local COLOURS = {
@@ -181,21 +192,29 @@ function App.mount(context: any): ScreenGui
 	menuToggleGui.ClipToDeviceSafeArea = true
 	menuToggleGui.DisplayOrder = 5
 	menuToggleGui.Parent = gui.Parent
+	-- The toggle is styled as an extra Roblox top-bar control rather than an
+	-- experience button: a square, fully rounded, icon-only pill on the same
+	-- translucent black as the native unibar, with no outline. Its size, radius
+	-- and glyph size are recomputed from the measured top-bar band by the
+	-- responsive binding below so it tracks whatever height Roblox reports on
+	-- the current device.
 	local menuToggle = Instance.new("TextButton")
 	menuToggle.Name = "OpenMenu"
-	menuToggle.Size = UDim2.fromOffset(96, 40)
-	menuToggle.BackgroundColor3 = Color3.fromRGB(14, 21, 32)
+	menuToggle.Size = UDim2.fromOffset(NATIVE_CONTROL_SIZE, NATIVE_CONTROL_SIZE)
+	menuToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	menuToggle.BackgroundTransparency = 0.5
 	menuToggle.BorderSizePixel = 0
 	menuToggle.AutoButtonColor = true
-	menuToggle.Font = Enum.Font.GothamBold
-	menuToggle.Text = "☰  MENU"
-	menuToggle.TextColor3 = COLOURS.Text
-	menuToggle.TextSize = 12
+	menuToggle.Font = Enum.Font.GothamMedium
+	menuToggle.Text = "☰"
+	menuToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	menuToggle.TextSize = NATIVE_CONTROL_SIZE * 0.5
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
-	corner(menuToggle, 12)
-	stroke(menuToggle, Color3.fromRGB(65, 80, 104), 0.2)
+	local menuToggleCorner = Instance.new("UICorner")
+	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
+	menuToggleCorner.Parent = menuToggle
 
 	-- A dedicated non-interactive backdrop extends above the legacy GUI origin.
 	-- This keeps the visual treatment full bleed even on clients which still
@@ -982,17 +1001,31 @@ function App.mount(context: any): ScreenGui
 		local navItems = navCount()
 		bleedBackdrop.Position = UDim2.fromOffset(0, -safeTop)
 		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop)
-		-- Clear the measured native control cluster, falling back to the historical
-		-- estimate only when Roblox reports no inset. Without this the toggle can
-		-- render underneath Roblox's own topbar buttons and become unreachable.
-		local nativeControlWidth =
-			math.max(layout.NativeLeft + 12, if layout.Compact then 224 else 360)
+		-- Size the toggle from the band Roblox actually reports rather than the
+		-- floor-clamped NativeTop, so it matches the height of the native controls
+		-- instead of the taller safe region our own panels reserve.
+		local reportedBand = math.floor(GuiService.TopbarInset.Height + 0.5)
+		local nativeBand = if reportedBand > 0 then reportedBand else NATIVE_BAND_HEIGHT
+		local controlSize =
+			math.floor(nativeBand * (NATIVE_CONTROL_SIZE / NATIVE_BAND_HEIGHT) + 0.5)
+		menuToggle.Size = UDim2.fromOffset(controlSize, controlSize)
+		menuToggleCorner.CornerRadius = UDim.new(0, controlSize / 2)
+		menuToggle.TextSize = math.floor(controlSize * 0.5 + 0.5)
+		-- Sit immediately right of the native control cluster. NativeLeft is the
+		-- measured left edge of the region Roblox leaves free, so trust it when it
+		-- is reported and fall back to the historical estimate only when Roblox
+		-- reports no inset. Without this the toggle can render underneath Roblox's
+		-- own top-bar buttons and become unreachable.
+		local nativeControlWidth = if layout.NativeLeft > 0
+			then layout.NativeLeft
+			else (if layout.Compact then 224 else 360)
 		menuToggle.Position = UDim2.fromOffset(
 			math.min(
-				nativeControlWidth,
-				math.max(12, layout.Viewport.X - menuToggle.AbsoluteSize.X - 12)
+				nativeControlWidth + NATIVE_CONTROL_GAP,
+				math.max(NATIVE_CONTROL_GAP, layout.Viewport.X - controlSize - NATIVE_CONTROL_GAP)
 			),
-			math.max(8, math.floor((layout.NativeTop - menuToggle.AbsoluteSize.Y) / 2))
+			-- Centre within the native band, never above the screen edge.
+			math.max(0, math.floor((nativeBand - controlSize) / 2))
 		)
 		local horizontal = layout.Compact or layout.Viewport.Y < 520
 		local narrow = layout.Viewport.X < 600
