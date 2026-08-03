@@ -86,30 +86,79 @@ function MDTController:_mount()
 	shortcutGlyph.Parent = launcher
 	self.shortcutGlyph = shortcutGlyph
 
-	local shell = Instance.new("Frame")
-	shell.Name = "Terminal"
-	shell.AnchorPoint = Vector2.new(0.5, 0.5)
-	shell.Position = UDim2.fromScale(0.5, 0.5)
-	shell.Size = UDim2.fromScale(0.86, 0.82)
-	shell.BackgroundColor3 = C.Surface
-	shell.BorderSizePixel = 0
-	shell.SelectionGroup = true
-	shell.Visible = false
-	shell.Parent = gui
-	corner(shell, 14)
+	-- The terminal is presented as a rugged landscape tablet: an outer chassis
+	-- carrying the bezel, status bar and home indicator, and an inner screen
+	-- that everything else parents into. Splitting them this way means the
+	-- screen keeps its own coordinate space, so page content is laid out
+	-- against the display rather than against the casing around it.
+	local chassis = Instance.new("Frame")
+	chassis.Name = "Terminal"
+	chassis.AnchorPoint = Vector2.new(0.5, 0.5)
+	chassis.Position = UDim2.fromScale(0.5, 0.5)
+	chassis.Size = UDim2.fromScale(0.86, 0.82)
+	chassis.BackgroundColor3 = Color3.fromRGB(8, 11, 17)
+	chassis.BorderSizePixel = 0
+	chassis.SelectionGroup = true
+	chassis.Visible = false
+	chassis.Parent = gui
+	corner(chassis, 22)
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MinSize = Vector2.new(720, 470)
 	constraint.MaxSize = Vector2.new(1120, 720)
-	constraint.Parent = shell
+	constraint.Parent = chassis
 	self.constraint = constraint
 	local scale = Instance.new("UIScale")
-	scale.Parent = shell
+	scale.Parent = chassis
 	self.scale = scale
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = C.Border
+	stroke.Color = Color3.fromRGB(74, 88, 110)
+	stroke.Thickness = 2
 	stroke.Transparency = 0.15
-	stroke.Parent = shell
-	self.shell = shell
+	stroke.Parent = chassis
+	-- Visibility, sizing and scaling act on the whole device.
+	self.shell = chassis
+
+	local statusBar = Instance.new("Frame")
+	statusBar.Name = "StatusBar"
+	statusBar.BackgroundTransparency = 1
+	statusBar.Position = UDim2.fromOffset(18, 6)
+	statusBar.Size = UDim2.new(1, -36, 0, 22)
+	statusBar.Parent = chassis
+	local statusClock = text(statusBar, "09:41", 11, true)
+	statusClock.Size = UDim2.fromOffset(60, 22)
+	self.statusClock = statusClock
+	local statusName = text(statusBar, "RoleplayOS MDT", 11, true)
+	statusName.AnchorPoint = Vector2.new(0.5, 0)
+	statusName.Position = UDim2.fromScale(0.5, 0)
+	statusName.Size = UDim2.fromOffset(200, 22)
+	statusName.TextXAlignment = Enum.TextXAlignment.Center
+	statusName.TextColor3 = C.Muted
+	local statusIcons = text(statusBar, "▮▮▮  ᯤ  ▰", 10, true)
+	statusIcons.AnchorPoint = Vector2.new(1, 0)
+	statusIcons.Position = UDim2.fromScale(1, 0)
+	statusIcons.Size = UDim2.fromOffset(80, 22)
+	statusIcons.TextXAlignment = Enum.TextXAlignment.Right
+	statusIcons.TextColor3 = C.Muted
+
+	local shell = Instance.new("Frame")
+	shell.Name = "Screen"
+	shell.Position = UDim2.fromOffset(12, 30)
+	shell.Size = UDim2.new(1, -24, 1, -50)
+	shell.BackgroundColor3 = C.Surface
+	shell.BorderSizePixel = 0
+	shell.ClipsDescendants = true
+	shell.Parent = chassis
+	corner(shell, 14)
+
+	local homeIndicator = Instance.new("Frame")
+	homeIndicator.AnchorPoint = Vector2.new(0.5, 1)
+	homeIndicator.Position = UDim2.new(0.5, 0, 1, -7)
+	homeIndicator.Size = UDim2.fromOffset(132, 5)
+	homeIndicator.BackgroundColor3 = Color3.fromRGB(150, 166, 190)
+	homeIndicator.BackgroundTransparency = 0.35
+	homeIndicator.BorderSizePixel = 0
+	homeIndicator.Parent = chassis
+	corner(homeIndicator, 3)
 	local classification = Instance.new("Frame")
 	classification.Size = UDim2.new(1, 0, 0, 4)
 	classification.BackgroundColor3 = Color3.fromRGB(241, 176, 47)
@@ -136,18 +185,29 @@ function MDTController:_mount()
 	close.Size = UDim2.fromOffset(72, 30)
 	self.close = close
 
-	local person = button(shell, "PEOPLE")
-	person.Position = UDim2.fromOffset(22, 73)
+	-- Tabs sit on a recessed rail so the active one reads as a selected segment
+	-- rather than four loose buttons floating on the page.
+	local tabRail = Instance.new("Frame")
+	tabRail.Name = "Tabs"
+	tabRail.Position = UDim2.fromOffset(18, 70)
+	tabRail.Size = UDim2.fromOffset(398, 40)
+	tabRail.BackgroundColor3 = Color3.fromRGB(10, 24, 38)
+	tabRail.BorderSizePixel = 0
+	tabRail.Parent = shell
+	corner(tabRail, 11)
+
+	local person = button(tabRail, "PEOPLE")
+	person.Position = UDim2.fromOffset(4, 3)
 	person.Size = UDim2.fromOffset(92, 34)
-	local vehicle = button(shell, "VEHICLES")
-	vehicle.Position = UDim2.fromOffset(122, 73)
+	local vehicle = button(tabRail, "VEHICLES")
+	vehicle.Position = UDim2.fromOffset(100, 3)
 	vehicle.Size = UDim2.fromOffset(92, 34)
-	local incidents = button(shell, "INCIDENTS")
-	incidents.Position = UDim2.fromOffset(222, 73)
+	local incidents = button(tabRail, "INCIDENTS")
+	incidents.Position = UDim2.fromOffset(196, 3)
 	incidents.Size = UDim2.fromOffset(98, 34)
-	local mapTab = button(shell, "MAP")
-	mapTab.Position = UDim2.fromOffset(328, 73)
-	mapTab.Size = UDim2.fromOffset(80, 34)
+	local mapTab = button(tabRail, "MAP")
+	mapTab.Position = UDim2.fromOffset(298, 3)
+	mapTab.Size = UDim2.fromOffset(96, 34)
 	self.personTab = person
 	self.vehicleTab = vehicle
 	self.incidentTab = incidents
@@ -324,7 +384,7 @@ function MDTController:_mount()
 		if not self.allowed then
 			return
 		end
-		shell.Visible = open
+		chassis.Visible = open
 		if open then
 			-- Map geometry is static, so rebuild on open rather than per refresh.
 			self.map:Rebuild()
@@ -332,7 +392,7 @@ function MDTController:_mount()
 		end
 	end
 	launcher.Activated:Connect(function()
-		setOpen(not shell.Visible)
+		setOpen(not chassis.Visible)
 	end)
 	close.Activated:Connect(function()
 		setOpen(false)
@@ -399,7 +459,16 @@ end
 
 -- Pulls a fresh server snapshot. The map only ever renders what the server
 -- reports, so an unauthorised duty simply sees an empty picture.
+-- Mirrors the tablet's status clock. Local time, like the handset: the device
+-- belongs to the officer carrying it.
+function MDTController:_updateClock()
+	if self.statusClock then
+		self.statusClock.Text = os.date("%H:%M")
+	end
+end
+
 function MDTController:RefreshMap()
+	self:_updateClock()
 	if self.recordType ~= "Map" then
 		return
 	end
