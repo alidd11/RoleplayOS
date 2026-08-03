@@ -1238,6 +1238,10 @@ local Config = {
 		MaximumNodes = 256,
 		MaximumStringBytes = 2048,
 		MaximumConcurrentRequests = 4,
+		-- A request still running after this long is presumed lost and stops
+		-- occupying a concurrency slot, so one stuck handler cannot refuse every
+		-- later request from that player for the rest of the session.
+		RequestAbandonSeconds = 30,
 		GlobalCapacity = 30,
 		GlobalRefillPerSecond = 10,
 		Endpoints = {

@@ -99,7 +99,32 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		local active = self.active[player.UserId] or 0
+		-- In-flight requests are tracked individually with a start time rather
+		-- than as a count. A handler that yields indefinitely never reaches the
+		-- release below, and a bare counter would leak that slot for the rest of
+		-- the session: once the limit was reached every later request from this
+		-- player was refused, whatever the endpoint. Presuming a long-running
+		-- request lost keeps one stuck call from wedging the whole session.
+		local inFlight = self.active[player.UserId]
+		if not inFlight then
+			inFlight = {}
+			self.active[player.UserId] = inFlight
+		end
+		local now = os.clock()
+		local ceiling = self.config.RequestAbandonSeconds or 30
+		local active = 0
+		for id, startedAt in inFlight do
+			if now - startedAt > ceiling then
+				inFlight[id] = nil
+				self.logger:Warning("Abandoned a stuck request slot", {
+					Endpoint = name,
+					UserId = player.UserId,
+					HeldSeconds = math.floor(now - startedAt),
+				})
+			else
+				active += 1
+			end
+		end
 		if active >= (self.config.MaximumConcurrentRequests or 4) then
 			return {
 				Success = false,
@@ -108,9 +133,9 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		self.active[player.UserId] = active + 1
+		inFlight[requestId] = now
 		local ok, result = pcall(handler, player, payload, requestId)
-		self.active[player.UserId] = math.max(0, (self.active[player.UserId] or 1) - 1)
+		inFlight[requestId] = nil
 		if not ok then
 			self.logger:Error("Remote handler failed", {
 				Endpoint = name,
