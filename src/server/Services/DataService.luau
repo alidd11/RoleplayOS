@@ -198,7 +198,7 @@ function DataService:_retry(operation: () -> any): (boolean, any)
 	return false, lastError
 end
 
-function DataService:Load(player: Player): (any?, string?)
+function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	if self.sessions[player.UserId] then
 		return nil, "SESSION_ALREADY_LOADED"
 	end
@@ -272,11 +272,15 @@ function DataService:Load(player: Player): (any?, string?)
 			return profile
 		end)
 	end)
-	if not ok and lockedUntil then
+	if not ok and lockedUntil and not waited then
 		-- A lease is held by another server. Retrying immediately cannot succeed,
 		-- since it expires on a clock rather than on contention, so wait it out
-		-- once when the remaining time is short. Rejoining straight after leaving
-		-- is the common case, and kicking the player for it reads as a fault.
+		-- when the remaining time is short. Rejoining straight after leaving is
+		-- the common case, and kicking the player for it reads as a fault.
+		--
+		-- Exactly one wait: a server that is still alive keeps refreshing its
+		-- lease, so retrying whenever time remains would never terminate and the
+		-- player would hang rather than be told what happened.
 		local remaining = lockedUntil - os.time()
 		if
 			remaining > 0
@@ -290,7 +294,7 @@ function DataService:Load(player: Player): (any?, string?)
 			if not player:IsDescendantOf(Players) then
 				return nil, "PLAYER_LEFT"
 			end
-			return self:Load(player)
+			return self:Load(player, true)
 		end
 	end
 	if not ok then

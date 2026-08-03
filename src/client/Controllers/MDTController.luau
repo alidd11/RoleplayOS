@@ -193,24 +193,11 @@ function MDTController:_mount()
 	local homeTab = button(shell, "\u{2302}  HOME")
 	homeTab.Position = UDim2.fromOffset(22, 70)
 	homeTab.Size = UDim2.fromOffset(104, 34)
-	local person = button(shell, "PEOPLE")
-	local vehicle = button(shell, "VEHICLES")
-	local incidents = button(shell, "INCIDENTS")
-	local mapTab = button(shell, "MAP")
-	-- Kept as the selection state the pages already drive, but never shown.
-	for _, hidden in { person, vehicle, incidents, mapTab } do
-		hidden.Visible = false
-		hidden.Parent = nil
-	end
 	self.homeTab = homeTab
-	self.personTab = person
-	self.vehicleTab = vehicle
-	self.incidentTab = incidents
-	self.mapTab = mapTab
 
-	-- The home screen the terminal opens on. Every page is reachable from here
-	-- as well as from the rail, so an officer who has just picked the terminal
-	-- up is not required to already know which tab they want.
+	-- The home screen the terminal opens on, and the only way into a page. Each
+	-- card says what its page is for, so an officer who has just picked the
+	-- terminal up is not required to already know where to look.
 	local home = Instance.new("Frame")
 	home.Name = "Home"
 	home.BackgroundTransparency = 1
@@ -429,27 +416,9 @@ function MDTController:_mount()
 	confirmWarrant.Activated:Connect(function()
 		self:_issueWarrant()
 	end)
-	person.Activated:Connect(function()
-		self.recordType = "Person"
-		self:_renderTabs()
-	end)
-	vehicle.Activated:Connect(function()
-		self.recordType = "Vehicle"
-		self:_renderTabs()
-	end)
-	incidents.Activated:Connect(function()
-		self.recordType = "Incident"
-		self:_renderTabs()
-		self:_performSearch()
-	end)
 	homeTab.Activated:Connect(function()
 		self.recordType = "Home"
 		self:_renderTabs()
-	end)
-	mapTab.Activated:Connect(function()
-		self.recordType = "Map"
-		self:_renderTabs()
-		self:RefreshMap()
 	end)
 	search.Activated:Connect(function()
 		self:_performSearch()
@@ -467,10 +436,6 @@ function MDTController:_renderTabs()
 	-- Nothing to return to from the home screen itself, so the control only
 	-- appears once the officer has opened a page.
 	self.homeTab.Visible = self.recordType ~= "Home"
-	self.personTab.BackgroundColor3 = if self.recordType == "Person" then C.Accent else C.Raised
-	self.vehicleTab.BackgroundColor3 = if self.recordType == "Vehicle" then C.Accent else C.Raised
-	self.incidentTab.BackgroundColor3 = if self.recordType == "Incident" then C.Accent else C.Raised
-	self.mapTab.BackgroundColor3 = if self.recordType == "Map" then C.Accent else C.Raised
 	-- Home and the map each replace the records surface rather than sharing it,
 	-- so the search controls cannot be used against a page that has no search.
 	local mapping = self.recordType == "Map"
