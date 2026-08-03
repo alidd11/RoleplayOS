@@ -103,11 +103,14 @@ function PhoneController:_mount()
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
-	local launcher = button(gui, "PHONE  ·  P", C.Body)
-	launcher.AnchorPoint = Vector2.new(1, 1)
-	launcher.Position = UDim2.new(1, -18, 1, -88)
+	-- The handset is opened by activating the Phone tool in the toolbar, the way
+	-- a real one is taken out of a pocket, so there is no on-screen launcher
+	-- competing with the rest of the interface for the corner. The button is
+	-- kept unparented purely so gamepad focus has somewhere to return to.
+	local launcher = button(gui, "PHONE", C.Body)
 	launcher.Size = UDim2.fromOffset(112, 38)
 	launcher.Visible = false
+	launcher.Parent = nil
 	self.launcher = launcher
 	local shortcutGlyph = Instance.new("ImageLabel")
 	shortcutGlyph.Name = "ControllerGlyph"
@@ -673,12 +676,13 @@ function PhoneController:Start()
 			end
 			self.body.Visible = false
 			self:_announce(false)
-			GuiService.SelectedObject = self.launcher
+			GuiService.SelectedObject = nil
 			return Enum.ContextActionResult.Sink
 		end
 		if
 			inputState ~= Enum.UserInputState.Begin
-			or not self.launcher.Visible
+			or self.hasCharacter ~= true
+			or self.vehicleMode == true
 			or UserInputService:GetFocusedTextBox() ~= nil
 		then
 			return Enum.ContextActionResult.Pass
@@ -692,7 +696,7 @@ function PhoneController:Start()
 		elseif
 			GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.body)
 		then
-			GuiService.SelectedObject = self.launcher
+			GuiService.SelectedObject = nil
 		end
 		return Enum.ContextActionResult.Sink
 	end
@@ -715,12 +719,24 @@ function PhoneController:Start()
 	local function watchTool(tool: Instance)
 		if tool:IsA("Tool") and tool.Name == "Phone" and not self.watchedTools[tool] then
 			self.watchedTools[tool] = true
+			local function open()
+				self.body.Visible = true
+				self:_announce(true)
+				self:Refresh()
+			end
+			-- Selecting the handset in the toolbar is what takes it out, so the
+			-- screen comes up on Equipped. Activated alone was not enough: it only
+			-- fires when an already equipped tool is clicked in the world, so
+			-- picking the slot appeared to do nothing.
+			table.insert(self.connections, tool.Equipped:Connect(open))
+			table.insert(self.connections, tool.Activated:Connect(open))
 			table.insert(
 				self.connections,
-				tool.Activated:Connect(function()
-					self.body.Visible = true
-					self:_announce(true)
-					self:Refresh()
+				tool.Unequipped:Connect(function()
+					-- Putting the handset away closes it, so the screen cannot be
+					-- left open while the character is holding something else.
+					self.body.Visible = false
+					self:_announce(false)
 				end)
 			)
 		end
@@ -763,7 +779,7 @@ function PhoneController:Start()
 		self.connections,
 		self.context.Events.CharacterChanged.Event:Connect(function()
 			self.hasCharacter = true
-			self.launcher.Visible = not self.vehicleMode
+			self.launcher.Visible = false
 			self:Refresh()
 		end)
 	)
@@ -771,7 +787,7 @@ function PhoneController:Start()
 		self.connections,
 		self.context.Events.VehicleModeChanged.Event:Connect(function(active)
 			self.vehicleMode = active
-			self.launcher.Visible = self.hasCharacter == true and not active
+			self.launcher.Visible = false
 			if active then
 				self.body.Visible = false
 				self:_announce(false)

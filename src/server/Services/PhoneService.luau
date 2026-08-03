@@ -43,7 +43,11 @@ function PhoneService:_makeTool(): Tool
 	light.Angle = 58
 	light.Face = Enum.NormalId.Back
 	light.Parent = handle
-	tool.Grip = CFrame.Angles(0, math.rad(90), math.rad(-10)) * CFrame.new(0, -0.25, 0)
+	-- Translation first, then rotation, matching the other tools. Written the
+	-- other way round the offset is applied in the rotated frame and pushes the
+	-- handset sideways, and the quarter turn about Y left the flat body edge on
+	-- to the camera so it read as being held wrong.
+	tool.Grip = CFrame.new(0, -0.1, -0.6) * CFrame.Angles(math.rad(90), 0, 0)
 	return tool
 end
 
