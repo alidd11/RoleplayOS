@@ -224,6 +224,14 @@ H.test("progression HUD is restricted to public non-whitelisted teams", function
 		not ProgressionVisibility.isPublicHudAllowed("Private", { AutoAssignable = true }),
 		"private community received the public HUD"
 	)
+	H.expect(
+		ProgressionVisibility.isPublicHudAllowed("Whitelisted", { AutoAssignable = true }),
+		"group whitelisted server was treated as a private community"
+	)
+	H.expect(
+		not ProgressionVisibility.isPublicHudAllowed("Whitelisted", { AutoAssignable = false }),
+		"whitelisted team received the public HUD on a group whitelisted server"
+	)
 end)
 H.test("community permissions honour active role", function()
 	local template = Config.Communities.Templates.RoleplayCommunity

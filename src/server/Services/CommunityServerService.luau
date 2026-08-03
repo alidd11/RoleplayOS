@@ -4,17 +4,36 @@ local CommunityServerService = {}
 
 function CommunityServerService:Init(context: any)
 	self.context = context
+	-- A public server that gates entry on a Roblox group is not the same product
+	-- as an open one: it is the whitelisted tier, where emergency services are
+	-- group locked. Reporting it as merely Public left the interface unable to
+	-- tell a player which of the three they had joined.
+	local restricted = self.context.Configuration.ExperienceAccess.Enabled == true
+		and self.context.Configuration.ExperienceAccess.RequiredGroupLinkId ~= nil
 	self.kind = if game.PrivateServerId == ""
-		then "Public"
+		then (if restricted then "Whitelisted" else "Public")
 		elseif game.PrivateServerOwnerId == 0 then "Reserved"
 		else "Private"
 end
 
+-- The group entry to this experience is gated on, when it is gated at all.
+function CommunityServerService:AccessGroup(): any?
+	local access = self.context.Configuration.ExperienceAccess
+	if access.Enabled ~= true or type(access.RequiredGroupLinkId) ~= "string" then
+		return nil
+	end
+	return self.context.Configuration.GroupLinks[access.RequiredGroupLinkId]
+end
+
 function CommunityServerService:GetServerContext(player: Player): any
+	local group = self:AccessGroup()
 	return {
 		Kind = self.kind,
 		PrivateServerOwnerId = if self.kind == "Private" then game.PrivateServerOwnerId else nil,
 		Community = self.context.Services:Get("CommunityService"):PublicSummary(player),
+		-- Named so the interface can say which community the whitelist belongs
+		-- to rather than stating that one exists.
+		AccessGroupName = group and group.DisplayName or nil,
 	}
 end
 

@@ -59,7 +59,10 @@ end
 function ProgressionService:GetPublicHud(player: Player): (any?, string?)
 	local team = player.Team
 	local teamDefinition = team and self.context.Configuration.Teams[team.Name]
-	local serverKind = if game.PrivateServerId == "" then "Public" else "Private"
+	-- Ask the service that owns this rather than deriving it again: two
+	-- independent answers to what kind of server this is will eventually
+	-- disagree, and the whitelisted tier is exactly where they would.
+	local serverKind = self.context.Services:Get("CommunityServerService").kind
 	if not ProgressionVisibility.isPublicHudAllowed(serverKind, teamDefinition) then
 		return nil, "PUBLIC_PROGRESSION_UNAVAILABLE"
 	end

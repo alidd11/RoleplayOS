@@ -899,35 +899,66 @@ function App.mount(context: any): ScreenGui
 					createCommunity.Text = "Create community"
 				end
 			end)
-		elseif server and server.Kind == "Public" then
-			local publicBadge = text(hero, "PRIVATE SERVER REQUIRED", 10, COLOURS.Muted, true)
-			publicBadge.AnchorPoint = Vector2.new(1, 1)
-			publicBadge.Position = UDim2.new(1, -22, 1, -21)
-			publicBadge.Size = UDim2.fromOffset(190, 24)
-			publicBadge.TextXAlignment = Enum.TextXAlignment.Right
+		elseif server then
+			local badge = text(
+				hero,
+				if server.Kind == "Whitelisted"
+					then "GROUP WHITELISTED"
+					else "PRIVATE SERVER REQUIRED",
+				10,
+				COLOURS.Muted,
+				true
+			)
+			badge.AnchorPoint = Vector2.new(1, 1)
+			badge.Position = UDim2.new(1, -22, 1, -21)
+			badge.Size = UDim2.fromOffset(220, 24)
+			badge.TextXAlignment = Enum.TextXAlignment.Right
+		end
+		-- The whitelisted tier is this community's own server, so it is described
+		-- as such rather than being presented as one of the private communities
+		-- a player could set up themselves.
+		if server and server.Kind == "Whitelisted" then
+			sectionHeading(
+				"This server",
+				string.format(
+					"Entry is restricted to %s.",
+					tostring(server.AccessGroupName or "the host community")
+				)
+			)
+			local official = card(scroll, 132)
+			local eyebrowOfficial = text(official, "WHITELISTED SERVER", 11, COLOURS.Accent, true)
+			eyebrowOfficial.Position = UDim2.fromOffset(18, 16)
+			eyebrowOfficial.Size = UDim2.new(1, -36, 0, 20)
+			local officialName = text(
+				official,
+				tostring(server.AccessGroupName or "Host community"),
+				19,
+				COLOURS.Text,
+				true
+			)
+			officialName.Position = UDim2.fromOffset(18, 40)
+			officialName.Size = UDim2.new(1, -36, 0, 30)
+			local officialCopy = text(
+				official,
+				"Emergency services are group locked. Ranks and departments follow the community's Roblox group.",
+				12,
+				COLOURS.Muted
+			)
+			officialCopy.Position = UDim2.fromOffset(18, 72)
+			officialCopy.Size = UDim2.new(1, -36, 0, 44)
+			officialCopy.TextWrapped = true
 		end
 		sectionHeading(
 			"Included controls",
 			"A professional foundation for private roleplay operations."
 		)
 		for _, feature in
-			{
-				{ "Staff hierarchy", "Owner, administrator, moderator and member roles." },
-				{ "Membership policy", "Open, approval-based or invite-only entry." },
-				{ "Safety and audit", "Suspensions, bans and sensitive actions are recorded." },
-				{
-					"Shared gameplay",
-					"Characters, careers, economy and services stay authoritative.",
-				},
-			}
+			{ "Staff hierarchy", "Membership policy", "Safety and audit", "Shared gameplay" }
 		do
-			local item = card(scroll, 78)
-			local name = text(item, feature[1], 15, COLOURS.Text, true)
-			name.Position = UDim2.fromOffset(18, 12)
-			name.Size = UDim2.new(1, -36, 0, 25)
-			local detail = text(item, feature[2], 12, COLOURS.Muted)
-			detail.Position = UDim2.fromOffset(18, 39)
-			detail.Size = UDim2.new(1, -36, 0, 23)
+			local item = card(scroll, 54)
+			local name = text(item, feature, 15, COLOURS.Text, true)
+			name.Position = UDim2.fromOffset(18, 0)
+			name.Size = UDim2.new(1, -36, 1, 0)
 		end
 	end
 
