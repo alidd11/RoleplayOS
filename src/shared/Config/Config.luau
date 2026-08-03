@@ -1115,6 +1115,9 @@ local Config = {
 		-- brake is drawn shorter above it, as a pedal pair rather than two equal
 		-- buttons.
 		PedalSize = 92,
+		-- A pedal held this long with the vehicle still stationary means the
+		-- chassis reads its input somewhere the pedals do not reach.
+		NoResponseSeconds = 2.5,
 	},
 	Chassis = {
 		-- Interfaces cloned into PlayerGui by the chassis, disabled on sight so
@@ -1134,6 +1137,9 @@ local Config = {
 		-- trusted anyway.
 		ValuesFolderName = "Values",
 		GearValueName = "Gear",
+		-- Written as well as the seat's own throttle, so a chassis that keeps its
+		-- input in this folder is driven without needing to know which fork it is.
+		ThrottleValueName = "Throttle",
 		RpmValueName = "RPM",
 	},
 	VehicleSpawning = {

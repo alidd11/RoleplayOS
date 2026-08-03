@@ -6,10 +6,16 @@
 -- steers and accelerates on one control and cannot hold full throttle while
 -- steering. These are separate pedals, so a phone player can do both at once.
 --
--- The pedals drive the seat's own throttle rather than talking to the chassis,
--- so they work with any chassis, or none. The value is written every frame
--- while a pedal is held: Roblox's own control module writes the same property
--- from the thumbstick, and whichever writes last in a frame wins.
+-- Reliability across chassis forks is the difficulty here, since they disagree
+-- on where input is read. Rather than detecting which fork this is, the pedals
+-- satisfy both contracts at once: the seat's own throttle, which Roblox and
+-- most chassis read, and the chassis's own input value where one exists. The
+-- value is written every frame while a pedal is held, because Roblox's control
+-- module writes the same property from the thumbstick and the last write in a
+-- frame wins.
+--
+-- Where neither contract reaches the chassis the pedals cannot work, and that
+-- is reported rather than left as a silent dead control.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -46,6 +52,8 @@ end
 function DrivingControlsController:Init(context: any)
 	self.context = context
 	self.settings = Config.DrivingControls
+	self.chassis = Config.Chassis
+	self.heldFor = 0
 end
 
 function DrivingControlsController:_mount()
@@ -106,6 +114,48 @@ function DrivingControlsController:_seat(): VehicleSeat?
 	return if seat and seat:IsA("VehicleSeat") and seat.Occupant == humanoid then seat else nil
 end
 
+-- Both input contracts are satisfied rather than betting on one. A chassis
+-- either reads the seat's throttle or keeps its own input values; writing both
+-- costs nothing and removes the need to know which fork this is. A chassis that
+-- writes its own values every frame simply overwrites ours, which is harmless.
+function DrivingControlsController:_apply(seat: VehicleSeat, throttle: number)
+	seat.ThrottleFloat = throttle
+	local values = seat:FindFirstChild(self.chassis.ValuesFolderName)
+		or (seat.Parent and seat.Parent:FindFirstChild(self.chassis.ValuesFolderName))
+	if not values then
+		return
+	end
+	local target = values:FindFirstChild(self.chassis.ThrottleValueName)
+	if target and target:IsA("ValueBase") then
+		(target :: any).Value = throttle
+	end
+end
+
+-- A pedal held with no change in speed means the chassis takes its input
+-- somewhere neither contract reaches. That is a property of the fork, not
+-- something the player can act on, so it is reported once to the log for
+-- whoever is fitting the chassis rather than shown on screen.
+function DrivingControlsController:_watchForNoResponse(seat: VehicleSeat, delta: number)
+	if self.reported then
+		return
+	end
+	local speed = seat.AssemblyLinearVelocity.Magnitude
+	if speed > 4 then
+		self.reported = true
+		return
+	end
+	self.heldFor = (self.heldFor or 0) + delta
+	if self.heldFor < self.settings.NoResponseSeconds then
+		return
+	end
+	self.reported = true
+	warn(
+		"RoleplayOS driving pedals produced no movement: this chassis reads input "
+			.. "elsewhere, so set DrivingControls.Enabled to false and use its own "
+			.. "touch controls, or point ThrottleValueName at the value it reads."
+	)
+end
+
 function DrivingControlsController:Start()
 	self:_mount()
 	if not self.settings.Enabled then
@@ -137,17 +187,20 @@ function DrivingControlsController:Start()
 	)
 	table.insert(
 		self.connections,
-		RunService.RenderStepped:Connect(function()
-			if self.throttle == 0 then
+		RunService.RenderStepped:Connect(function(delta)
+			local seat = self:_seat()
+			if not seat then
+				-- The player left the seat, possibly while holding a pedal.
+				self.throttle = 0
+				self.heldFor = 0
 				return
 			end
-			local seat = self:_seat()
-			if seat then
-				seat.ThrottleFloat = self.throttle
-			else
-				-- The player left the seat while holding a pedal.
-				self.throttle = 0
+			if self.throttle == 0 then
+				self.heldFor = 0
+				return
 			end
+			self:_apply(seat, self.throttle)
+			self:_watchForNoResponse(seat, delta)
 		end)
 	)
 end

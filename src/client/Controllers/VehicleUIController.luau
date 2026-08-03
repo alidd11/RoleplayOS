@@ -6,7 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
-local VehicleUIController = { connections = {}, vehicleMode = false, state = "OnFoot" }
+local VehicleUIController =
+	{ connections = {}, vehicleMode = false, state = "OnFoot", suppressed = {} }
 
 function VehicleUIController:Init(context: any)
 	self.context = context
@@ -14,30 +15,37 @@ function VehicleUIController:Init(context: any)
 end
 
 -- The chassis clones its own gauges into PlayerGui when a player takes a seat.
--- RoleplayOS presents the readouts itself, so the chassis interface is disabled
--- on sight rather than left to sit alongside a second set of gauges. It is
--- disabled rather than destroyed: the chassis may still be driving it, and
--- removing something another system owns invites errors that are hard to trace
--- back here.
-function VehicleUIController:_suppress(instance: Instance)
-	if not instance:IsA("ScreenGui") then
+-- Matching them by name is unreliable: forks rename them freely, and a name
+-- list is only ever as current as the last fork someone checked. Identify them
+-- by behaviour instead. Anything that appears while seated, and is not ours, is
+-- the chassis interface, whatever it happens to be called.
+--
+-- They are disabled rather than destroyed, since the chassis may still be
+-- driving them, and re-enabled on leaving the seat so nothing is left broken
+-- for a system that expects to own them. The configured names remain as an
+-- immediate match for interfaces already present before sitting down.
+function VehicleUIController:_suppress(instance: Instance, seated: boolean)
+	if not instance:IsA("ScreenGui") or instance:GetAttribute("RoleplayOSManagedUI") then
 		return
 	end
-	if instance:GetAttribute("RoleplayOSManagedUI") then
+	local named = table.find(self.settings.SuppressGuiNames, instance.Name) ~= nil
+	if not named and not seated then
 		return
 	end
-	if table.find(self.settings.SuppressGuiNames, instance.Name) then
-		instance.Enabled = false
+	if not instance.Enabled then
+		return
 	end
+	instance.Enabled = false
+	self.suppressed[instance] = true
 end
 
-function VehicleUIController:_broadcast()
-	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-	if playerGui then
-		playerGui:SetAttribute("RoleplayOSVehicleMode", self.vehicleMode)
+function VehicleUIController:_restoreSuppressed()
+	for instance in self.suppressed do
+		if instance.Parent then
+			instance.Enabled = true
+		end
 	end
-	self.context.Events.VehicleModeChanged:Fire(self.vehicleMode)
-	self.context.Events.UIStateChanged:Fire(self.state)
+	table.clear(self.suppressed)
 end
 
 function VehicleUIController:_setSeat(seatPart: BasePart?)
@@ -55,6 +63,14 @@ function VehicleUIController:_setSeat(seatPart: BasePart?)
 	end
 	self.vehicleMode = enabled
 	self.state = state
+	if not enabled then
+		self:_restoreSuppressed()
+	else
+		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+		for _, child in if playerGui then playerGui:GetChildren() else {} do
+			self:_suppress(child, true)
+		end
+	end
 	self:_broadcast()
 end
 
@@ -82,12 +98,16 @@ end
 function VehicleUIController:Start()
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	for _, child in playerGui:GetChildren() do
-		self:_suppress(child)
+		self:_suppress(child, false)
 	end
 	table.insert(
 		self.connections,
 		playerGui.ChildAdded:Connect(function(child)
-			self:_suppress(child)
+			-- Deferred: the chassis parents its interface and then enables it, so
+			-- reading Enabled in the same frame can see the wrong value.
+			task.defer(function()
+				self:_suppress(child, self.vehicleMode)
+			end)
 		end)
 	)
 	local player = Players.LocalPlayer
