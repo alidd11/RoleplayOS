@@ -249,6 +249,9 @@ function DataService:Load(player: Player): (any?, string?)
 	end
 	local now = os.time()
 	local loaded
+	-- Recorded so a lease held by a server that has gone away can be waited out
+	-- rather than treated as an unrecoverable failure.
+	local lockedUntil: number? = nil
 	local ok, problem = self:_retry(function()
 		return self.store:UpdateAsync(tostring(player.UserId), function(stored)
 			local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
@@ -256,9 +259,11 @@ function DataService:Load(player: Player): (any?, string?)
 				error(migrationError)
 			end
 			local lock = profile.AuditMetadata.SessionLock
-			if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > now then
+			if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > os.time() then
+				lockedUntil = lock.ExpiresAt
 				error("PROFILE_SESSION_LOCKED")
 			end
+			lockedUntil = nil
 			profile.AuditMetadata.SessionLock = {
 				ServerId = self.serverId,
 				ExpiresAt = now + self.context.Configuration.Framework.SessionLeaseSeconds,
@@ -267,6 +272,27 @@ function DataService:Load(player: Player): (any?, string?)
 			return profile
 		end)
 	end)
+	if not ok and lockedUntil then
+		-- A lease is held by another server. Retrying immediately cannot succeed,
+		-- since it expires on a clock rather than on contention, so wait it out
+		-- once when the remaining time is short. Rejoining straight after leaving
+		-- is the common case, and kicking the player for it reads as a fault.
+		local remaining = lockedUntil - os.time()
+		if
+			remaining > 0
+			and remaining <= self.context.Configuration.Framework.SessionLeaseSeconds
+		then
+			self.context.Logger:Warning("Waiting for a held profile lease", {
+				UserId = player.UserId,
+				Seconds = remaining,
+			})
+			task.wait(remaining + 1)
+			if not player:IsDescendantOf(Players) then
+				return nil, "PLAYER_LEFT"
+			end
+			return self:Load(player)
+		end
+	end
 	if not ok then
 		self.context.Logger:Error(
 			"Profile load failed",

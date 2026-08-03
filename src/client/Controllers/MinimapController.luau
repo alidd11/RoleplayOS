@@ -309,8 +309,11 @@ function MinimapController:Start()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Minimap", function(layout)
 		self.shell.Visible = not layout.Vehicle or not layout.Compact
 		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
+		-- Sits above centre on touch, where a sprint pad shares the right edge and
+		-- a centred minimap would land on top of it.
 		self.shell.Position = if layout.Vehicle
 			then UDim2.new(0, 18, 0.52, 0)
+			elseif layout.InputMode == "Touch" then UDim2.new(1, -layout.RightReserve, 0.36, 0)
 			else UDim2.new(1, -layout.RightReserve, 0.5, 0)
 		self.shell.Size = if layout.Vehicle
 			then UDim2.fromOffset(150, 170)

@@ -186,32 +186,22 @@ function MDTController:_mount()
 	close.Size = UDim2.fromOffset(72, 30)
 	self.close = close
 
-	-- Tabs sit on a recessed rail so the active one reads as a selected segment
-	-- rather than four loose buttons floating on the page.
-	local tabRail = Instance.new("Frame")
-	tabRail.Name = "Tabs"
-	tabRail.Position = UDim2.fromOffset(18, 70)
-	tabRail.Size = UDim2.fromOffset(446, 40)
-	tabRail.BackgroundColor3 = Color3.fromRGB(10, 24, 38)
-	tabRail.BorderSizePixel = 0
-	tabRail.Parent = shell
-	corner(tabRail, 11)
-
-	local homeTab = button(tabRail, "HOME")
-	homeTab.Position = UDim2.fromOffset(4, 3)
-	homeTab.Size = UDim2.fromOffset(74, 34)
-	local person = button(tabRail, "PEOPLE")
-	person.Position = UDim2.fromOffset(82, 3)
-	person.Size = UDim2.fromOffset(88, 34)
-	local vehicle = button(tabRail, "VEHICLES")
-	vehicle.Position = UDim2.fromOffset(174, 3)
-	vehicle.Size = UDim2.fromOffset(92, 34)
-	local incidents = button(tabRail, "INCIDENTS")
-	incidents.Position = UDim2.fromOffset(270, 3)
-	incidents.Size = UDim2.fromOffset(96, 34)
-	local mapTab = button(tabRail, "MAP")
-	mapTab.Position = UDim2.fromOffset(370, 3)
-	mapTab.Size = UDim2.fromOffset(72, 34)
+	-- No tab rail: pages are chosen from the home screen, and a single HOME
+	-- control returns there. Four permanent tabs cost a row of screen on a
+	-- device that is already small on a phone, and duplicated what the home
+	-- screen already offers.
+	local homeTab = button(shell, "\u{2302}  HOME")
+	homeTab.Position = UDim2.fromOffset(22, 70)
+	homeTab.Size = UDim2.fromOffset(104, 34)
+	local person = button(shell, "PEOPLE")
+	local vehicle = button(shell, "VEHICLES")
+	local incidents = button(shell, "INCIDENTS")
+	local mapTab = button(shell, "MAP")
+	-- Kept as the selection state the pages already drive, but never shown.
+	for _, hidden in { person, vehicle, incidents, mapTab } do
+		hidden.Visible = false
+		hidden.Parent = nil
+	end
 	self.homeTab = homeTab
 	self.personTab = person
 	self.vehicleTab = vehicle
@@ -474,7 +464,9 @@ function MDTController:_mount()
 end
 
 function MDTController:_renderTabs()
-	self.homeTab.BackgroundColor3 = if self.recordType == "Home" then C.Accent else C.Raised
+	-- Nothing to return to from the home screen itself, so the control only
+	-- appears once the officer has opened a page.
+	self.homeTab.Visible = self.recordType ~= "Home"
 	self.personTab.BackgroundColor3 = if self.recordType == "Person" then C.Accent else C.Raised
 	self.vehicleTab.BackgroundColor3 = if self.recordType == "Vehicle" then C.Accent else C.Raised
 	self.incidentTab.BackgroundColor3 = if self.recordType == "Incident" then C.Accent else C.Raised

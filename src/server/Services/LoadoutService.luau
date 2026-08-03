@@ -19,6 +19,23 @@ local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: 
 	tool:SetAttribute("RoleplayOSToolId", toolId)
 	tool.Parent = backpack
 end
+
+-- Loadouts overlap: several police loadouts issue handcuffs, and applying one
+-- again on respawn would issue a second set. An officer should carry one of
+-- each, so a tool already held is not issued again. The equipped tool lives on
+-- the character rather than in the backpack, so both are checked.
+local function alreadyIssued(player: Player, toolId: string): boolean
+	for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
+		if container then
+			for _, child in container:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("RoleplayOSToolId") == toolId then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
 function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, string?)
 	local definition = self.context.Configuration.Loadouts[loadoutId]
 	if not definition then
@@ -35,6 +52,9 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		return true, nil
 	end
 	for _, toolId in definition.ToolIds or definition.ToolNames or {} do
+		if alreadyIssued(player, toolId) then
+			continue
+		end
 		local toolDefinition = self.context.Configuration.Tools[toolId]
 		local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
 			then resolve(assets, toolDefinition.AssetPath)

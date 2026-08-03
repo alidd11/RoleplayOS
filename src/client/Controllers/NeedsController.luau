@@ -149,8 +149,11 @@ function NeedsController:Start()
 		self.sprintPad.Visible = layout.InputMode == "Touch" and not layout.Vehicle
 		self.sprintPad.Size =
 			UDim2.fromOffset(if layout.Compact then 76 else 84, if layout.Compact then 76 else 84)
+		-- The minimap occupies the right edge at mid height, so the pad sits below
+		-- it rather than under it. Clearing the minimap's own height keeps the two
+		-- apart on a phone, where the screen is short and both want that corner.
 		self.sprintPad.Position =
-			UDim2.new(1, -(layout.RightReserve + 14), 1, -(layout.HotbarBottom + 28))
+			UDim2.new(1, -(layout.RightReserve + 14), 1, -(layout.HotbarBottom + 40))
 	end)
 	ContextActionService:BindAction("RoleplayOSSprint", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin or inputState == Enum.UserInputState.End then

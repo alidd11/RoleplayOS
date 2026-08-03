@@ -44,7 +44,10 @@ local Config = {
 		AutosaveSeconds = 120,
 		ShutdownSaveSeconds = 25,
 		MaxSaveAttempts = 4,
-		SessionLeaseSeconds = 300,
+		-- How long a profile stays claimed by a server. A server that dies without
+		-- releasing locks the player out for this long, so it is kept close to the
+		-- autosave cadence that refreshes it rather than far above it.
+		SessionLeaseSeconds = 120,
 	},
 	ContentQuality = {
 		RequireCertification = true,
