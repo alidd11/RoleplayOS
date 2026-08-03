@@ -5,6 +5,8 @@ local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 
+local TacticalMap = require(script.Parent.Parent.UI.TacticalMap)
+
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
 local C = {
@@ -143,9 +145,13 @@ function MDTController:_mount()
 	local incidents = button(shell, "INCIDENTS")
 	incidents.Position = UDim2.fromOffset(222, 73)
 	incidents.Size = UDim2.fromOffset(98, 34)
+	local mapTab = button(shell, "MAP")
+	mapTab.Position = UDim2.fromOffset(328, 73)
+	mapTab.Size = UDim2.fromOffset(80, 34)
 	self.personTab = person
 	self.vehicleTab = vehicle
 	self.incidentTab = incidents
+	self.mapTab = mapTab
 
 	local input = Instance.new("TextBox")
 	input.BackgroundColor3 = C.Raised
@@ -171,6 +177,7 @@ function MDTController:_mount()
 	search.Position = UDim2.new(0.62, -22, 0, 119)
 	search.Size = UDim2.fromOffset(86, 42)
 	search.BackgroundColor3 = C.Accent
+	self.searchAction = search
 
 	local status = text(shell, "Enter at least two characters.", 11)
 	status.Position = UDim2.fromOffset(22, 170)
@@ -198,6 +205,11 @@ function MDTController:_mount()
 	detail.BorderSizePixel = 0
 	detail.Parent = shell
 	corner(detail, 11)
+	self.detail = detail
+
+	local map = TacticalMap.new(shell)
+	map:SetSize(UDim2.new(1, -44, 1, -136), UDim2.fromOffset(22, 119))
+	self.map = map
 	local detailTitle = text(detail, "RECORD PREVIEW", 11, true)
 	detailTitle.Position = UDim2.fromOffset(16, 14)
 	detailTitle.Size = UDim2.new(1, -32, 0, 20)
@@ -309,8 +321,14 @@ function MDTController:_mount()
 	self.warrantExpiry = expiryInput
 
 	local function setOpen(open: boolean)
-		if self.allowed then
-			shell.Visible = open
+		if not self.allowed then
+			return
+		end
+		shell.Visible = open
+		if open then
+			-- Map geometry is static, so rebuild on open rather than per refresh.
+			self.map:Rebuild()
+			self:RefreshMap()
 		end
 	end
 	launcher.Activated:Connect(function()
@@ -347,6 +365,11 @@ function MDTController:_mount()
 		self:_renderTabs()
 		self:_performSearch()
 	end)
+	mapTab.Activated:Connect(function()
+		self.recordType = "Map"
+		self:_renderTabs()
+		self:RefreshMap()
+	end)
 	search.Activated:Connect(function()
 		self:_performSearch()
 	end)
@@ -362,6 +385,26 @@ function MDTController:_renderTabs()
 	self.personTab.BackgroundColor3 = if self.recordType == "Person" then C.Accent else C.Raised
 	self.vehicleTab.BackgroundColor3 = if self.recordType == "Vehicle" then C.Accent else C.Raised
 	self.incidentTab.BackgroundColor3 = if self.recordType == "Incident" then C.Accent else C.Raised
+	self.mapTab.BackgroundColor3 = if self.recordType == "Map" then C.Accent else C.Raised
+	-- The map replaces the records surface rather than sharing it, so the
+	-- search controls cannot be used against a record type that has no search.
+	local mapping = self.recordType == "Map"
+	self.input.Visible = not mapping
+	self.searchAction.Visible = not mapping
+	self.status.Visible = not mapping
+	self.results.Visible = not mapping
+	self.detail.Visible = not mapping
+	self.map:SetVisible(mapping)
+end
+
+-- Pulls a fresh server snapshot. The map only ever renders what the server
+-- reports, so an unauthorised duty simply sees an empty picture.
+function MDTController:RefreshMap()
+	if self.recordType ~= "Map" then
+		return
+	end
+	local response = self.context.Controllers.NetworkController:Request("GetDispatchSnapshot", {})
+	self.map:Update(if response.Success then response.Data else nil)
 end
 
 function MDTController:_renderResults(items: { any })
@@ -678,6 +721,16 @@ function MDTController:Start()
 			self.shell.Visible = false
 		end
 	end)
+	-- Dispatch pushes a change event whenever a call or unit moves state, so the
+	-- map follows the live picture without polling.
+	table.insert(
+		self.connections,
+		self.context.Events.DispatchChanged.Event:Connect(function()
+			if self.shell.Visible then
+				self:RefreshMap()
+			end
+		end)
+	)
 	self:RefreshAccess()
 end
 
@@ -696,6 +749,9 @@ function MDTController:Destroy()
 	table.clear(self.connections)
 	if self.unbindLayout then
 		self.unbindLayout()
+	end
+	if self.map then
+		self.map:Destroy()
 	end
 	if self.gui then
 		self.gui:Destroy()

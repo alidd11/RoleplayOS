@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 
 local MinimapController = { connections = {}, running = false }
 local C = {
@@ -107,10 +108,8 @@ function MinimapController:_bounds(): BasePart?
 end
 
 function MinimapController:_project(position: Vector3, bounds: BasePart): Vector2
-	local relative = bounds.CFrame:PointToObjectSpace(position)
-	local x = math.clamp(relative.X / bounds.Size.X + 0.5, 0, 1)
-	local y = math.clamp(relative.Z / bounds.Size.Z + 0.5, 0, 1)
-	return Vector2.new(x, y)
+	local point = MapProjection.project(position, bounds.CFrame, bounds.Size)
+	return Vector2.new(point.X, point.Y)
 end
 
 function MinimapController:_clearGeometry()
@@ -127,10 +126,8 @@ function MinimapController:_drawRoad(part: BasePart, bounds: BasePart)
 	road.Name = "Road"
 	road.AnchorPoint = Vector2.new(0.5, 0.5)
 	road.Position = UDim2.fromScale(point.X, point.Y)
-	road.Size = UDim2.fromScale(
-		math.clamp(part.Size.X / bounds.Size.X, 0.003, 1),
-		math.clamp(part.Size.Z / bounds.Size.Z, 0.003, 1)
-	)
+	local footprint = MapProjection.footprint(part.Size, bounds.Size, 0.003)
+	road.Size = UDim2.fromScale(footprint.X, footprint.Y)
 	road.Rotation = -part.Orientation.Y + bounds.Orientation.Y
 	road.BackgroundColor3 = C.Road
 	road.BorderSizePixel = 0

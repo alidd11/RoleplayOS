@@ -2,6 +2,8 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 
 local EmergencyTriggerService = { connections = {}, cooldowns = {}, playerCooldowns = {} }
 
@@ -69,6 +71,11 @@ function EmergencyTriggerService:Trigger(instance: Instance, player: Player?): (
 		Priority = incident.Priority,
 		Summary = tostring(instance:GetAttribute("Summary") or incident.Summary),
 		Location = tostring(instance:GetAttribute("Location") or instance.Name),
+		-- The trigger itself is the incident location, so alarms and panic
+		-- points plot exactly where they were activated.
+		Position = if instance:IsA("BasePart")
+			then MapProjection.serialise(instance.Position)
+			else nil,
 		DepartmentIds = departments,
 		Source = "AutomaticTrigger",
 	})

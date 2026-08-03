@@ -3,6 +3,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
@@ -303,10 +304,16 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 	if not filteredSummary or not filteredLocation then
 		return nil, reason
 	end
+	-- Plot the call where the caller actually stands. Resolved server-side so a
+	-- client cannot place an incident somewhere it is not.
+	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	return self.context.Services:Get("CallService"):Create({
 		Priority = "Immediate",
 		Summary = "999 · " .. filteredSummary,
 		Location = filteredLocation,
+		Position = if rootPart and rootPart:IsA("BasePart")
+			then MapProjection.serialise(rootPart.Position)
+			else nil,
 		CallerNumber = self:_ensurePhone(character).Number,
 		DepartmentIds = { "Police", "Ambulance", "Fire", "Control" },
 		IncidentType = "Emergency",

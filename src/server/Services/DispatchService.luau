@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local DispatchService = { Optional = true, connections = {}, occupied = {} }
@@ -175,6 +176,16 @@ function DispatchService:Snapshot(player: Player): (any?, string?)
 	local units = {}
 	for _, unit in self.context.Services:Get("UnitService"):Snapshot() do
 		if duty and (duty.DepartmentId == "Control" or unit.DepartmentId == duty.DepartmentId) then
+			-- Live position is runtime only and resolved server-side; the client
+			-- never supplies it. Units off-map or without a character simply
+			-- carry no position and are listed without a map marker.
+			local other = Players:GetPlayerByUserId(unit.UserId)
+			local rootPart = other
+				and other.Character
+				and other.Character:FindFirstChild("HumanoidRootPart")
+			if rootPart and rootPart:IsA("BasePart") then
+				unit.Position = MapProjection.serialise(rootPart.Position)
+			end
 			table.insert(units, unit)
 		end
 	end

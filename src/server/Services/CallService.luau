@@ -38,6 +38,14 @@ function CallService:Create(data: any): (any?, string?)
 		Priority = data.Priority,
 		Summary = data.Summary,
 		Location = tostring(data.Location or "Unknown"),
+		-- Serialised primitives, never a Vector3: closing a call can promote it
+		-- to a persisted incident, and persistent records hold primitives only.
+		Position = if type(data.Position) == "table"
+				and type(data.Position.X) == "number"
+				and type(data.Position.Y) == "number"
+				and type(data.Position.Z) == "number"
+			then { X = data.Position.X, Y = data.Position.Y, Z = data.Position.Z }
+			else nil,
 		IncidentType = incidentType,
 		CallerName = tostring(data.CallerName or "Unknown caller"),
 		CallerNumber = tostring(data.CallerNumber or ""),
