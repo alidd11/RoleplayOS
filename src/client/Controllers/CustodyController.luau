@@ -122,6 +122,9 @@ function CustodyController:_mount()
 	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	-- Anchored to a screen edge, so it must stay clear of notches, rounded
+	-- corners and home indicators rather than being clipped by them.
+	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 22
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui

@@ -47,6 +47,9 @@ function NeedsController:Start()
 	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	-- Anchored to a screen edge, so it must stay clear of notches, rounded
+	-- corners and home indicators rather than being clipped by them.
+	gui.ClipToDeviceSafeArea = true
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local hud = Instance.new("Frame")
 	hud.AnchorPoint = Vector2.new(0.5, 1)

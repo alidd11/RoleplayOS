@@ -344,7 +344,11 @@ function App.mount(context: any): ScreenGui
 
 	local function showModal()
 		local currentLayout = context.Controllers.UIOrchestrator:GetLayout()
-		local shortViewport = currentLayout.Viewport.Y < 520
+		-- Sized against the usable area rather than the raw viewport: this canvas
+		-- is deliberately full bleed, so a modal measured against the whole screen
+		-- would run under a notch, island or home indicator.
+		local safeViewport = currentLayout.SafeViewport
+		local shortViewport = safeViewport.Y < 520
 		local shade = Instance.new("TextButton")
 		shade.Text = ""
 		shade.AutoButtonColor = false
@@ -357,8 +361,8 @@ function App.mount(context: any): ScreenGui
 		modal.AnchorPoint = Vector2.new(0.5, 0.5)
 		modal.Position = UDim2.fromScale(0.5, 0.5)
 		modal.Size = UDim2.fromOffset(
-			math.min(460, currentLayout.Viewport.X - 32),
-			if shortViewport then math.min(326, currentLayout.Viewport.Y - 24) else 465
+			math.min(460, safeViewport.X - 32),
+			if shortViewport then math.min(326, safeViewport.Y - 24) else 465
 		)
 		modal.BackgroundColor3 = COLOURS.Surface
 		modal.BorderSizePixel = 0
@@ -1027,23 +1031,30 @@ function App.mount(context: any): ScreenGui
 			-- Centre within the native band, never above the screen edge.
 			math.max(0, math.floor((nativeBand - controlSize) / 2))
 		)
-		local horizontal = layout.Compact or layout.Viewport.Y < 520
-		local narrow = layout.Viewport.X < 600
+		-- Breakpoints follow the usable area, not the panel size. A landscape
+		-- phone loses real width to a notch and rounded corners, so deciding from
+		-- the raw viewport would pick a layout that does not actually fit.
+		local horizontal = layout.Compact or layout.SafeViewport.Y < 520
+		local narrow = layout.SafeViewport.X < 600
+		local safeLeft = layout.SafeLeft
+		local safeRight = layout.SafeRight
 		if horizontal then
 			local barHeight = safeTop + (if narrow then 112 else 82)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
-			brand.Position = UDim2.fromOffset(18, safeTop + 8)
-			brand.Size = UDim2.fromOffset(if narrow then layout.Viewport.X - 36 else 270, 30)
+			brand.Position = UDim2.fromOffset(safeLeft + 18, safeTop + 8)
+			brand.Size = UDim2.fromOffset(if narrow then layout.SafeViewport.X - 36 else 270, 30)
 			brand.TextSize = 15
 			brand.TextWrapped = false
 			brand.TextTruncate = Enum.TextTruncate.AtEnd
-			version.Position = UDim2.fromOffset(19, safeTop + 37)
+			version.Position = UDim2.fromOffset(safeLeft + 19, safeTop + 37)
 			navigation.Position = if narrow
-				then UDim2.fromOffset(18, safeTop + 66)
-				else UDim2.fromOffset(300, safeTop + 18)
-			navigation.Size = if narrow then UDim2.new(1, -36, 0, 38) else UDim2.new(1, -318, 0, 46)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 66)
+				else UDim2.fromOffset(safeLeft + 300, safeTop + 18)
+			navigation.Size = if narrow
+				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 38)
+				else UDim2.new(1, -(318 + safeLeft + safeRight), 0, 46)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
 			for _, item in navigation:GetChildren() do
@@ -1057,25 +1068,27 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = false
-			header.Position = UDim2.fromOffset(20, 10)
-			header.Size = UDim2.new(1, -40, 0, 54)
+			header.Position = UDim2.fromOffset(safeLeft + 20, 10)
+			header.Size = UDim2.new(1, -(40 + safeLeft + safeRight), 0, 54)
 			pageTitle.TextSize = 24
 			pageDescription.Visible = false
-			status.Position = UDim2.new(1, 0, 0, 3)
-			scroll.Position = UDim2.fromOffset(20, 68)
-			scroll.Size = UDim2.new(1, -40, 1, -76)
+			status.Position = UDim2.new(1, -safeRight, 0, 3)
+			scroll.Position = UDim2.fromOffset(safeLeft + 20, 68)
+			scroll.Size = UDim2.new(1, -(40 + safeLeft + safeRight), 1, -(76 + layout.SafeBottom))
 		else
-			sidebar.Size = UDim2.new(0, 250, 1, 0)
-			content.Position = UDim2.fromOffset(250, 0)
-			content.Size = UDim2.new(1, -250, 1, 0)
-			brand.Position = UDim2.fromOffset(26, safeTop + 20)
-			brand.Size = UDim2.new(1, -52, 0, 42)
+			-- The sidebar hugs the left edge, so it absorbs the left reserve and
+			-- the content pane starts after it. Only the sidebar needs to know.
+			sidebar.Size = UDim2.new(0, 250 + safeLeft, 1, 0)
+			content.Position = UDim2.fromOffset(250 + safeLeft, 0)
+			content.Size = UDim2.new(1, -(250 + safeLeft), 1, 0)
+			brand.Position = UDim2.fromOffset(safeLeft + 26, safeTop + 20)
+			brand.Size = UDim2.new(1, -(52 + safeLeft), 0, 42)
 			brand.TextSize = 17
 			brand.TextWrapped = true
 			brand.TextTruncate = Enum.TextTruncate.None
-			version.Position = UDim2.fromOffset(27, safeTop + 66)
-			navigation.Position = UDim2.fromOffset(18, safeTop + 112)
-			navigation.Size = UDim2.new(1, -36, 0, navItems * 44 + (navItems - 1) * 7)
+			version.Position = UDim2.fromOffset(safeLeft + 27, safeTop + 66)
+			navigation.Position = UDim2.fromOffset(safeLeft + 18, safeTop + 112)
+			navigation.Size = UDim2.new(1, -(36 + safeLeft), 0, navItems * 44 + (navItems - 1) * 7)
 			navLayout.FillDirection = Enum.FillDirection.Vertical
 			navLayout.Padding = UDim.new(0, 7)
 			for _, item in navigation:GetChildren() do
@@ -1090,12 +1103,12 @@ function App.mount(context: any): ScreenGui
 			end
 			profile.Visible = true
 			header.Position = UDim2.fromOffset(44, safeTop + 30)
-			header.Size = UDim2.new(1, -88, 0, 76)
+			header.Size = UDim2.new(1, -(88 + safeRight), 0, 76)
 			pageTitle.TextSize = 30
 			pageDescription.Visible = true
-			status.Position = UDim2.new(1, 0, 0, 9)
+			status.Position = UDim2.new(1, -safeRight, 0, 9)
 			scroll.Position = UDim2.fromOffset(44, safeTop + 118)
-			scroll.Size = UDim2.new(1, -88, 1, -(safeTop + 146))
+			scroll.Size = UDim2.new(1, -(88 + safeRight), 1, -(safeTop + 146 + layout.SafeBottom))
 		end
 	end)
 

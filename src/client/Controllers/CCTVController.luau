@@ -33,6 +33,9 @@ function CCTVController:_mount()
 	gui.Name = "RoleplayOSCCTV"
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	-- Anchored to a screen edge, so it must stay clear of notches, rounded
+	-- corners and home indicators rather than being clipped by them.
+	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 18
 	gui.Enabled = false
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")

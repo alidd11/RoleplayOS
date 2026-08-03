@@ -359,6 +359,9 @@ function DealershipController:_buildUI()
 	gui.Name = "RoleplayOSDealership"
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	-- Anchored to a screen edge, so it must stay clear of notches, rounded
+	-- corners and home indicators rather than being clipped by them.
+	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 30
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
