@@ -56,7 +56,32 @@ function NeedsService:SetSprinting(player: Player, sprinting: any): (boolean, st
 		return false, "SPRINT_UNAVAILABLE"
 	end
 	state.Sprinting = sprinting and state.Stamina > 1 and state.Hunger > 2
+	-- Apply the speed now rather than waiting for the next tick. The step loop
+	-- runs twice a second, so deferring left up to half a second of dead input
+	-- after the key went down, which reads as the sprint key not working.
+	self:_applySpeed(player, state, humanoid)
 	return true, nil
+end
+
+-- Resolves the walk speed implied by the current needs state. Shared by the
+-- step loop and by immediate state changes so the two cannot disagree.
+function NeedsService:_applySpeed(player: Player, state: any, humanoid: Humanoid)
+	local needs = self.context.Configuration.Needs
+	local speed = needs.WalkSpeed
+	if state.Sprinting then
+		speed = needs.MinimumSprintSpeed
+			+ (needs.MaximumSprintSpeed - needs.MinimumSprintSpeed) * (state.Stamina / 100)
+	elseif state.Hunger < 10 then
+		speed *= 0.82
+	end
+	if player:GetAttribute("RoleplayOSCuffed") then
+		state.Sprinting = false
+		speed = 7
+		humanoid.JumpPower = 0
+	else
+		humanoid.JumpPower = 50
+	end
+	humanoid.WalkSpeed = speed
 end
 
 function NeedsService:PurchaseFood(player: Player, foodId: any): (any?, string?)
@@ -122,26 +147,7 @@ function NeedsService:_step(player: Player, delta: number)
 	end
 	state.Hunger =
 		math.max(0, state.Hunger - self.context.Configuration.Needs.HungerDrainPerSecond * delta)
-	local staminaRatio = state.Stamina / 100
-	local speed = self.context.Configuration.Needs.WalkSpeed
-	if state.Sprinting then
-		speed = self.context.Configuration.Needs.MinimumSprintSpeed
-			+ (
-					self.context.Configuration.Needs.MaximumSprintSpeed
-					- self.context.Configuration.Needs.MinimumSprintSpeed
-				)
-				* staminaRatio
-	elseif state.Hunger < 10 then
-		speed *= 0.82
-	end
-	if player:GetAttribute("RoleplayOSCuffed") then
-		state.Sprinting = false
-		speed = 7
-		humanoid.JumpPower = 0
-	else
-		humanoid.JumpPower = 50
-	end
-	humanoid.WalkSpeed = speed
+	self:_applySpeed(player, state, humanoid)
 	local now = os.clock()
 	local lastPayload = state.LastPayload
 	local materiallyChanged = not lastPayload

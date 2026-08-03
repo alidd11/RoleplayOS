@@ -75,6 +75,65 @@ function NeedsController:Start()
 			self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
 		end)
 	end
+	-- A purpose-built control rather than the generic touch button, so touch
+	-- players get a sprint pad sized and placed like the rest of the interface
+	-- instead of one Roblox positions for us. Shown only on touch, since a
+	-- keyboard or pad player already has a binding.
+	local sprintPad = Instance.new("TextButton")
+	sprintPad.Name = "SprintPad"
+	sprintPad.AnchorPoint = Vector2.new(1, 1)
+	sprintPad.AutoButtonColor = false
+	sprintPad.BackgroundColor3 = Color3.fromRGB(22, 30, 44)
+	sprintPad.BackgroundTransparency = 0.2
+	sprintPad.BorderSizePixel = 0
+	sprintPad.Font = Enum.Font.GothamBold
+	sprintPad.Text = "RUN"
+	sprintPad.TextColor3 = Color3.fromRGB(238, 244, 252)
+	sprintPad.TextSize = 13
+	sprintPad.Size = UDim2.fromOffset(84, 84)
+	sprintPad.Visible = false
+	sprintPad.Parent = gui
+	local padCorner = Instance.new("UICorner")
+	padCorner.CornerRadius = UDim.new(0, 42)
+	padCorner.Parent = sprintPad
+	local padStroke = Instance.new("UIStroke")
+	padStroke.Color = Color3.fromRGB(78, 100, 132)
+	padStroke.Transparency = 0.35
+	padStroke.Parent = sprintPad
+	self.sprintPad = sprintPad
+
+	local function setSprinting(sprinting: boolean)
+		sprintPad.BackgroundColor3 = if sprinting
+			then Color3.fromRGB(46, 104, 168)
+			else Color3.fromRGB(22, 30, 44)
+		task.spawn(function()
+			self.context.Controllers.NetworkController:Request(
+				"SetSprintState",
+				{ Sprinting = sprinting }
+			)
+		end)
+	end
+
+	-- Hold to run, matching the key and pad bindings. InputEnded rather than
+	-- Activated, so lifting a finger anywhere reliably stops the sprint instead
+	-- of leaving the character running.
+	sprintPad.InputBegan:Connect(function(inputObject)
+		if
+			inputObject.UserInputType == Enum.UserInputType.Touch
+			or inputObject.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			setSprinting(true)
+		end
+	end)
+	sprintPad.InputEnded:Connect(function(inputObject)
+		if
+			inputObject.UserInputType == Enum.UserInputType.Touch
+			or inputObject.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			setSprinting(false)
+		end
+	end)
+
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
 		self.blur.Enabled = not layout.VR
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
@@ -84,18 +143,22 @@ function NeedsController:Start()
 		self.hud.Size = if layout.Vehicle
 			then UDim2.fromOffset(if layout.Compact then 164 else 220, 14)
 			else UDim2.fromOffset(if layout.Compact then 224 else 270, 15)
+		-- Only touch players need an on-screen control, and never while driving,
+		-- where the pad would sit over the vehicle controls.
+		self.sprintPad.Visible = layout.InputMode == "Touch" and not layout.Vehicle
+		self.sprintPad.Size =
+			UDim2.fromOffset(if layout.Compact then 76 else 84, if layout.Compact then 76 else 84)
+		self.sprintPad.Position =
+			UDim2.new(1, -(layout.RightReserve + 14), 1, -(layout.HotbarBottom + 28))
 	end)
 	ContextActionService:BindAction("RoleplayOSSprint", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin or inputState == Enum.UserInputState.End then
-			task.spawn(function()
-				self.context.Controllers.NetworkController:Request(
-					"SetSprintState",
-					{ Sprinting = inputState == Enum.UserInputState.Begin }
-				)
-			end)
+			setSprinting(inputState == Enum.UserInputState.Begin)
 		end
 		return Enum.ContextActionResult.Sink
-	end, true, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3)
+		-- No generic touch button: the sprint pad above replaces it. Both shift
+		-- keys are bound, since a player may hold either.
+	end, false, Enum.KeyCode.LeftShift, Enum.KeyCode.RightShift, Enum.KeyCode.ButtonL3)
 	ContextActionService:SetTitle("RoleplayOSSprint", "RUN")
 	ContextActionService:SetDescription(
 		"RoleplayOSSprint",
