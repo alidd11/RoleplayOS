@@ -1,6 +1,8 @@
 # Mobile phone
 
-RoleplayOS Mobile is an original modern smartphone interface rather than a copy of a branded handset. It opens with the on-screen launcher or the `P` key and uses the selected civilian character's persistent phone identity.
+RoleplayOS Mobile is an original modern smartphone interface rather than a copy of a branded handset. It is taken out by selecting the Phone tool in the toolbar, the way a handset is taken from a pocket, or with the `P` key; putting the tool away closes it. There is no on-screen launcher, so nothing competes with the rest of the interface for a corner of the screen. The handset uses the selected civilian character's persistent phone identity.
+
+Its home screen is a grid of apps with a dock of pinned ones, and the heading and dock give way to whichever app is open. A wallet app shows the holder's own identity card. Reading your own card is not the same as presenting it: showing identification to another player still goes through the identification service, which requires the physical card in hand and the other player within range.
 
 It also exists as a held toolbar `Tool` with a welded screen and a server-controlled flashlight. The home screen uses an icon dock and includes a Contacts app showing active characters in this server.
 

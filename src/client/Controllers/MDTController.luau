@@ -811,11 +811,14 @@ function MDTController:Start()
 		end)
 	)
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("MDT", function(layout)
-		self.launcher.AnchorPoint = if layout.Vehicle
-			then Vector2.new(0, 1)
-			else Vector2.new(0, 0.5)
+		-- While driving the minimap moves to the left edge and the needs bars to
+		-- the bottom left, so the launcher stacks directly beneath the minimap
+		-- rather than sharing either position. The offset is derived from the
+		-- minimap's own height so the two cannot drift into each other.
+		local minimapBottom = 0.52 + (85 * layout.HudScale) / math.max(layout.Viewport.Y, 1)
+		self.launcher.AnchorPoint = Vector2.new(0, 0)
 		self.launcher.Position = if layout.Vehicle
-			then UDim2.new(0, 18, 1, -(layout.HotbarBottom + 8))
+			then UDim2.new(0, 18, minimapBottom, 12)
 			else UDim2.new(0, 18, 0.62, 0)
 		-- The shell never shrinks below its minimum size, so it is scaled against
 		-- the usable area on every device class. Measuring the raw viewport

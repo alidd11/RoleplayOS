@@ -70,6 +70,11 @@ function SpeedometerController:_mount()
 	fuel.TextXAlignment = Enum.TextXAlignment.Right
 	fuel.Parent = frame
 	self.gui, self.frame, self.speed, self.gear, self.fuel = gui, frame, speed, gear, fuel
+	-- Ambient display, scaled with the rest of it so the readout keeps its
+	-- proportions on a phone as well as a large monitor.
+	local frameScale = Instance.new("UIScale")
+	frameScale.Parent = frame
+	self.frameScale = frameScale
 end
 
 function SpeedometerController:_watch(character: Model)
@@ -91,8 +96,12 @@ end
 function SpeedometerController:Start()
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Speedometer", function(layout)
+		self.frameScale.Scale = layout.HudScale
 		self.frame.AnchorPoint = Vector2.new(0.5, 1)
-		self.frame.Position = UDim2.new(0.5, 0, 1, -18)
+		-- Clear of Roblox's toolbar rather than pinned to the bottom edge, which
+		-- put the readout underneath the equipped tools. The needs bars move to
+		-- the left while driving, so the bottom centre is free for this.
+		self.frame.Position = UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 8))
 		self.frame.Size =
 			UDim2.fromOffset(if layout.Compact then 158 else 190, if layout.Compact then 62 else 72)
 		local detailY = if layout.Compact then 43 else 52

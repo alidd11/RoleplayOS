@@ -13,3 +13,15 @@ Incidents and warrants have stable IDs, durable records and audit trails. Active
 The MDT includes People, Vehicles and Incidents views. Authorised police duties can issue a filtered, expiry-bounded warrant from a person record and revoke it through a two-step confirmation. Active warrants appear as `WANTED` on both the person and their registered vehicle. See [MDT persistence](MDT_PERSISTENCE.md) for index and failure behaviour.
 
 For an automatic alarm, tag a server-owned part or model `RoleplayOSEmergencyTrigger`, add a `ProximityPrompt`, and set `IncidentType` to `BankRobbery`, `ATMRobbery`, `FireAlarm`, or `MedicalPanic`. Optional attributes are `Summary`, `Location`, `Departments` (comma-separated), and `CooldownSeconds`. The server verifies the tag, workspace ancestry, incident allowlist, player distance, per-player cooldown, and per-trigger cooldown before creating a call.
+
+## Terminal layout
+
+The terminal is presented as a landscape tablet: an outer chassis carrying the bezel, status bar and home indicator, and an inner screen holding the pages. It opens on a home screen of cards that say what each page is for, rather than onto a search behind unlabelled tabs, and a single home control returns there once a page is open.
+
+## The map
+
+The map draws the same tagged geometry as the minimap, at selectable zoom. Control needs the whole picture, but a region-sized world drawn whole leaves every road a few thousandths of the surface wide and every label over its neighbour, so the region view omits point labels and the closer levels follow the officer carrying the terminal at a constant scale.
+
+Incidents are drawn in UK response grades and units by their dispatch status. Counts name the current level and say how many of the reported incidents and units are visible at it, so a quiet map can be told apart from one zoomed past what is being looked for.
+
+Positions are decided by the server and never by the client. Fixed world features report their own position, on-duty units report theirs, and a 999 caller reports their own as the substance of the call. A wanted person is never plotted, and a wanted vehicle is not tracked: an ANPR hit is recorded at the camera that saw it, and stays there as the vehicle drives on.
