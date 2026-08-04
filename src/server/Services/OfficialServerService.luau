@@ -62,6 +62,33 @@ function OfficialServerService:_storageKey(serverId: string): string
 	return "officialserver:" .. serverId
 end
 
+-- The place an entry lives in.
+--
+-- Zero, or absent, means this same place. A whitelisted world is usually its own
+-- place so that it is a genuinely separate map from the public one, and any
+-- place in the same universe can be teleported to natively and shares the same
+-- data stores, so a player's profile, money and vehicles follow them across.
+--
+-- A place in a different universe would not share those, so the player would
+-- arrive with nothing. This deliberately offers no way to name one.
+function OfficialServerService:_placeIdFor(entry: any): number
+	local placeId = tonumber(entry and entry.PlaceId) or 0
+	return if placeId > 0 then placeId else game.PlaceId
+end
+
+-- Whether an entry gathers everybody into named instances it reserves, or simply
+-- hands the player to that place's ordinary matchmaking.
+--
+-- Reserving is what keeps one community together in one world. A place of its
+-- own that is happy to be matchmade normally does not need it, and turning it
+-- off removes the occupancy tracking and the instance ceiling with it.
+function OfficialServerService:_usesReservedServers(entry: any): boolean
+	if entry == nil then
+		return true
+	end
+	return entry.Reserved ~= false
+end
+
 -- Picks an instance of an official server with room in it, opening another when
 -- every existing one is full.
 --
@@ -71,6 +98,8 @@ end
 -- gathers in the first one and later ones open only under real pressure rather
 -- than scattering people across half empty worlds.
 function OfficialServerService:_pickInstance(serverId: string): (string?, number?, string?)
+	local entry = self.settings.Entries[serverId]
+	local placeId = self:_placeIdFor(entry)
 	local data = self.context.Services:Get("DataService")
 	local stored, storeError = data:GetCommunity(self:_storageKey(serverId))
 	if storeError then
@@ -110,7 +139,7 @@ function OfficialServerService:_pickInstance(serverId: string): (string?, number
 		return nil, nil, "OFFICIAL_SERVER_FULL"
 	end
 
-	local ok, fresh = pcall(TeleportService.ReserveServer, TeleportService, game.PlaceId)
+	local ok, fresh = pcall(TeleportService.ReserveServer, TeleportService, placeId)
 	if not ok or type(fresh) ~= "string" or fresh == "" then
 		self.context.Logger:Error(
 			"Could not reserve an official server instance",
@@ -216,9 +245,14 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	if self:_isHere(serverId) then
 		return nil, "ALREADY_ON_THIS_SERVER"
 	end
-	local code, index, reason = self:_pickInstance(serverId)
-	if not code then
-		return nil, reason
+	local entry = self.settings.Entries[serverId]
+	local placeId = self:_placeIdFor(entry)
+	local code, index, reason = nil, nil, nil
+	if self:_usesReservedServers(entry) then
+		code, index, reason = self:_pickInstance(serverId)
+		if not code then
+			return nil, reason
+		end
 	end
 	-- Saved and released before the teleport, not after.
 	--
@@ -246,12 +280,14 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	end
 
 	local options = Instance.new("TeleportOptions")
-	options.ReservedServerAccessCode = code
+	if code then
+		options.ReservedServerAccessCode = code
+	end
 	-- Carried so the destination knows which entry it is without having to work
 	-- it back from an access code it cannot see.
 	options:SetTeleportData({ OfficialServerId = serverId, InstanceIndex = index })
 	local ok, problem =
-		pcall(TeleportService.TeleportAsync, TeleportService, game.PlaceId, { player }, options)
+		pcall(TeleportService.TeleportAsync, TeleportService, placeId, { player }, options)
 	if not ok then
 		self.context.Logger:Error(
 			"Official server teleport failed",
@@ -354,6 +390,12 @@ function OfficialServerService:_learnFrom(player: Player)
 		local ok, data = pcall(player.GetJoinData, player)
 		local teleportData = if ok and type(data) == "table" then data.TeleportData else nil
 		local id = if type(teleportData) == "table" then teleportData.OfficialServerId else nil
+		local arrivedEntry = if type(id) == "string" then self.settings.Entries[id] else nil
+		if arrivedEntry and self:_placeIdFor(arrivedEntry) ~= game.PlaceId then
+			-- Teleport data survives a hop, so a player arriving here from an entry
+			-- that lives somewhere else does not make this server that entry.
+			return
+		end
 		if type(id) == "string" and self.settings.Entries[id] then
 			self.currentServerId = id
 			-- The instance number travels with the teleport for the same reason

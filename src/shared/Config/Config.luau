@@ -175,6 +175,20 @@ local Config = {
 				Order = 1,
 				Whitelisted = true,
 				RequiredGroupLinkId = "UniversalProjects",
+				-- The place this world lives in. Zero means the same place as the
+				-- public one, which is the state until a separate place exists.
+				--
+				-- Put the whitelisted world in its own place in THIS universe and
+				-- name its id here. Any place in the same universe teleports
+				-- natively and shares the same data stores, so a player's profile,
+				-- money and vehicles follow them across. A place in a different
+				-- universe would not share those and they would arrive with
+				-- nothing, so do not use one.
+				PlaceId = 0,
+				-- Reserved instances gather everybody into one world and open
+				-- another only when it fills. Set false to hand the player to that
+				-- place's ordinary matchmaking instead.
+				Reserved = true,
 			},
 			Training = {
 				Id = "Training",
@@ -183,6 +197,8 @@ local Config = {
 				Order = 2,
 				Whitelisted = true,
 				RequiredGroupLinkId = "UniversalProjects",
+				PlaceId = 0,
+				Reserved = true,
 			},
 		},
 	},
