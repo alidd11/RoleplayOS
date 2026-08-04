@@ -1,5 +1,6 @@
 --!strict
 local HttpService = game:GetService("HttpService")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local ApplicationService = {}
 local allowed = {
 	Draft = true,
@@ -51,7 +52,35 @@ function ApplicationService:Submit(player: Player, formId: string, answers: any)
 		if question.Type == "Choice" and not table.find(question.Options, answer) then
 			return nil, "INVALID_CHOICE"
 		end
-		clean[question.Id] = answer
+		if question.Type == "Choice" then
+			clean[question.Id] = answer
+		else
+			-- Free text written by one player and read by another. Every other
+			-- player authored string in the framework is filtered before it is
+			-- stored; these were not, and they are read by reviewing staff.
+			local filtered, filterReason = TextFilter.forBroadcast(answer, player.UserId)
+			if not filtered then
+				return nil, filterReason or "TEXT_FILTER_UNAVAILABLE"
+			end
+			clean[question.Id] = filtered
+		end
+	end
+	-- Filtering yields, and the session captured before it may have been released
+	-- in the meantime. Writing into that table would put the application into a
+	-- profile nobody will ever save, and a duplicate check made before the yield
+	-- is equally stale, so both are taken again.
+	local current = self.context.Services:Get("DataService"):GetSession(player)
+	if not current or current ~= session then
+		return nil, "PROFILE_UNAVAILABLE"
+	end
+	for _, existing in current.Profile.Applications do
+		if
+			existing.FormId == formId
+			and existing.Status ~= "Rejected"
+			and existing.Status ~= "Withdrawn"
+		then
+			return nil, "APPLICATION_ALREADY_EXISTS"
+		end
 	end
 	local record = {
 		ApplicationId = HttpService:GenerateGUID(false),

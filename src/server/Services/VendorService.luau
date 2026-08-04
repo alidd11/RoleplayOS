@@ -192,9 +192,16 @@ function VendorService:Purchase(player: Player, payload: any): (any?, string?)
 	-- ordinary. Owning the pass is the cheapest way to have it, so that is checked
 	-- first and hands the item over without charging.
 	if item.GamepassId then
+		-- Checked live rather than from the cache. The cache is written once and
+		-- never revisited, so a refunded or revoked pass would go on handing out a
+		-- weapon for nothing. A failed check falls back to what was cached, since
+		-- a Roblox outage should not take away something already paid for.
+		local owned = self.context.Services
+			:Get("GamepassService")
+			:Refresh(player, { GamepassId = item.GamepassId })
 		local session = self.context.Services:Get("DataService"):GetSession(player)
 		local cache = session and session.Profile and session.Profile.GamepassCache or {}
-		if cache[tostring(item.GamepassId)] == true then
+		if owned == true or cache[tostring(item.GamepassId)] == true then
 			local given, giveReason = loadouts:GiveTool(player, item.ToolId, "Vendor")
 			if not given then
 				return nil, giveReason
