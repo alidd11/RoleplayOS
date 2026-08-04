@@ -187,17 +187,16 @@ function OfficialServerService:List(): { any }
 	if self.settings.Enabled ~= true then
 		return rows
 	end
-	local here = game.PrivateServerId
 	for _, entry in self.settings.Entries do
 		table.insert(rows, {
 			Id = entry.Id,
 			Name = entry.Name,
 			Description = entry.Description,
 			Order = entry.Order or 100,
-			-- A reserved server cannot read the access code that opened it, so
-			-- requiring one here meant the entry a player was standing in never
-			-- knew itself and always offered to send them where they already were.
-			Current = here ~= "" and self:_isHere(entry.Id),
+			-- Whether this is the world the player is already standing in. Not
+			-- gated on being a private server any more: a place of its own is
+			-- matchmade normally and has no private server id at all.
+			Current = self:_isHere(entry.Id),
 		})
 	end
 	table.sort(rows, function(a, b)
@@ -214,6 +213,19 @@ end
 -- identity is decided in one place rather than inferred separately by each
 -- service that cares.
 function OfficialServerService:CurrentEntry(): any?
+	-- Resolved from this server's own place first.
+	--
+	-- Teleport data does not survive a hop between experiences, so a whitelisted
+	-- world in its own experience never receives the entry it was sent as. Its
+	-- place id is the one thing it always knows about itself, and an entry that
+	-- names a place is uniquely identified by it.
+	for _, entry in self.settings.Entries do
+		if tonumber(entry.PlaceId) == game.PlaceId then
+			return entry
+		end
+	end
+	-- Otherwise it is an entry sharing this place, told apart by what the
+	-- teleport carried, which only arrives within one experience.
 	if type(self.currentServerId) ~= "string" then
 		return nil
 	end
@@ -232,7 +244,8 @@ end
 -- the instance, and the access code is the door to it, so the two are compared
 -- through what was stored rather than directly.
 function OfficialServerService:_isHere(serverId: string): boolean
-	return game.PrivateServerId ~= "" and self.currentServerId == serverId
+	local entry = self:CurrentEntry()
+	return entry ~= nil and entry.Id == serverId
 end
 
 function OfficialServerService:Join(player: Player, serverId: any): (any?, string?)

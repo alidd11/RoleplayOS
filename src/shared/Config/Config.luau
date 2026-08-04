@@ -148,15 +148,20 @@ local Config = {
 	-- the menu rather than found from outside.
 	OfficialServers = {
 		Enabled = true,
-		-- Universe 6865450179, start place 85767986923809.
+		-- The public experience is universe 5710996304, start place 16596652266.
+		-- The whitelisted world is a different experience: universe 6865450179,
+		-- place 85767986923809.
 		--
-		-- The start place is the public tier. A whitelisted world needs a SECOND
-		-- place created inside the same universe, and its id set on the entry
-		-- below. Same universe matters: those share data stores, so a profile,
-		-- its money and its vehicles follow the player across. A place in another
-		-- universe shares none of that and they arrive with nothing.
-		UniverseId = 6865450179,
-		PublicPlaceId = 85767986923809,
+		-- Different experiences do not share data stores, and that is deliberate
+		-- here: nothing a player has in the public tier follows them across, so
+		-- every decision they make in the whitelisted world is their own. Roblox
+		-- gamepasses are owned by the person rather than by the experience, so
+		-- those still apply on both sides.
+		--
+		-- Two consequences fall out of that boundary and are handled below:
+		-- teleport data does not survive the hop, so a server works out which
+		-- entry it is by its own place id; and memory stores are per experience,
+		-- so occupancy cannot be read across it and reserved instances are off.
 		-- An official server is a set of instances rather than one. When the first
 		-- fills, the next join opens another, so nobody is turned away at peak.
 		--
@@ -179,31 +184,16 @@ local Config = {
 			-- for it existing separately from the public place.
 			UniversalProjects = {
 				Id = "UniversalProjects",
-				Name = "Universal Projects",
-				Description = "Whitelisted roleplay. Emergency services by application.",
+				Name = "Whitelist Access",
+				Description = "A separate world. Your progress there is its own.",
 				Order = 1,
 				Whitelisted = true,
 				RequiredGroupLinkId = "UniversalProjects",
-				-- Set this to the id of the whitelisted place once it exists.
-				--
-				-- Zero means the same place as the public tier, which separates
-				-- nothing: it is the state until a second place is created in
-				-- universe 6865450179. This is the only value that needs changing.
-				PlaceId = 0,
-				-- Reserved instances gather everybody into one world and open
-				-- another only when it fills. Set false to hand the player to that
-				-- place's ordinary matchmaking instead.
-				Reserved = true,
-			},
-			Training = {
-				Id = "Training",
-				Name = "Training",
-				Description = "Assessments and inductions. Quiet by design.",
-				Order = 2,
-				Whitelisted = true,
-				RequiredGroupLinkId = "UniversalProjects",
-				PlaceId = 0,
-				Reserved = true,
+				PlaceId = 85767986923809,
+				-- Off, and it has to be: reserved instances are chosen by reading
+				-- occupancy from a memory store, and those do not cross an
+				-- experience boundary either. This place uses its own matchmaking.
+				Reserved = false,
 			},
 		},
 	},
