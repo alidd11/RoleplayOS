@@ -14,14 +14,46 @@
 -- Reserving and teleporting are both server side only, which is why this lives
 -- here and the client merely asks.
 
+local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+
+-- Occupancy lives in a memory store rather than a data store: it is worth
+-- nothing a minute from now, it is written every few seconds by every instance,
+-- and a data store would be the wrong tool at that rate for something disposable.
+local OCCUPANCY_MAP = "RoleplayOSOfficialOccupancy"
 
 local OfficialServerService = { codes = {}, reserving = {} }
 
 function OfficialServerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.OfficialServers
+	self.instances = {}
+	local ok, map = pcall(MemoryStoreService.GetHashMap, MemoryStoreService, OCCUPANCY_MAP)
+	self.occupancy = if ok then map else nil
+	if not self.occupancy then
+		self.context.Logger:Warning(
+			"No memory store, so instances cannot see how full each other are",
+			{}
+		)
+	end
+end
+
+function OfficialServerService:_occupancyKey(serverId: string, index: number): string
+	return serverId .. ":" .. tostring(index)
+end
+
+-- How many people are on an instance, or nil when nobody has said recently.
+-- Silence is treated as empty rather than full: an instance that has not
+-- reported is far more likely to be one that has never started than one that is
+-- full and has stopped talking.
+function OfficialServerService:_occupantsOf(serverId: string, index: number): number
+	if not self.occupancy then
+		return 0
+	end
+	local ok, value =
+		pcall(self.occupancy.GetAsync, self.occupancy, self:_occupancyKey(serverId, index))
+	return if ok and type(value) == "number" then value else 0
 end
 
 -- Stored beside the communities rather than in a store of its own. The key is
@@ -30,65 +62,81 @@ function OfficialServerService:_storageKey(serverId: string): string
 	return "officialserver:" .. serverId
 end
 
--- The access code for an official server, reserving one the first time it is
--- asked for. Reserved under UpdateAsync so two servers asking at the same moment
--- cannot each reserve one and split the community permanently in half.
-function OfficialServerService:_code(serverId: string): (string?, string?)
-	local cached = self.codes[serverId]
-	if type(cached) == "string" and cached ~= "" then
-		return cached, nil
-	end
-	-- One reservation at a time per server, so a burst of joins on a cold entry
-	-- does not each start their own.
-	if self.reserving[serverId] then
-		local deadline = os.clock() + 10
-		while self.reserving[serverId] and os.clock() < deadline do
-			task.wait(0.1)
-		end
-		local settled = self.codes[serverId]
-		if type(settled) == "string" and settled ~= "" then
-			return settled, nil
-		end
-	end
-	self.reserving[serverId] = true
-
+-- Picks an instance of an official server with room in it, opening another when
+-- every existing one is full.
+--
+-- A reserved server has a hard player cap and a teleport into a full one simply
+-- fails, so a single instance meant being turned away at exactly the times the
+-- community most wanted to play. Instances are tried in order, so everybody
+-- gathers in the first one and later ones open only under real pressure rather
+-- than scattering people across half empty worlds.
+function OfficialServerService:_pickInstance(serverId: string): (string?, number?, string?)
 	local data = self.context.Services:Get("DataService")
 	local stored = data:GetCommunity(self:_storageKey(serverId))
-	if
-		type(stored) == "table"
-		and type(stored.AccessCode) == "string"
-		and stored.AccessCode ~= ""
-	then
-		self.codes[serverId] = stored.AccessCode
-		self.reserving[serverId] = nil
-		return stored.AccessCode, nil
-	end
-
-	local ok, code = pcall(TeleportService.ReserveServer, TeleportService, game.PlaceId)
-	if not ok or type(code) ~= "string" or code == "" then
-		self.reserving[serverId] = nil
-		self.context.Logger:Error(
-			"Could not reserve an official server",
-			{ ServerId = serverId, Error = tostring(code) }
-		)
-		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
-	end
-
-	-- Written under UpdateAsync so a code reserved elsewhere at the same moment
-	-- wins and this one is discarded, rather than the two overwriting each other
-	-- and leaving players split across both.
-	local saved = data:UpdateCommunity(self:_storageKey(serverId), function(existing)
-		if type(existing) == "table" and type(existing.AccessCode) == "string" then
-			return existing
+	local codes = {}
+	if type(stored) == "table" then
+		if type(stored.Instances) == "table" then
+			codes = stored.Instances
+		elseif type(stored.AccessCode) == "string" then
+			-- Written before instances existed. The single code is instance one.
+			codes = { stored.AccessCode }
 		end
-		return { ServerId = serverId, AccessCode = code, ReservedAt = os.time() }
+	end
+
+	local capacity = self.settings.MaximumPlayersPerInstance or 30
+	for index, code in codes do
+		if type(code) == "string" and code ~= "" then
+			if self:_occupantsOf(serverId, index) < capacity then
+				self.codes[serverId] = code
+				return code, index, nil
+			end
+		end
+	end
+
+	if #codes >= (self.settings.MaximumInstances or 6) then
+		-- Refused rather than opening yet another. Past this the community is
+		-- split too thin for the roleplay any of them came for.
+		return nil, nil, "OFFICIAL_SERVER_FULL"
+	end
+
+	local ok, fresh = pcall(TeleportService.ReserveServer, TeleportService, game.PlaceId)
+	if not ok or type(fresh) ~= "string" or fresh == "" then
+		self.context.Logger:Error(
+			"Could not reserve an official server instance",
+			{ ServerId = serverId, Error = tostring(fresh) }
+		)
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
+
+	-- Appended under UpdateAsync, so two servers opening an overflow at the same
+	-- moment both keep their instance instead of one silently replacing the
+	-- other and stranding whoever was sent there.
+	local saved = data:UpdateCommunity(self:_storageKey(serverId), function(existing)
+		local record = if type(existing) == "table" then existing else {}
+		local list = if type(record.Instances) == "table"
+			then record.Instances
+			elseif type(record.AccessCode) == "string" then { record.AccessCode }
+			else {}
+		table.insert(list, fresh)
+		record.ServerId = serverId
+		record.Instances = list
+		record.AccessCode = list[1]
+		record.UpdatedAt = os.time()
+		return record
 	end)
-	local settled = if type(saved) == "table" and type(saved.AccessCode) == "string"
-		then saved.AccessCode
-		else code
-	self.codes[serverId] = settled
-	self.reserving[serverId] = nil
-	return settled, nil
+	local list = if type(saved) == "table" and type(saved.Instances) == "table"
+		then saved.Instances
+		else { fresh }
+	-- The index this code ended up at, which may not be the end if another
+	-- server appended at the same time.
+	for index, code in list do
+		if code == fresh then
+			self.codes[serverId] = fresh
+			return fresh, index, nil
+		end
+	end
+	self.codes[serverId] = fresh
+	return fresh, #list, nil
 end
 
 -- The player is not consulted: every official server is open to anyone the
@@ -156,7 +204,7 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	if self:_isHere(serverId) then
 		return nil, "ALREADY_ON_THIS_SERVER"
 	end
-	local code, reason = self:_code(serverId)
+	local code, index, reason = self:_pickInstance(serverId)
 	if not code then
 		return nil, reason
 	end
@@ -189,7 +237,7 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	options.ReservedServerAccessCode = code
 	-- Carried so the destination knows which entry it is without having to work
 	-- it back from an access code it cannot see.
-	options:SetTeleportData({ OfficialServerId = serverId })
+	options:SetTeleportData({ OfficialServerId = serverId, InstanceIndex = index })
 	local ok, problem =
 		pcall(TeleportService.TeleportAsync, TeleportService, game.PlaceId, { player }, options)
 	if not ok then
@@ -219,6 +267,45 @@ function OfficialServerService:Start()
 	self.connection = Players.PlayerAdded:Connect(function(player)
 		self:_learnFrom(player)
 	end)
+	self:_publishOccupancy()
+end
+
+-- Tells the other servers how full this one is.
+--
+-- Nothing else can find this out: a server cannot see inside another, so an
+-- instance that never reports is one nobody will ever route around, and the
+-- overflow would never open no matter how full this got.
+--
+-- Published with a lifetime several times the interval, so one missed beat
+-- reads as slightly stale rather than as an empty server that everybody is then
+-- sent into.
+function OfficialServerService:_publishOccupancy()
+	if not self.occupancy then
+		return
+	end
+	self.publishing = true
+	task.spawn(function()
+		while self.publishing do
+			local entry = self:CurrentEntry()
+			local index = self.currentInstanceIndex
+			if entry and index then
+				local ok, problem = pcall(
+					self.occupancy.SetAsync,
+					self.occupancy,
+					self:_occupancyKey(entry.Id, index),
+					#Players:GetPlayers(),
+					self.settings.OccupancyLifetimeSeconds or 45
+				)
+				if not ok then
+					self.context.Logger:Warning(
+						"Could not publish occupancy",
+						{ ServerId = entry.Id, Instance = index, Error = tostring(problem) }
+					)
+				end
+			end
+			task.wait(self.settings.OccupancyHeartbeatSeconds or 12)
+		end
+	end)
 end
 
 -- Players already present when this service starts carry the same teleport data
@@ -240,12 +327,23 @@ function OfficialServerService:_learnFrom(player: Player)
 		local id = if type(teleportData) == "table" then teleportData.OfficialServerId else nil
 		if type(id) == "string" and self.settings.Entries[id] then
 			self.currentServerId = id
-			self.context.Logger:Info("Serving an official server", { ServerId = id })
+			-- The instance number travels with the teleport for the same reason
+			-- the entry does: a reserved server cannot see which of its own
+			-- instances it is, and occupancy has to be reported per instance.
+			local index = if type(teleportData) == "table"
+				then tonumber(teleportData.InstanceIndex)
+				else nil
+			self.currentInstanceIndex = index or 1
+			self.context.Logger:Info(
+				"Serving an official server",
+				{ ServerId = id, Instance = self.currentInstanceIndex }
+			)
 		end
 	end
 end
 
 function OfficialServerService:Destroy()
+	self.publishing = false
 	if self.connection then
 		self.connection:Disconnect()
 	end

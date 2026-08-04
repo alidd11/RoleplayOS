@@ -140,6 +140,22 @@ local Config = {
 	-- the menu rather than found from outside.
 	OfficialServers = {
 		Enabled = true,
+		-- An official server is a set of instances rather than one. When the first
+		-- fills, the next join opens another, so nobody is turned away at peak.
+		--
+		-- Occupancy is published to a memory store by each instance and read by
+		-- whoever is about to send somebody, because a server cannot see how full
+		-- another one is any other way.
+		MaximumPlayersPerInstance = 30,
+		-- A ceiling on how far the community can be split. Past this, joins are
+		-- refused rather than scattering everybody across instances too thin to
+		-- roleplay in.
+		MaximumInstances = 6,
+		-- How often an instance republishes its occupancy, and how long that
+		-- reading is trusted. The lifetime is deliberately several times the
+		-- interval so one missed beat does not read as an empty server.
+		OccupancyHeartbeatSeconds = 12,
+		OccupancyLifetimeSeconds = 45,
 		Entries = {
 			-- The whitelisted community. Emergency roles here are held by group
 			-- membership and application, not bought, which is the whole reason
