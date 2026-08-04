@@ -62,6 +62,14 @@ function ApplicationService:Submit(player: Player, formId: string, answers: any)
 		UpdatedAt = os.time(),
 	}
 	table.insert(session.Profile.Applications, record)
+	-- Applications accumulate for the life of an account and nothing ever removed
+	-- one, so a player who applies repeatedly grew their profile without limit
+	-- until it could no longer be saved at all. The oldest go first; what matters
+	-- is the current standing, not every attempt ever made.
+	local maximum = self.context.Configuration.Framework.MaximumApplicationHistory or 60
+	while #session.Profile.Applications > maximum do
+		table.remove(session.Profile.Applications, 1)
+	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return {
 		ApplicationId = record.ApplicationId,

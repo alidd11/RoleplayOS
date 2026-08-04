@@ -27,6 +27,13 @@ function EmploymentService:Hire(player: Player, characterId: string, jobId: stri
 		StartedAt = os.time(),
 	}
 	table.insert(character.Employment, record)
+	-- Employment is a history, one record per hire, and nothing trimmed it. A
+	-- character that changes job often grew this list forever, and payroll walks
+	-- it every pay period, so it cost both profile size and time on a timer.
+	local maximum = self.context.Configuration.Framework.MaximumEmploymentHistory or 40
+	while #character.Employment > maximum do
+		table.remove(character.Employment, 1)
+	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return record, nil
 end

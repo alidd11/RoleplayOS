@@ -1,6 +1,7 @@
 --!strict
 
 local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -13,6 +14,50 @@ local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
 local MDT_RECORD_STORE_NAME = "RoleplayOS_MDTRecords_v1"
 local MDT_INDEX_STORE_NAME = "RoleplayOS_MDTIndexes_v1"
 local SHOULDER_STORE_NAME = "RoleplayOS_ShoulderNumbers_v1"
+
+-- Roblox refuses a key longer than fifty characters and a value larger than four
+-- megabytes. Both arrive as an ordinary error from a call this framework already
+-- retries, so without an explicit check they look like a transient outage and are
+-- retried forever instead of being recognised as a fault that will never clear.
+local MAXIMUM_KEY_LENGTH = 50
+local MAXIMUM_VALUE_BYTES = 4 * 1024 * 1024
+
+function DataService:_checkKey(key: string, store: string): boolean
+	if #key <= MAXIMUM_KEY_LENGTH then
+		return true
+	end
+	self.context.Logger:Error("Data store key exceeds the fifty character limit", {
+		Store = store,
+		Length = #key,
+		Key = string.sub(key, 1, 64),
+	})
+	return false
+end
+
+-- Measures a profile and warns while there is still room to act.
+--
+-- A profile that passes four megabytes stops saving, and it stops saving
+-- silently: every write from then on fails and the player's progress is lost
+-- from the last good save onward. That is the worst outcome this service has, so
+-- it is reported as a warning long before it becomes one.
+function DataService:_measure(player: Player, profile: any)
+	local ok, encoded = pcall(HttpService.JSONEncode, HttpService, profile)
+	if not ok or type(encoded) ~= "string" then
+		return
+	end
+	local bytes = #encoded
+	local warnAt = self.context.Configuration.Framework.ProfileSizeWarningBytes
+		or math.floor(MAXIMUM_VALUE_BYTES * 0.35)
+	if bytes < warnAt then
+		return
+	end
+	self.context.Logger:Warning("Profile is approaching the data store size limit", {
+		UserId = player.UserId,
+		Bytes = bytes,
+		LimitBytes = MAXIMUM_VALUE_BYTES,
+		PercentOfLimit = math.floor(bytes / MAXIMUM_VALUE_BYTES * 100),
+	})
+end
 
 local function deepCopy(value: any, seen: { [any]: any }?): any
 	if type(value) ~= "table" then
@@ -50,6 +95,9 @@ function DataService:Init(context: any)
 end
 
 function DataService:GetMdtRecord(key: string): (any?, string?)
+	if not self:_checkKey(key, "MdtRecords") then
+		return nil, "MDT_RECORD_STORE_UNAVAILABLE"
+	end
 	if self.mock then
 		return deepCopy(self.mockMdtRecords[key]), nil
 	end
@@ -60,6 +108,9 @@ function DataService:GetMdtRecord(key: string): (any?, string?)
 end
 
 function DataService:UpdateMdtRecord(key: string, transform: (any?) -> any): (any?, string?)
+	if not self:_checkKey(key, "MdtRecords") then
+		return nil, "MDT_RECORD_STORE_UNAVAILABLE"
+	end
 	if self.mock then
 		local updated = transform(deepCopy(self.mockMdtRecords[key]))
 		self.mockMdtRecords[key] = deepCopy(updated)
@@ -76,6 +127,9 @@ function DataService:UpdateMdtRecord(key: string, transform: (any?) -> any): (an
 end
 
 function DataService:GetMdtIndex(key: string): (any?, string?)
+	if not self:_checkKey(key, "MdtIndexes") then
+		return nil, "MDT_INDEX_STORE_UNAVAILABLE"
+	end
 	if self.mock then
 		return deepCopy(self.mockMdtIndexes[key]), nil
 	end
@@ -86,6 +140,9 @@ function DataService:GetMdtIndex(key: string): (any?, string?)
 end
 
 function DataService:UpdateMdtIndex(key: string, transform: (any?) -> any): (any?, string?)
+	if not self:_checkKey(key, "MdtIndexes") then
+		return nil, "MDT_INDEX_STORE_UNAVAILABLE"
+	end
 	if self.mock then
 		local updated = transform(deepCopy(self.mockMdtIndexes[key]))
 		self.mockMdtIndexes[key] = deepCopy(updated)
@@ -410,7 +467,11 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 			"Profile load failed",
 			{ UserId = player.UserId, Error = tostring(problem) }
 		)
-		return nil, "PROFILE_LOAD_FAILED"
+		-- The underlying reason travels with the code. A kick that says only that
+		-- something went wrong forces whoever is looking into it to reach the
+		-- server console, which nobody can do from a phone and nobody does at all
+		-- once they have simply left.
+		return nil, "PROFILE_LOAD_FAILED: " .. string.sub(tostring(problem), 1, 180)
 	end
 	self.sessions[player.UserId] =
 		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil, Revision = 0 }

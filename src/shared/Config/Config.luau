@@ -74,6 +74,17 @@ local Config = {
 		-- case of leaving and rejoining straight away rather than an unusual one.
 		-- It must comfortably exceed a save that has to retry.
 		SessionHandoverSeconds = 10,
+		-- A profile larger than this is reported while there is still room to act.
+		-- Roblox refuses a value over four megabytes, and a profile that reaches
+		-- that stops saving silently: every write fails from then on and the
+		-- player loses everything after their last good save.
+		ProfileSizeWarningBytes = 1400000,
+		-- Caps on the parts of a profile that are history rather than possessions.
+		-- History is trimmed oldest first, since losing the record of a job held
+		-- two years ago costs nothing, whereas an unbounded list eventually costs
+		-- the entire profile.
+		MaximumApplicationHistory = 60,
+		MaximumEmploymentHistory = 40,
 	},
 	ContentQuality = {
 		RequireCertification = true,
