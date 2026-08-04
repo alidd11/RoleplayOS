@@ -105,6 +105,9 @@ function NetworkService:Start()
 					elseif
 						reason == "PROFILE_BUSY"
 					then "Your progress is still saving. Try again in a moment."
+					elseif
+						reason == "OFFICIAL_SERVER_FULL"
+					then "Every instance of that server is full. Try again shortly."
 					else "That server could not be joined right now.",
 				RequestId = requestId,
 			}
