@@ -171,14 +171,23 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
+		-- Read from the role rather than from the duty record, which would mean
+		-- asking DutyService and that yields on a group check.
+		local role = self.context.Configuration.Roles[payload.RoleId]
 		return {
 			Success = true,
 			Code = "OK",
 			Message = "You are now on duty.",
+			-- The department travels with the response. The custody panel gates on
+			-- it, and without it that gate was never satisfied, so the whole
+			-- booking workflow had no way to be opened by anybody.
 			Data = {
 				RoleId = payload.RoleId,
 				StationId = payload.StationId,
 				SpawnId = payload.SpawnId,
+				DepartmentId = role and role.DepartmentId,
+				DivisionId = role and role.DivisionId,
+				TeamName = role and role.TeamName,
 			},
 			RequestId = requestId,
 		}
@@ -412,8 +421,11 @@ function NetworkService:Start()
 				:Get("PersonRecordService")
 				:Search(query, page, includeWarrants)
 		else
-			data, searchReason =
-				self.context.Services:Get("VehicleRecordService"):Search(query, page)
+			data, searchReason = self.context.Services:Get("VehicleRecordService"):Search(
+				query,
+				page,
+				self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
+			)
 		end
 		return {
 			Success = data ~= nil,

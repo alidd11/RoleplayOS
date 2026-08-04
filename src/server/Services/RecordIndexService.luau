@@ -384,7 +384,11 @@ function RecordIndexService:SearchPeople(
 	return { Items = items, Page = page, Total = #matches }, nil
 end
 
-function RecordIndexService:SearchVehicles(query: string, page: number): (any?, string?)
+function RecordIndexService:SearchVehicles(
+	query: string,
+	page: number,
+	includeWarrants: boolean?
+): (any?, string?)
 	local search = compact(query)
 	local key = indexKey("Vehicle", search)
 	if not key then
@@ -415,8 +419,14 @@ function RecordIndexService:SearchVehicles(query: string, page: number): (any?, 
 			return nil, recordReason
 		end
 		if record then
-			local owner = select(1, self:GetPerson(record.OwnerCharacterId))
-			local wanted = owner and #activeWarrants(owner) > 0
+			-- Gated the same way the person route gates it. Without this a
+			-- department denied WarrantRead learned that a keeper was wanted
+			-- simply by typing the registration, which is the exact disclosure
+			-- the person search withholds from them.
+			local owner = if includeWarrants
+				then select(1, self:GetPerson(record.OwnerCharacterId))
+				else nil
+			local wanted = includeWarrants == true and owner ~= nil and #activeWarrants(owner) > 0
 			table.insert(items, {
 				VehicleId = record.VehicleId,
 				Registration = record.Registration,

@@ -88,7 +88,11 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 end
 function CallService:Update(callId: string, data: any): (any?, string?)
 	local call = self.calls[callId]
-	if not call or call.Status == "Closed" then
+	-- Resolved, not Closed. Nothing in the framework ever writes "Closed", so
+	-- this guard never fired and a resolved call could be reopened, put back on
+	-- every dispatcher's board and closed a second time, overwriting the
+	-- incident that was already persisted from it.
+	if not call or call.Status == "Resolved" then
 		return nil, "CALL_NOT_FOUND"
 	end
 	if data.Status ~= nil then

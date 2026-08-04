@@ -845,6 +845,13 @@ function CustodyService:Book(
 		character.CustodyRecord.Bookings,
 		self.context.Configuration.Custody.MaximumBookingHistory
 	)
+	-- Backfilled here. CriminalRecord is written at character creation and never
+	-- added by a migration, so a character made before it existed had none, and
+	-- booking one raised after the sentence had already been applied: a live
+	-- sentence, no booking record, and a detainee never moved to a cell.
+	if type(character.CriminalRecord) ~= "table" then
+		character.CriminalRecord = {}
+	end
 	table.insert(character.CriminalRecord, {
 		Type = "CustodyBooking",
 		RecordId = record.BookingId,

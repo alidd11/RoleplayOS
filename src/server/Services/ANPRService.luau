@@ -4,7 +4,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
-local ANPRService = { connections = {}, cooldowns = {} }
+local ANPRService = { connections = {}, cooldowns = {}, watched = {}, watchedCount = 0 }
 
 function ANPRService:Init(context: any)
 	self.context = context
@@ -51,12 +51,19 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 	if type(registration) ~= "string" then
 		return
 	end
-	local key = sensor:GetDebugId() .. ":" .. registration
+	-- Keyed on the sensor instance itself. GetDebugId is not available to a
+	-- script at game security, so the first vehicle to touch a camera raised
+	-- inside the Touched handler and no plate was ever read.
+	local perSensor = self.cooldowns[sensor]
+	if not perSensor then
+		perSensor = {}
+		self.cooldowns[sensor] = perSensor
+	end
 	local now = os.clock()
-	if (self.cooldowns[key] or 0) > now then
+	if (perSensor[registration] or 0) > now then
 		return
 	end
-	self.cooldowns[key] = now + self.context.Configuration.ANPR.CooldownSeconds
+	perSensor[registration] = now + self.context.Configuration.ANPR.CooldownSeconds
 	local vehicle =
 		self.context.Services:Get("VehicleOwnershipService"):GetByRegistration(registration)
 	if not vehicle then
@@ -100,18 +107,33 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 end
 
 function ANPRService:_watch(instance: Instance)
-	if
-		not instance:IsA("BasePart")
-		or #self.connections >= self.context.Configuration.ANPR.MaximumSensors
-	then
+	if not instance:IsA("BasePart") or self.watched[instance] then
 		return
 	end
-	table.insert(
-		self.connections,
-		instance.Touched:Connect(function(hit)
-			self:_scan(instance, hit)
-		end)
-	)
+	-- Counted against the sensors actually being watched, not against every
+	-- connection this service holds. Counting the latter meant the tag signal
+	-- consumed a slot, and a sensor that was removed kept its slot forever, so
+	-- a map that churned tags eventually stopped watching new cameras.
+	if self.watchedCount >= self.context.Configuration.ANPR.MaximumSensors then
+		return
+	end
+	self.watched[instance] = instance.Touched:Connect(function(hit)
+		self:_scan(instance, hit)
+	end)
+	self.watchedCount += 1
+end
+
+function ANPRService:_unwatch(instance: Instance)
+	local connection = self.watched[instance]
+	if connection then
+		connection:Disconnect()
+		self.watched[instance] = nil
+		self.watchedCount -= 1
+	end
+	-- The cooldowns for a camera that no longer exists are of no use to anybody
+	-- and were never swept, so they accumulated one entry per plate per camera
+	-- for the life of the server.
+	self.cooldowns[instance] = nil
 end
 
 function ANPRService:Start()
@@ -125,9 +147,21 @@ function ANPRService:Start()
 				self:_watch(sensor)
 			end)
 	)
+	table.insert(
+		self.connections,
+		CollectionService:GetInstanceRemovedSignal(self.context.Configuration.ANPR.SensorTag)
+			:Connect(function(sensor)
+				self:_unwatch(sensor)
+			end)
+	)
 end
 
 function ANPRService:Destroy()
+	for instance in self.watched do
+		self:_unwatch(instance)
+	end
+	table.clear(self.watched)
+	self.watchedCount = 0
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
