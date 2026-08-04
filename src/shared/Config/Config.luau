@@ -41,12 +41,22 @@ local Config = {
 		},
 		UseMockDataInStudio = true,
 		GrantMockEmergencyAccessInStudio = true,
-		AutosaveSeconds = 120,
+		-- Saving also renews the session lease, so this is what keeps a live
+		-- server's claim on a profile alive.
+		AutosaveSeconds = 60,
 		ShutdownSaveSeconds = 25,
 		MaxSaveAttempts = 4,
-		-- How long a profile stays claimed by a server. A server that dies without
-		-- releasing locks the player out for this long, so it is kept close to the
-		-- autosave cadence that refreshes it rather than far above it.
+		-- How long a profile stays claimed by a server, and how long a player is
+		-- locked out after a server dies without releasing it.
+		--
+		-- This must stay comfortably above AutosaveSeconds, not equal to it. The
+		-- lease is renewed by the save, so equal values expire it at the exact
+		-- moment its renewal falls due, and any save latency lets a server lose
+		-- the lease on a player who is still sitting in front of it. At double
+		-- the cadence a save has to miss twice running before that can happen.
+		--
+		-- Lowering it shortens the lockout after a crash but shortens the grace
+		-- for a live server too; it should not go below twice AutosaveSeconds.
 		SessionLeaseSeconds = 120,
 	},
 	ContentQuality = {

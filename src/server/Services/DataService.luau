@@ -185,7 +185,12 @@ function DataService:UpdateCommunity(communityId: string, transform: (any?) -> a
 	return updated, nil
 end
 
-function DataService:_retry(operation: () -> any): (boolean, any)
+-- Retries transient DataStore failures with a backoff. `final` marks an error
+-- as settled: retrying it cannot change the answer, so the backoff is skipped
+-- and the caller is told at once. Without it a held session lease was retried
+-- like a network fault, and since a lease clears on a clock rather than on
+-- contention, that spent the full backoff to arrive at the same refusal.
+function DataService:_retry(operation: () -> any, final: ((any) -> boolean)?): (boolean, any)
 	local lastError
 	for attempt = 1, self.context.Configuration.Framework.MaxSaveAttempts do
 		local ok, result = pcall(operation)
@@ -193,6 +198,9 @@ function DataService:_retry(operation: () -> any): (boolean, any)
 			return true, result
 		end
 		lastError = result
+		if final and final(result) then
+			return false, result
+		end
 		task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25)
 	end
 	return false, lastError
@@ -271,6 +279,8 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 			loaded = profile
 			return profile
 		end)
+	end, function(failure)
+		return string.find(tostring(failure), "PROFILE_SESSION_LOCKED", 1, true) ~= nil
 	end)
 	if not ok and lockedUntil and not waited then
 		-- A lease is held by another server. Retrying immediately cannot succeed,
