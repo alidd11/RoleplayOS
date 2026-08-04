@@ -518,6 +518,7 @@ function App.mount(context: any): ScreenGui
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
 	local renderSettings: () -> ()
+	local renderControls: () -> ()
 	dismissToWorld = function()
 		if not interfaceMotionEnabled() then
 			gui.Enabled = false
@@ -821,18 +822,162 @@ function App.mount(context: any): ScreenGui
 		end
 	end
 
+	-- Controls as an ordinary page rather than an overlay. It was the one item in
+	-- the sidebar that opened something else entirely, which made it read as a
+	-- different product from the four either side of it.
+	renderControls = function()
+		pageTitle.Text = "Controls"
+		pageDescription.Text = "Every action, and what it is bound to on your device."
+		local controller = context.Controllers.ControlsController
+		local data = controller:List()
+		local order = data.ModeOrder
+		local labels = data.ModeLabels
+		local selected = controller:DetectedMode()
+
+		local rowsHolder: Frame
+		local modeButtons: { [string]: TextButton } = {}
+
+		local function paint()
+			for mode, item in modeButtons do
+				local active = mode == selected
+				item.BackgroundColor3 = if active then COLOURS.Accent else COLOURS.Canvas
+				item.TextColor3 = if active then COLOURS.Text else COLOURS.Muted
+			end
+			for _, child in rowsHolder:GetChildren() do
+				if child:IsA("Frame") then
+					child:Destroy()
+				end
+			end
+			for index, control in data.Controls do
+				local row = Instance.new("Frame")
+				row.LayoutOrder = index
+				row.Size = UDim2.new(1, 0, 0, 42)
+				-- Banded rather than bordered. A list this long reads faster when
+				-- the eye can follow a stripe across to the binding.
+				row.BackgroundColor3 = if index % 2 == 0 then COLOURS.Canvas else COLOURS.Surface
+				row.BorderSizePixel = 0
+				row.Parent = rowsHolder
+				corner(row, 8)
+				local action = text(row, tostring(control.Action), 14, COLOURS.Text)
+				action.Position = UDim2.fromOffset(16, 0)
+				action.Size = UDim2.new(0.5, -16, 1, 0)
+				local binding =
+					text(row, tostring(control[selected] or "—"), 14, COLOURS.Accent, true)
+				binding.Position = UDim2.new(0.5, 4, 0, 0)
+				binding.Size = UDim2.new(0.5, -20, 1, 0)
+			end
+		end
+
+		sectionHeading("Your device", "Bindings change with what you are playing on.")
+		local switcher = card(scroll, 62)
+		local switcherLayout = Instance.new("UIListLayout")
+		switcherLayout.FillDirection = Enum.FillDirection.Horizontal
+		switcherLayout.Padding = UDim.new(0, 8)
+		switcherLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		switcherLayout.Parent = switcher
+		local switcherPadding = Instance.new("UIPadding")
+		switcherPadding.PaddingLeft = UDim.new(0, 12)
+		switcherPadding.PaddingRight = UDim.new(0, 12)
+		switcherPadding.Parent = switcher
+		for index, mode in order do
+			local item = Instance.new("TextButton")
+			item.AutoButtonColor = false
+			item.BackgroundColor3 = COLOURS.Canvas
+			item.BorderSizePixel = 0
+			item.Font = Enum.Font.GothamBold
+			item.LayoutOrder = index
+			item.Text = tostring(labels[mode] or mode)
+			item.TextColor3 = COLOURS.Muted
+			item.TextSize = 11
+			item.Size = UDim2.new(1 / #order, -6, 0, 38)
+			item.Parent = switcher
+			corner(item, 9)
+			pressable(item)
+			modeButtons[mode] = item
+			item.Activated:Connect(function()
+				selected = mode
+				paint()
+			end)
+		end
+
+		sectionHeading("Controls", "Held actions are marked where they differ.")
+		local listCard = card(scroll, 0)
+		listCard.AutomaticSize = Enum.AutomaticSize.Y
+		local listPadding = Instance.new("UIPadding")
+		listPadding.PaddingTop = UDim.new(0, 10)
+		listPadding.PaddingBottom = UDim.new(0, 10)
+		listPadding.PaddingLeft = UDim.new(0, 10)
+		listPadding.PaddingRight = UDim.new(0, 10)
+		listPadding.Parent = listCard
+		rowsHolder = Instance.new("Frame")
+		rowsHolder.BackgroundTransparency = 1
+		rowsHolder.Size = UDim2.fromScale(1, 0)
+		rowsHolder.AutomaticSize = Enum.AutomaticSize.Y
+		rowsHolder.Parent = listCard
+		local rowsLayout = Instance.new("UIListLayout")
+		rowsLayout.Padding = UDim.new(0, 4)
+		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		rowsLayout.Parent = rowsHolder
+
+		paint()
+	end
+
+	-- Three questions, in the order somebody actually asks them: where am I, where
+	-- else can I go, and what about my own community.
+	--
+	-- The page used to open on a tall block of marketing copy, carried two
+	-- headings both called "Your server", and left the servers you could actually
+	-- join below the fold. Nothing here is decoration: the status strip answers
+	-- the first question in one line so the rest of the page can be the answer to
+	-- the second.
 	renderCommunity = function()
-		clear(scroll)
 		pageTitle.Text = "Community"
-		pageDescription.Text = "Run serious roleplay with your own standards and staff team."
+		pageDescription.Text = "Where you are playing, and where else you can."
 		local server = menuData and menuData.Server
-		sectionHeading(
-			"Your server",
-			"Communities share RoleplayOS while retaining their identity."
+		local kind = server and server.Kind or "Public"
+		local community = server and server.Community
+
+		local KIND_LABEL = {
+			Public = "PUBLIC SERVER",
+			Whitelisted = "WHITELISTED SERVER",
+			Private = "PRIVATE SERVER",
+			Reserved = "RESERVED SERVER",
+		}
+		local KIND_BLURB = {
+			Public = "Open to everyone. Teams and passes are available here.",
+			Whitelisted = "Entry is restricted, and services are held by group rank.",
+			Private = "Run by its owner, to their own standards.",
+			Reserved = "A dedicated instance of this experience.",
+		}
+
+		-- Where you are, in one strip rather than a screen of copy.
+		local whereCard = card(scroll, 96)
+		local accent = Instance.new("Frame")
+		accent.BackgroundColor3 = if kind == "Public" then COLOURS.Accent else COLOURS.Success
+		accent.BorderSizePixel = 0
+		accent.Position = UDim2.fromOffset(0, 18)
+		accent.Size = UDim2.fromOffset(4, 60)
+		accent.Parent = whereCard
+		local kindLabel = text(whereCard, KIND_LABEL[kind] or "SERVER", 11, COLOURS.Accent, true)
+		kindLabel.Position = UDim2.fromOffset(20, 18)
+		kindLabel.Size = UDim2.new(1, -40, 0, 18)
+		local whereName = text(
+			whereCard,
+			(community and community.Name)
+				or (server and server.AccessGroupName)
+				or "Emergency Response: Portsmouth",
+			19,
+			COLOURS.Text,
+			true
 		)
-		-- The official servers, above the community card. These are the ones the
-		-- team runs, and a player opening this page is far more often looking for
-		-- one of those than setting up a community of their own.
+		whereName.Position = UDim2.fromOffset(20, 38)
+		whereName.Size = UDim2.new(1, -40, 0, 26)
+		local whereBlurb = text(whereCard, KIND_BLURB[kind] or "", 12, COLOURS.Muted)
+		whereBlurb.Position = UDim2.fromOffset(20, 64)
+		whereBlurb.Size = UDim2.new(1, -40, 0, 18)
+
+		-- Where else you can go. This is the reason most people open this page, so
+		-- it comes before anything about setting a community up.
 		local officialResponse =
 			context.Controllers.NetworkController:Request("GetOfficialServers", {})
 		local officialRows = if officialResponse.Success
@@ -840,31 +985,42 @@ function App.mount(context: any): ScreenGui
 			then officialResponse.Data.Servers
 			else nil
 		if type(officialRows) == "table" and #officialRows > 0 then
-			sectionHeading("Official servers", "Run by the team. Join one to play.")
+			sectionHeading("Official servers", "Run by the team. Pick one and play.")
 			for _, entry in officialRows do
-				local row = card(scroll, 92)
+				local row = card(scroll, 88)
+				local here = entry.Current == true
+				local marker = Instance.new("Frame")
+				marker.BackgroundColor3 = if here then COLOURS.Success else COLOURS.Accent
+				marker.BorderSizePixel = 0
+				marker.Position = UDim2.fromOffset(0, 16)
+				marker.Size = UDim2.fromOffset(4, 56)
+				marker.Parent = row
 				local name = text(row, tostring(entry.Name), 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(22, 18)
-				name.Size = UDim2.new(1, -180, 0, 24)
+				name.Position = UDim2.fromOffset(20, 17)
+				name.Size = UDim2.new(1, -176, 0, 24)
 				local blurb = text(row, tostring(entry.Description or ""), 12, COLOURS.Muted)
-				blurb.Position = UDim2.fromOffset(22, 44)
-				blurb.Size = UDim2.new(1, -180, 0, 32)
+				blurb.Position = UDim2.fromOffset(20, 42)
+				blurb.Size = UDim2.new(1, -176, 0, 30)
 				blurb.TextWrapped = true
 				local join = Instance.new("TextButton")
+				join.AutoButtonColor = false
 				join.AnchorPoint = Vector2.new(1, 0.5)
-				join.Position = UDim2.new(1, -22, 0.5, 0)
-				join.Size = UDim2.fromOffset(126, 42)
-				join.BackgroundColor3 = if entry.Current then COLOURS.Sidebar else COLOURS.Accent
+				join.Position = UDim2.new(1, -20, 0.5, 0)
+				join.Size = UDim2.fromOffset(124, 44)
+				join.BackgroundColor3 = if here then COLOURS.Canvas else COLOURS.Accent
 				join.BorderSizePixel = 0
 				join.Font = Enum.Font.GothamBold
-				join.Text = if entry.Current then "YOU ARE HERE" else "JOIN"
-				join.TextColor3 = COLOURS.Text
-				join.TextSize = 13
-				join.Active = not entry.Current
+				join.Text = if here then "YOU ARE HERE" else "JOIN"
+				join.TextColor3 = if here then COLOURS.Muted else COLOURS.Text
+				join.TextSize = 12
+				join.Active = not here
 				join.Parent = row
 				corner(join, 10)
+				if not here then
+					pressable(join)
+				end
 				join.Activated:Connect(function()
-					if entry.Current then
+					if here then
 						return
 					end
 					join.Active = false
@@ -873,70 +1029,45 @@ function App.mount(context: any): ScreenGui
 						"JoinOfficialServer",
 						{ ServerId = entry.Id }
 					)
-					-- A successful teleport never returns here, so anything that
-					-- arrives at this point is a failure worth showing.
+					-- A teleport that works never comes back here, so anything
+					-- arriving at this point is a refusal worth showing.
 					join.Active = true
 					join.Text = "JOIN"
 					context.Controllers.NotificationController:Show(response.Message, "Servers")
 				end)
 			end
-			sectionHeading(
-				"Your server",
-				"Communities share RoleplayOS while retaining their identity."
-			)
 		end
-		local hero = card(scroll, 240)
-		local eyebrow = text(
-			hero,
-			server and string.upper(server.Kind .. " SERVER") or "PUBLIC SERVER",
-			11,
-			COLOURS.Accent,
-			true
-		)
-		eyebrow.Position = UDim2.fromOffset(22, 20)
-		eyebrow.Size = UDim2.new(1, -44, 0, 22)
-		local titleValue = server and server.Community and server.Community.Name
-			or "Create your community"
-		local titleItem = text(hero, titleValue, 23, COLOURS.Text, true)
-		titleItem.Position = UDim2.fromOffset(22, 48)
-		titleItem.Size = UDim2.new(1, -44, 0, 36)
-		local copy = text(
-			hero,
-			"Membership, staff permissions, sessions and access policies—without compromising server authority.",
-			13,
-			COLOURS.Muted
-		)
-		copy.Position = UDim2.fromOffset(22, 89)
-		copy.Size = UDim2.new(1, -44, 0, 50)
-		copy.TextWrapped = true
-		local state = text(
-			hero,
-			server and server.Community and "●  ACTIVE COMMUNITY" or "●  COMMUNITY READY",
-			11,
-			COLOURS.Success,
-			true
-		)
-		state.Position = UDim2.fromOffset(22, 145)
-		state.Size = UDim2.new(1, -220, 0, 28)
-		if server and server.Kind == "Private" and not server.Community then
+
+		-- Your own community, last, because it applies to the fewest people.
+		if kind == "Private" and not community then
+			sectionHeading("Your community", "Link this server to a Roblox group you own.")
+			local setup = card(scroll, 132)
+			local copy = text(
+				setup,
+				"Members, staff permissions and access policies follow the group.",
+				12,
+				COLOURS.Muted
+			)
+			copy.Position = UDim2.fromOffset(20, 16)
+			copy.Size = UDim2.new(1, -40, 0, 20)
 			local groupIdInput = Instance.new("TextBox")
-			groupIdInput.BackgroundColor3 = COLOURS.Sidebar
+			groupIdInput.BackgroundColor3 = COLOURS.Canvas
 			groupIdInput.BorderSizePixel = 0
 			groupIdInput.ClearTextOnFocus = false
 			groupIdInput.Font = Enum.Font.Gotham
 			groupIdInput.PlaceholderColor3 = COLOURS.Muted
 			groupIdInput.PlaceholderText = "Roblox group ID"
-			groupIdInput.Position = UDim2.fromOffset(22, 183)
-			groupIdInput.Size = UDim2.new(1, -220, 0, 38)
+			groupIdInput.Position = UDim2.fromOffset(20, 46)
+			groupIdInput.Size = UDim2.new(1, -212, 0, 44)
 			groupIdInput.Text = ""
 			groupIdInput.TextColor3 = COLOURS.Text
-			groupIdInput.TextSize = 13
-			groupIdInput.Parent = hero
-			corner(groupIdInput, 9)
-			local createCommunity = button(hero, "Create community", true)
-			createCommunity.AnchorPoint = Vector2.new(1, 1)
-			createCommunity.Position = UDim2.new(1, -20, 1, -18)
-			createCommunity.Size = UDim2.fromOffset(170, 42)
+			groupIdInput.TextSize = 14
+			groupIdInput.Parent = setup
+			corner(groupIdInput, 10)
+			local createCommunity = button(setup, "Create community", true)
+			createCommunity.AnchorPoint = Vector2.new(1, 0)
+			createCommunity.Position = UDim2.new(1, -20, 0, 46)
+			createCommunity.Size = UDim2.fromOffset(172, 44)
 			createCommunity.Activated:Connect(function()
 				local groupId = tonumber(groupIdInput.Text)
 				if not groupId or groupId <= 0 or groupId % 1 ~= 0 then
@@ -954,66 +1085,27 @@ function App.mount(context: any): ScreenGui
 					createCommunity.Text = "Create community"
 				end
 			end)
-		elseif server then
-			local badge = text(
-				hero,
-				if server.Kind == "Whitelisted"
-					then "GROUP WHITELISTED"
-					else "PRIVATE SERVER REQUIRED",
-				10,
-				COLOURS.Muted,
-				true
-			)
-			badge.AnchorPoint = Vector2.new(1, 1)
-			badge.Position = UDim2.new(1, -22, 1, -21)
-			badge.Size = UDim2.fromOffset(220, 24)
-			badge.TextXAlignment = Enum.TextXAlignment.Right
-		end
-		-- The whitelisted tier is this community's own server, so it is described
-		-- as such rather than being presented as one of the private communities
-		-- a player could set up themselves.
-		if server and server.Kind == "Whitelisted" then
-			sectionHeading(
-				"This server",
-				string.format(
-					"Entry is restricted to %s.",
-					tostring(server.AccessGroupName or "the host community")
-				)
-			)
-			local official = card(scroll, 132)
-			local eyebrowOfficial = text(official, "WHITELISTED SERVER", 11, COLOURS.Accent, true)
-			eyebrowOfficial.Position = UDim2.fromOffset(18, 16)
-			eyebrowOfficial.Size = UDim2.new(1, -36, 0, 20)
-			local officialName = text(
-				official,
-				tostring(server.AccessGroupName or "Host community"),
-				19,
-				COLOURS.Text,
-				true
-			)
-			officialName.Position = UDim2.fromOffset(18, 40)
-			officialName.Size = UDim2.new(1, -36, 0, 30)
-			local officialCopy = text(
-				official,
-				"Emergency services are group locked. Ranks and departments follow the community's Roblox group.",
-				12,
+			local note = text(
+				setup,
+				"You must own the group. Everyone joining still needs to be a member of the host community.",
+				11,
 				COLOURS.Muted
 			)
-			officialCopy.Position = UDim2.fromOffset(18, 72)
-			officialCopy.Size = UDim2.new(1, -36, 0, 44)
-			officialCopy.TextWrapped = true
-		end
-		sectionHeading(
-			"Included controls",
-			"A professional foundation for private roleplay operations."
-		)
-		for _, feature in
-			{ "Staff hierarchy", "Membership policy", "Safety and audit", "Shared gameplay" }
-		do
-			local item = card(scroll, 54)
-			local name = text(item, feature, 15, COLOURS.Text, true)
-			name.Position = UDim2.fromOffset(18, 0)
-			name.Size = UDim2.new(1, -36, 1, 0)
+			note.Position = UDim2.fromOffset(20, 98)
+			note.Size = UDim2.new(1, -40, 0, 20)
+			note.TextWrapped = true
+		elseif kind == "Public" then
+			sectionHeading("Your own community", "Private servers can run to their own rules.")
+			local hint = card(scroll, 74)
+			local hintCopy = text(
+				hint,
+				"Start a private server for this experience, then set it up from this page.",
+				13,
+				COLOURS.Muted
+			)
+			hintCopy.Position = UDim2.fromOffset(20, 0)
+			hintCopy.Size = UDim2.new(1, -40, 1, 0)
+			hintCopy.TextWrapped = true
 		end
 	end
 
@@ -1058,8 +1150,8 @@ function App.mount(context: any): ScreenGui
 	addNav("Careers", renderCareers)
 	addNav("Community", renderCommunity)
 	addNav("Controls", function()
-		context.Controllers.ControlsController:Open()
-	end, true)
+		renderControls()
+	end)
 	addNav("Settings", renderSettings)
 	activeNav = playNav
 	playNav.BackgroundColor3 = COLOURS.AccentSoft

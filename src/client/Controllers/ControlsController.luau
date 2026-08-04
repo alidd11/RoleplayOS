@@ -378,6 +378,25 @@ function ControlsController:_mount()
 	)
 end
 
+-- The control list, for anywhere that wants to show it rather than open the
+-- overlay. The start menu renders this as an ordinary page, so the list lives in
+-- one place and cannot drift between the two.
+function ControlsController:List(): any
+	return {
+		Controls = CONTROLS,
+		Mode = self.mode,
+		ModeLabels = MODE_LABELS,
+		ModeOrder = { "KeyboardMouse", "Gamepad", "Touch", "VR" },
+		Hint = MODE_HINTS[self.mode],
+	}
+end
+
+-- The mode the player is actually using, so a page can open on the right one
+-- without waiting for them to press something.
+function ControlsController:DetectedMode(): string
+	return self:_detectMode(UserInputService:GetLastInputType())
+end
+
 function ControlsController:Open()
 	-- Start runs concurrently with the interface mount, so the panel may not exist
 	-- yet on a very early click.
