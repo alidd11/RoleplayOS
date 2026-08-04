@@ -607,7 +607,37 @@ function DataService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
-			local profile, reason = self:Load(player)
+			-- Tried several times before giving up. A data store failure is very
+			-- often transient, and kicking on the first one turns a momentary
+			-- Roblox wobble into a player who cannot get in and does not come
+			-- back. A held lease is not retried here: that clears on a clock and
+			-- is reported with the number of seconds instead.
+			local attempts = self.context.Configuration.Framework.JoinLoadAttempts or 3
+			local profile, reason
+			for attempt = 1, attempts do
+				profile, reason = self:Load(player)
+				if profile then
+					return
+				end
+				if not player:IsDescendantOf(Players) then
+					return
+				end
+				local settled = reason == nil
+					or string.find(tostring(reason), "PROFILE_SESSION_LOCKED", 1, true) ~= nil
+					or reason == "PLAYER_LEFT"
+				if settled or attempt == attempts then
+					break
+				end
+				self.context.Logger:Warning("Retrying a failed profile load", {
+					UserId = player.UserId,
+					Attempt = attempt,
+					Error = tostring(reason),
+				})
+				task.wait(2 ^ (attempt - 1))
+				if not player:IsDescendantOf(Players) then
+					return
+				end
+			end
 			if profile then
 				return
 			end

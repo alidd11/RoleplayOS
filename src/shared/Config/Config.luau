@@ -74,6 +74,11 @@ local Config = {
 		-- case of leaving and rejoining straight away rather than an unusual one.
 		-- It must comfortably exceed a save that has to retry.
 		SessionHandoverSeconds = 10,
+		-- How many times a join will try to load a profile before giving up.
+		-- Each attempt already retries the store call itself; this is the outer
+		-- loop, so a failure that clears within a few seconds never reaches the
+		-- player at all.
+		JoinLoadAttempts = 3,
 		-- A profile larger than this is reported while there is still room to act.
 		-- Roblox refuses a value over four megabytes, and a profile that reaches
 		-- that stops saving silently: every write fails from then on and the
