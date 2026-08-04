@@ -1530,27 +1530,13 @@ local Config = {
 		StarterColour = "Blue",
 		StarterGarageId = "CityGarage",
 	},
-	-- Vehicles are discovered from the asset folders, so a dealership says which
-	-- folders it sells from rather than naming every car. Dropping a model into
-	-- Vehicles/Civilian/Premium puts it on every forecourt that sells that path,
-	-- with no list here to remember to update.
-	--
-	-- VehicleIds still works and is additive, for a car sold somewhere its folder
-	-- would not otherwise put it.
-	VehicleCatalogue = {
-		Enabled = true,
-		-- Used when a model carries no Price attribute. Deliberately high enough
-		-- to be noticed: a car that silently costs nothing is worse than one
-		-- priced wrongly, because nobody reports it.
-		DefaultPrice = 25000,
-		DefaultColour = "Black",
-	},
 	Dealerships = {
 		CityMotors = {
 			Id = "CityMotors",
 			Name = "City Motors",
-			IncludePaths = { { "Civilian" } },
-			VehicleIds = {},
+			-- Named here, and appended to automatically for any civilian model
+			-- whose DealershipId attribute points at this forecourt.
+			VehicleIds = { "Compact", "PremiumSaloon" },
 		},
 	},
 	Properties = {

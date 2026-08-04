@@ -34,24 +34,8 @@ function DealershipService:Catalogue(player: Player, terminalId: string): (any?,
 		owned[vehicle.DefinitionId] = true
 	end
 
-	-- What this forecourt sells: everything under the folders it covers, plus
-	-- anything named outright. Built as a set so a car matching both appears once.
-	local catalogue = self.context.Services:Get("VehicleCatalogueService")
-	local selling = {}
-	for _, definitionId in dealership.VehicleIds or {} do
-		selling[definitionId] = true
-	end
-	for definitionId, definition in self.context.Configuration.Vehicles do
-		for _, prefix in dealership.IncludePaths or {} do
-			if catalogue:MatchesPath(definition, prefix) then
-				selling[definitionId] = true
-				break
-			end
-		end
-	end
-
 	local rows = {}
-	for definitionId in selling do
+	for _, definitionId in dealership.VehicleIds or {} do
 		local definition = self.context.Configuration.Vehicles[definitionId]
 		if not definition then
 			continue
@@ -110,19 +94,13 @@ function DealershipService:Purchase(
 	if not dealership or not definition then
 		return nil, "VEHICLE_NOT_SOLD_HERE"
 	end
-	-- Sold here if named outright or if its folder is one this forecourt covers.
-	-- The showroom is built from the same rule, so anything visible is buyable.
-	local sold = table.find(dealership.VehicleIds or {}, definitionId) ~= nil
-	if not sold then
-		local catalogue = self.context.Services:Get("VehicleCatalogueService")
-		for _, prefix in dealership.IncludePaths or {} do
-			if catalogue:MatchesPath(definition, prefix) then
-				sold = true
-				break
-			end
-		end
+	if not table.find(dealership.VehicleIds or {}, definitionId) then
+		return nil, "VEHICLE_NOT_SOLD_HERE"
 	end
-	if not sold then
+	-- A service vehicle is issued from a depot, never sold. Buying one produced a
+	-- paid for car that SpawnOwned then refused forever, with no refund, because
+	-- it only refunds when creation itself fails.
+	if definition.Category == "Service" then
 		return nil, "VEHICLE_NOT_SOLD_HERE"
 	end
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)

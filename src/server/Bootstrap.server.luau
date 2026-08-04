@@ -23,9 +23,6 @@ local context = {
 }
 
 local serviceOrder = {
-	-- Fills the vehicle catalogue from the asset folders, so it must run before
-	-- anything reads or validates that list.
-	"VehicleCatalogueService",
 	"DataService",
 	"RecordIndexService",
 	"SettingsService",
