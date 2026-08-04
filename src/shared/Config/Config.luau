@@ -148,6 +148,15 @@ local Config = {
 	-- the menu rather than found from outside.
 	OfficialServers = {
 		Enabled = true,
+		-- Universe 6865450179, start place 85767986923809.
+		--
+		-- The start place is the public tier. A whitelisted world needs a SECOND
+		-- place created inside the same universe, and its id set on the entry
+		-- below. Same universe matters: those share data stores, so a profile,
+		-- its money and its vehicles follow the player across. A place in another
+		-- universe shares none of that and they arrive with nothing.
+		UniverseId = 6865450179,
+		PublicPlaceId = 85767986923809,
 		-- An official server is a set of instances rather than one. When the first
 		-- fills, the next join opens another, so nobody is turned away at peak.
 		--
@@ -175,15 +184,11 @@ local Config = {
 				Order = 1,
 				Whitelisted = true,
 				RequiredGroupLinkId = "UniversalProjects",
-				-- The place this world lives in. Zero means the same place as the
-				-- public one, which is the state until a separate place exists.
+				-- Set this to the id of the whitelisted place once it exists.
 				--
-				-- Put the whitelisted world in its own place in THIS universe and
-				-- name its id here. Any place in the same universe teleports
-				-- natively and shares the same data stores, so a player's profile,
-				-- money and vehicles follow them across. A place in a different
-				-- universe would not share those and they would arrive with
-				-- nothing, so do not use one.
+				-- Zero means the same place as the public tier, which separates
+				-- nothing: it is the state until a second place is created in
+				-- universe 6865450179. This is the only value that needs changing.
 				PlaceId = 0,
 				-- Reserved instances gather everybody into one world and open
 				-- another only when it fills. Set false to hand the player to that
