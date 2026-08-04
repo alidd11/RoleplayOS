@@ -12,6 +12,7 @@ local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
 local MDT_RECORD_STORE_NAME = "RoleplayOS_MDTRecords_v1"
 local MDT_INDEX_STORE_NAME = "RoleplayOS_MDTIndexes_v1"
+local SHOULDER_STORE_NAME = "RoleplayOS_ShoulderNumbers_v1"
 
 local function deepCopy(value: any, seen: { [any]: any }?): any
 	if type(value) ~= "table" then
@@ -36,12 +37,14 @@ function DataService:Init(context: any)
 	self.mockRegistrations = {}
 	self.mockMdtRecords = {}
 	self.mockMdtIndexes = {}
+	self.mockShoulder = {}
 	if not self.mock then
 		self.store = DataStoreService:GetDataStore(STORE_NAME)
 		self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
 		self.registrationStore = DataStoreService:GetDataStore(REGISTRATION_STORE_NAME)
 		self.mdtRecordStore = DataStoreService:GetDataStore(MDT_RECORD_STORE_NAME)
 		self.mdtIndexStore = DataStoreService:GetDataStore(MDT_INDEX_STORE_NAME)
+		self.shoulderStore = DataStoreService:GetDataStore(SHOULDER_STORE_NAME)
 	end
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
 end
@@ -96,6 +99,66 @@ function DataService:UpdateMdtIndex(key: string, transform: (any?) -> any): (any
 		end)
 	end)
 	return if ok then updated else nil, if ok then nil else "MDT_INDEX_STORE_UNAVAILABLE"
+end
+
+-- Claims the next shoulder number for a department and records who holds it.
+--
+-- The counter and the holder record are two keys, and only the counter is
+-- allocated under UpdateAsync, so a server that dies between the two burns a
+-- number without assigning it. That is the safe direction to fail: a gap in the
+-- sequence is invisible, whereas issuing the same number twice would put two
+-- officers on air as the same unit. Numbers are plentiful and never reissued.
+function DataService:AllocateShoulderNumber(
+	departmentId: string,
+	userId: number,
+	start: number
+): (number?, string?)
+	local counterKey = "counter:" .. departmentId
+	local issued: number? = nil
+	if self.mock then
+		local current = self.mockShoulder[counterKey]
+		issued = if type(current) == "number" then current + 1 else start
+		self.mockShoulder[counterKey] = issued
+		self.mockShoulder[departmentId .. ":" .. tostring(issued)] =
+			{ UserId = userId, AssignedAt = os.time() }
+		return issued, nil
+	end
+	local ok = self:_retry(function()
+		return self.shoulderStore:UpdateAsync(counterKey, function(stored)
+			issued = if type(stored) == "number" then stored + 1 else start
+			return issued
+		end)
+	end)
+	if not ok or not issued then
+		return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+	end
+	-- The holder record is what the staff export reads. Losing it costs the
+	-- reconciliation view, not the allocation, so a failure here is warned about
+	-- rather than surfaced as a refusal to go on duty.
+	local recorded = self:_retry(function()
+		return self.shoulderStore:SetAsync(
+			departmentId .. ":" .. tostring(issued),
+			{ UserId = userId, AssignedAt = os.time() }
+		)
+	end)
+	if not recorded then
+		self.context.Logger:Warning("Shoulder number holder record failed", {
+			DepartmentId = departmentId,
+			Number = issued,
+			UserId = userId,
+		})
+	end
+	return issued, nil
+end
+
+function DataService:GetShoulderNumberHolder(departmentId: string, number: number): (any?, string?)
+	if self.mock then
+		return deepCopy(self.mockShoulder[departmentId .. ":" .. tostring(number)]), nil
+	end
+	local ok, result = self:_retry(function()
+		return self.shoulderStore:GetAsync(departmentId .. ":" .. tostring(number))
+	end)
+	return if ok then result else nil, if ok then nil else "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 end
 
 function DataService:ReserveCustomRegistration(

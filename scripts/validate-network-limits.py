@@ -7,7 +7,10 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NETWORK = ROOT / "src/server/Services/NetworkService.luau"
+# Every server source file, not just NetworkService. Endpoints are registered
+# there by convention, but a registration anywhere else used to be invisible
+# here and so escaped the rate limit it is the job of this script to require.
+SERVER = ROOT / "src/server"
 CONFIG = ROOT / "src/shared/Config/Config.luau"
 
 endpoint_pattern = re.compile(r'RegisterFunction\(\s*"([^"]+)"')
@@ -21,7 +24,9 @@ def duplicates(values: list[str]) -> list[str]:
     return sorted({value for value in values if values.count(value) > 1})
 
 
-endpoints = endpoint_pattern.findall(NETWORK.read_text(encoding="utf-8"))
+endpoints: list[str] = []
+for source in sorted(SERVER.rglob("*.luau")):
+    endpoints.extend(endpoint_pattern.findall(source.read_text(encoding="utf-8")))
 limits = limit_pattern.findall(CONFIG.read_text(encoding="utf-8"))
 problems: list[str] = []
 

@@ -123,8 +123,13 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		DivisionId = role.DivisionId,
 		TeamName = role.TeamName,
 	}
+	-- The rank abbreviation and shoulder number, issued now if this is the first
+	-- shift in this service. An explicitly set callsign on the profile still wins,
+	-- so a unit given a bespoke one by staff keeps it.
+	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
 	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
 		then profile.Callsign
+		elseif type(shoulder) == "string" and #shoulder >= 2 then shoulder
 		else string.format("%s-%d", role.DepartmentId, player.UserId % 100)
 	local unit, unitReason = self.context.Services:Get("UnitService"):Register(player, {
 		Callsign = callsign,

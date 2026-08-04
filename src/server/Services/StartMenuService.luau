@@ -20,11 +20,12 @@ function StartMenuService:_ensureDutyProfile(player: Player, session: any, depar
 		DepartmentId = departmentId,
 		Rank = 1,
 		QualificationIds = {},
-		Callsign = string.format(
-			"%s-%02d",
-			string.upper(string.sub(departmentId, 1, 3)),
-			player.UserId % 100
-		),
+		-- Left unset here. The shoulder number is issued on first going on duty,
+		-- by the service that owns the counter, so that it is unique across every
+		-- server rather than derived from the user id. Deriving it collided:
+		-- UserId % 100 gave a hundred numbers per department and two officers on
+		-- the same number the moment a department passed that many members.
+		Callsign = nil,
 	}
 	self.context.Services:Get("DataService"):MarkDirty(player)
 end

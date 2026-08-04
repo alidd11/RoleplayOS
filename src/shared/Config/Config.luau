@@ -413,11 +413,30 @@ local Config = {
 		PoliceForceName = "UP Hampshire & Isle of Wight Constabulary",
 	},
 	UKTime = { Enabled = true, UpdateSeconds = 15 },
+	-- Rank ladders. A profile stores its rank as an index into this list, so
+	-- ranks may be appended freely but never reordered or removed from the
+	-- middle: doing so silently repromotes or demotes everyone above the change.
+	--
+	-- `Numbered` decides whether the rank wears a shoulder number. In the British
+	-- services these are worn by the junior ranks and dropped at the point rank
+	-- insignia takes over, which is why an inspector has no collar number. The
+	-- number is still kept on the profile when someone is promoted past that
+	-- point, so it comes back on demotion rather than being reissued.
 	Departments = {
 		Police = {
 			Id = "Police",
 			Name = "Police",
-			Ranks = { "Constable", "Sergeant", "Inspector" },
+			Ranks = {
+				{ Name = "Constable", Abbreviation = "PC", Numbered = true },
+				{ Name = "Sergeant", Abbreviation = "PS", Numbered = true },
+				{ Name = "Inspector", Abbreviation = "Insp", Numbered = false },
+				{ Name = "Chief Inspector", Abbreviation = "Ch Insp", Numbered = false },
+				{ Name = "Superintendent", Abbreviation = "Supt", Numbered = false },
+				{ Name = "Chief Superintendent", Abbreviation = "Ch Supt", Numbered = false },
+				{ Name = "Assistant Chief Constable", Abbreviation = "ACC", Numbered = false },
+				{ Name = "Deputy Chief Constable", Abbreviation = "DCC", Numbered = false },
+				{ Name = "Chief Constable", Abbreviation = "CC", Numbered = false },
+			},
 			RoleIds = {
 				"PoliceOfficer",
 				"PoliceFrontline",
@@ -428,39 +447,105 @@ local Config = {
 		Ambulance = {
 			Id = "Ambulance",
 			Name = "Ambulance",
-			Ranks = { "Clinician", "Team Leader" },
+			Ranks = {
+				{ Name = "Emergency Care Assistant", Abbreviation = "ECA", Numbered = true },
+				{
+					Name = "Associate Ambulance Practitioner",
+					Abbreviation = "AAP",
+					Numbered = true,
+				},
+				{ Name = "Technician", Abbreviation = "Tech", Numbered = true },
+				{ Name = "Paramedic", Abbreviation = "Para", Numbered = true },
+				{ Name = "Senior Paramedic", Abbreviation = "Sen Para", Numbered = true },
+				{ Name = "Clinical Team Leader", Abbreviation = "CTL", Numbered = true },
+				{ Name = "Operations Manager", Abbreviation = "Ops Mgr", Numbered = false },
+				{ Name = "Head of Operations", Abbreviation = "Head of Ops", Numbered = false },
+			},
 			RoleIds = { "Paramedic" },
 		},
 		Fire = {
 			Id = "Fire",
 			Name = "Fire and Rescue",
-			Ranks = { "Firefighter", "Crew Manager" },
+			Ranks = {
+				{ Name = "Firefighter", Abbreviation = "FF", Numbered = true },
+				{ Name = "Crew Manager", Abbreviation = "CM", Numbered = true },
+				{ Name = "Watch Manager", Abbreviation = "WM", Numbered = true },
+				{ Name = "Station Manager", Abbreviation = "SM", Numbered = false },
+				{ Name = "Group Manager", Abbreviation = "GM", Numbered = false },
+				{ Name = "Area Manager", Abbreviation = "AM", Numbered = false },
+				{ Name = "Deputy Chief Fire Officer", Abbreviation = "DCFO", Numbered = false },
+				{ Name = "Chief Fire Officer", Abbreviation = "CFO", Numbered = false },
+			},
 			RoleIds = { "Firefighter" },
 		},
 		Control = {
 			Id = "Control",
 			Name = "Dispatch and Control",
-			Ranks = { "Controller", "Supervisor" },
+			Ranks = {
+				{ Name = "Call Handler", Abbreviation = "CH", Numbered = true },
+				{ Name = "Dispatcher", Abbreviation = "Disp", Numbered = true },
+				{ Name = "Senior Dispatcher", Abbreviation = "Sen Disp", Numbered = true },
+				{ Name = "Control Room Supervisor", Abbreviation = "Sup", Numbered = false },
+				{ Name = "Control Room Manager", Abbreviation = "Mgr", Numbered = false },
+			},
 			RoleIds = { "Controller" },
 		},
 		Transport = {
 			Id = "Transport",
 			Name = "Transport",
-			Ranks = { "Driver", "Supervisor", "Operations Manager" },
+			Ranks = {
+				{ Name = "Driver", Abbreviation = "Drv", Numbered = true },
+				{ Name = "Senior Driver", Abbreviation = "Sen Drv", Numbered = true },
+				{ Name = "Supervisor", Abbreviation = "Sup", Numbered = false },
+				{ Name = "Operations Manager", Abbreviation = "Ops Mgr", Numbered = false },
+			},
 			RoleIds = { "TransportOperator" },
 		},
 		Highways = {
 			Id = "Highways",
 			Name = "Highway Patrol",
-			Ranks = { "Traffic Officer", "Team Manager" },
+			Ranks = {
+				{ Name = "Traffic Officer", Abbreviation = "TO", Numbered = true },
+				{ Name = "Senior Traffic Officer", Abbreviation = "STO", Numbered = true },
+				{ Name = "Team Manager", Abbreviation = "TM", Numbered = false },
+				{ Name = "Operations Manager", Abbreviation = "Ops Mgr", Numbered = false },
+			},
 			RoleIds = { "HighwayPatrolOfficer" },
 		},
 		Prison = {
 			Id = "Prison",
 			Name = "Prison Service",
-			Ranks = { "Prison Officer", "Supervising Officer", "Governor" },
+			Ranks = {
+				{ Name = "Prison Officer", Abbreviation = "PO", Numbered = true },
+				{ Name = "Senior Officer", Abbreviation = "SO", Numbered = true },
+				{ Name = "Principal Officer", Abbreviation = "PrO", Numbered = true },
+				{ Name = "Custodial Manager", Abbreviation = "CM", Numbered = false },
+				{ Name = "Governor", Abbreviation = "Gov", Numbered = false },
+			},
 			RoleIds = { "PrisonOfficer" },
 		},
+	},
+	-- Shoulder numbers are issued from a counter held per department, so two
+	-- servers claiming at the same moment cannot land on the same number and no
+	-- scan of existing holders is needed to find the next free one. Numbers are
+	-- never reissued: a counter that only moves forward means a number identifies
+	-- one person for the lifetime of the game, which is the whole point of
+	-- putting it in a Discord name.
+	ShoulderNumbers = {
+		Enabled = true,
+		Format = "%04d",
+		-- Each service starts its own block, so the number alone reads as
+		-- belonging to that service.
+		Start = {
+			Police = 1000,
+			Ambulance = 3000,
+			Fire = 5000,
+			Control = 7000,
+			Transport = 7500,
+			Highways = 8000,
+			Prison = 9000,
+		},
+		DefaultStart = 100,
 	},
 	Teams = {
 		Civilian = {
@@ -1384,6 +1469,9 @@ local Config = {
 		GlobalRefillPerSecond = 10,
 		Endpoints = {
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
+			-- Reads every loaded profile in the server, so it is deliberately
+			-- slower to refill than a lookup a player would repeat.
+			GetShoulderNumberRoster = { Capacity = 3, RefillPerSecond = 0.2 },
 			CreatePrivateCommunity = { Capacity = 1, RefillPerSecond = 0.02 },
 			GetStartMenu = { Capacity = 4, RefillPerSecond = 1 },
 			GetSettings = { Capacity = 4, RefillPerSecond = 1 },

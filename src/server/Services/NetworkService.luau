@@ -55,6 +55,29 @@ function NetworkService:Start()
 			}
 		end
 	)
+	-- Read-only roster for staff reconciling Discord display names against the
+	-- game. Registered here with every other endpoint so it is covered by the
+	-- rate-limit check, which only inspects this file.
+	self.context.Network:RegisterFunction("GetShoulderNumberRoster", function(payload)
+		return payload == nil or type(payload) == "table"
+	end, function(player, _, requestId)
+		local roster, reason = self.context.Services:Get("ShoulderNumberService"):RosterFor(player)
+		if not roster then
+			return {
+				Success = false,
+				Code = reason or "ROSTER_NOT_AUTHORISED",
+				Message = "A management rank is required to read a roster.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = roster,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("CreatePrivateCommunity", function(payload)
 		return type(payload) == "table" and type(payload.GroupId) == "number"
 	end, function(player, payload, requestId)
