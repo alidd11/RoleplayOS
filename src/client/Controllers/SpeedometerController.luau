@@ -164,6 +164,7 @@ function SpeedometerController:_mount()
 	fuelMark.Position = UDim2.new(1, -110, 0, 79)
 	fuelMark.Size = UDim2.fromOffset(34, 14)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Right
+	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
 	self.gui, self.frame = gui, frame
 	-- Ambient display, scaled with the rest of it so the readout keeps its
@@ -173,11 +174,21 @@ function SpeedometerController:_mount()
 	self.frameScale = frameScale
 end
 
+function SpeedometerController:_setText(item: TextLabel, text: string)
+	if item.Text ~= text then
+		item.Text = text
+	end
+end
+
 -- Lights the sweep to a fraction of its length, warming through amber to red as
 -- it fills, the way a cluster shades its upper range.
 function SpeedometerController:_paintSweep(fraction: number)
 	local count = #self.segments
 	local lit = math.clamp(math.floor(fraction * count + 0.5), 0, count)
+	if lit == self.lit then
+		return
+	end
+	self.lit = lit
 	for index, segment in self.segments do
 		if index > lit then
 			segment.BackgroundColor3 = C.Track
@@ -245,21 +256,37 @@ function SpeedometerController:Start()
 				return
 			end
 			local mph = math.floor(seat.AssemblyLinearVelocity.Magnitude * 0.626 + 0.5)
-			self.speed.Text = tostring(math.min(mph, 999))
+			-- Assigned only on change. A property write replicates and dirties
+			-- layout even when the value is identical, and at this refresh rate a
+			-- car standing still would otherwise rewrite the whole cluster
+			-- twelve times a second for nothing.
+			self:_setText(self.speed, tostring(math.min(mph, 999)))
 
 			-- The chassis knows its own gear, including reverse and each ratio,
 			-- which throttle direction alone cannot tell apart. Fall back to
 			-- throttle only where no chassis is present.
 			local values = self:_chassisValues(seat)
 			local gear = readValue(values, self.settings.GearValueName)
-			self.gear.Text = if type(gear) == "number"
-				then (if gear < 0 then "R" elseif gear == 0 then "N" else tostring(gear))
-				elseif type(gear) == "string" and gear ~= "" then gear
-				else (if seat.ThrottleFloat < -0.05
-					then "R"
-					elseif math.abs(seat.ThrottleFloat) > 0.05 then "D"
-					else "N")
-			self.plate.Text = tostring(seat:GetAttribute("RoleplayOSRegistration") or "NO PLATE")
+			self:_setText(
+				self.gear,
+				if type(gear) == "number"
+					then (if gear < 0 then "R" elseif gear == 0 then "N" else tostring(gear))
+					elseif type(gear) == "string" and gear ~= "" then gear
+					else (if seat.ThrottleFloat < -0.05
+						then "R"
+						elseif math.abs(seat.ThrottleFloat) > 0.05 then "D"
+						else "N")
+			)
+
+			-- An unregistered vehicle shows nothing rather than a placeholder.
+			-- "NO PLATE" reads as a fault the driver ought to do something about,
+			-- when it only means this car was not spawned through the framework.
+			local registration = seat:GetAttribute("RoleplayOSRegistration")
+			local plated = type(registration) == "string" and registration ~= ""
+			self.plate.Visible = plated
+			if plated then
+				self:_setText(self.plate, registration :: string)
+			end
 
 			-- The sweep follows engine speed where the chassis reports it, since
 			-- that is what a cluster shows, and road speed otherwise.
@@ -270,15 +297,21 @@ function SpeedometerController:Start()
 					else mph / math.max(self.settings.TopSpeedMph, 1)
 			)
 
+			-- A vehicle that reports no fuel level hides the gauge rather than
+			-- drawing it empty. An empty bar labelled FUEL says the tank is dry,
+			-- which is a different claim from "this car has no fuel system" and
+			-- the one thing a driver would act on.
 			local fuel = seat:GetAttribute("RoleplayOSFuel")
-			if type(fuel) == "number" then
-				self.fuelFill.Size = UDim2.fromScale(math.clamp(fuel / 100, 0, 1), 1)
-				self.fuelFill.BackgroundColor3 = if fuel <= 10
-					then Color3.fromRGB(247, 92, 96)
-					elseif fuel <= 25 then Color3.fromRGB(245, 176, 66)
-					else Color3.fromRGB(104, 205, 148)
-			else
-				self.fuelFill.Size = UDim2.fromScale(0, 1)
+			local metered = type(fuel) == "number"
+			self.fuelTrack.Visible = metered
+			self.fuelMark.Visible = metered
+			if metered then
+				local level = fuel :: number
+				self.fuelFill.Size = UDim2.fromScale(math.clamp(level / 100, 0, 1), 1)
+				self.fuelFill.BackgroundColor3 = if level <= 10
+					then C.Danger
+					elseif level <= 25 then C.Warn
+					else C.Fuel
 			end
 		end)
 	)

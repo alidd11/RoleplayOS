@@ -48,6 +48,16 @@ function VehicleUIController:_restoreSuppressed()
 	table.clear(self.suppressed)
 end
 
+-- Announces the seating state to the rest of the interface. This is the only
+-- producer of UIStateChanged: the orchestrator derives Vehicle, HotbarBottom and
+-- RightReserve from it, and the speedometer, needs bars, pedals and minimap all
+-- position themselves against those. Without it every panel lays itself out as
+-- though the player were on foot, so the readout lands on top of the needs bars
+-- and the toolbar no matter what car they are in.
+function VehicleUIController:_broadcast()
+	self.context.Events.UIStateChanged:Fire(self.state)
+end
+
 function VehicleUIController:_setSeat(seatPart: BasePart?)
 	local state = "OnFoot"
 	if seatPart and CollectionService:HasTag(seatPart, "RoleplayOSDispatchSeat") then
