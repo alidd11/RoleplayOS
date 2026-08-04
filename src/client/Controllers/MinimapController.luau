@@ -60,7 +60,7 @@ function MinimapController:_mount()
 	shell.Name = "Minimap"
 	shell.AnchorPoint = Vector2.new(1, 0.5)
 	shell.Position = UDim2.new(1, -18, 0.5, 0)
-	shell.Size = UDim2.fromOffset(184, 208)
+	shell.Size = UDim2.fromOffset(Config.Minimap.PanelSize.X, Config.Minimap.PanelSize.Y)
 	shell.BackgroundColor3 = C.Surface
 	shell.BorderSizePixel = 0
 	shell.Parent = gui
@@ -318,15 +318,13 @@ function MinimapController:Start()
 		-- Sits above centre on touch, where a sprint pad shares the right edge and
 		-- a centred minimap would land on top of it.
 		self.shell.Position = if layout.Vehicle
-			then UDim2.new(0, 18, 0.52, 0)
+			then UDim2.new(0, 18, self.settings.VehicleAnchorY, 0)
 			elseif layout.InputMode == "Touch" then UDim2.new(1, -layout.RightReserve, 0.36, 0)
 			else UDim2.new(1, -layout.RightReserve, 0.5, 0)
-		self.shell.Size = if layout.Vehicle
-			then UDim2.fromOffset(150, 170)
-			else UDim2.fromOffset(
-				if layout.Compact then 150 else 184,
-				if layout.Compact then 170 else 208
-			)
+		local panel = if layout.Vehicle or layout.Compact
+			then self.settings.CompactPanelSize
+			else self.settings.PanelSize
+		self.shell.Size = UDim2.fromOffset(panel.X, panel.Y)
 	end)
 	self.running = true
 	task.spawn(function()

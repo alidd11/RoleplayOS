@@ -190,14 +190,18 @@ function DrivingControlsController:Start()
 	table.insert(
 		self.connections,
 		RunService.RenderStepped:Connect(function(delta)
-			local seat = self:_seat()
-			if not seat then
-				-- The player left the seat, possibly while holding a pedal.
-				self.throttle = 0
+			-- Cheapest possible exit first. This runs every frame for every
+			-- player, including everyone on a keyboard who will never press a
+			-- pedal, so it must not search the character before it knows there is
+			-- anything to do.
+			if self.throttle == 0 then
 				self.heldFor = 0
 				return
 			end
-			if self.throttle == 0 then
+			local seat = self:_seat()
+			if not seat then
+				-- The player left the seat while holding a pedal.
+				self.throttle = 0
 				self.heldFor = 0
 				return
 			end

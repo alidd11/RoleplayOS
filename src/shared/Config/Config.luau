@@ -172,6 +172,14 @@ local Config = {
 		-- Minimum gap between full passes over the tagged geometry. Only this
 		-- pass scales with the size of the map.
 		RecollectSeconds = 3,
+		-- Panel footprint before the interface scale is applied. Anything that
+		-- has to sit clear of the minimap reads this rather than repeating the
+		-- numbers, so the two cannot drift apart when the panel is resized.
+		PanelSize = Vector2.new(184, 208),
+		CompactPanelSize = Vector2.new(150, 170),
+		-- Fraction of the screen height the panel is centred on while driving,
+		-- where it moves to the left edge.
+		VehicleAnchorY = 0.52,
 	},
 	Locations = {
 		Enabled = true,

@@ -5,6 +5,9 @@ local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local TacticalMap = require(script.Parent.Parent.UI.TacticalMap)
 
 local MDTController = { connections = {} }
@@ -815,7 +818,12 @@ function MDTController:Start()
 		-- the bottom left, so the launcher stacks directly beneath the minimap
 		-- rather than sharing either position. The offset is derived from the
 		-- minimap's own height so the two cannot drift into each other.
-		local minimapBottom = 0.52 + (85 * layout.HudScale) / math.max(layout.Viewport.Y, 1)
+		-- Derived from the minimap's own configured footprint rather than a copy
+		-- of its numbers, so resizing that panel moves this out of the way too.
+		local minimap = Config.Minimap
+		local minimapBottom = minimap.VehicleAnchorY
+			+ (minimap.CompactPanelSize.Y / 2 * layout.HudScale)
+				/ math.max(layout.Viewport.Y, 1)
 		self.launcher.AnchorPoint = Vector2.new(0, 0)
 		self.launcher.Position = if layout.Vehicle
 			then UDim2.new(0, 18, minimapBottom, 12)
