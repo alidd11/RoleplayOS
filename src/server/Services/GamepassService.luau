@@ -27,12 +27,23 @@ function GamepassService:Refresh(player: Player, definition: any): (boolean, str
 	return owned, nil
 end
 
+-- Roblox rate limits ownership checks per server in the same way it limits group
+-- lookups, and there are fifteen passes here. Checking them back to back meant
+-- fifteen web calls per joining player at once, and a server filling up made
+-- hundreds within seconds, at which point the throttle answers every one of them
+-- with a failure and nobody's purchases are recognised.
+--
+-- Spaced and jittered so that players joining together do not line their checks
+-- up with each other. Nothing is waiting on this: a pass that resolves a second
+-- later is invisible, whereas a throttled one reads as unowned.
 function GamepassService:RefreshAll(player: Player)
+	local spacing = self.context.Configuration.Groups.WarmSpacingSeconds or 0.6
 	for _, definition in self.context.Configuration.Gamepasses do
 		if not player.Parent then
 			return
 		end
 		self:Refresh(player, definition)
+		task.wait(spacing * (0.5 + math.random()))
 	end
 end
 

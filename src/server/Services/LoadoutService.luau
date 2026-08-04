@@ -75,6 +75,70 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 	end
 	return true, nil
 end
+-- Issues the items a player has bought a gamepass for.
+--
+-- EquipmentPasses maps a gamepass to the tools it unlocks, and nothing read it,
+-- so the four civilian weapon passes took Robux and granted nothing: ownership
+-- was checked and cached, and then never used to give anybody anything.
+--
+-- These are not duty issued. Marking them so would have ClearIssued destroy them
+-- when a shift ends, taking away something the player owns rather than something
+-- the job lent them.
+function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
+	local passes = self.context.Configuration.EquipmentPasses
+	if type(passes) ~= "table" then
+		return true, nil
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local cache = session and session.Profile and session.Profile.GamepassCache
+	if type(cache) ~= "table" then
+		return false, "PROFILE_UNAVAILABLE"
+	end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return false, "BACKPACK_UNAVAILABLE"
+	end
+	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
+	local tools = if assets then assets:FindFirstChild("Tools") else nil
+	if not tools then
+		return true, nil
+	end
+	for passId, definition in passes do
+		if cache[tostring(definition.GamepassId)] ~= true then
+			continue
+		end
+		-- A pass may be limited to one team, so a civilian weapon does not follow
+		-- its owner onto a police shift.
+		local team = player.Team
+		if definition.TeamName and (not team or team.Name ~= definition.TeamName) then
+			continue
+		end
+		for _, toolId in definition.ToolNames or {} do
+			if alreadyIssued(player, toolId) then
+				continue
+			end
+			local toolDefinition = self.context.Configuration.Tools[toolId]
+			local template = if toolDefinition
+					and type(toolDefinition.AssetPath) == "table"
+				then resolve(assets, toolDefinition.AssetPath)
+				else tools:FindFirstChild(toolId)
+			if template and template:IsA("Tool") then
+				local clone = template:Clone()
+				clone:SetAttribute("RoleplayOSToolId", toolId)
+				clone:SetAttribute("RoleplayOSEquipmentPassId", passId)
+				clone.Parent = backpack
+			else
+				self.context.Logger:Warning("Gamepass equipment is unavailable", {
+					Pass = passId,
+					Tool = toolId,
+					UserId = player.UserId,
+				})
+			end
+		end
+	end
+	return true, nil
+end
+
 function LoadoutService:ClearIssued(player: Player)
 	for _, container in { player:FindFirstChildOfClass("Backpack"), player.Character } do
 		if container then
