@@ -175,14 +175,16 @@ function DrivingControlsController:Start()
 			local size = self.settings.PedalSize
 			local right = layout.SafeRight + 20
 			local bottom = layout.HotbarBottom + 16
+			-- Side by side as a pedal box, brake to the left of the accelerator as
+			-- in a car. Both stay on the right: the left of the screen belongs to
+			-- Roblox's steering thumbstick, and a brake placed under the steering
+			-- thumb would be pressed by accident constantly.
 			self.accelerate.Size = UDim2.fromOffset(size, size)
-			self.brake.Size = UDim2.fromOffset(size, math.floor(size * 0.62))
+			self.brake.Size = UDim2.fromOffset(math.floor(size * 0.82), size)
 			self.accelerate.AnchorPoint = Vector2.new(1, 1)
 			self.brake.AnchorPoint = Vector2.new(1, 1)
-			-- Accelerator under the thumb, brake stacked above it, both inside
-			-- the strip reserved on the right while driving.
 			self.accelerate.Position = UDim2.new(1, -right, 1, -bottom)
-			self.brake.Position = UDim2.new(1, -right, 1, -(bottom + size + 12))
+			self.brake.Position = UDim2.new(1, -(right + size + 14), 1, -bottom)
 		end
 	)
 	table.insert(

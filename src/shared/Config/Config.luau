@@ -1140,6 +1140,13 @@ local Config = {
 		-- Written as well as the seat's own throttle, so a chassis that keeps its
 		-- input in this folder is driven without needing to know which fork it is.
 		ThrottleValueName = "Throttle",
+		-- Engine speed the sweep treats as full. Used only for the display.
+		Redline = 8000,
+		-- Road speed the sweep treats as full where no engine speed is reported.
+		TopSpeedMph = 150,
+		-- Segments in the cluster sweep. Roblox has no arc primitive, so the
+		-- sweep is a bar of discrete segments.
+		SweepSegments = 22,
 		RpmValueName = "RPM",
 	},
 	VehicleSpawning = {
