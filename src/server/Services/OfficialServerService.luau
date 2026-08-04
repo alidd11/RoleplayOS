@@ -160,6 +160,31 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	if not code then
 		return nil, reason
 	end
+	-- Saved and released before the teleport, not after.
+	--
+	-- A teleport is faster than a data store round trip. Leaving normally defers
+	-- the final save, so the destination was reached while this server still held
+	-- the profile lease, and it refused the load and kicked. The lease then sat
+	-- there for its full duration, which locked the player out of every server
+	-- including the one they came from: clicking join was close to a guaranteed
+	-- two minute lockout.
+	--
+	-- Releasing first also means the destination reads the state as it was when
+	-- they left rather than as it was at the last autosave.
+	local data = self.context.Services:Get("DataService")
+	local released, releaseReason = data:Save(player, true)
+	if not released then
+		self.context.Logger:Warning("Could not release the profile before a teleport", {
+			ServerId = serverId,
+			UserId = player.UserId,
+			Error = tostring(releaseReason),
+		})
+		-- Going anyway would hand the destination a lease it cannot take, so the
+		-- player is told to try again while they still have a working session
+		-- here rather than being sent somewhere that will refuse them.
+		return nil, "PROFILE_BUSY"
+	end
+
 	local options = Instance.new("TeleportOptions")
 	options.ReservedServerAccessCode = code
 	-- Carried so the destination knows which entry it is without having to work
@@ -172,6 +197,12 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 			"Official server teleport failed",
 			{ ServerId = serverId, UserId = player.UserId, Error = tostring(problem) }
 		)
+		-- The session was released for a journey that did not happen, so it is
+		-- taken back. Without this the player stays here with no profile and
+		-- every later action fails for a reason nobody could work out.
+		if player:IsDescendantOf(Players) then
+			data:Load(player)
+		end
 		return nil, "TELEPORT_FAILED"
 	end
 	return { ServerId = serverId }, nil

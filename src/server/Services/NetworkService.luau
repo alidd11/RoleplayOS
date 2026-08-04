@@ -102,6 +102,9 @@ function NetworkService:Start()
 				Code = reason or "OFFICIAL_SERVER_UNAVAILABLE",
 				Message = if reason == "ALREADY_ON_THIS_SERVER"
 					then "You are already on this server."
+					elseif
+						reason == "PROFILE_BUSY"
+					then "Your progress is still saving. Try again in a moment."
 					else "That server could not be joined right now.",
 				RequestId = requestId,
 			}
