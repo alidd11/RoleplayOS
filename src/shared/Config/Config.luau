@@ -396,6 +396,78 @@ local Config = {
 		Shotgun = { GamepassId = 1934043075, TeamName = "Civilian", ToolNames = { "Shotgun" } },
 		Rifle = { GamepassId = 1933239337, TeamName = "Civilian", ToolNames = { "Rifle" } },
 	},
+	-- People standing around the map who sell things.
+	--
+	-- Tag a model with the tag below and give it a RoleplayOSVendorId attribute
+	-- naming one of the definitions here. Anything with a PrimaryPart or a
+	-- HumanoidRootPart works, so a posed avatar, a shopkeeper rig or a market
+	-- stall are all the same thing as far as this is concerned.
+	--
+	-- Interaction is a ProximityPrompt, which Roblox renders and drives itself on
+	-- touch, gamepad and keyboard alike. That matters more than it sounds: a
+	-- bespoke click region would have needed separate handling per device and is
+	-- exactly the sort of thing that ends up unreachable on a phone.
+	Vendors = {
+		Tag = "RoleplayOSVendor",
+		-- Held to open the stall. Long enough that walking past does not trigger it.
+		HoldSeconds = 0.35,
+		ActivationDistance = 10,
+		-- Re-checked on the server when something is bought, since the client can
+		-- claim any distance it likes.
+		MaximumPurchaseDistance = 16,
+		Definitions = {
+			CornerShop = {
+				Name = "Corner Shop",
+				Subtitle = "Food and drink",
+				Items = {
+					{ Id = "Water", Kind = "Food", FoodId = "Water" },
+					{ Id = "Apple", Kind = "Food", FoodId = "Apple" },
+					{ Id = "Meal", Kind = "Food", FoodId = "Meal" },
+				},
+			},
+			-- Cash weapons. Priced against the wage rates, so a handgun is a few
+			-- hours of work rather than an afternoon's pocket change.
+			StreetDealer = {
+				Name = "Dealer",
+				Subtitle = "No questions asked",
+				Items = {
+					{ Id = "Knife", Kind = "Tool", ToolId = "Knife", Name = "Knife", Price = 900 },
+					{
+						Id = "Handgun",
+						Kind = "Tool",
+						ToolId = "Handgun",
+						Name = "Handgun",
+						Price = 7500,
+					},
+				},
+			},
+			-- Items carrying both a pass and a price. Owning the pass hands it over
+			-- for nothing; everybody else can still buy it with cash. Cash prices
+			-- are set high enough that the pass remains worth having.
+			LicensedDealer = {
+				Name = "Licensed Firearms",
+				Subtitle = "Permit holders only",
+				Items = {
+					{
+						Id = "PassShotgun",
+						Kind = "Tool",
+						ToolId = "Shotgun",
+						Name = "Shotgun",
+						GamepassId = 1934043075,
+						Price = 26000,
+					},
+					{
+						Id = "PassRifle",
+						Kind = "Tool",
+						ToolId = "Rifle",
+						Name = "Rifle",
+						GamepassId = 1933239337,
+						Price = 42000,
+					},
+				},
+			},
+		},
+	},
 	VehicleIdentity = {
 		MinimumRegistrationLength = 2,
 		MaximumRegistrationLength = 8,
@@ -1573,6 +1645,7 @@ local Config = {
 			-- players tap this far more often than any other control.
 			SetSprintState = { Capacity = 20, RefillPerSecond = 8 },
 			PurchaseFood = { Capacity = 2, RefillPerSecond = 0.25 },
+			PurchaseFromVendor = { Capacity = 3, RefillPerSecond = 0.3 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 		},

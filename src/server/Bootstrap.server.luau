@@ -68,6 +68,7 @@ local serviceOrder = {
 	"StationService",
 	"UniformService",
 	"LoadoutService",
+	"VendorService",
 	"SpawnService",
 	"DutyService",
 	"MDTService",

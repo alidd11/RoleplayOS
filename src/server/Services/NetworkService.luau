@@ -878,6 +878,28 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("PurchaseFromVendor", function(payload)
+		return type(payload) == "table"
+			and type(payload.VendorId) == "string"
+			and type(payload.ItemId) == "string"
+	end, function(player, payload, requestId)
+		local result, reason = self.context.Services:Get("VendorService"):Purchase(player, payload)
+		if not result then
+			return {
+				Success = false,
+				Code = reason or "VENDOR_PURCHASE_FAILED",
+				Message = "That purchase could not be completed.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("PurchaseFood", function(payload)
 		return type(payload) == "table" and type(payload.FoodId) == "string"
 	end, function(player, payload, requestId)

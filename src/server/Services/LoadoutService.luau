@@ -75,6 +75,49 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 	end
 	return true, nil
 end
+-- Puts one tool in a player's backpack, by the same asset rules the loadouts
+-- use. Returns false when the asset is missing, so a caller that has taken
+-- payment can refund rather than charging for nothing.
+--
+-- Not marked as duty issued: this is for things the player owns, and clearing a
+-- shift destroys duty items.
+function LoadoutService:GiveTool(
+	player: Player,
+	toolId: string,
+	source: string?
+): (boolean, string?)
+	if alreadyIssued(player, toolId) then
+		return false, "ALREADY_HELD"
+	end
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not backpack then
+		return false, "BACKPACK_UNAVAILABLE"
+	end
+	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
+	local tools = if assets then assets:FindFirstChild("Tools") else nil
+	if not tools then
+		return false, "TOOL_UNAVAILABLE"
+	end
+	local toolDefinition = self.context.Configuration.Tools[toolId]
+	local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
+		then resolve(assets, toolDefinition.AssetPath)
+		else tools:FindFirstChild(toolId)
+	if not template or not template:IsA("Tool") then
+		self.context.Logger:Warning(
+			"Tool asset is unavailable",
+			{ Tool = toolId, Source = source, UserId = player.UserId }
+		)
+		return false, "TOOL_UNAVAILABLE"
+	end
+	local clone = template:Clone()
+	clone:SetAttribute("RoleplayOSToolId", toolId)
+	if source then
+		clone:SetAttribute("RoleplayOSToolSource", source)
+	end
+	clone.Parent = backpack
+	return true, nil
+end
+
 -- Issues the items a player has bought a gamepass for.
 --
 -- EquipmentPasses maps a gamepass to the tools it unlocks, and nothing read it,
