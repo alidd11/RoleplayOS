@@ -1,5 +1,12 @@
 {
   "name": "RoleplayOSRealBaseplate",
+  "globIgnorePaths": [
+    "**/*.tmp*",
+    "**/*.tmp.*",
+    "**/.DS_Store",
+    "**/*.swp",
+    "**/*~"
+  ],
   "tree": {
     "$className": "DataModel",
     "$ignoreUnknownInstances": true,
@@ -8,10 +15,18 @@
       "RoleplayOS": {
         "$className": "Folder",
         "$ignoreUnknownInstances": true,
-        "Shared": { "$path": "src/shared/Utility" },
-        "Config": { "$path": "src/shared/Config" },
-        "Types": { "$path": "src/shared/Types" },
-        "Network": { "$path": "src/shared/Network" }
+        "Shared": {
+          "$path": "src/shared/Utility"
+        },
+        "Config": {
+          "$path": "src/shared/Config"
+        },
+        "Types": {
+          "$path": "src/shared/Types"
+        },
+        "Network": {
+          "$path": "src/shared/Network"
+        }
       }
     },
     "ServerScriptService": {
@@ -19,9 +34,15 @@
       "RoleplayOS": {
         "$className": "Folder",
         "$ignoreUnknownInstances": true,
-        "Services": { "$path": "src/server/Services" },
-        "Systems": { "$path": "src/server/Systems" },
-        "Bootstrap": { "$path": "src/server/Bootstrap.server.luau" }
+        "Services": {
+          "$path": "src/server/Services"
+        },
+        "Systems": {
+          "$path": "src/server/Systems"
+        },
+        "Bootstrap": {
+          "$path": "src/server/Bootstrap.server.luau"
+        }
       }
     },
     "ServerStorage": {
