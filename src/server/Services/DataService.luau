@@ -433,6 +433,11 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	-- Recorded so a lease held by a server that has gone away can be waited out
 	-- rather than treated as an unrecoverable failure.
 	local lockedUntil: number? = nil
+	-- Set when the stored profile could not be read at all, so it can be written
+	-- aside after the transform. Nothing may yield inside an UpdateAsync
+	-- transform, so the backup cannot be written from in there.
+	local quarantined: any = nil
+	local quarantineReason: string? = nil
 	-- Claimed for the duration of the store call so a second caller waits on this
 	-- one rather than opening its own. Cleared on every exit below, including the
 	-- failures, or a player who failed once could never be loaded again.
@@ -441,7 +446,17 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 		return self.store:UpdateAsync(tostring(player.UserId), function(stored)
 			local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
 			if not profile then
-				error(migrationError)
+				-- A profile that cannot be read is set aside and replaced, not
+				-- thrown on. Raising here is indistinguishable from an outage: it
+				-- is retried, then kicked, on every join, forever. A schema
+				-- rollback would have locked out everybody who played the newer
+				-- build with no way back.
+				--
+				-- The unreadable original is kept, so this loses nothing that can
+				-- be recovered by hand later.
+				quarantined = stored
+				quarantineReason = migrationError
+				profile = ProfileSchema.default(player.UserId)
 			end
 			local lock = profile.AuditMetadata.SessionLock
 			if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > os.time() then
@@ -512,6 +527,25 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	self.sessions[player.UserId] =
 		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil, Revision = 0 }
 	self.loading[player.UserId] = nil
+	if quarantined ~= nil then
+		self.context.Logger:Error("Profile could not be read and was set aside", {
+			UserId = player.UserId,
+			Reason = quarantineReason,
+		})
+		-- Written outside the transform and after the load has succeeded, so a
+		-- failure to keep the backup costs the record rather than the session.
+		local key = "quarantine:" .. tostring(player.UserId) .. ":" .. tostring(os.time())
+		if self:_checkKey(key, "Profiles") then
+			self:_retry(function()
+				return self.store:SetAsync(key, {
+					UserId = player.UserId,
+					Reason = quarantineReason,
+					StoredAt = os.time(),
+					Profile = quarantined,
+				})
+			end)
+		end
+	end
 	-- Measured once per join rather than on every save, which would encode the
 	-- whole profile every forty seconds for a number that barely moves.
 	self:_measure(player, loaded)

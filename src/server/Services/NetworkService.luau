@@ -963,16 +963,18 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	-- Food is bought from a vendor, and PurchaseFromVendor re-checks that the
+	-- player is standing at one. This endpoint reached the same purchase with no
+	-- proximity rule at all, so a player could eat mid-pursuit, from a rooftop or
+	-- inside a custody cell. It is kept only so an existing client build does not
+	-- break, and refuses.
 	self.context.Network:RegisterFunction("PurchaseFood", function(payload)
 		return type(payload) == "table" and type(payload.FoodId) == "string"
-	end, function(player, payload, requestId)
-		local result, reason =
-			self.context.Services:Get("NeedsService"):PurchaseFood(player, payload.FoodId)
+	end, function(_, _, requestId)
 		return {
-			Success = result ~= nil,
-			Code = if result then "OK" else reason,
-			Message = if result then "Food consumed." else "The food could not be purchased.",
-			Data = result,
+			Success = false,
+			Code = "VENDOR_REQUIRED",
+			Message = "Food is bought from a shop. Find one on the map.",
 			RequestId = requestId,
 		}
 	end)

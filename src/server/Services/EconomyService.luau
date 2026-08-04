@@ -2,7 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
-local EconomyService = { seen = {} }
+local EconomyService = { seen = {}, order = {} }
 function EconomyService:Init(context: any)
 	self.context = context
 end
@@ -20,6 +20,19 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 		return false, reason
 	end
 	seen[transaction.TransactionId] = true
+	-- Bounded. Identifiers are server generated GUIDs used once, so this only
+	-- needs to be long enough that a replay cannot outrun it; keeping every
+	-- identifier a character ever used grows for the life of the server.
+	local order = self.order[transaction.CharacterId] or {}
+	self.order[transaction.CharacterId] = order
+	table.insert(order, transaction.TransactionId)
+	local maximum = self.context.Configuration.Economy.MaximumTransactionHistory or 200
+	while #order > maximum do
+		local oldest = table.remove(order, 1)
+		if oldest then
+			seen[oldest] = nil
+		end
+	end
 	transaction.Timestamp = os.time()
 	transaction.Result = "Applied"
 	transaction.Metadata = transaction.Metadata or {}
@@ -51,5 +64,6 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 end
 function EconomyService:Destroy()
 	table.clear(self.seen)
+	table.clear(self.order)
 end
 return EconomyService

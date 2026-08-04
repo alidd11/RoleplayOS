@@ -85,6 +85,15 @@ function RoadSafetyService:_issue(
 		Status = "Unpaid",
 	}
 	table.insert(character.DrivingRecord.Fines, record)
+	-- Trimmed oldest first. This is the only history in a profile written by an
+	-- automated source: cameras issue records unattended, per character, with
+	-- nobody choosing to do it. Left unbounded it is the one list that reaches
+	-- the four megabyte ceiling on its own, and past that the profile stops
+	-- saving entirely.
+	local maximum = self.context.Configuration.Framework.MaximumDrivingFines or 80
+	while #character.DrivingRecord.Fines > maximum do
+		table.remove(character.DrivingRecord.Fines, 1)
+	end
 	character.DrivingRecord.Points = math.min(99, (character.DrivingRecord.Points or 0) + points)
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)

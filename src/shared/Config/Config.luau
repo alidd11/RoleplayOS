@@ -90,6 +90,9 @@ local Config = {
 		-- the entire profile.
 		MaximumApplicationHistory = 60,
 		MaximumEmploymentHistory = 40,
+		-- Speed and red light cameras write these without anybody asking, so this
+		-- is the history most able to grow on its own.
+		MaximumDrivingFines = 80,
 	},
 	ContentQuality = {
 		RequireCertification = true,

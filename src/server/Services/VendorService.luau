@@ -110,12 +110,12 @@ function VendorService:_watch(model: Instance)
 	-- prompt. Kept in the shared list it would accumulate for the life of the
 	-- server as vendors stream in and out.
 	self.promptConnections[model] = prompt.Triggered:Connect(function(player)
-			self.openEvent:FireClient(player, {
-				VendorId = model:GetAttribute("RoleplayOSVendorId"),
-				Name = definition.Name,
-				Subtitle = definition.Subtitle,
-				Items = self:_catalogue(player, definition),
-			})
+		self.openEvent:FireClient(player, {
+			VendorId = model:GetAttribute("RoleplayOSVendorId"),
+			Name = definition.Name,
+			Subtitle = definition.Subtitle,
+			Items = self:_catalogue(player, definition),
+		})
 	end)
 end
 

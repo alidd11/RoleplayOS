@@ -139,9 +139,15 @@ function DealershipService:Purchase(
 		RelatedEntityId = definitionId,
 		Metadata = {},
 	}
-	local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, transaction)
-	if not paid then
-		return nil, reason
+	-- A free vehicle is granted without a transaction. The economy rejects an
+	-- amount of zero as not positive, which is right for a payment and wrong for
+	-- a promotion: sending one would refuse the purchase with a code nobody could
+	-- act on rather than handing over the car.
+	if (definition.Price or 0) > 0 then
+		local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, transaction)
+		if not paid then
+			return nil, reason
+		end
 	end
 	local vehicle, creationError = self.context.Services
 		:Get("VehicleOwnershipService")
@@ -151,16 +157,18 @@ function DealershipService:Purchase(
 			"Paid vehicle creation failed",
 			{ TransactionId = transaction.TransactionId, Error = creationError }
 		)
-		self.context.Services:Get("EconomyService"):Apply(player, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = characterId,
-			Amount = definition.Price,
-			Direction = "Credit",
-			ReasonCode = "VEHICLE_PURCHASE_REFUND",
-			Description = "Automatic refund: " .. definition.Name,
-			RelatedEntityId = transaction.TransactionId,
-			Metadata = {},
-		})
+		if (definition.Price or 0) > 0 then
+			self.context.Services:Get("EconomyService"):Apply(player, {
+				TransactionId = HttpService:GenerateGUID(false),
+				CharacterId = characterId,
+				Amount = definition.Price,
+				Direction = "Credit",
+				ReasonCode = "VEHICLE_PURCHASE_REFUND",
+				Description = "Automatic refund: " .. definition.Name,
+				RelatedEntityId = transaction.TransactionId,
+				Metadata = {},
+			})
+		end
 	end
 	return vehicle, creationError
 end

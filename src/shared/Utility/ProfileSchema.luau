@@ -47,9 +47,22 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if type(data) ~= "table" then
 		return nil, "PROFILE_NOT_TABLE"
 	end
-	local version = data.SchemaVersion or 0
+	-- Coerced rather than compared directly. A stored SchemaVersion that is not a
+	-- number would otherwise raise "attempt to compare" inside the transform, and
+	-- a raise there is indistinguishable from an outage: retried, then a kick,
+	-- every join, forever.
+	local version = tonumber(data.SchemaVersion) or 0
 	if version > ProfileSchema.CURRENT_VERSION then
 		return nil, "PROFILE_VERSION_TOO_NEW"
+	end
+	data.SchemaVersion = version
+	-- The migrations below walk these, so a corrupt one has to be replaced here
+	-- rather than allowed to throw halfway through.
+	if data.Characters ~= nil and type(data.Characters) ~= "table" then
+		data.Characters = {}
+	end
+	if data.Applications ~= nil and type(data.Applications) ~= "table" then
+		data.Applications = {}
 	end
 	if version == 0 then
 		data.SchemaVersion = 1
