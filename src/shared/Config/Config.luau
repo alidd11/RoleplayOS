@@ -143,6 +143,41 @@ local Config = {
 		MaximumTransactionHistory = 200,
 		TransferMaximum = 100000,
 	},
+	-- Wages. Without an income the economy only ever drains, so prices carry no
+	-- meaning: these rates are what every price in the game is measured against.
+	--
+	-- They are set from what things cost rather than from what sounds plausible.
+	-- Against the starter vehicle at fifteen thousand, an emergency shift buys a
+	-- first car in roughly six hours of play, the premium saloon in about
+	-- eighteen and the starter flat in about thirty, which leaves the first
+	-- purchase reachable in a session or two and property a long-term goal.
+	-- Change these together with prices, never one alone.
+	Payroll = {
+		Enabled = true,
+		-- Pay is settled this often while working, rather than in a lump on
+		-- clocking off, so a crash or a disconnect costs at most one period.
+		IntervalSeconds = 120,
+		-- Studs a character must have covered since the last payment to be paid
+		-- for it. A character left standing must not earn the same as one
+		-- answering calls, or every price stops meaning anything.
+		MinimumMovementStuds = 24,
+		DepartmentHourlyRates = {
+			Police = 2600,
+			Ambulance = 2600,
+			Fire = 2500,
+			Control = 2300,
+			Prison = 2200,
+			Highways = 2000,
+			Transport = 1900,
+		},
+		DefaultDepartmentHourlyRate = 2000,
+		-- Added per rank above the first, so seniority is worth holding.
+		RankHourlyBonus = 180,
+		-- Civilian employment pays less than an emergency service shift, so the
+		-- services remain the career path. A job may set its own HourlyRate to
+		-- override this; BaseWage is a per-task figure and is not an hourly rate.
+		CivilianHourlyRate = 1400,
+	},
 	Progression = {
 		BaseXP = 100,
 		GrowthFactor = 1.18,
