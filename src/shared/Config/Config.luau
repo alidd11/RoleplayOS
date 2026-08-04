@@ -44,7 +44,12 @@ local Config = {
 		-- Saving also renews the session lease, so this is what keeps a live
 		-- server's claim on a profile alive.
 		AutosaveSeconds = 60,
-		ShutdownSaveSeconds = 25,
+		-- Roblox allows about thirty seconds for BindToClose. Two services block on
+		-- shutdown and their budgets add up rather than sharing: incidents take
+		-- half of this and profiles take all of it, so twenty five meant a worst
+		-- case of thirty seven and a half and the process was killed mid save.
+		-- Sixteen keeps the pair under twenty five with room for the rest.
+		ShutdownSaveSeconds = 16,
 		MaxSaveAttempts = 4,
 		-- How long a profile stays claimed by a server, and how long a player is
 		-- locked out after a server dies without releasing it.

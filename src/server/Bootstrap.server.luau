@@ -96,19 +96,27 @@ for _, name in serviceOrder do
 	registry:Register(name, require(script.Parent.Services[name]))
 end
 
+-- Armed before anything is started.
+--
+-- Registered after startup, a service that threw took the whole script down
+-- before this line ran, so nothing was ever bound: the services that had already
+-- started kept running, and when the server eventually closed no Destroy ran at
+-- all. Every online player lost the time since their last autosave and left a
+-- stamped lease behind that locked them out of every other server.
+game:BindToClose(function()
+	registry:Destroy(context)
+	context.Network:Destroy()
+end)
+
 local ok, problem = pcall(function()
 	registry:Initialise(context)
 	registry:Start(context)
 end)
 if not ok then
+	-- Reported, not re-raised. A server missing one service is worth far more
+	-- than no server at all, and re-raising here only removed the running one.
 	logger:Error("RoleplayOS startup failed", { Error = tostring(problem) })
-	error(problem, 0)
 end
-
-game:BindToClose(function()
-	registry:Destroy(context)
-	context.Network:Destroy()
-end)
 logger:Info("RoleplayOS started", {
 	ServiceCount = #serviceOrder,
 	SchemaVersion = Config.Framework.SchemaVersion,

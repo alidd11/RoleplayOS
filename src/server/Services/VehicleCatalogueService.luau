@@ -64,7 +64,14 @@ function VehicleCatalogueService:_definitionFrom(model: Instance, path: { string
 		return nil
 	end
 	local service = root == "Services"
+	-- Negative prices are discarded rather than trusted. The configuration
+	-- validator rejects them, but it runs before discovery, so nothing checked
+	-- these; and the purchase path skips the charge entirely when a price is not
+	-- above zero, which turns a mistyped attribute into a free car for everybody.
 	local price = tonumber(model:GetAttribute("Price"))
+	if price and price < 0 then
+		price = nil
+	end
 	local colours = split(model:GetAttribute("Colours"))
 	local gamepassId = tonumber(model:GetAttribute("GamepassId"))
 	local roleIds = split(model:GetAttribute("RoleIds"))
@@ -83,9 +90,28 @@ function VehicleCatalogueService:_definitionFrom(model: Instance, path: { string
 
 	if service then
 		-- Services/<Department>/[<Division>/]<Model>
+		--
+		-- The folder names have to name real departments and divisions. The
+		-- configuration validator would have caught an unknown one, but it runs
+		-- before discovery, so an access rule pointing at a department that does
+		-- not exist would reach the evaluator unchallenged.
+		if not self.context.Configuration.Departments[path[2]] then
+			self.context.Logger:Warning("Vehicle folder names an unknown department", {
+				Vehicle = model.Name,
+				Department = path[2],
+			})
+			return nil
+		end
 		definition.DepartmentId = path[2]
 		definition.TeamName = path[2]
 		if #path >= 4 then
+			if not self.context.Configuration.Divisions[path[3]] then
+				self.context.Logger:Warning("Vehicle folder names an unknown division", {
+					Vehicle = model.Name,
+					Division = path[3],
+				})
+				return nil
+			end
 			definition.DivisionId = path[3]
 		end
 		if #roleIds > 0 then
@@ -127,6 +153,17 @@ function VehicleCatalogueService:_walk(instance: Instance, path: { string })
 			local definition = self:_definitionFrom(child, nextPath)
 			if definition then
 				local existing = self.context.Configuration.Vehicles[definition.Id]
+				-- Two models sharing a name is a mistake worth reporting: the
+				-- second silently replaced the first, so one of the two cars
+				-- never appeared and nobody was told which.
+				if existing and existing.Discovered == true then
+					self.context.Logger:Warning("Two vehicles share an identifier", {
+						Id = definition.Id,
+						Kept = table.concat(existing.AssetPath or {}, "/"),
+						Ignored = table.concat(definition.AssetPath, "/"),
+					})
+					continue
+				end
 				if existing then
 					-- Hand written wins. A configured vehicle has usually been
 					-- tuned deliberately, and silently replacing it with folder

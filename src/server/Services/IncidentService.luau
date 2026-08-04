@@ -142,8 +142,21 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		Revision = call.Revision or 1,
 	}
 	task.spawn(function()
-		local stored, reason = self:_persist(snapshot)
+		-- The claim is released whether persisting returns or raises. Releasing it
+		-- only on the way out meant a single raise held it forever: that incident
+		-- could never be scheduled again, and shutdown then spent its whole
+		-- deadline waiting for something that had already died.
+		local ok, stored, reason = pcall(function()
+			return self:_persist(snapshot)
+		end)
 		self.pending[incidentId] = nil
+		if not ok then
+			self.context.Logger:Error("Closed dispatch incident persistence raised", {
+				IncidentId = incidentId,
+				Error = tostring(stored),
+			})
+			return
+		end
 		if not stored then
 			self.context.Logger:Error("Closed dispatch incident persistence failed", {
 				IncidentId = incidentId,

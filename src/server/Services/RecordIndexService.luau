@@ -270,12 +270,24 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any)
 	local state = { Resync = false }
 	self.pendingSync[key] = state
 	task.spawn(function()
+		-- Released whether indexing returns or raises. Held on a raise, every
+		-- later change to this character was silently refused for the life of the
+		-- server: bookings appeared to succeed and never reached the index.
 		local ok, reason
-		repeat
-			state.Resync = false
-			ok, reason = self:IndexCharacter(player, character)
-		until not state.Resync
+		local safe, raised = pcall(function()
+			repeat
+				state.Resync = false
+				ok, reason = self:IndexCharacter(player, character)
+			until not state.Resync
+		end)
 		self.pendingSync[key] = nil
+		if not safe then
+			self.context.Logger:Error("Deferred MDT character indexing raised", {
+				CharacterId = character.CharacterId,
+				Error = tostring(raised),
+			})
+			return
+		end
 		if not ok then
 			self.context.Logger:Warning("Deferred MDT character indexing failed", {
 				CharacterId = character.CharacterId,
