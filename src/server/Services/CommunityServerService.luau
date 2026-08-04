@@ -37,6 +37,22 @@ function CommunityServerService:RequiredGroupLinkId(): string?
 	if fromServer then
 		return fromServer
 	end
+	-- Every server that is not the published place asks for the community group.
+	--
+	-- A private community is somewhere its owner runs to their own standards, and
+	-- a whitelisted one is staffed by people who applied; both are downstream of
+	-- being a member here in the first place. Only the public place is open to
+	-- anybody, which is what makes it the public tier.
+	--
+	-- Read from PrivateServerOwnerId directly rather than through Kind, which is
+	-- derived from this and would otherwise call back into it.
+	if game.PrivateServerOwnerId ~= 0 then
+		local community = self.context.Configuration.Communities
+		local linkId = community and community.RequiredGroupLinkId
+		if type(linkId) == "string" then
+			return linkId
+		end
+	end
 	local access = self.context.Configuration.ExperienceAccess
 	if access.Enabled == true and type(access.RequiredGroupLinkId) == "string" then
 		return access.RequiredGroupLinkId

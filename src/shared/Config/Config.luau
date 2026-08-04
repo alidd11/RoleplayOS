@@ -190,6 +190,11 @@ local Config = {
 	},
 	Communities = {
 		Enabled = true,
+		-- The group a player must be in before they can join any private
+		-- community. Private servers are run to their owner's standards and
+		-- whitelisted ones are staffed by people who applied; both sit downstream
+		-- of membership here. Set to nil to let anybody into a private server.
+		RequiredGroupLinkId = "UniversalProjects",
 		AllowPrivateServerCommunities = true,
 		MaximumMembershipsPerPlayer = 20,
 		DefaultTemplateId = "RoleplayCommunity",
