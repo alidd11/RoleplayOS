@@ -158,12 +158,68 @@ end
 -- The panel is authored at a fixed size, so it is scaled against the area the
 -- device actually leaves usable. Measuring the raw viewport pushed the panel
 -- under the top bar and device cutouts on phones and notched displays.
+-- Two authored sizes rather than one shrunk to fit.
+--
+-- A landscape phone is wide and very short, about nine hundred by four hundred
+-- once the insets are taken out. Fitting a panel authored at 580 high into that
+-- means rendering everything at roughly two thirds, which turns the ten and
+-- eleven pixel labels into six and seven pixel ones. Scaling cannot rescue a
+-- layout that is simply too tall; the layout has to be shorter, so that the
+-- scale stays near one and the text stays the size it was designed to be.
+local DESIGN = Vector2.new(760, 580)
+local COMPACT_DESIGN = Vector2.new(700, 392)
+
 function DealershipController:_setScale(layout: any)
-	if not self.scale then
+	if not self.scale or not self.panel then
 		return
 	end
-	self.scale.Scale =
-		self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(760, 580), 28)
+	local compact = layout.Compact == true
+	local design = if compact then COMPACT_DESIGN else DESIGN
+	self.panel.Size = UDim2.fromOffset(design.X, design.Y)
+	self.scale.Scale = self.context.Controllers.UIOrchestrator:FitScale(layout, design, 20)
+	if self.compact ~= compact then
+		self.compact = compact
+		self:_applyDensity()
+		-- Card heights differ between the two, so the list has to be rebuilt
+		-- rather than left at whatever density it was drawn with.
+		if self.panel.Visible then
+			self:_render()
+		end
+	end
+end
+
+-- Moves the header furniture up and the list with it when the panel is short.
+-- The eyebrow and the page description are the first things to go: they are
+-- context, and context is what a small screen has least room for.
+function DealershipController:_applyDensity()
+	local compact = self.compact == true
+	if self.eyebrow then
+		self.eyebrow.Visible = not compact
+	end
+	if self.title then
+		self.title.Position = UDim2.fromOffset(24, if compact then 16 else 39)
+		self.title.TextSize = if compact then 19 else 23
+	end
+	for index, tab in { self.ownedTab, self.serviceTab, self.showroomTab } do
+		if tab then
+			tab.Position = UDim2.fromOffset(tab.Position.X.Offset, if compact then 52 else 87)
+			tab.Size = UDim2.fromOffset(tab.Size.X.Offset, if compact then 36 else 42)
+		end
+		local _ = index
+	end
+	if self.close then
+		self.close.Position = UDim2.new(1, -62, 0, if compact then 14 else 20)
+	end
+	if self.heading then
+		self.heading.Position = UDim2.fromOffset(24, if compact then 98 else 151)
+	end
+	if self.list then
+		self.list.Position = UDim2.fromOffset(24, if compact then 122 else 181)
+		self.list.Size = UDim2.new(1, -48, 1, if compact then -140 else -205)
+	end
+	if self.empty then
+		self.empty.Position = UDim2.fromOffset(24, if compact then 130 else 190)
+	end
 end
 
 function DealershipController:_setOpen(open: boolean)
@@ -193,8 +249,12 @@ end
 -- says what unlocks it, since hiding what cannot yet be afforded leaves a player
 -- with no reason to earn anything.
 function DealershipController:_showroomCard(vehicle: any)
+	-- Shorter cards on a short screen, so three fit where two would. The list is
+	-- the only part of this panel worth the space, and a card that never comes
+	-- into view is worse than a slightly tighter one.
+	local compact = self.compact == true
 	local card = Instance.new("Frame")
-	card.Size = UDim2.new(1, -8, 0, 104)
+	card.Size = UDim2.new(1, -8, 0, if compact then 78 else 104)
 	card.BackgroundColor3 = colours.surface
 	card.BorderSizePixel = 0
 	card.Parent = self.list
@@ -202,19 +262,19 @@ function DealershipController:_showroomCard(vehicle: any)
 
 	local buyable = not vehicle.Locked and vehicle.Affordable and not vehicle.Owned
 	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.fromOffset(4, 64)
-	stripe.Position = UDim2.fromOffset(0, 20)
+	stripe.Size = UDim2.fromOffset(4, if compact then 46 else 64)
+	stripe.Position = UDim2.fromOffset(0, if compact then 16 else 20)
 	stripe.BackgroundColor3 = if buyable then colours.success else colours.locked
 	stripe.BorderSizePixel = 0
 	stripe.Parent = card
 
-	local name = label(card, tostring(vehicle.Name), 15, true)
-	name.Position = UDim2.fromOffset(20, 17)
-	name.Size = UDim2.new(1, -260, 0, 22)
+	local name = label(card, tostring(vehicle.Name), if compact then 14 else 15, true)
+	name.Position = UDim2.fromOffset(20, if compact then 11 else 17)
+	name.Size = UDim2.new(1, -252, 0, 22)
 
 	local price = label(card, string.format("£%d", vehicle.Price or 0), 13, true)
-	price.Position = UDim2.fromOffset(20, 43)
-	price.Size = UDim2.new(1, -260, 0, 18)
+	price.Position = UDim2.fromOffset(20, if compact then 33 else 43)
+	price.Size = UDim2.new(1, -252, 0, 18)
 	price.TextColor3 = if vehicle.Affordable then colours.success else colours.locked
 
 	local state = if vehicle.Owned
@@ -223,9 +283,11 @@ function DealershipController:_showroomCard(vehicle: any)
 		elseif vehicle.Locked then tostring(vehicle.LockedReason or "LOCKED")
 		elseif not vehicle.Affordable then "NOT ENOUGH MONEY"
 		else "AVAILABLE"
-	local status = label(card, state, 10, true)
-	status.Position = UDim2.fromOffset(20, 68)
-	status.Size = UDim2.new(1, -260, 0, 21)
+	-- Never below eleven: this line carries the reason a car cannot be bought,
+	-- which is the one thing on the card a player has to be able to read.
+	local status = label(card, state, if compact then 11 else 10, true)
+	status.Position = UDim2.fromOffset(20, if compact then 54 else 68)
+	status.Size = UDim2.new(1, -252, 0, 21)
 	status.TextColor3 = if buyable then colours.success else colours.locked
 
 	-- Colours cycle on one button rather than opening a second panel. There are
@@ -236,8 +298,8 @@ function DealershipController:_showroomCard(vehicle: any)
 		else { "Default" }
 	local chosen = 1
 	local colourButton = button(card, tostring(palette[chosen]))
-	colourButton.Position = UDim2.new(1, -232, 0, 32)
-	colourButton.Size = UDim2.fromOffset(100, 40)
+	colourButton.Position = UDim2.new(1, -226, 0, if compact then 19 else 32)
+	colourButton.Size = UDim2.fromOffset(98, if compact then 40 else 40)
 	colourButton.BackgroundColor3 = colours.raised
 	table.insert(
 		self.connections,
@@ -254,7 +316,7 @@ function DealershipController:_showroomCard(vehicle: any)
 			elseif vehicle.Locked and vehicle.GamepassId then "GET PASS"
 			else "BUY"
 	)
-	action.Position = UDim2.new(1, -124, 0, 32)
+	action.Position = UDim2.new(1, -122, 0, if compact then 19 else 32)
 	action.Size = UDim2.fromOffset(100, 40)
 	action.BackgroundColor3 = if buyable or (vehicle.Locked and vehicle.GamepassId)
 		then colours.accent
@@ -548,9 +610,11 @@ function DealershipController:_buildUI()
 	eyebrow.Position = UDim2.fromOffset(24, 19)
 	eyebrow.Size = UDim2.fromOffset(300, 18)
 	eyebrow.TextColor3 = colours.muted
+	self.eyebrow = eyebrow
 	local title = label(panel, "Dealership & Garage", 23, true)
 	title.Position = UDim2.fromOffset(24, 39)
 	title.Size = UDim2.new(1, -100, 0, 32)
+	self.title = title
 	local close = button(panel, "×")
 	close.Position = UDim2.new(1, -62, 0, 20)
 	close.Size = UDim2.fromOffset(38, 38)
