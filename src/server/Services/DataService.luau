@@ -270,8 +270,32 @@ function DataService:_retry(operation: () -> any, final: ((any) -> boolean)?): (
 end
 
 function DataService:Load(player: Player, waited: boolean?): (any?, string?)
+	-- A rejoin routinely outruns the departure it follows. Leaving defers a
+	-- final save, that save is a DataStore round trip, and the session is only
+	-- dropped once it returns. Roblox frequently puts a returning player back on
+	-- the same server, so arriving inside that window found the outgoing session
+	-- still present and refused the load, which the join handler turned into a
+	-- kick. Leaving and immediately rejoining was therefore close to a reliable
+	-- way to be kicked.
+	--
+	-- The outgoing save must still finish first, so this waits for the handover
+	-- rather than discarding it: loading over a save in flight would race two
+	-- writers on one profile.
 	if self.sessions[player.UserId] then
-		return nil, "SESSION_ALREADY_LOADED"
+		local deadline = os.clock()
+			+ (self.context.Configuration.Framework.SessionHandoverSeconds or 10)
+		while self.sessions[player.UserId] and os.clock() < deadline do
+			if not player:IsDescendantOf(Players) then
+				return nil, "PLAYER_LEFT"
+			end
+			task.wait(0.1)
+		end
+		if self.sessions[player.UserId] then
+			self.context.Logger:Warning("Previous session did not release in time", {
+				UserId = player.UserId,
+			})
+			return nil, "SESSION_ALREADY_LOADED"
+		end
 	end
 	if self.mock then
 		local profile = ProfileSchema.default(player.UserId)
@@ -457,9 +481,17 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 		end
 		return true, nil
 	end
+	-- A release that failed still drops the session. The player has gone, so
+	-- holding their profile in memory saves nothing and blocks their return:
+	-- every later load on this server would find the session still present and
+	-- refuse, locking them out until the server itself died. The stored lease
+	-- expires on its own clock, which is what that mechanism is for.
+	if release then
+		self.sessions[player.UserId] = nil
+	end
 	self.context.Logger:Error(
 		"Profile save failed",
-		{ UserId = player.UserId, Error = tostring(problem) }
+		{ UserId = player.UserId, Error = tostring(problem), Released = release == true }
 	)
 	return false, "PROFILE_SAVE_FAILED"
 end

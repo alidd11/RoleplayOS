@@ -68,6 +68,12 @@ local Config = {
 		-- back in a moment, which is a worse outcome than loading but a much
 		-- better one than a silent disconnection.
 		MaximumLeaseWaitSeconds = 12,
+		-- How long a join waits for the same player's previous session on this
+		-- server to finish saving and let go. Roblox often puts a returning
+		-- player back on the server they just left, so this covers the ordinary
+		-- case of leaving and rejoining straight away rather than an unusual one.
+		-- It must comfortably exceed a save that has to retry.
+		SessionHandoverSeconds = 10,
 	},
 	ContentQuality = {
 		RequireCertification = true,
