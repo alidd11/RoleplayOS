@@ -17,7 +17,6 @@
 -- Where neither contract reaches the chassis the pedals cannot work, and that
 -- is reported rather than left as a silent dead control.
 
-local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -212,7 +211,6 @@ function DrivingControlsController:Start()
 end
 
 function DrivingControlsController:Destroy()
-	ContextActionService:UnbindAction("RoleplayOSDrivingControls")
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

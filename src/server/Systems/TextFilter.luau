@@ -78,8 +78,12 @@ function TextFilter.forUser(
 	toUserId: number,
 	context: Enum.TextFilterContext?
 ): (string?, string?)
+	-- GetNonChatStringForUserAsync, not GetChatForUserAsync. Every caller here is
+	-- non-chat text -- phone messages, MDT records -- so the chat extractor was
+	-- the wrong one on meaning alone, before considering that it is deprecated
+	-- and the non-chat pair is not.
 	return run(text, fromUserId, context, function(result)
-		local ok, value = pcall(result.GetChatForUserAsync, result, toUserId)
+		local ok, value = pcall(result.GetNonChatStringForUserAsync, result, toUserId)
 		return if ok then value else nil
 	end)
 end

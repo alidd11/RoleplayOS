@@ -104,7 +104,16 @@ function VehicleCatalogueService:_definitionFrom(model: Instance, path: { string
 			GamepassId = gamepassId,
 			DisplayWhenLocked = true,
 		}
-	elseif not service then
+	elseif service then
+		-- A service vehicle is gated on the department that owns the folder it
+		-- was found in. Left unset it would have been nil, and the evaluator
+		-- indexes the rule it is given, so the first discovered police car would
+		-- have thrown rather than been refused.
+		definition.Access = {
+			AccessType = "Department",
+			DepartmentId = definition.DepartmentId,
+		}
+	else
 		definition.Access = { AccessType = "Public" }
 	end
 	return definition
@@ -149,6 +158,12 @@ end
 function VehicleCatalogueService:MatchesPath(definition: any, prefix: { string }): boolean
 	local path = definition and definition.AssetPath
 	if type(path) ~= "table" then
+		return false
+	end
+	-- An empty prefix would match everything, and "sell everything" is the
+	-- natural way somebody would write it. Refused rather than silently putting
+	-- every service vehicle on a civilian forecourt.
+	if #prefix == 0 then
 		return false
 	end
 	for index, segment in prefix do

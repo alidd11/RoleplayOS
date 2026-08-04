@@ -14,7 +14,7 @@
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 
-local VendorService = { connections = {}, prompts = {} }
+local VendorService = { connections = {}, prompts = {}, promptConnections = {} }
 
 function VendorService:Init(context: any)
 	self.context = context
@@ -106,20 +106,25 @@ function VendorService:_watch(model: Instance)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = anchor
 	self.prompts[model] = prompt
-	table.insert(
-		self.connections,
-		prompt.Triggered:Connect(function(player)
+	-- Held against the model so removing the tag releases the connection with the
+	-- prompt. Kept in the shared list it would accumulate for the life of the
+	-- server as vendors stream in and out.
+	self.promptConnections[model] = prompt.Triggered:Connect(function(player)
 			self.openEvent:FireClient(player, {
 				VendorId = model:GetAttribute("RoleplayOSVendorId"),
 				Name = definition.Name,
 				Subtitle = definition.Subtitle,
 				Items = self:_catalogue(player, definition),
 			})
-		end)
-	)
+	end)
 end
 
 function VendorService:_unwatch(model: Instance)
+	local connection = self.promptConnections[model]
+	if connection then
+		connection:Disconnect()
+		self.promptConnections[model] = nil
+	end
 	local prompt = self.prompts[model]
 	if prompt then
 		prompt:Destroy()

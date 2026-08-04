@@ -21,7 +21,7 @@ local C = {
 	Pass = Color3.fromRGB(245, 196, 88),
 }
 
-local VendorController = { connections = {}, rows = {} }
+local VendorController = { connections = {}, rows = {}, rowConnections = {} }
 
 function VendorController:Init(context: any)
 	self.context = context
@@ -117,6 +117,10 @@ function VendorController:_mount()
 end
 
 function VendorController:_clear()
+	for _, connection in self.rowConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.rowConnections)
 	for _, row in self.rows do
 		row:Destroy()
 	end
@@ -162,8 +166,11 @@ function VendorController:_row(item: any, order: number)
 	action.Parent = row
 	Instance.new("UICorner", action).CornerRadius = UDim.new(0, 10)
 
+	-- Kept with the row rather than in the controller's list. A stall reopened a
+	-- hundred times would otherwise leave a hundred dead connections per item
+	-- behind, since the rows are destroyed and the connections were not.
 	table.insert(
-		self.connections,
+		self.rowConnections,
 		action.Activated:Connect(function()
 			self:_purchase(item, action)
 		end)

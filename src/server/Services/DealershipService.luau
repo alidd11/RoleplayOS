@@ -25,7 +25,10 @@ function DealershipService:Catalogue(player: Player, terminalId: string): (any?,
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local characterId = session and session.ActiveCharacterId
 	local character = characterId and session.Profile.Characters[characterId]
-	local balance = character and character.Economy and character.Economy.Bank or 0
+	-- Balance, not Bank. A character's account is { Balance, Cash, Transactions },
+	-- so reading Bank was always nil and the forecourt told every player they
+	-- could afford nothing while the purchase itself would have gone through.
+	local balance = character and character.Economy and character.Economy.Balance or 0
 	local owned = {}
 	for _, vehicle in self.context.Services:Get("VehicleOwnershipService"):List(player) do
 		owned[vehicle.DefinitionId] = true

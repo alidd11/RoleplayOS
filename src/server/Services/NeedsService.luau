@@ -77,9 +77,13 @@ function NeedsService:_applySpeed(player: Player, state: any, humanoid: Humanoid
 	if player:GetAttribute("RoleplayOSCuffed") then
 		state.Sprinting = false
 		speed = 7
-		humanoid.JumpPower = 0
+		-- Jumping is disabled by state rather than by JumpPower. JumpPower only
+		-- applies when Humanoid.UseJumpPower is true, and that defaults to false
+		-- in modern experiences, so writing zero to it did nothing at all and a
+		-- cuffed suspect could simply jump away.
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 	else
-		humanoid.JumpPower = 50
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	end
 	humanoid.WalkSpeed = speed
 end

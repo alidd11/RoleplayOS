@@ -72,7 +72,18 @@ end
 -- than scattering people across half empty worlds.
 function OfficialServerService:_pickInstance(serverId: string): (string?, number?, string?)
 	local data = self.context.Services:Get("DataService")
-	local stored = data:GetCommunity(self:_storageKey(serverId))
+	local stored, storeError = data:GetCommunity(self:_storageKey(serverId))
+	if storeError then
+		-- "No record" and "could not read" arrive the same way, and treating an
+		-- outage as the former reserves a brand new server that nobody else can
+		-- find. Several servers doing that at once is exactly the scattering this
+		-- whole mechanism exists to prevent.
+		self.context.Logger:Warning(
+			"Could not read the official server record",
+			{ ServerId = serverId, Error = tostring(storeError) }
+		)
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	local codes = {}
 	if type(stored) == "table" then
 		if type(stored.Instances) == "table" then
@@ -154,9 +165,10 @@ function OfficialServerService:List(): { any }
 			Name = entry.Name,
 			Description = entry.Description,
 			Order = entry.Order or 100,
-			-- Known only once a code has been reserved on this server, which is
-			-- enough to grey out the entry a player is already standing in.
-			Current = here ~= "" and self.codes[entry.Id] ~= nil and self:_isHere(entry.Id),
+			-- A reserved server cannot read the access code that opened it, so
+			-- requiring one here meant the entry a player was standing in never
+			-- knew itself and always offered to send them where they already were.
+			Current = here ~= "" and self:_isHere(entry.Id),
 		})
 	end
 	table.sort(rows, function(a, b)
@@ -267,6 +279,23 @@ function OfficialServerService:Start()
 	self.connection = Players.PlayerAdded:Connect(function(player)
 		self:_learnFrom(player)
 	end)
+	-- A teleport that is accepted can still fail on arrival: a full instance, a
+	-- restricted place, a flood check. The profile was released before the
+	-- journey, so a player left behind by one of those has no session at all and
+	-- every later action fails for a reason nobody could work out. This is the
+	-- only signal Roblox gives for it.
+	self.teleportFailed = TeleportService.TeleportInitFailed:Connect(
+		function(player, result, message)
+			self.context.Logger:Error("Teleport failed after being accepted", {
+				UserId = player.UserId,
+				Result = tostring(result),
+				Message = tostring(message),
+			})
+			if player:IsDescendantOf(Players) then
+				self.context.Services:Get("DataService"):Load(player)
+			end
+		end
+	)
 	self:_publishOccupancy()
 end
 
@@ -344,6 +373,9 @@ end
 
 function OfficialServerService:Destroy()
 	self.publishing = false
+	if self.teleportFailed then
+		self.teleportFailed:Disconnect()
+	end
 	if self.connection then
 		self.connection:Disconnect()
 	end

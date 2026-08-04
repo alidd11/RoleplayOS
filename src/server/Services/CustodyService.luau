@@ -268,7 +268,7 @@ function CustodyService:_release(target: Player)
 	local targetHumanoid = humanoid(target)
 	if targetHumanoid then
 		targetHumanoid.WalkSpeed = self.context.Configuration.Needs.WalkSpeed
-		targetHumanoid.JumpPower = 50
+		targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 		targetHumanoid.AutoRotate = true
 	end
 end
@@ -330,7 +330,7 @@ function CustodyService:SetCuffed(
 		target:SetAttribute("RoleplayOSCuffed", true)
 		target:SetAttribute("RoleplayOSCuffPosition", "Rear")
 		targetHumanoid.WalkSpeed = self.context.Configuration.Custody.CuffedWalkSpeed
-		targetHumanoid.JumpPower = 0
+		targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 	end
 	local summary = self:_summary(targetUserId)
 	self.event:FireClient(target, { Kind = "State", State = summary })
@@ -654,7 +654,7 @@ function CustodyService:Start()
 						if targetHumanoid then
 							targetHumanoid.WalkSpeed =
 								self.context.Configuration.Custody.CuffedWalkSpeed
-							targetHumanoid.JumpPower = 0
+							targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 						end
 					end
 				end)

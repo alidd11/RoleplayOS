@@ -112,7 +112,7 @@ function PayrollService:_pay(player: Player)
 		CharacterId = characterId,
 		Direction = "Credit",
 		Amount = amount,
-		Reason = "Wages",
+		ReasonCode = "Wages",
 		Metadata = { Source = source, Seconds = self.settings.IntervalSeconds },
 	})
 end

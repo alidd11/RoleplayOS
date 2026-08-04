@@ -826,6 +826,7 @@ function App.mount(context: any): ScreenGui
 	-- the sidebar that opened something else entirely, which made it read as a
 	-- different product from the four either side of it.
 	renderControls = function()
+		clear(scroll)
 		pageTitle.Text = "Controls"
 		pageDescription.Text = "Every action, and what it is bound to on your device."
 		local controller = context.Controllers.ControlsController
@@ -931,6 +932,7 @@ function App.mount(context: any): ScreenGui
 	-- the first question in one line so the rest of the page can be the answer to
 	-- the second.
 	renderCommunity = function()
+		clear(scroll)
 		pageTitle.Text = "Community"
 		pageDescription.Text = "Where you are playing, and where else you can."
 		local server = menuData and menuData.Server

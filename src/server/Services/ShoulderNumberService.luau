@@ -38,10 +38,11 @@ function ShoulderNumberService:_readableDepartments(player: Player): { [string]:
 	end
 	for _, profile in profiles do
 		local departmentId = profile.DepartmentId
-		if
-			type(departmentId) == "string"
-			and not self:IsNumberedRank(departmentId, tonumber(profile.Rank) or 1)
-		then
+		-- A positive check. Reading this as "not a numbered rank" granted access
+		-- whenever the rank could not be resolved at all, so a department renamed
+		-- or removed from the configuration would leave stale duty profiles that
+		-- open the roster rather than close it.
+		if type(departmentId) == "string" and self:IsManagementRank(departmentId, profile.Rank) then
 			allowed[departmentId] = true
 		end
 	end
@@ -81,6 +82,20 @@ function ShoulderNumberService:GetRank(departmentId: string, rank: number): any?
 		return nil
 	end
 	return ranks[math.clamp(math.floor(rank), 1, #ranks)]
+end
+
+-- Management begins at the first rank that stops wearing a number. Resolved from
+-- the ladder itself, and false whenever the ladder cannot be read, so an
+-- unknown department is refused rather than admitted.
+function ShoulderNumberService:IsManagementRank(departmentId: string, rank: any): boolean
+	local department = self:_department(departmentId)
+	local ranks = department and department.Ranks
+	if type(ranks) ~= "table" or #ranks == 0 then
+		return false
+	end
+	local index = math.clamp(math.floor(tonumber(rank) or 1), 1, #ranks)
+	local entry = ranks[index]
+	return entry ~= nil and entry.Numbered ~= true
 end
 
 function ShoulderNumberService:IsNumberedRank(departmentId: string, rank: number): boolean
