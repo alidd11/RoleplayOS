@@ -30,20 +30,37 @@ end
 -- working. Emergency duty pays by department and rank; civilian employment pays
 -- the job's own wage.
 function PayrollService:_hourlyRate(player: Player): (number?, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local duty = self.context.Services:Get("DutyService"):Get(player)
 	if duty then
 		local rate = self.settings.DepartmentHourlyRates[duty.DepartmentId]
 			or self.settings.DefaultDepartmentHourlyRate
-		local rank = math.max(0, (tonumber(duty.Rank) or 1) - 1)
+		-- Rank lives on the duty profile, not on the shift record, so reading it
+		-- from the shift silently gave everyone the lowest rank's pay.
+		local profile = session
+			and session.Profile.DutyProfiles
+			and session.Profile.DutyProfiles[duty.DutyProfileId]
+		local rank = math.max(0, (tonumber(profile and profile.Rank) or 1) - 1)
 		return rate + rank * self.settings.RankHourlyBonus, duty.DepartmentId
 	end
-	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session
 		and session.ActiveCharacterId
 		and session.Profile.Characters[session.ActiveCharacterId]
-	local employment = character and character.Employment
-	local jobId = employment and employment.JobId
-	local job = if type(jobId) == "string" then self.context.Configuration.Jobs[jobId] else nil
+	-- Employment is a list of records rather than a single one, since a character
+	-- keeps its history. The current job is the most recently started, so the
+	-- list is read from the end.
+	local records = if character and type(character.Employment) == "table"
+		then character.Employment
+		else {}
+	local job = nil
+	for index = #records, 1, -1 do
+		local candidate = records[index]
+		local jobId = candidate and candidate.JobId
+		if type(jobId) == "string" and self.context.Configuration.Jobs[jobId] then
+			job = self.context.Configuration.Jobs[jobId]
+			break
+		end
+	end
 	if job then
 		-- BaseWage is what a completed task is worth, not an hourly rate, so it
 		-- is not used as one. A job may declare an HourlyRate of its own.
