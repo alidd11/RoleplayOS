@@ -126,6 +126,30 @@ local Config = {
 		-- Ceiling on the wait after consecutive failures, which doubles each time.
 		MaximumFailureBackoffSeconds = 120,
 	},
+	-- The official servers listed in the Communities section.
+	--
+	-- Each is a reserved server: reserved once, its access code kept, and every
+	-- later join sent to that same code so the community is not scattered across
+	-- instances Roblox happened to spin up. A reserved server does not appear in
+	-- the Roblox server list, which is the point, since these are reached from
+	-- the menu rather than found from outside.
+	OfficialServers = {
+		Enabled = true,
+		Entries = {
+			PortsmouthMain = {
+				Id = "PortsmouthMain",
+				Name = "Portsmouth",
+				Description = "The main city. Emergency services and civilians.",
+				Order = 1,
+			},
+			Training = {
+				Id = "Training",
+				Name = "Training",
+				Description = "Assessments and inductions. Quiet by design.",
+				Order = 2,
+			},
+		},
+	},
 	ExperienceAccess = {
 		Enabled = true,
 		RequiredGroupLinkId = "UniversalProjects",
@@ -1663,6 +1687,9 @@ local Config = {
 			PurchaseFood = { Capacity = 2, RefillPerSecond = 0.25 },
 			PurchaseFromVendor = { Capacity = 3, RefillPerSecond = 0.3 },
 			GetDealershipCatalogue = { Capacity = 4, RefillPerSecond = 0.5 },
+			GetOfficialServers = { Capacity = 4, RefillPerSecond = 0.5 },
+			-- A teleport is one action a player takes deliberately, never repeatedly.
+			JoinOfficialServer = { Capacity = 2, RefillPerSecond = 0.1 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 		},

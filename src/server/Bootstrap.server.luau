@@ -32,6 +32,7 @@ local serviceOrder = {
 	"AuditService",
 	"CommunityService",
 	"CommunityServerService",
+	"OfficialServerService",
 	"GroupService",
 	"ExperienceAccessService",
 	"AccessService",

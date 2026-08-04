@@ -830,6 +830,61 @@ function App.mount(context: any): ScreenGui
 			"Your server",
 			"Communities share RoleplayOS while retaining their identity."
 		)
+		-- The official servers, above the community card. These are the ones the
+		-- team runs, and a player opening this page is far more often looking for
+		-- one of those than setting up a community of their own.
+		local officialResponse =
+			context.Controllers.NetworkController:Request("GetOfficialServers", {})
+		local officialRows = if officialResponse.Success
+				and type(officialResponse.Data) == "table"
+			then officialResponse.Data.Servers
+			else nil
+		if type(officialRows) == "table" and #officialRows > 0 then
+			sectionHeading("Official servers", "Run by the team. Join one to play.")
+			for _, entry in officialRows do
+				local row = card(scroll, 92)
+				local name = text(row, tostring(entry.Name), 17, COLOURS.Text, true)
+				name.Position = UDim2.fromOffset(22, 18)
+				name.Size = UDim2.new(1, -180, 0, 24)
+				local blurb = text(row, tostring(entry.Description or ""), 12, COLOURS.Muted)
+				blurb.Position = UDim2.fromOffset(22, 44)
+				blurb.Size = UDim2.new(1, -180, 0, 32)
+				blurb.TextWrapped = true
+				local join = Instance.new("TextButton")
+				join.AnchorPoint = Vector2.new(1, 0.5)
+				join.Position = UDim2.new(1, -22, 0.5, 0)
+				join.Size = UDim2.fromOffset(126, 42)
+				join.BackgroundColor3 = if entry.Current then COLOURS.Sidebar else COLOURS.Accent
+				join.BorderSizePixel = 0
+				join.Font = Enum.Font.GothamBold
+				join.Text = if entry.Current then "YOU ARE HERE" else "JOIN"
+				join.TextColor3 = COLOURS.Text
+				join.TextSize = 13
+				join.Active = not entry.Current
+				join.Parent = row
+				corner(join, 10)
+				join.Activated:Connect(function()
+					if entry.Current then
+						return
+					end
+					join.Active = false
+					join.Text = "CONNECTING…"
+					local response = context.Controllers.NetworkController:Request(
+						"JoinOfficialServer",
+						{ ServerId = entry.Id }
+					)
+					-- A successful teleport never returns here, so anything that
+					-- arrives at this point is a failure worth showing.
+					join.Active = true
+					join.Text = "JOIN"
+					context.Controllers.NotificationController:Show(response.Message, "Servers")
+				end)
+			end
+			sectionHeading(
+				"Your server",
+				"Communities share RoleplayOS while retaining their identity."
+			)
+		end
 		local hero = card(scroll, 240)
 		local eyebrow = text(
 			hero,

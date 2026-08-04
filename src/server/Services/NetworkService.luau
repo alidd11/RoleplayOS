@@ -78,6 +78,42 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("GetOfficialServers", function(payload)
+		return payload == nil or type(payload) == "table"
+	end, function(_, _, requestId)
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = {
+				Servers = self.context.Services:Get("OfficialServerService"):List(),
+			},
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("JoinOfficialServer", function(payload)
+		return type(payload) == "table" and type(payload.ServerId) == "string"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("OfficialServerService"):Join(player, payload.ServerId)
+		if not result then
+			return {
+				Success = false,
+				Code = reason or "OFFICIAL_SERVER_UNAVAILABLE",
+				Message = if reason == "ALREADY_ON_THIS_SERVER"
+					then "You are already on this server."
+					else "That server could not be joined right now.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Connecting…",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("CreatePrivateCommunity", function(payload)
 		return type(payload) == "table" and type(payload.GroupId) == "number"
 	end, function(player, payload, requestId)
