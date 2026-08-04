@@ -136,22 +136,41 @@ local Config = {
 	OfficialServers = {
 		Enabled = true,
 		Entries = {
-			PortsmouthMain = {
-				Id = "PortsmouthMain",
-				Name = "Portsmouth",
-				Description = "The main city. Emergency services and civilians.",
+			-- The whitelisted community. Emergency roles here are held by group
+			-- membership and application, not bought, which is the whole reason
+			-- for it existing separately from the public place.
+			UniversalProjects = {
+				Id = "UniversalProjects",
+				Name = "Universal Projects",
+				Description = "Whitelisted roleplay. Emergency services by application.",
 				Order = 1,
+				Whitelisted = true,
+				RequiredGroupLinkId = "UniversalProjects",
 			},
 			Training = {
 				Id = "Training",
 				Name = "Training",
 				Description = "Assessments and inductions. Quiet by design.",
 				Order = 2,
+				Whitelisted = true,
+				RequiredGroupLinkId = "UniversalProjects",
 			},
 		},
 	},
+	-- Entry to the experience itself.
+	--
+	-- Off, deliberately. Gating the whole place on the Universal Projects group
+	-- meant nobody outside it could join at all, so the public tier could not
+	-- exist: every server reported as Whitelisted, and the roles written as
+	-- "in the group or on a public server" never saw a public server to match.
+	-- One flag was defeating the three tiers the rest of the configuration
+	-- already describes.
+	--
+	-- Whitelisting now belongs to the servers that want it. An official server
+	-- entry naming a RequiredGroupLinkId gates itself, and the public place stays
+	-- open to everybody.
 	ExperienceAccess = {
-		Enabled = true,
+		Enabled = false,
 		RequiredGroupLinkId = "UniversalProjects",
 		KickMessage = "This experience is restricted to members of the Universal Projects Roblox community.",
 		-- Attempts to get a definitive answer before giving up, with the wait

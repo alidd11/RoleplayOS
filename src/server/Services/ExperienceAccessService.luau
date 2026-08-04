@@ -8,13 +8,23 @@ function ExperienceAccessService:Init(context: any)
 	self.context = context
 end
 
+-- Entry to this server, which is not the same as entry to the experience.
+--
+-- The published place is open to everyone: that is the public tier, where
+-- emergency roles are bought rather than applied for. A server asks for a group
+-- only when it is one of the whitelisted ones, and it asks for that server's
+-- group rather than a single experience wide one.
 function ExperienceAccessService:_check(player: Player)
 	local config = self.context.Configuration.ExperienceAccess
-	if not config.Enabled or not player:IsDescendantOf(Players) then
+	if not player:IsDescendantOf(Players) then
+		return
+	end
+	local linkId = self.context.Services:Get("CommunityServerService"):RequiredGroupLinkId()
+	if not linkId then
 		return
 	end
 	local groupService = self.context.Services:Get("GroupService")
-	local membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
+	local membership = groupService:GetMembership(player, linkId)
 	-- A failed check is usually Roblox throttling this server rather than an
 	-- answer about this player, and a throttle clears on a clock. The waits
 	-- therefore double, so the retries outlast a rate limit instead of arriving
@@ -27,8 +37,8 @@ function ExperienceAccessService:_check(player: Player)
 		if not player:IsDescendantOf(Players) then
 			return
 		end
-		groupService:Invalidate(player, config.RequiredGroupLinkId)
-		membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
+		groupService:Invalidate(player, linkId)
+		membership = groupService:GetMembership(player, linkId)
 	end
 	if
 		membership.IsMember == true

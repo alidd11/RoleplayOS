@@ -120,6 +120,25 @@ function OfficialServerService:List(): { any }
 	return rows
 end
 
+-- The official server entry this server is serving, or nil on the public place.
+-- Everything that differs between the tiers is read from here, so a server's
+-- identity is decided in one place rather than inferred separately by each
+-- service that cares.
+function OfficialServerService:CurrentEntry(): any?
+	if type(self.currentServerId) ~= "string" then
+		return nil
+	end
+	return self.settings.Entries[self.currentServerId]
+end
+
+-- The group this server requires, when it requires one. The public place
+-- requires none, which is what makes it public.
+function OfficialServerService:RequiredGroupLinkId(): string?
+	local entry = self:CurrentEntry()
+	local linkId = entry and entry.RequiredGroupLinkId
+	return if type(linkId) == "string" then linkId else nil
+end
+
 -- Whether this server is the official server with that id. PrivateServerId is
 -- the instance, and the access code is the door to it, so the two are compared
 -- through what was stored rather than directly.
@@ -165,10 +184,26 @@ function OfficialServerService:Start()
 	-- Which official server this one is, taken from the data the teleport carried.
 	-- A reserved server has no other way to know: the access code that opened it
 	-- is not readable from inside.
+	self:_adopt()
 	self.connection = Players.PlayerAdded:Connect(function(player)
-		if self.currentServerId or game.PrivateServerId == "" then
-			return
-		end
+		self:_learnFrom(player)
+	end)
+end
+
+-- Players already present when this service starts carry the same teleport data
+-- as any later arrival, and on a reserved server the first of them is usually
+-- already in before Start runs.
+function OfficialServerService:_adopt()
+	for _, player in Players:GetPlayers() do
+		self:_learnFrom(player)
+	end
+end
+
+function OfficialServerService:_learnFrom(player: Player)
+	if self.currentServerId or game.PrivateServerId == "" then
+		return
+	end
+	do
 		local ok, data = pcall(player.GetJoinData, player)
 		local teleportData = if ok and type(data) == "table" then data.TeleportData else nil
 		local id = if type(teleportData) == "table" then teleportData.OfficialServerId else nil
@@ -176,7 +211,7 @@ function OfficialServerService:Start()
 			self.currentServerId = id
 			self.context.Logger:Info("Serving an official server", { ServerId = id })
 		end
-	end)
+	end
 end
 
 function OfficialServerService:Destroy()
