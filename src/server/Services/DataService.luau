@@ -569,11 +569,22 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 			if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > now then
 				error("SESSION_OWNERSHIP_LOST")
 			end
-			snapshot.AuditMetadata.SessionLock = release and nil
-				or {
+			-- Written as a statement, not as `release and nil or {...}`.
+			--
+			-- That idiom cannot express "nil when true": `release and nil` is nil,
+			-- and `nil or {...}` is the table, so the release branch was
+			-- unreachable and every release stamped a fresh lease instead of
+			-- clearing it. A player leaving therefore locked their own profile for
+			-- the full lease on the way out, and was refused by every other server
+			-- until it expired.
+			if release then
+				snapshot.AuditMetadata.SessionLock = nil
+			else
+				snapshot.AuditMetadata.SessionLock = {
 					ServerId = self.serverId,
 					ExpiresAt = now + self.context.Configuration.Framework.SessionLeaseSeconds,
 				}
+			end
 			return snapshot
 		end)
 	end)
