@@ -58,6 +58,16 @@ local Config = {
 		-- Lowering it shortens the lockout after a crash but shortens the grace
 		-- for a live server too; it should not go below twice AutosaveSeconds.
 		SessionLeaseSeconds = 120,
+		-- The longest a join will sit waiting for someone else's lease to lapse.
+		--
+		-- Waiting happens inside the PlayerAdded handler, where the player has no
+		-- profile and no character yet. Roblox abandons a join that takes too
+		-- long, and the player sees a connection error rather than anything this
+		-- framework chose to tell them, so a wait must stay far shorter than the
+		-- lease it is waiting on. Beyond this the player is told plainly to come
+		-- back in a moment, which is a worse outcome than loading but a much
+		-- better one than a silent disconnection.
+		MaximumLeaseWaitSeconds = 12,
 	},
 	ContentQuality = {
 		RequireCertification = true,
@@ -84,10 +94,32 @@ local Config = {
 		MinimumWorldAssetExtentStuds = 0.1,
 		MaximumWorldAssetExtentStuds = 80,
 	},
+	-- Roblox throttles group membership lookups per server, and answers a burst
+	-- with a 429 that is indistinguishable from any other failure. Every number
+	-- here exists to keep this framework under that ceiling, because a throttled
+	-- check is read as an unverified member and an unverified member is kicked.
+	Groups = {
+		-- Gap between prefetching one group link and the next, jittered. Ten links
+		-- warmed back to back per joining player is what made a filling server
+		-- throttle itself.
+		WarmSpacingSeconds = 0.6,
+		-- A verified answer is good for this long. Raising it cuts request volume
+		-- but leaves a promotion or removal unseen for longer.
+		CacheSeconds = 300,
+		-- Ceiling on the wait after consecutive failures, which doubles each time.
+		MaximumFailureBackoffSeconds = 120,
+	},
 	ExperienceAccess = {
 		Enabled = true,
 		RequiredGroupLinkId = "UniversalProjects",
 		KickMessage = "This experience is restricted to members of the Universal Projects Roblox community.",
+		-- Attempts to get a definitive answer before giving up, with the wait
+		-- doubling each time. A throttle clears on a clock, so the retries have to
+		-- outlast it rather than hammer through it; the previous two-and-three
+		-- second retries expired long before a rate limit did and turned every
+		-- throttled join into a kick.
+		VerifyAttempts = 4,
+		VerifyBackoffSeconds = 3,
 	},
 	Characters = {
 		FreeSlots = 2,

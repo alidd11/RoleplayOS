@@ -15,11 +15,18 @@ function ExperienceAccessService:_check(player: Player)
 	end
 	local groupService = self.context.Services:Get("GroupService")
 	local membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
-	for attempt = 2, 3 do
+	-- A failed check is usually Roblox throttling this server rather than an
+	-- answer about this player, and a throttle clears on a clock. The waits
+	-- therefore double, so the retries outlast a rate limit instead of arriving
+	-- inside it and turning every throttled join into a kick.
+	for attempt = 2, config.VerifyAttempts or 4 do
 		if membership.Failed ~= true or not player:IsDescendantOf(Players) then
 			break
 		end
-		task.wait(attempt)
+		task.wait((config.VerifyBackoffSeconds or 3) * 2 ^ (attempt - 2))
+		if not player:IsDescendantOf(Players) then
+			return
+		end
 		groupService:Invalidate(player, config.RequiredGroupLinkId)
 		membership = groupService:GetMembership(player, config.RequiredGroupLinkId)
 	end

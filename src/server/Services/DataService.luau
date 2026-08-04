@@ -354,11 +354,15 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 		-- Exactly one wait: a server that is still alive keeps refreshing its
 		-- lease, so retrying whenever time remains would never terminate and the
 		-- player would hang rather than be told what happened.
+		--
+		-- The wait is capped well below the lease. It happens inside PlayerAdded,
+		-- before the player has a profile or a character, and a join that takes
+		-- too long is abandoned by Roblox and shown to the player as a connection
+		-- error. Waiting out a full lease therefore replaced a clear message with
+		-- a silent disconnection, which is the worse of the two by far.
 		local remaining = lockedUntil - os.time()
-		if
-			remaining > 0
-			and remaining <= self.context.Configuration.Framework.SessionLeaseSeconds
-		then
+		local ceiling = self.context.Configuration.Framework.MaximumLeaseWaitSeconds or 12
+		if remaining > 0 and remaining <= ceiling then
 			self.context.Logger:Warning("Waiting for a held profile lease", {
 				UserId = player.UserId,
 				Seconds = remaining,
@@ -368,6 +372,13 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 				return nil, "PLAYER_LEFT"
 			end
 			return self:Load(player, true)
+		end
+		if remaining > 0 then
+			self.context.Logger:Warning("Profile lease held for longer than a join can wait", {
+				UserId = player.UserId,
+				Seconds = remaining,
+			})
+			return nil, "PROFILE_SESSION_LOCKED:" .. tostring(math.ceil(remaining))
 		end
 	end
 	if not ok then
@@ -458,10 +469,26 @@ function DataService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
-			local profile = self:Load(player)
-			if not profile then
-				player:Kick("Your profile could not be loaded safely. Please rejoin shortly.")
+			local profile, reason = self:Load(player)
+			if profile then
+				return
 			end
+			-- A held lease is a wait, not a fault, and saying so with the number of
+			-- seconds turns a rejoin from guesswork into something the player can
+			-- simply do. Anything else keeps the general message, since the cause
+			-- is ours rather than theirs and a number would be invented.
+			local seconds =
+				tonumber(string.match(tostring(reason), "^PROFILE_SESSION_LOCKED:(%d+)$"))
+			if seconds then
+				player:Kick(
+					string.format(
+						"Your previous session is still being saved. Please rejoin in about %d seconds.",
+						seconds
+					)
+				)
+				return
+			end
+			player:Kick("Your profile could not be loaded safely. Please rejoin shortly.")
 		end)
 	)
 	table.insert(

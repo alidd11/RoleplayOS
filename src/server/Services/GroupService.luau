@@ -3,10 +3,11 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local RobloxGroupService = { cache = {}, connections = {} }
+local RobloxGroupService = { cache = {}, connections = {}, failures = {} }
 
 function RobloxGroupService:Init(context: any)
 	self.context = context
+	self.settings = context.Configuration.Groups
 end
 
 function RobloxGroupService:GetMembership(player: Player, linkId: string): any
@@ -72,34 +73,42 @@ function RobloxGroupService:GetMembershipByGroupId(
 	end
 	local ok, rank = pcall(player.GetRankInGroup, player, groupId)
 	if not ok or type(rank) ~= "number" then
+		-- Roblox throttles this call, and a failure is very often a 429 rather
+		-- than a real answer about the player. Retrying a throttle on a fixed
+		-- short interval deepens it, so each consecutive failure waits longer
+		-- before the next attempt is allowed.
+		local failures = (self.failures[key] or 0) + 1
+		self.failures[key] = failures
+		local backoff =
+			math.min(15 * 2 ^ (failures - 1), self.settings.MaximumFailureBackoffSeconds)
 		self.context.Logger:Warning("Roblox group membership check failed", {
 			UserId = player.UserId,
 			GroupLinkId = key,
 			GroupId = groupId,
+			ConsecutiveFailures = failures,
+			RetryAfterSeconds = backoff,
 		})
 		local failure = {
 			GroupId = groupId,
 			MinimumRank = minimumRank or 1,
 			Failed = true,
-			ExpiresAt = os.clock() + 30,
+			ExpiresAt = os.clock() + backoff,
 		}
 		playerCache[key] = failure
 		return failure
 	end
-	local roleName = "Guest"
-	if rank > 0 then
-		local roleOk, resolvedRole = pcall(player.GetRoleInGroup, player, groupId)
-		if roleOk and type(resolvedRole) == "string" then
-			roleName = resolvedRole
-		end
-	end
+	self.failures[key] = nil
+	-- The role name costs a second web call per group and is only ever shown,
+	-- never used to decide anything, so it is not fetched here. Doubling the
+	-- request count on every join to label a rank is what pushes a busy server
+	-- into the throttle that then reads as a failed membership check.
 	local membership = {
 		GroupId = groupId,
 		IsMember = rank > 0,
 		HighestRank = rank,
 		MinimumRank = minimumRank or 1,
-		Roles = if rank > 0 then { { Name = roleName, Rank = rank } } else {},
-		ExpiresAt = os.clock() + 300,
+		Roles = if rank > 0 then { { Name = "Member", Rank = rank } } else {},
+		ExpiresAt = os.clock() + self.settings.CacheSeconds,
 	}
 	playerCache[key] = membership
 	return membership
@@ -108,12 +117,35 @@ end
 -- Populates the membership cache for every configured link. Without this the
 -- first StartMenu build performs one live GetRankInGroup per link inside the
 -- request, because AccessService evaluates each role in turn.
+-- Prefetches every configured link so the first StartMenu build does not perform
+-- a live lookup per link inside the request.
+--
+-- Spaced out rather than fired as a burst. There are ten links, so warming them
+-- back to back meant ten calls per joining player at once, and a server filling
+-- up after a restart made hundreds within seconds. Roblox answers that with a
+-- 429, which this framework then read as "membership could not be verified" and
+-- turned into a kick, so the burst locked out the very players it was checking.
+--
+-- The link that gates entry is warmed first and without delay, because a player
+-- is waiting on it. Everything else is a prefetch and can take its time.
 function RobloxGroupService:Warm(player: Player)
+	local gate = self.context.Configuration.ExperienceAccess.RequiredGroupLinkId
+	if gate and self.context.Configuration.GroupLinks[gate] then
+		self:GetMembership(player, gate)
+	end
 	for linkId in self.context.Configuration.GroupLinks do
 		if not player:IsDescendantOf(Players) then
 			return
 		end
-		self:GetMembership(player, linkId)
+		if linkId ~= gate then
+			-- Jittered so that several players joining together do not line their
+			-- lookups up with each other and rebuild the burst.
+			task.wait(self.settings.WarmSpacingSeconds * (0.5 + math.random()))
+			if not player:IsDescendantOf(Players) then
+				return
+			end
+			self:GetMembership(player, linkId)
+		end
 	end
 end
 
