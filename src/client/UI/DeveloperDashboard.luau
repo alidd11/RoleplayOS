@@ -1062,10 +1062,9 @@ function App.mount(context: any): ScreenGui
 			-- Centre within the native band, never above the screen edge.
 			math.max(0, math.floor((nativeBand - controlSize) / 2))
 		)
-		-- Breakpoints follow the usable area, not the panel size. A landscape
-		-- phone loses real width to a notch and rounded corners, so deciding from
-		-- the raw viewport would pick a layout that does not actually fit.
-		local horizontal = layout.Compact or layout.SafeViewport.Y < 520
+		-- Compact already accounts for a short landscape phone, so the height is
+		-- not tested again here.
+		local horizontal = layout.Compact
 		local narrow = layout.SafeViewport.X < 600
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight

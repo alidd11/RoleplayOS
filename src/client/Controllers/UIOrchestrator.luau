@@ -91,10 +91,21 @@ function UIOrchestrator:_layout(): Layout
 		elseif string.find(lastInput.Name, "Gamepad") then "Gamepad"
 		elseif UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then "Touch"
 		else "KeyboardMouse"
+	local safeTop, safeBottom, safeLeft, safeRight = safeReserves(viewport)
+	-- Classified on the area interfaces actually get, after the notch and home
+	-- indicator are taken out, and on both axes rather than width alone.
+	--
+	-- Roblox runs phones in landscape, where the short axis is height: a current
+	-- large phone is about 932 by 430, which is wider than the tablet threshold
+	-- while having barely half a tablet's height. Deciding on width alone called
+	-- that a tablet and handed sixteen panels the wrong sizes. Tablets in
+	-- landscape start around 744 high, so the two do not overlap.
+	local usableX = math.max(1, viewport.X - safeLeft - safeRight)
+	local usableY = math.max(1, viewport.Y - safeTop - safeBottom)
 	local breakpoint = if vr
 		then "VR"
-		elseif viewport.X < 700 then "Compact"
-		elseif viewport.X < 1050 then "Tablet"
+		elseif usableX < 700 or usableY < 500 then "Compact"
+		elseif usableX < 1050 then "Tablet"
 		else "Desktop"
 	local vehicle = self.state == "Driver" or self.state == "Passenger"
 	local measuredTop = math.max(0, math.floor(GuiService.TopbarInset.Height + 0.5))
@@ -102,7 +113,6 @@ function UIOrchestrator:_layout(): Layout
 	-- Its left edge moves as Roblox changes the native control cluster, so it must
 	-- be measured rather than assumed, otherwise our controls render underneath it.
 	local measuredLeft = math.max(0, math.floor(GuiService.TopbarInset.Min.X + 0.5))
-	local safeTop, safeBottom, safeLeft, safeRight = safeReserves(viewport)
 	return {
 		Breakpoint = breakpoint,
 		State = self.state,
@@ -119,10 +129,7 @@ function UIOrchestrator:_layout(): Layout
 		-- Usable area for interfaces mounted with CoreUISafeInsets. Panels must
 		-- size and scale against this rather than the raw viewport, otherwise
 		-- they spill under the reserved regions and are clipped.
-		SafeViewport = Vector2.new(
-			math.max(1, viewport.X - safeLeft - safeRight),
-			math.max(1, viewport.Y - safeTop - safeBottom)
-		),
+		SafeViewport = Vector2.new(usableX, usableY),
 		-- One factor for the ambient heads-up display. Its elements are laid out
 		-- in fixed pixels, which leaves them proportionally overbearing on a
 		-- phone and small on a large monitor, so they are scaled against the

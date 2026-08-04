@@ -214,9 +214,15 @@ end
 function MinimapController:_redraw(centre: Vector3)
 	self:_clearGeometry()
 	local radius = self.settings.WindowRadius or 900
+	local maximumRoads = if self.compact
+		then self.settings.CompactMaximumRoads or self.settings.MaximumRoads
+		else self.settings.MaximumRoads
+	local maximumPoints = if self.compact
+		then self.settings.CompactMaximumPoints or self.settings.MaximumPoints
+		else self.settings.MaximumPoints
 	local drawn = 0
 	for _, part in self.roads do
-		if drawn >= self.settings.MaximumRoads then
+		if drawn >= maximumRoads then
 			break
 		end
 		-- Streaming can remove a part after it was collected, so presence is
@@ -227,7 +233,7 @@ function MinimapController:_redraw(centre: Vector3)
 	end
 	local points = 0
 	for _, item in self.points do
-		if points >= self.settings.MaximumPoints then
+		if points >= maximumPoints then
 			break
 		end
 		if item.Parent and self:_drawPoint(item, centre, radius) then
@@ -313,6 +319,13 @@ function MinimapController:Start()
 	self:_rebuild()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Minimap", function(layout)
 		self.shellScale.Scale = layout.HudScale
+		-- Detail follows the panel size, so a change of breakpoint has to force a
+		-- redraw: without it the map keeps whatever density it was built with
+		-- until the player next moves far enough to trigger one.
+		if self.compact ~= layout.Compact then
+			self.compact = layout.Compact
+			self.drawnAt = nil
+		end
 		self.shell.Visible = not layout.Vehicle or not layout.Compact
 		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 		-- Sits above centre on touch, where a sprint pad shares the right edge and

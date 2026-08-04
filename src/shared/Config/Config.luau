@@ -208,6 +208,12 @@ local Config = {
 		-- region-sized map to whichever parts happened to be enumerated first.
 		MaximumRoads = 300,
 		MaximumPoints = 80,
+		-- A phone draws into a panel roughly half the size and has the least
+		-- capable renderer, so it draws proportionally less into it. Detail that
+		-- lands below a pixel on that panel costs a frame to build and cannot be
+		-- seen once it is there.
+		CompactMaximumRoads = 140,
+		CompactMaximumPoints = 36,
 		-- Studs either side of the player shown on the minimap. Projecting a
 		-- region-sized world whole leaves every road a few thousandths of the
 		-- surface wide, which reads as a smear.
