@@ -5,6 +5,71 @@ function DealershipService:Init(context: any)
 	self.context = context
 end
 function DealershipService:Start() end
+
+-- What this dealership has for sale, as the player standing at it sees it.
+--
+-- Resolved on the server so the forecourt cannot be made to advertise a price or
+-- an unlock the purchase would then refuse. A locked vehicle is still listed
+-- where the access rule says to display it, because a showroom that hides what
+-- you cannot yet afford gives a player no reason to earn anything.
+function DealershipService:Catalogue(player: Player, terminalId: string): (any?, string?)
+	local terminal, terminalReason =
+		self.context.Services:Get("VehicleService"):AuthoriseDealershipTerminal(player, terminalId)
+	if not terminal then
+		return nil, terminalReason
+	end
+	local dealership = self.context.Configuration.Dealerships[terminal.DealershipId]
+	if not dealership then
+		return nil, "DEALERSHIP_NOT_FOUND"
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local characterId = session and session.ActiveCharacterId
+	local character = characterId and session.Profile.Characters[characterId]
+	local balance = character and character.Economy and character.Economy.Bank or 0
+	local owned = {}
+	for _, vehicle in self.context.Services:Get("VehicleOwnershipService"):List(player) do
+		owned[vehicle.DefinitionId] = true
+	end
+
+	local rows = {}
+	for _, definitionId in dealership.VehicleIds do
+		local definition = self.context.Configuration.Vehicles[definitionId]
+		if not definition then
+			continue
+		end
+		local access =
+			self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)
+		if not access.Allowed and definition.Access and not definition.Access.DisplayWhenLocked then
+			continue
+		end
+		-- A gamepass named on the access rule is offered for purchase rather than
+		-- being a dead end, in the same way the vendors do it.
+		local gamepassId = if not access.Allowed and definition.Access
+			then definition.Access.GamepassId
+			else nil
+		table.insert(rows, {
+			DefinitionId = definitionId,
+			Name = definition.Name,
+			Price = definition.Price,
+			Colours = definition.Colours,
+			Category = definition.Category,
+			Locked = not access.Allowed,
+			LockedReason = if access.Allowed then nil else access.ReasonCode,
+			GamepassId = gamepassId,
+			Owned = owned[definitionId] == true,
+			Affordable = (definition.Price or 0) <= balance,
+		})
+	end
+	return {
+		DealershipId = terminal.DealershipId,
+		Name = dealership.Name,
+		TerminalId = terminalId,
+		CharacterId = characterId,
+		Balance = balance,
+		Vehicles = rows,
+	},
+		nil
+end
 function DealershipService:Purchase(
 	player: Player,
 	terminalId: string,

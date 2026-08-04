@@ -542,6 +542,27 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("GetDealershipCatalogue", function(payload)
+		return type(payload) == "table" and type(payload.TerminalId) == "string"
+	end, function(player, payload, requestId)
+		local catalogue, reason =
+			self.context.Services:Get("DealershipService"):Catalogue(player, payload.TerminalId)
+		if not catalogue then
+			return {
+				Success = false,
+				Code = reason or "DEALERSHIP_UNAVAILABLE",
+				Message = "This forecourt is not available.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = catalogue,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
 		return type(payload) == "table"
 			and type(payload.TerminalId) == "string"

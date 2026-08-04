@@ -189,21 +189,148 @@ function DealershipController:_setOpen(open: boolean)
 	end
 end
 
+-- One card per vehicle on the forecourt. A locked vehicle stays on the list and
+-- says what unlocks it, since hiding what cannot yet be afforded leaves a player
+-- with no reason to earn anything.
+function DealershipController:_showroomCard(vehicle: any)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.new(1, -8, 0, 104)
+	card.BackgroundColor3 = colours.surface
+	card.BorderSizePixel = 0
+	card.Parent = self.list
+	corner(card, 12)
+
+	local buyable = not vehicle.Locked and vehicle.Affordable and not vehicle.Owned
+	local stripe = Instance.new("Frame")
+	stripe.Size = UDim2.fromOffset(4, 64)
+	stripe.Position = UDim2.fromOffset(0, 20)
+	stripe.BackgroundColor3 = if buyable then colours.success else colours.locked
+	stripe.BorderSizePixel = 0
+	stripe.Parent = card
+
+	local name = label(card, tostring(vehicle.Name), 15, true)
+	name.Position = UDim2.fromOffset(20, 17)
+	name.Size = UDim2.new(1, -260, 0, 22)
+
+	local price = label(card, string.format("£%d", vehicle.Price or 0), 13, true)
+	price.Position = UDim2.fromOffset(20, 43)
+	price.Size = UDim2.new(1, -260, 0, 18)
+	price.TextColor3 = if vehicle.Affordable then colours.success else colours.locked
+
+	local state = if vehicle.Owned
+		then "ALREADY OWNED"
+		elseif vehicle.Locked and vehicle.GamepassId then "UNLOCK WITH A PASS"
+		elseif vehicle.Locked then tostring(vehicle.LockedReason or "LOCKED")
+		elseif not vehicle.Affordable then "NOT ENOUGH MONEY"
+		else "AVAILABLE"
+	local status = label(card, state, 10, true)
+	status.Position = UDim2.fromOffset(20, 68)
+	status.Size = UDim2.new(1, -260, 0, 21)
+	status.TextColor3 = if buyable then colours.success else colours.locked
+
+	-- Colours cycle on one button rather than opening a second panel. There are
+	-- rarely more than a handful and a picker would be a whole screen for a
+	-- choice that takes one tap.
+	local palette = if type(vehicle.Colours) == "table" and #vehicle.Colours > 0
+		then vehicle.Colours
+		else { "Default" }
+	local chosen = 1
+	local colourButton = button(card, tostring(palette[chosen]))
+	colourButton.Position = UDim2.new(1, -232, 0, 32)
+	colourButton.Size = UDim2.fromOffset(100, 40)
+	colourButton.BackgroundColor3 = colours.raised
+	table.insert(
+		self.connections,
+		colourButton.Activated:Connect(function()
+			chosen = chosen % #palette + 1
+			colourButton.Text = tostring(palette[chosen])
+		end)
+	)
+
+	local action = button(
+		card,
+		if vehicle.Owned
+			then "OWNED"
+			elseif vehicle.Locked and vehicle.GamepassId then "GET PASS"
+			else "BUY"
+	)
+	action.Position = UDim2.new(1, -124, 0, 32)
+	action.Size = UDim2.fromOffset(100, 40)
+	action.BackgroundColor3 = if buyable or (vehicle.Locked and vehicle.GamepassId)
+		then colours.accent
+		else colours.raised
+	action.Active = vehicle.Owned ~= true
+		and (buyable or (vehicle.Locked and vehicle.GamepassId ~= nil))
+	table.insert(
+		self.connections,
+		action.Activated:Connect(function()
+			if vehicle.Locked and vehicle.GamepassId then
+				self.context.Controllers.GamepassController:Prompt(vehicle.GamepassId)
+				return
+			end
+			self:_purchase(vehicle, tostring(palette[chosen]), action)
+		end)
+	)
+end
+
+function DealershipController:_purchase(vehicle: any, colour: string, action: TextButton)
+	action.Active = false
+	action.Text = "BUYING…"
+	local response = self.context.Controllers.NetworkController:Request("PurchaseVehicle", {
+		TerminalId = self.terminalId,
+		CharacterId = self.characterId,
+		DealershipId = self.dealershipId,
+		DefinitionId = vehicle.DefinitionId,
+		Colour = colour,
+	})
+	self.context.Controllers.NotificationController:Show(
+		if response.Success then "Purchased " .. tostring(vehicle.Name) else response.Message,
+		"Dealership"
+	)
+	if not response.Success then
+		action.Active = true
+		action.Text = "BUY"
+		return
+	end
+	-- Reopened rather than patched, so the balance, the garage and what is now
+	-- affordable all come back from the server together rather than being
+	-- guessed at here.
+	self:_open(self.terminalId)
+end
+
 function DealershipController:_render()
 	for _, child in self.list:GetChildren() do
 		if child:IsA("Frame") then
 			child:Destroy()
 		end
 	end
-	local vehicles = if self.selectedTab == "Owned" then self.owned else self.service
+	local vehicles = if self.selectedTab == "Owned"
+		then self.owned
+		elseif self.selectedTab == "Showroom" then self.showroom
+		else self.service
 	self.ownedTab.BackgroundColor3 = if self.selectedTab == "Owned"
 		then colours.accent
 		else colours.raised
 	self.serviceTab.BackgroundColor3 = if self.selectedTab == "Service"
 		then colours.accent
 		else colours.raised
-	self.heading.Text = if self.selectedTab == "Owned" then "YOUR GARAGE" else "SERVICE FLEET"
+	self.showroomTab.BackgroundColor3 = if self.selectedTab == "Showroom"
+		then colours.accent
+		else colours.raised
+	self.heading.Text = if self.selectedTab == "Owned"
+		then "YOUR GARAGE"
+		elseif self.selectedTab == "Showroom" then string.format(
+			"SHOWROOM  ·  £%d AVAILABLE",
+			self.balance or 0
+		)
+		else "SERVICE FLEET"
 	self.empty.Visible = #vehicles == 0
+	if self.selectedTab == "Showroom" then
+		for _, vehicle in vehicles do
+			self:_showroomCard(vehicle)
+		end
+		return
+	end
 	for _, rawVehicle in vehicles do
 		local vehicle = normalise(rawVehicle)
 		local card = Instance.new("Frame")
@@ -308,6 +435,29 @@ function DealershipController:_open(terminalId: string)
 		else nil
 	self.owned = if type(data.OwnedVehicles) == "table" then data.OwnedVehicles else {}
 	self.service = if type(data.ServiceVehicles) == "table" then data.ServiceVehicles else {}
+	-- The forecourt is a second call because it is priced against the player's
+	-- balance and their unlocks, which the spawn menu has no reason to know. A
+	-- terminal that only spawns service vehicles has no forecourt, and the tab
+	-- is hidden rather than opening on an empty list.
+	self.showroom = {}
+	self.balance = 0
+	self.characterId = nil
+	if self.dealershipId then
+		local catalogue = self.context.Controllers.NetworkController:Request(
+			"GetDealershipCatalogue",
+			{ TerminalId = terminalId }
+		)
+		if catalogue.Success and type(catalogue.Data) == "table" then
+			local payload = catalogue.Data
+			self.showroom = if type(payload.Vehicles) == "table" then payload.Vehicles else {}
+			self.balance = tonumber(payload.Balance) or 0
+			self.characterId = payload.CharacterId
+		end
+	end
+	self.showroomTab.Visible = #self.showroom > 0
+	if self.selectedTab == "Showroom" and #self.showroom == 0 then
+		self.selectedTab = "Owned"
+	end
 	self:_render()
 end
 
@@ -406,14 +556,20 @@ function DealershipController:_buildUI()
 	close.Size = UDim2.fromOffset(38, 38)
 	close.TextSize = 22
 	self.close = close
-	local ownedTab = button(panel, "OWNED VEHICLES")
+	local ownedTab = button(panel, "OWNED")
 	ownedTab.Position = UDim2.fromOffset(24, 87)
-	ownedTab.Size = UDim2.fromOffset(174, 42)
+	ownedTab.Size = UDim2.fromOffset(150, 42)
 	self.ownedTab = ownedTab
-	local serviceTab = button(panel, "SERVICE VEHICLES")
-	serviceTab.Position = UDim2.fromOffset(208, 87)
-	serviceTab.Size = UDim2.fromOffset(184, 42)
+	local serviceTab = button(panel, "SERVICE FLEET")
+	serviceTab.Position = UDim2.fromOffset(182, 87)
+	serviceTab.Size = UDim2.fromOffset(166, 42)
 	self.serviceTab = serviceTab
+	-- The forecourt. Without it the dealership could only ever hand back a
+	-- vehicle the player already had, so a first car was unobtainable.
+	local showroomTab = button(panel, "BUY A VEHICLE")
+	showroomTab.Position = UDim2.fromOffset(356, 87)
+	showroomTab.Size = UDim2.fromOffset(166, 42)
+	self.showroomTab = showroomTab
 	local heading = label(panel, "YOUR GARAGE", 11, true)
 	heading.Position = UDim2.fromOffset(24, 151)
 	heading.Size = UDim2.new(1, -48, 0, 20)
@@ -539,6 +695,13 @@ function DealershipController:_buildUI()
 		self.connections,
 		close.Activated:Connect(function()
 			self:_setOpen(false)
+		end)
+	)
+	table.insert(
+		self.connections,
+		showroomTab.Activated:Connect(function()
+			self.selectedTab = "Showroom"
+			self:_render()
 		end)
 	)
 	table.insert(

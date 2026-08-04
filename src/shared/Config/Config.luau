@@ -1646,6 +1646,7 @@ local Config = {
 			SetSprintState = { Capacity = 20, RefillPerSecond = 8 },
 			PurchaseFood = { Capacity = 2, RefillPerSecond = 0.25 },
 			PurchaseFromVendor = { Capacity = 3, RefillPerSecond = 0.3 },
+			GetDealershipCatalogue = { Capacity = 4, RefillPerSecond = 0.5 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 		},
