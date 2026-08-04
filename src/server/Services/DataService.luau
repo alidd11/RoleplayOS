@@ -7,7 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
-local DataService = { sessions = {}, running = false, connections = {} }
+local DataService = { sessions = {}, running = false, connections = {}, loading = {} }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
@@ -327,6 +327,35 @@ function DataService:_retry(operation: () -> any, final: ((any) -> boolean)?): (
 end
 
 function DataService:Load(player: Player, waited: boolean?): (any?, string?)
+	-- Loading is idempotent. Two paths call it for the same player: the join
+	-- signal, and the sweep over everyone already present when this service
+	-- starts. Whoever joins a server first satisfies both, so both ran, and the
+	-- loser found the winner's session already in place. That was reported as a
+	-- failure and the join handler kicked for it, which meant the first player
+	-- into a fresh server was liable to be kicked by their own successful load.
+	--
+	-- A session that exists is a profile that loaded. That is the successful
+	-- outcome, not a conflict, so it is returned as one.
+	local live = self.sessions[player.UserId]
+	if live and not live.Releasing then
+		return live.Profile, nil
+	end
+	-- A load already in flight is waited on rather than duplicated, so the two
+	-- callers cannot both open an UpdateAsync on one profile.
+	if self.loading[player.UserId] then
+		local deadline = os.clock()
+			+ (self.context.Configuration.Framework.SessionHandoverSeconds or 10)
+		while self.loading[player.UserId] and os.clock() < deadline do
+			if not player:IsDescendantOf(Players) then
+				return nil, "PLAYER_LEFT"
+			end
+			task.wait(0.1)
+		end
+		local settled = self.sessions[player.UserId]
+		if settled and not settled.Releasing then
+			return settled.Profile, nil
+		end
+	end
 	-- A rejoin routinely outruns the departure it follows. Leaving defers a
 	-- final save, that save is a DataStore round trip, and the session is only
 	-- dropped once it returns. Roblox frequently puts a returning player back on
@@ -404,6 +433,10 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	-- Recorded so a lease held by a server that has gone away can be waited out
 	-- rather than treated as an unrecoverable failure.
 	local lockedUntil: number? = nil
+	-- Claimed for the duration of the store call so a second caller waits on this
+	-- one rather than opening its own. Cleared on every exit below, including the
+	-- failures, or a player who failed once could never be loaded again.
+	self.loading[player.UserId] = true
 	local ok, problem = self:_retry(function()
 		return self.store:UpdateAsync(tostring(player.UserId), function(stored)
 			local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
@@ -449,6 +482,7 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 				Seconds = remaining,
 			})
 			task.wait(remaining + 1)
+			self.loading[player.UserId] = nil
 			if not player:IsDescendantOf(Players) then
 				return nil, "PLAYER_LEFT"
 			end
@@ -459,6 +493,7 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 				UserId = player.UserId,
 				Seconds = remaining,
 			})
+			self.loading[player.UserId] = nil
 			return nil, "PROFILE_SESSION_LOCKED:" .. tostring(math.ceil(remaining))
 		end
 	end
@@ -471,10 +506,15 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 		-- something went wrong forces whoever is looking into it to reach the
 		-- server console, which nobody can do from a phone and nobody does at all
 		-- once they have simply left.
+		self.loading[player.UserId] = nil
 		return nil, "PROFILE_LOAD_FAILED: " .. string.sub(tostring(problem), 1, 180)
 	end
 	self.sessions[player.UserId] =
 		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil, Revision = 0 }
+	self.loading[player.UserId] = nil
+	-- Measured once per join rather than on every save, which would encode the
+	-- whole profile every forty seconds for a number that barely moves.
+	self:_measure(player, loaded)
 	return loaded, nil
 end
 
@@ -515,6 +555,11 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 		end
 	end
 	session.Saving = true
+	-- Marks the session as on its way out, so a load arriving now waits for the
+	-- handover instead of adopting a profile that is about to be dropped.
+	if release then
+		session.Releasing = true
+	end
 	local revision = session.Revision or 0
 	local snapshot = deepCopy(session.Profile)
 	local now = os.time()
@@ -587,6 +632,10 @@ function DataService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
+			-- A load abandoned by the player leaving must not leave its claim
+			-- behind, or their next join waits the full handover on a load that
+			-- will never finish.
+			self.loading[player.UserId] = nil
 			-- Defer the final save so gameplay services can commit disconnect consequences
 			-- (for example, leaving while restrained) before the session lease is released.
 			task.defer(function()
