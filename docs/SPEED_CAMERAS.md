@@ -6,11 +6,43 @@ where the MDT can see it.
 
 ## Hooking a camera up
 
-One call, from a **server** script:
+RoleplayOS puts a `BindableFunction` called **`RoleplayOSIssueFine`** in
+`ServerStorage`. A camera script parented anywhere on the server can find it
+without requiring anything:
 
 ```lua
-local RoadSafety = -- the RoleplayOS service registry entry
-RoadSafety:IssueFine({
+local bridge = game:GetService("ServerStorage"):WaitForChild("RoleplayOSIssueFine")
+
+local issued, reason = bridge:Invoke({
+    Registration = plate,        -- required
+    Mph          = measuredMph,  -- required
+    LimitMph     = limit,        -- required
+    Vehicle      = vehicleModel, -- optional, needed for the blue light exemption
+    Driver       = driverPlayer, -- optional, defaults to the registered keeper
+    Location     = "London Road",
+})
+
+if not issued and reason == "EXEMPT_EMERGENCY_RESPONSE" then
+    -- On a blue light run. Do not flash, do not fine.
+end
+```
+
+### If your camera exempts by team
+
+A team allowlist cannot express this rule. It is all or nothing per team, so an
+emergency driver is either never fined or always fined, and what you want is
+"exempt only while responding".
+
+**Empty that list** and let this decide instead. It knows whether the lights are
+on and whether the driver is actually on duty, neither of which a team name can
+tell you.
+
+## The direct call
+
+From inside RoleplayOS, the same thing without the bridge:
+
+```lua
+RoadSafetyService:IssueFine({
     Registration = "AB12 CDE",   -- required
     Mph          = 47,           -- required, what the camera measured
     LimitMph     = 30,           -- required

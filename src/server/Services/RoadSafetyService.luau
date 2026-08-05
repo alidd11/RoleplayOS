@@ -16,6 +16,12 @@
 -- reports, because that is the only moment it is true of.
 
 local HttpService = game:GetService("HttpService")
+local ServerStorage = game:GetService("ServerStorage")
+
+-- The name a camera system looks for. A BindableFunction rather than a module,
+-- so a script that knows nothing about RoleplayOS and cannot require anything
+-- from it can still ask.
+local BRIDGE_NAME = "RoleplayOSIssueFine"
 
 local RoadSafetyService = {}
 
@@ -23,7 +29,29 @@ function RoadSafetyService:Init(context: any)
 	self.context = context
 end
 
-function RoadSafetyService:Start() end
+-- A door for the camera system in the world.
+--
+-- It lives in ServerStorage under a fixed name, so a camera script parented
+-- anywhere on the server can find it without requiring anything, and it takes
+-- the same table IssueFine does. Anything that goes wrong inside is reported to
+-- the caller rather than raised, since a camera should not stop working because
+-- one reading was malformed.
+function RoadSafetyService:Start()
+	local bridge = Instance.new("BindableFunction")
+	bridge.Name = BRIDGE_NAME
+	bridge.OnInvoke = function(request: any)
+		local ok, issued, reason = pcall(function()
+			return self:IssueFine(request)
+		end)
+		if not ok then
+			self.context.Logger:Error("Speed camera fine raised", { Error = tostring(issued) })
+			return false, "ISSUE_FAILED"
+		end
+		return issued, reason
+	end
+	bridge.Parent = ServerStorage
+	self.bridge = bridge
+end
 
 -- Whether a value read from an attribute or a value object means "lights on".
 --
@@ -224,6 +252,11 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 	return true, nil
 end
 
-function RoadSafetyService:Destroy() end
+function RoadSafetyService:Destroy()
+	if self.bridge then
+		self.bridge:Destroy()
+		self.bridge = nil
+	end
+end
 
 return RoadSafetyService
