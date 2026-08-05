@@ -227,16 +227,44 @@ function App.mount(context: any): ScreenGui
 	menuToggle.BackgroundTransparency = 0.5
 	menuToggle.BorderSizePixel = 0
 	menuToggle.AutoButtonColor = true
-	menuToggle.Font = Enum.Font.GothamMedium
-	menuToggle.Text = "☰"
-	menuToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-	menuToggle.TextSize = NATIVE_CONTROL_SIZE * 0.5
+	menuToggle.Text = ""
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
+
+	-- Three drawn bars rather than a text glyph.
+	--
+	-- This was U+2630, the trigram character, which Roblox's Gotham fonts do not
+	-- contain. A font that has no glyph for a character draws the missing
+	-- character box instead, so the one control that opens the whole menu showed
+	-- players an empty square.
+	--
+	-- Roblox draws its own top bar icons as artwork rather than as characters,
+	-- which is also why theirs cannot fail this way. Drawing the bars follows
+	-- that and needs no uploaded asset, so it cannot fail on asset permissions
+	-- either, and it scales with the measured top bar instead of with a font.
+	local glyph = Instance.new("Frame")
+	glyph.Name = "Glyph"
+	glyph.AnchorPoint = Vector2.new(0.5, 0.5)
+	glyph.Position = UDim2.fromScale(0.5, 0.5)
+	glyph.Size = UDim2.fromScale(0.42, 0.34)
+	glyph.BackgroundTransparency = 1
+	glyph.Parent = menuToggle
+	for _, offset in { -0.5, 0, 0.5 } do
+		local bar = Instance.new("Frame")
+		bar.AnchorPoint = Vector2.new(0.5, 0.5)
+		bar.Position = UDim2.fromScale(0.5, 0.5 + offset)
+		bar.Size = UDim2.new(1, 0, 0, 2)
+		bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		bar.BorderSizePixel = 0
+		bar.Parent = glyph
+		local barCorner = Instance.new("UICorner")
+		barCorner.CornerRadius = UDim.new(1, 0)
+		barCorner.Parent = bar
+	end
 
 	-- A dedicated non-interactive backdrop extends above the legacy GUI origin.
 	-- This keeps the visual treatment full bleed even on clients which still
@@ -1588,7 +1616,17 @@ function App.mount(context: any): ScreenGui
 			math.floor(nativeBand * (NATIVE_CONTROL_SIZE / NATIVE_BAND_HEIGHT) + 0.5)
 		menuToggle.Size = UDim2.fromOffset(controlSize, controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, controlSize / 2)
-		menuToggle.TextSize = math.floor(controlSize * 0.5 + 0.5)
+		-- The bars keep their proportions against the measured control, and each
+		-- one stays at least a pixel so it never rounds away on a small screen.
+		glyph.Size = UDim2.fromOffset(
+			math.floor(controlSize * 0.42 + 0.5),
+			math.floor(controlSize * 0.34 + 0.5)
+		)
+		for _, bar in glyph:GetChildren() do
+			if bar:IsA("Frame") then
+				bar.Size = UDim2.new(1, 0, 0, math.max(1, math.floor(controlSize * 0.055 + 0.5)))
+			end
+		end
 		-- Sit immediately right of the native control cluster. NativeLeft is the
 		-- measured left edge of the region Roblox leaves free, so trust it when it
 		-- is reported and fall back to the historical estimate only when Roblox

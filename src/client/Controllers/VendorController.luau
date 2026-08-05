@@ -78,7 +78,7 @@ function VendorController:_mount()
 	close.BackgroundColor3 = C.Raised
 	close.BorderSizePixel = 0
 	close.Font = Enum.Font.GothamBold
-	close.Text = "✕"
+	close.Text = "×"
 	close.TextColor3 = C.Text
 	close.TextSize = 18
 	close.Parent = panel
