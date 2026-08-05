@@ -71,6 +71,32 @@ function RecordIndexService:_cacheSet(key: string, value: any)
 		Value = value,
 		ExpiresAt = os.clock() + self.context.Configuration.MDT.RecordCacheSeconds,
 	}
+	self:_sweepCache()
+end
+
+-- Drops entries whose time is up.
+--
+-- Every entry carried an expiry and nothing ever acted on one: reading a record
+-- cleared only the key it was asked for, so a server accumulated every person
+-- and vehicle record anybody had ever looked at, criminal and custody histories
+-- included, and never gave any of it back. Roblox servers do not release memory
+-- when players leave, so this only ever grew.
+--
+-- Swept on write rather than on a timer, which keeps it to the moment something
+-- is already being spent, and amortised so a large cache is not walked in full
+-- on every single write.
+function RecordIndexService:_sweepCache()
+	self.sweepCounter = (self.sweepCounter or 0) + 1
+	if self.sweepCounter < 32 then
+		return
+	end
+	self.sweepCounter = 0
+	local now = os.clock()
+	for key, entry in self.cache do
+		if type(entry) ~= "table" or (entry.ExpiresAt or 0) <= now then
+			self.cache[key] = nil
+		end
+	end
 end
 
 function RecordIndexService:_getRecord(key: string): (any?, string?)

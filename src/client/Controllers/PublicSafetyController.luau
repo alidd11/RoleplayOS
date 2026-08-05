@@ -5,7 +5,13 @@ local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
-local PublicSafetyController = { connections = {}, watched = {} }
+-- Weak keyed. A tool destroyed on respawn should be collectable, and holding it
+-- strongly kept every tool the player had ever carried alive for the session.
+local PublicSafetyController = {
+	connections = {},
+	watched = setmetatable({}, { __mode = "k" }),
+	scanConnections = {},
+}
 local CLOSE_ACTION = "RoleplayOSCustodyActionsClose"
 
 local function corner(parent: Instance, radius: number)
@@ -193,8 +199,15 @@ function PublicSafetyController:_scan(container: Instance)
 			self:_watchTool(child)
 		end
 	end
+	-- One scan connection at a time. A fresh one was added on every respawn and
+	-- never released, so a long session left dozens of dead listeners behind on
+	-- containers that no longer existed.
+	for _, connection in self.scanConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.scanConnections)
 	table.insert(
-		self.connections,
+		self.scanConnections,
 		container.ChildAdded:Connect(function(child)
 			if child:IsA("Tool") then
 				self:_watchTool(child)
