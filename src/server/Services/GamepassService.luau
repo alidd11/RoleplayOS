@@ -2,9 +2,10 @@
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
-local GamepassService = {}
+local GamepassService = { connections = {}, running = false }
 function GamepassService:Init(context: any)
 	self.context = context
+	self.changedEvent = context.Network:RegisterEvent("GamepassOwnershipChanged")
 end
 function GamepassService:Refresh(player: Player, definition: any): (boolean, string?)
 	if definition.GamepassId == 0 then
@@ -21,8 +22,15 @@ function GamepassService:Refresh(player: Player, definition: any): (boolean, str
 	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if session then
-		session.Profile.GamepassCache[tostring(definition.GamepassId)] = owned
-		self.context.Services:Get("DataService"):MarkDirty(player)
+		local ownershipKey = tostring(definition.GamepassId)
+		if session.Profile.GamepassCache[ownershipKey] ~= owned then
+			session.Profile.GamepassCache[ownershipKey] = owned
+			self.context.Services:Get("DataService"):MarkDirty(player)
+			self.changedEvent:FireClient(player, {
+				GamepassId = definition.GamepassId,
+				Owned = owned,
+			})
+		end
 	end
 	return owned, nil
 end
@@ -39,7 +47,7 @@ end
 function GamepassService:RefreshAll(player: Player)
 	local spacing = self.context.Configuration.Groups.WarmSpacingSeconds or 0.6
 	for _, definition in self.context.Configuration.Gamepasses do
-		if not player.Parent then
+		if not self.running or not player.Parent then
 			return
 		end
 		self:Refresh(player, definition)
@@ -48,17 +56,21 @@ function GamepassService:RefreshAll(player: Player)
 end
 
 function GamepassService:Start()
-	MarketplaceService.PromptGamePassPurchaseFinished:Connect(
-		function(player, gamepassId, purchased)
-			if not purchased then
-				return
-			end
-			for _, definition in self.context.Configuration.Gamepasses do
-				if definition.GamepassId == gamepassId then
-					self:Refresh(player, definition)
+	self.running = true
+	table.insert(
+		self.connections,
+		MarketplaceService.PromptGamePassPurchaseFinished:Connect(
+			function(player, gamepassId, purchased)
+				if not purchased then
+					return
+				end
+				for _, definition in self.context.Configuration.Gamepasses do
+					if definition.GamepassId == gamepassId then
+						self:Refresh(player, definition)
+					end
 				end
 			end
-		end
+		)
 	)
 	local function refreshWhenReady(player: Player)
 		task.spawn(function()
@@ -75,7 +87,7 @@ function GamepassService:Start()
 			end
 		end)
 	end
-	Players.PlayerAdded:Connect(refreshWhenReady)
+	table.insert(self.connections, Players.PlayerAdded:Connect(refreshWhenReady))
 	for _, player in Players:GetPlayers() do
 		refreshWhenReady(player)
 	end
@@ -87,5 +99,11 @@ function GamepassService:GetPromptMetadata(definitionId: string): any?
 	end
 	return { GamepassId = item.GamepassId, Name = item.Name, Description = item.Description }
 end
-function GamepassService:Destroy() end
+function GamepassService:Destroy()
+	self.running = false
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+end
 return GamepassService

@@ -1,6 +1,7 @@
 --!strict
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local ConfigValidator = require(ReplicatedStorage.RoleplayOS.Shared.ConfigValidator)
 local Logger = require(ReplicatedStorage.RoleplayOS.Shared.Logger)
@@ -100,19 +101,33 @@ end
 -- started kept running, and when the server eventually closed no Destroy ran at
 -- all. Every online player lost the time since their last autosave and left a
 -- stamped lease behind that locked them out of every other server.
-game:BindToClose(function()
+local tornDown = false
+local function tearDown()
+	if tornDown then
+		return
+	end
+	tornDown = true
 	registry:Destroy(context)
 	context.Network:Destroy()
-end)
+end
+
+game:BindToClose(tearDown)
 
 local ok, problem = pcall(function()
 	registry:Initialise(context)
 	registry:Start(context)
 end)
 if not ok then
-	-- Reported, not re-raised. A server missing one service is worth far more
-	-- than no server at all, and re-raising here only removed the running one.
 	logger:Error("RoleplayOS startup failed", { Error = tostring(problem) })
+	tearDown()
+	local message = "This server could not start safely. Please join another server."
+	for _, player in Players:GetPlayers() do
+		player:Kick(message)
+	end
+	Players.PlayerAdded:Connect(function(player)
+		player:Kick(message)
+	end)
+	return
 end
 logger:Info("RoleplayOS started", {
 	ServiceCount = #serviceOrder,

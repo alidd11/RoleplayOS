@@ -38,21 +38,21 @@ function Registry:Start(context: any)
 		local service = self.services[name]
 		local ok, errorMessage = pcall(service.Start, service)
 		if not ok then
-			-- Reported and stepped over, whether the service is optional or not.
-			--
-			-- Raising here stopped every later service from starting, and since
-			-- the raise propagated out of the bootstrap it also removed the
-			-- server's own shutdown handler. One missing service became a whole
-			-- server that could not save anybody.
-			--
-			-- A service that fails is still Destroyed, so it releases whatever it
-			-- managed to acquire before it threw.
-			local level = if service.Optional then "Warning" else "Error"
-			context.Logger[level](context.Logger, "Service failed to start", {
-				Service = name,
-				Optional = service.Optional == true,
-				Error = tostring(errorMessage),
-			})
+			if service.Optional == true then
+				context.Logger:Warning("Optional service failed to start", {
+					Service = name,
+					Error = tostring(errorMessage),
+				})
+				continue
+			end
+			error(
+				string.format(
+					"Required service %s failed to start: %s",
+					name,
+					tostring(errorMessage)
+				),
+				0
+			)
 		end
 	end
 end
