@@ -1573,6 +1573,37 @@ local Config = {
 	-- If the exemption is not working, the surest way to find the right name is to
 	-- turn the lights on in Studio and watch which attribute or value changes.
 	EmergencyLights = {
+		-- Matched by pattern as well as by name, because lighting systems name
+		-- this differently and guessing wrong silently costs an emergency driver
+		-- a fine. Anything whose name contains one of these counts.
+		NamePatterns = {
+			"els",
+			"lightbar",
+			"siren",
+			"beacon",
+			"emergency",
+			"strobe",
+			"blues",
+			"code3",
+			"lightson",
+			"lightstate",
+		},
+		-- Checked first and never matched, so an ordinary lamp cannot be mistaken
+		-- for a blue light run. Without these a marked car simply driving with its
+		-- headlights on would be exempt from every camera.
+		ExcludedPatterns = {
+			"head",
+			"interior",
+			"brake",
+			"reverse",
+			"fog",
+			"indicator",
+			"hazard",
+			"dash",
+			"plate",
+			"cabin",
+			"map",
+		},
 		AttributeNames = {
 			"RoleplayOSEmergencyLights",
 			"ELSActive",
