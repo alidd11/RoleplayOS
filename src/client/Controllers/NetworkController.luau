@@ -24,21 +24,61 @@ local REQUEST_TIMEOUT_SECONDS = 14
 -- server is unavailable, which is both true and visible.
 local REMOTES_TIMEOUT_SECONDS = 20
 
+-- Init does not touch the network at all.
+--
+-- The Init loop is serial and the start menu is mounted after it, so anything
+-- that waits here is time the player spends looking at nothing. Waiting for a
+-- server that never started meant no interface at all for a minute, and then
+-- only a warning nobody sees.
+--
+-- The remotes are found on first use instead, so the menu is on screen while
+-- that happens and can say what it is waiting for.
 function NetworkController:Init(_context: any)
 	self.resolved = {}
+	self.remotes = nil
+	self.lookupStarted = false
+end
+
+-- The remotes folder, waited for once and shared by every later caller.
+--
+-- Started on demand rather than at init, and only once: a hundred callers
+-- during startup should be one wait, not a hundred.
+function NetworkController:_folder(): Instance?
+	if self.remotes then
+		return self.remotes
+	end
+	if self.lookupStarted then
+		-- Another caller is already waiting. Wait alongside it rather than
+		-- starting a second lookup for the same folder.
+		local deadline = os.clock() + REMOTES_TIMEOUT_SECONDS
+		while not self.remotes and os.clock() < deadline do
+			task.wait(0.1)
+		end
+		return self.remotes
+	end
+	self.lookupStarted = true
 	local root = ReplicatedStorage:WaitForChild("RoleplayOS", REMOTES_TIMEOUT_SECONDS)
 	local network = if root then root:WaitForChild("Network", REMOTES_TIMEOUT_SECONDS) else nil
 	self.remotes = if network then network:WaitForChild("Remotes", REMOTES_TIMEOUT_SECONDS) else nil
 	if not self.remotes then
 		warn(
 			"RoleplayOS could not find the server's remotes. The server did not finish "
-				.. "starting, so nothing that needs it will work. The menu is still usable."
+				.. "starting, so nothing that needs it will work."
 		)
 	end
+	return self.remotes
+end
+
+-- What the interface should be telling the player about the server.
+function NetworkController:GetState(): string
+	if self.remotes then
+		return if self.ready then "Ready" else "Connecting"
+	end
+	return if self.lookupStarted then "Unavailable" else "Connecting"
 end
 function NetworkController:Start() end
 function NetworkController:_awaitReady()
-	if not self.remotes then
+	if not self:_folder() then
 		return
 	end
 	if self.ready or self.remotes:GetAttribute("Ready") then
@@ -55,7 +95,7 @@ function NetworkController:_awaitReady()
 	end
 end
 function NetworkController:Resolve(endpoint: string): RemoteFunction?
-	if not self.remotes then
+	if not self:_folder() then
 		return nil
 	end
 	local cached = self.resolved[endpoint]
@@ -78,7 +118,7 @@ end
 -- Bounded lookup for RemoteEvents. An untimed WaitForChild here yields forever
 -- when the server never reaches that registration, silently wedging the caller.
 function NetworkController:ResolveEvent(name: string): RemoteEvent?
-	if not self.remotes then
+	if not self:_folder() then
 		return nil
 	end
 	local remote = self.remotes:FindFirstChild(name)

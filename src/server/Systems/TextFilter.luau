@@ -16,7 +16,11 @@ local TextService = game:GetService("TextService")
 
 local TextFilter = {}
 
-local TIMEOUT_SECONDS = 8
+-- Long enough for a filter that is working, short enough that a handler waiting
+-- on one still answers. Eight seconds was neither: two fields filtered one after
+-- the other could not finish inside any sensible request budget, which is why
+-- creating a character timed out rather than failing.
+local TIMEOUT_SECONDS = 4
 local POLL_SECONDS = 0.05
 
 local function run(
@@ -56,6 +60,49 @@ local function run(
 		return filtered, nil
 	end
 	return nil, if finished then "TEXT_FILTER_UNAVAILABLE" else "TEXT_FILTER_TIMEOUT"
+end
+
+-- Filters several strings at once.
+--
+-- Filtering is a web call, so doing them one after another costs the sum of
+-- their waits: two fields at up to four seconds each is eight, which no request
+-- should spend. Run together they cost the slowest one.
+--
+-- Returns nil and the first refusal, since a caller that cannot show one field
+-- has nothing to do with the rest.
+function TextFilter.manyForBroadcast(
+	texts: { [string]: string },
+	userId: number,
+	context: Enum.TextFilterContext?
+): ({ [string]: string }?, string?)
+	local results: { [string]: string } = {}
+	local failure: string? = nil
+	local pending = 0
+	for key, text in texts do
+		pending += 1
+		task.spawn(function()
+			local value, reason = TextFilter.forBroadcast(text, userId, context)
+			if value then
+				results[key] = value
+			else
+				failure = failure or reason or "TEXT_FILTER_UNAVAILABLE"
+			end
+			pending -= 1
+		end)
+	end
+	-- Bounded by the same deadline the individual calls use, so a spawned filter
+	-- that never returns cannot hold this open either.
+	local deadline = os.clock() + TIMEOUT_SECONDS + 1
+	while pending > 0 and os.clock() < deadline do
+		task.wait(POLL_SECONDS)
+	end
+	if pending > 0 then
+		return nil, "TEXT_FILTER_TIMEOUT"
+	end
+	if failure then
+		return nil, failure
+	end
+	return results, nil
 end
 
 -- Text shown to everyone. Callers must treat nil as a refusal, never as

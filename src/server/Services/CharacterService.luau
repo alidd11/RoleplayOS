@@ -11,14 +11,19 @@ function CharacterService:Init(context: any)
 end
 function CharacterService:Start() end
 local function filterIdentity(player: Player, identity: any): (any?, string?)
-	local filtered = table.clone(identity)
-	for _, field in { "FirstName", "LastName" } do
-		local result, reason = TextFilter.forBroadcast(identity[field], player.UserId)
-		if not result then
-			return nil, reason or "TEXT_FILTER_UNAVAILABLE"
-		end
-		filtered[field] = result
+	-- Both names at once. Filtered one after the other they cost the sum of two
+	-- web calls, which is longer than a request should ever take and is why
+	-- creating a character timed out rather than being refused.
+	local cleaned, reason = TextFilter.manyForBroadcast({
+		FirstName = identity.FirstName,
+		LastName = identity.LastName,
+	}, player.UserId)
+	if not cleaned then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 	end
+	local filtered = table.clone(identity)
+	filtered.FirstName = cleaned.FirstName
+	filtered.LastName = cleaned.LastName
 	return filtered, nil
 end
 -- Single authority for how many character slots a profile may occupy. The start
