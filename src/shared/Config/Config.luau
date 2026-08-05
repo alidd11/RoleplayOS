@@ -459,6 +459,16 @@ local Config = {
 			Name = "Civilian Rifle Access",
 			Description = "Unlocks approved civilian rifle items.",
 		},
+		-- Base policing on the public place. The id still has to be created on
+		-- Roblox and set here; until it is, the pass cannot be owned, so the
+		-- police team is unavailable on the public place and PCSO is the free way
+		-- in there.
+		PublicPoliceTeam = {
+			Id = "PublicPoliceTeam",
+			GamepassId = 0,
+			Name = "Public Police Team",
+			Description = "Unlocks the police team in public servers.",
+		},
 		PublicArmedResponse = {
 			Id = "PublicArmedResponse",
 			GamepassId = 1933635353,
@@ -683,6 +693,7 @@ local Config = {
 				{ Name = "Chief Constable", Abbreviation = "CC", Numbered = false },
 			},
 			RoleIds = {
+				"PCSO",
 				"PoliceOfficer",
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
@@ -906,9 +917,12 @@ local Config = {
 			TeamName = "Civilian",
 			Access = { AccessType = "Public", DisplayWhenLocked = true },
 		},
-		PoliceOfficer = {
-			Id = "PoliceOfficer",
-			Name = "Police Officer",
+		-- Free on the public place, and the only policing role that is. A PCSO
+		-- carries a radio and a notebook and no handcuffs, which is both the real
+		-- distinction and a reason to buy the police pass.
+		PCSO = {
+			Id = "PCSO",
+			Name = "PCSO",
 			TeamName = "Police",
 			DepartmentId = "Police",
 			Access = publicOr({
@@ -916,6 +930,19 @@ local Config = {
 				GroupLinkId = "Police",
 				MinimumGroupRank = 1,
 			}),
+			LoadoutId = "PCSO",
+			UniformId = "PoliceStandard",
+		},
+		PoliceOfficer = {
+			Id = "PoliceOfficer",
+			Name = "Police Officer",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			Access = publicPassOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}, 0),
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -925,11 +952,11 @@ local Config = {
 			TeamName = "Police",
 			DepartmentId = "Police",
 			DivisionId = "Frontline",
-			Access = publicOr({
+			Access = publicPassOr({
 				AccessType = "Group",
 				GroupLinkId = "Police",
 				MinimumGroupRank = 1,
-			}),
+			}, 0),
 			LoadoutId = "PoliceFrontline",
 			UniformId = "PoliceStandard",
 		},
@@ -1082,6 +1109,7 @@ local Config = {
 			StationId = "CityCentre",
 			TeamName = "Police",
 			RoleIds = {
+				"PCSO",
 				"PoliceOfficer",
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
@@ -1168,6 +1196,9 @@ local Config = {
 	},
 	Loadouts = {
 		PoliceResponse = { Id = "PoliceResponse", ToolIds = { "Radio", "Handcuffs" } },
+		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
+		-- gated on carrying them, so the distinction enforces itself.
+		PCSO = { Id = "PCSO", ToolIds = { "Radio", "Notebook" } },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
 			ToolIds = { "Radio", "Notebook", "Handcuffs" },
