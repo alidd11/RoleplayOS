@@ -677,6 +677,19 @@ local Config = {
 		PoliceForceName = "UP Hampshire & Isle of Wight Constabulary",
 	},
 	UKTime = { Enabled = true, UpdateSeconds = 15 },
+	-- Periodic record of what the server is doing.
+	--
+	-- Everything wrong with this game so far arrived as a feeling: it is looping,
+	-- it is laggy, people are being kicked. Each had a specific cause and each
+	-- took far longer to find than it should have, because there was no record of
+	-- what the server looked like at the time.
+	Health = {
+		Enabled = true,
+		IntervalSeconds = 120,
+		-- Offset from startup, so the first sample is of a running server rather
+		-- than of one still starting, which is always its worst minute.
+		FirstSampleSeconds = 45,
+	},
 	-- Our own emergency lighting, rather than whichever kit a vehicle arrived
 	-- with.
 	--

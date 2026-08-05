@@ -20,6 +20,7 @@ function NetworkServer.new(config: any, logger: any)
 		logger = logger,
 		endpoints = {},
 		limiters = {},
+		counts = {},
 		active = {},
 		globalLimiter = RateLimiter.new(
 			config.GlobalCapacity or 30,
@@ -35,6 +36,26 @@ function NetworkServer.new(config: any, logger: any)
 		self.active[player.UserId] = nil
 	end)
 	return self
+end
+
+-- Counts outcomes by code.
+--
+-- Every refusal above is a decision this server made about a request, and
+-- until now each one was either silent or a single security log line with no
+-- sense of rate. A server refusing one request an hour and a server refusing
+-- half of them look identical in a log and completely different to play on.
+function NetworkServer:_count(code: string)
+	self.counts[code] = (self.counts[code] or 0) + 1
+end
+
+-- The counts since the last call, and then resets them.
+--
+-- Read as a rate rather than a total: a running total only ever grows, so it
+-- says how bad the server has ever been rather than how it is now.
+function NetworkServer:DrainCounts(): { [string]: number }
+	local drained = self.counts
+	self.counts = {}
+	return drained
 end
 
 function NetworkServer:RegisterFunction(
@@ -55,6 +76,7 @@ function NetworkServer:RegisterFunction(
 		local requestId = HttpService:GenerateGUID(false)
 		local userKey = tostring(player.UserId)
 		if not self.globalLimiter:Allow(userKey) or not limiter:Allow(userKey) then
+			self:_count("RATE_LIMITED")
 			return {
 				Success = false,
 				Code = "RATE_LIMITED",
@@ -69,6 +91,7 @@ function NetworkServer:RegisterFunction(
 				UserId = player.UserId,
 				Reason = structuralReason,
 			})
+			self:_count("PAYLOAD_REJECTED")
 			return {
 				Success = false,
 				Code = "PAYLOAD_REJECTED",
@@ -78,6 +101,7 @@ function NetworkServer:RegisterFunction(
 		end
 		local encodedOk, encoded = pcall(HttpService.JSONEncode, HttpService, payload)
 		if not encodedOk or #encoded > self.config.MaximumPayloadBytes then
+			self:_count("PAYLOAD_REJECTED")
 			return {
 				Success = false,
 				Code = "PAYLOAD_REJECTED",
@@ -92,6 +116,7 @@ function NetworkServer:RegisterFunction(
 				UserId = player.UserId,
 				Reason = if schemaOk then reason else "SCHEMA_ERROR",
 			})
+			self:_count("INVALID_REQUEST")
 			return {
 				Success = false,
 				Code = "INVALID_REQUEST",
@@ -126,6 +151,7 @@ function NetworkServer:RegisterFunction(
 			end
 		end
 		if active >= (self.config.MaximumConcurrentRequests or 4) then
+			self:_count("SERVER_BUSY")
 			return {
 				Success = false,
 				Code = "SERVER_BUSY",
@@ -167,6 +193,7 @@ function NetworkServer:RegisterFunction(
 				UserId = player.UserId,
 				Seconds = self.config.HandlerTimeoutSeconds or 8,
 			})
+			self:_count("SERVER_TIMEOUT")
 			return {
 				Success = false,
 				Code = "SERVER_TIMEOUT",
@@ -181,6 +208,7 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 				Error = tostring(result),
 			})
+			self:_count("SERVER_ERROR")
 			return {
 				Success = false,
 				Code = "SERVER_ERROR",
@@ -193,6 +221,7 @@ function NetworkServer:RegisterFunction(
 				"Remote handler returned an invalid response",
 				{ Endpoint = name, RequestId = requestId }
 			)
+			self:_count("SERVER_ERROR")
 			return {
 				Success = false,
 				Code = "SERVER_ERROR",

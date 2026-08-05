@@ -90,6 +90,7 @@ local serviceOrder = {
 	"NeedsService",
 	"StartMenuService",
 	"NetworkService",
+	"HealthService",
 }
 
 for _, name in serviceOrder do
