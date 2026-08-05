@@ -124,6 +124,9 @@ local Config = {
 		-- two years ago costs nothing, whereas an unbounded list eventually costs
 		-- the entire profile.
 		MaximumApplicationHistory = 60,
+		-- Cameras issue fines unattended, so this is the history most able to grow
+		-- without anybody choosing to add to it.
+		MaximumDrivingFines = 80,
 		MaximumEmploymentHistory = 40,
 	},
 	ContentQuality = {
@@ -1526,6 +1529,47 @@ local Config = {
 		-- A pedal held this long with the vehicle still stationary means the
 		-- chassis reads its input somewhere the pedals do not reach.
 		NoResponseSeconds = 2.5,
+	},
+	-- Speeding, and who is exempt from it.
+	--
+	-- Detection belongs to the camera system in the world. This is the rule it
+	-- asks about and the record it writes into, so an officer searching a driver
+	-- in the MDT sees their points and their fines.
+	RoadSafety = {
+		ToleranceMph = 2,
+		FineBase = 100,
+		FinePerMph = 10,
+		MaximumFine = 1000,
+		PointsByExcess = { { 10, 3 }, { 20, 4 }, { 30, 6 }, { 999, 6 } },
+		-- An emergency driver on a blue light run is exempt. The same driver with
+		-- the lights off is not, which is the whole point of the rule: the
+		-- exemption belongs to the response, not to the person or the car.
+		ExemptOnEmergencyLights = true,
+		-- Being on duty is required as well as the lights. Without it, anybody who
+		-- got hold of a marked car and found the light switch would be exempt.
+		ExemptRequiresDuty = true,
+	},
+	-- How to tell whether a vehicle's blue lights are on.
+	--
+	-- Lighting systems differ as much as chassis forks do, so this is a list of
+	-- places to look rather than one assumption. Every name is tried as an
+	-- attribute on the vehicle model and on the driver's seat, and as a value
+	-- object inside the named folders. The first one that reads as on wins.
+	--
+	-- If the exemption is not working, the surest way to find the right name is to
+	-- turn the lights on in Studio and watch which attribute or value changes.
+	EmergencyLights = {
+		AttributeNames = {
+			"RoleplayOSEmergencyLights",
+			"ELSActive",
+			"Lights",
+			"LightsOn",
+			"Emergency",
+			"Code3",
+		},
+		ValueFolderNames = { "ELS", "Values", "Configuration", "Settings" },
+		-- Values that count as off even when the attribute exists.
+		OffValues = { "off", "false", "none", "0" },
 	},
 	Chassis = {
 		-- Interfaces cloned into PlayerGui by the chassis, disabled on sight so

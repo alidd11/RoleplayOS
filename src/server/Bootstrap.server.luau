@@ -48,6 +48,7 @@ local serviceOrder = {
 	"VehicleOwnershipService",
 	"VehiclePreviewService",
 	"VehicleService",
+	"RoadSafetyService",
 	"CustodyService",
 	"IdentificationService",
 	"UKTimeService",
