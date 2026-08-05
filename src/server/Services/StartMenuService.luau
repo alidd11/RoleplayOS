@@ -49,6 +49,10 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Locked = not access.Allowed,
 			LockType = role.Access.AccessType,
 			LockMessage = access.Message,
+			-- Only send the entitlement identifier required by the client purchase
+			-- prompt. The server remains authoritative and re-evaluates ownership;
+			-- exposing this ID never grants the role by itself.
+			GamepassId = access.Metadata and access.Metadata.GamepassId,
 			Action = access.ReasonCode == "GAMEPASS_REQUIRED" and "PromptGamepass"
 				or access.ReasonCode == "APPLICATION_REQUIRED" and "OpenApplication"
 				or "SelectRole",
@@ -67,6 +71,32 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		})
 	end
 	local slotCount = self.context.Services:Get("CharacterService"):SlotAllowance(session)
+	local server = self.context.Services:Get("CommunityServerService"):GetServerContext(player)
+	local gamepasses = {}
+	for definitionId, definition in self.context.Configuration.Gamepasses do
+		local gamepassId = definition.GamepassId
+		local configured = type(gamepassId) == "number" and gamepassId > 0
+		local publicTeam = string.sub(definitionId, 1, 6) == "Public"
+		table.insert(gamepasses, {
+			Id = definitionId,
+			GamepassId = if configured then gamepassId else nil,
+			Name = definition.Name,
+			Description = definition.Description,
+			Configured = configured,
+			Owned = configured and session.Profile.GamepassCache[tostring(gamepassId)] == true,
+			AvailableInServer = not publicTeam or server.Kind == "Public",
+			Category = if publicTeam
+				then "Public teams"
+				elseif string.find(definitionId, "Civilian", 1, true) then "Civilian equipment"
+				else "Upgrades",
+		})
+	end
+	table.sort(gamepasses, function(a, b)
+		if a.Category == b.Category then
+			return a.Name < b.Name
+		end
+		return a.Category < b.Category
+	end)
 	return {
 		Framework = {
 			Version = "0.1-dev",
@@ -76,11 +106,12 @@ function StartMenuService:Build(player: Player): (any?, string?)
 				or game.Name,
 			ShowRoleplayOSMark = self.context.Configuration.Framework.Branding.ShowRoleplayOSMark,
 		},
-		Server = self.context.Services:Get("CommunityServerService"):GetServerContext(player),
+		Server = server,
 		Characters = self.context.Services:Get("CharacterService"):List(player),
 		DutyProfiles = dutyProfiles,
 		EmptySlots = math.max(0, slotCount - #session.Profile.CharacterSlots),
 		Roles = roles,
+		Gamepasses = gamepasses,
 		Stations = self.context.Configuration.Stations,
 		Jobs = self.context.Configuration.Jobs,
 		LastCharacterId = session.Profile.AuditMetadata.LastCharacterId,

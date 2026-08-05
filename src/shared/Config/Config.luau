@@ -419,110 +419,108 @@ local Config = {
 	Gamepasses = {
 		PremiumVehicles = {
 			Id = "PremiumVehicles",
-			GamepassId = 1935128985,
+			GamepassId = 1936590544,
 			Name = "Premium Vehicles",
 			Description = "Unlocks the premium vehicle catalogue.",
 		},
 		ExtraCharacterSlot = {
 			Id = "ExtraCharacterSlot",
-			GamepassId = 1935374962,
+			GamepassId = 1934044063,
 			Name = "Extra Character Slot",
 			Description = "Adds one civilian character slot.",
 		},
 		CustomRegistration = {
 			Id = "CustomRegistration",
-			GamepassId = 1932237647,
+			GamepassId = 1937140343,
 			Name = "Custom Registration Plate",
 			Description = "Lets civilians choose a moderated registration for an owned vehicle.",
 		},
 		CivilianKnife = {
 			Id = "CivilianKnife",
-			GamepassId = 1932205625,
+			GamepassId = 1937446295,
 			Name = "Civilian Knife Access",
 			Description = "Unlocks approved civilian knife items.",
 		},
 		CivilianHandgun = {
 			Id = "CivilianHandgun",
-			GamepassId = 1935362991,
+			GamepassId = 1937822271,
 			Name = "Civilian Handgun Access",
 			Description = "Unlocks approved civilian handgun items.",
 		},
 		CivilianShotgun = {
 			Id = "CivilianShotgun",
-			GamepassId = 1934043075,
+			GamepassId = 1934518052,
 			Name = "Civilian Shotgun Access",
 			Description = "Unlocks approved civilian shotgun items.",
 		},
 		CivilianRifle = {
 			Id = "CivilianRifle",
-			GamepassId = 1933239337,
+			GamepassId = 1934955986,
 			Name = "Civilian Rifle Access",
 			Description = "Unlocks approved civilian rifle items.",
 		},
-		-- Base policing on the public place. The id still has to be created on
-		-- Roblox and set here; until it is, the pass cannot be owned, so the
-		-- police team is unavailable on the public place and PCSO is the free way
-		-- in there.
+		-- Base Police Officer and Frontline Policing access on the public place.
+		-- PCSO remains the free public policing route.
 		PublicPoliceTeam = {
 			Id = "PublicPoliceTeam",
-			GamepassId = 0,
+			GamepassId = 1937222319,
 			Name = "Public Police Team",
 			Description = "Unlocks the police team in public servers.",
 		},
 		PublicArmedResponse = {
 			Id = "PublicArmedResponse",
-			GamepassId = 1933635353,
+			GamepassId = 1933270297,
 			Name = "Public Armed Response Division",
 			Description = "Unlocks Armed Response in public servers.",
 		},
 		PublicRoadsPolicing = {
 			Id = "PublicRoadsPolicing",
-			GamepassId = 1933455264,
+			GamepassId = 1933156365,
 			Name = "Public Roads Policing Division",
 			Description = "Unlocks Roads Policing in public servers.",
 		},
 		PublicAmbulanceTeam = {
 			Id = "PublicAmbulanceTeam",
-			GamepassId = 1934391076,
+			GamepassId = 1936100607,
 			Name = "Public Ambulance Team",
 			Description = "Unlocks the Ambulance team in public servers.",
 		},
 		PublicFireTeam = {
 			Id = "PublicFireTeam",
-			GamepassId = 1934942991,
+			GamepassId = 1936292594,
 			Name = "Public Fire & Rescue Team",
 			Description = "Unlocks Fire and Rescue in public servers.",
 		},
 		PublicControlTeam = {
 			Id = "PublicControlTeam",
-			GamepassId = 1931427656,
+			GamepassId = 1935724637,
 			Name = "Public Control Room Team",
 			Description = "Unlocks Emergency Control in public servers.",
 		},
 		PublicTransportTeam = {
 			Id = "PublicTransportTeam",
-			GamepassId = 1935021036,
+			GamepassId = 1934302085,
 			Name = "Public Bus Service Team",
 			Description = "Unlocks the Bus Service in public servers.",
 		},
 		PublicHighwaysTeam = {
 			Id = "PublicHighwaysTeam",
-			GamepassId = 1933137299,
+			GamepassId = 1934122097,
 			Name = "Public Highways Team",
 			Description = "Unlocks Highways in public servers.",
 		},
 		PublicPrisonTeam = {
 			Id = "PublicPrisonTeam",
-			GamepassId = 1935158990,
+			GamepassId = 1937368306,
 			Name = "Public Prison Service Team",
 			Description = "Unlocks the Prison Service in public servers.",
 		},
 	},
 	EquipmentPasses = {
-		Knife = { GamepassId = 1932205625, TeamName = "Civilian", ToolNames = { "Knife" } },
-		Handgun = { GamepassId = 1935362991, TeamName = "Civilian", ToolNames = { "Handgun" } },
-		Shotgun = { GamepassId = 1934043075, TeamName = "Civilian", ToolNames = { "Shotgun" } },
-		Rifle = { GamepassId = 1933239337, TeamName = "Civilian", ToolNames = { "Rifle" } },
+		Knife = { GamepassId = 1937446295, TeamName = "Civilian", ToolNames = { "Knife" } },
+		Handgun = { GamepassId = 1937822271, TeamName = "Civilian", ToolNames = { "Handgun" } },
+		Shotgun = { GamepassId = 1934518052, TeamName = "Civilian", ToolNames = { "Shotgun" } },
+		Rifle = { GamepassId = 1934955986, TeamName = "Civilian", ToolNames = { "Rifle" } },
 	},
 	-- People standing around the map who sell things.
 	--
@@ -581,7 +579,7 @@ local Config = {
 						Kind = "Tool",
 						ToolId = "Shotgun",
 						Name = "Shotgun",
-						GamepassId = 1934043075,
+						GamepassId = 1934518052,
 						Price = 26000,
 					},
 					{
@@ -589,7 +587,7 @@ local Config = {
 						Kind = "Tool",
 						ToolId = "Rifle",
 						Name = "Rifle",
-						GamepassId = 1933239337,
+						GamepassId = 1934955986,
 						Price = 42000,
 					},
 				},
@@ -942,7 +940,7 @@ local Config = {
 				AccessType = "Group",
 				GroupLinkId = "Police",
 				MinimumGroupRank = 1,
-			}, 0),
+			}, 1937222319),
 			LoadoutId = "PoliceResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -956,7 +954,7 @@ local Config = {
 				AccessType = "Group",
 				GroupLinkId = "Police",
 				MinimumGroupRank = 1,
-			}, 0),
+			}, 1937222319),
 			LoadoutId = "PoliceFrontline",
 			UniformId = "PoliceStandard",
 		},
@@ -973,7 +971,7 @@ local Config = {
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "ArmedResponse", MinimumGroupRank = 1 },
 				},
-			}, 1933635353),
+			}, 1933270297),
 			LoadoutId = "ArmedResponse",
 			UniformId = "PoliceStandard",
 		},
@@ -990,7 +988,7 @@ local Config = {
 					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
 					{ AccessType = "Group", GroupLinkId = "RoadsPolicing", MinimumGroupRank = 1 },
 				},
-			}, 1933455264),
+			}, 1933156365),
 			LoadoutId = "RoadsPolicing",
 			UniformId = "PoliceStandard",
 		},
@@ -1001,7 +999,7 @@ local Config = {
 			DepartmentId = "Ambulance",
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
-				1934391076
+				1936100607
 			),
 			LoadoutId = "AmbulanceStandard",
 			UniformId = "AmbulanceStandard",
@@ -1013,7 +1011,7 @@ local Config = {
 			DepartmentId = "Fire",
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
-				1934942991
+				1936292594
 			),
 			LoadoutId = "FireStandard",
 			UniformId = "FireStandard",
@@ -1030,7 +1028,7 @@ local Config = {
 					{ AccessType = "Application", DepartmentId = "Control" },
 					{ AccessType = "Group", GroupLinkId = "Control", MinimumGroupRank = 1 },
 				},
-			}, 1931427656),
+			}, 1935724637),
 			LoadoutId = "ControlStandard",
 		},
 		TransportOperator = {
@@ -1040,7 +1038,7 @@ local Config = {
 			DepartmentId = "Transport",
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
-				1935021036
+				1934302085
 			),
 			LoadoutId = "TransportStandard",
 			UniformId = "TransportStandard",
@@ -1052,7 +1050,7 @@ local Config = {
 			DepartmentId = "Highways",
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
-				1933137299
+				1934122097
 			),
 			LoadoutId = "HighwaysStandard",
 			UniformId = "HighwaysStandard",
@@ -1064,7 +1062,7 @@ local Config = {
 			DepartmentId = "Prison",
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
-				1935158990
+				1937368306
 			),
 			LoadoutId = "PrisonStandard",
 			UniformId = "PrisonStandard",
@@ -1355,7 +1353,7 @@ local Config = {
 			Access = {
 				AccessType = "Gamepass",
 				Id = "PremiumVehicles",
-				GamepassId = 1935128985,
+				GamepassId = 1936590544,
 				DisplayWhenLocked = true,
 			},
 			Category = "Civilian",
@@ -1406,7 +1404,7 @@ local Config = {
 						MinimumGroupRank = 1,
 					},
 				},
-			}, 1933635353),
+			}, 1933270297),
 		},
 		RoadsPolicingEstate = {
 			Id = "RoadsPolicingEstate",
@@ -1431,7 +1429,7 @@ local Config = {
 						MinimumGroupRank = 1,
 					},
 				},
-			}, 1933455264),
+			}, 1933156365),
 		},
 		AmbulanceResponse = {
 			Id = "AmbulanceResponse",
@@ -1446,7 +1444,7 @@ local Config = {
 			RoleIds = { "Paramedic" },
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
-				1934391076
+				1936100607
 			),
 		},
 		FireEngine = {
@@ -1462,7 +1460,7 @@ local Config = {
 			RoleIds = { "Firefighter" },
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
-				1934942991
+				1936292594
 			),
 		},
 		ServiceBus = {
@@ -1478,7 +1476,7 @@ local Config = {
 			RoleIds = { "TransportOperator" },
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
-				1935021036
+				1934302085
 			),
 		},
 		HighwaysPatrol = {
@@ -1494,7 +1492,7 @@ local Config = {
 			RoleIds = { "HighwayPatrolOfficer" },
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
-				1933137299
+				1934122097
 			),
 		},
 		PrisonTransport = {
@@ -1510,7 +1508,7 @@ local Config = {
 			RoleIds = { "PrisonOfficer" },
 			Access = publicPassOr(
 				{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
-				1935158990
+				1937368306
 			),
 		},
 	},

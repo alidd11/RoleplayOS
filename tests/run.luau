@@ -44,6 +44,72 @@ H.test("public-only access is restricted by server kind", function()
 		"private server bypassed public-only access"
 	)
 end)
+H.test("server-tier access preserves the actionable public gamepass denial", function()
+	local result = Access.evaluate({
+		AccessType = "Combined",
+		Match = "Any",
+		Rules = {
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kind = "Public" },
+					{ AccessType = "Gamepass", GamepassId = 12 },
+				},
+			},
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kinds = { "Whitelisted", "Private" } },
+					{ AccessType = "Group", GroupLinkId = "Police" },
+				},
+			},
+		},
+	}, {
+		ServerKind = "Public",
+		Gamepasses = {},
+		Groups = {},
+	})
+	H.expect(
+		not result.Allowed
+			and result.ReasonCode == "GAMEPASS_REQUIRED"
+			and result.Metadata.GamepassId == 12,
+		"public gamepass denial was hidden by another server tier"
+	)
+end)
+H.test("server-tier access preserves the actionable whitelisted group denial", function()
+	local result = Access.evaluate({
+		AccessType = "Combined",
+		Match = "Any",
+		Rules = {
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kind = "Public" },
+					{ AccessType = "Gamepass", GamepassId = 12 },
+				},
+			},
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kinds = { "Whitelisted", "Private" } },
+					{ AccessType = "Group", GroupLinkId = "Police" },
+				},
+			},
+		},
+	}, {
+		ServerKind = "Whitelisted",
+		Gamepasses = {},
+		Groups = {},
+	})
+	H.expect(
+		not result.Allowed and result.ReasonCode == "GROUP_CHECK_FAILED",
+		"whitelisted group denial was hidden by another server tier"
+	)
+end)
 H.test("Roblox group access enforces membership and rank", function()
 	local rule = { AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 10 }
 	local denied = Access.evaluate(rule, {

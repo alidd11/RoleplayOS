@@ -30,6 +30,23 @@ local COLOURS = {
 	Danger = Color3.fromRGB(244, 104, 112),
 }
 
+local ROLE_PRESENTATION = {
+	Civilian = { Icon = "CIV", Colour = Color3.fromRGB(91, 156, 255), Label = "PUBLIC LIFE" },
+	Police = { Icon = "POL", Colour = Color3.fromRGB(72, 132, 224), Label = "POLICING" },
+	Ambulance = { Icon = "AMB", Colour = Color3.fromRGB(80, 190, 133), Label = "AMBULANCE" },
+	Fire = { Icon = "FIRE", Colour = Color3.fromRGB(231, 92, 82), Label = "FIRE & RESCUE" },
+	Highways = { Icon = "HWY", Colour = Color3.fromRGB(238, 174, 67), Label = "HIGHWAYS" },
+	Transport = { Icon = "BUS", Colour = Color3.fromRGB(148, 108, 219), Label = "TRANSPORT" },
+	Prison = { Icon = "HMP", Colour = Color3.fromRGB(167, 117, 75), Label = "PRISON SERVICE" },
+	Control = { Icon = "CTL", Colour = Color3.fromRGB(50, 190, 188), Label = "FORCE CONTROL" },
+}
+
+local function rolePresentation(role: any): any
+	local key = role.DepartmentId or role.Id
+	return ROLE_PRESENTATION[key]
+		or { Icon = "ROLE", Colour = COLOURS.Accent, Label = "PUBLIC SERVICE" }
+end
+
 local function corner(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
 	value.CornerRadius = UDim.new(0, radius)
@@ -660,58 +677,166 @@ function App.mount(context: any): ScreenGui
 	renderCareers = function()
 		renderGeneration += 1
 		clear(scroll)
-		pageTitle.Text = "Careers"
-		pageDescription.Text = "Every path is visible. Requirements are always clear."
-		sectionHeading(
-			"Roles and departments",
-			"Restricted careers explain exactly how to unlock them."
-		)
-		for _, role in menuData and menuData.Roles or {} do
+		pageTitle.Text = "Choose your role"
+		pageDescription.Text = "Join a department, report for duty and start your next shift."
+
+		local roles = menuData and menuData.Roles or {}
+		local compactCareers = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
+		local visibleCount = 0
+		local availableCount = 0
+		for _, role in roles do
 			if role.Visible then
-				local item = card(scroll, 96)
+				visibleCount += 1
+				if not role.Locked then
+					availableCount += 1
+				end
+			end
+		end
+
+		local overview = card(scroll, if compactCareers then 166 else 116)
+		overview.BackgroundColor3 = Color3.fromRGB(13, 27, 47)
+		local overviewAccent = Instance.new("Frame")
+		overviewAccent.BackgroundColor3 = COLOURS.Accent
+		overviewAccent.BorderSizePixel = 0
+		overviewAccent.Size = UDim2.fromOffset(4, 76)
+		overviewAccent.Position = UDim2.fromOffset(0, 20)
+		overviewAccent.Parent = overview
+		corner(overviewAccent, 2)
+		local eyebrow = text(overview, "ROLEPLAYOS  /  CAREER DIRECTORY", 10, COLOURS.Accent, true)
+		eyebrow.Position = UDim2.fromOffset(22, 16)
+		eyebrow.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 18)
+		local overviewTitle = text(overview, "Where will you serve today?", 20, COLOURS.Text, true)
+		overviewTitle.Position = UDim2.fromOffset(22, 36)
+		overviewTitle.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 30)
+		local overviewCopy = text(
+			overview,
+			"Your access, rank and server determine which roles are ready.",
+			12,
+			COLOURS.Muted
+		)
+		overviewCopy.Position = UDim2.fromOffset(22, 68)
+		overviewCopy.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 28)
+		overviewCopy.TextWrapped = true
+		local availability = Instance.new("Frame")
+		availability.AnchorPoint = if compactCareers then Vector2.zero else Vector2.new(1, 0.5)
+		availability.Position = if compactCareers
+			then UDim2.fromOffset(22, 106)
+			else UDim2.new(1, -20, 0.5, 0)
+		availability.Size = if compactCareers
+			then UDim2.new(1, -44, 0, 44)
+			else UDim2.fromOffset(154, 62)
+		availability.BackgroundColor3 = Color3.fromRGB(17, 36, 61)
+		availability.BorderSizePixel = 0
+		availability.Parent = overview
+		corner(availability, 10)
+		stroke(availability, COLOURS.Accent, 0.72)
+		local count = text(
+			availability,
+			string.format("%d / %d", availableCount, visibleCount),
+			21,
+			COLOURS.Text,
+			true
+		)
+		count.Position = UDim2.fromOffset(14, if compactCareers then 2 else 7)
+		count.Size = UDim2.new(if compactCareers then 0.34 else 1, -28, 0, 26)
+		local countCopy = text(availability, "ROLES AVAILABLE", 9, COLOURS.Success, true)
+		countCopy.Position = if compactCareers
+			then UDim2.new(0.34, 0, 0, 13)
+			else UDim2.fromOffset(14, 34)
+		countCopy.Size = UDim2.new(if compactCareers then 0.66 else 1, -14, 0, 18)
+
+		sectionHeading("Departments", "Select an available role or unlock the access you need.")
+		for _, role in roles do
+			if role.Visible then
+				local presentation = rolePresentation(role)
+				local narrowCard = compactCareers
+				local item = card(scroll, if narrowCard then 152 else 120)
+				item.Name = "Career_" .. tostring(role.Id)
+				item.ClipsDescendants = true
+				local rail = Instance.new("Frame")
+				rail.BackgroundColor3 = presentation.Colour
+				rail.BackgroundTransparency = if role.Locked then 0.42 else 0
+				rail.BorderSizePixel = 0
+				rail.Size = UDim2.new(0, 4, 1, 0)
+				rail.Parent = item
 				local badge = Instance.new("Frame")
-				badge.Position = UDim2.fromOffset(18, 19)
-				badge.Size = UDim2.fromOffset(58, 58)
-				badge.BackgroundColor3 = if role.Locked
-					then Color3.fromRGB(45, 38, 27)
-					else COLOURS.AccentSoft
+				badge.Position = UDim2.fromOffset(20, 20)
+				badge.Size = UDim2.fromOffset(64, 64)
+				badge.BackgroundColor3 = presentation.Colour
+				badge.BackgroundTransparency = if role.Locked then 0.76 else 0.8
 				badge.Parent = item
-				corner(badge, 12)
+				corner(badge, 14)
+				stroke(badge, presentation.Colour, 0.46)
 				local icon = text(
 					badge,
-					if role.Locked then "◇" else "✓",
-					23,
-					if role.Locked then COLOURS.Warning else COLOURS.Accent,
+					presentation.Icon,
+					if string.len(presentation.Icon) > 3 then 11 else 15,
+					presentation.Colour,
 					true
 				)
 				icon.Size = UDim2.fromScale(1, 1)
 				icon.TextXAlignment = Enum.TextXAlignment.Center
+				local category = text(item, presentation.Label, 9, presentation.Colour, true)
+				category.Position = UDim2.fromOffset(102, 15)
+				category.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 17)
 				local name = text(item, role.Name, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(91, 18)
-				name.Size = UDim2.new(1, -280, 0, 28)
+				name.Position = UDim2.fromOffset(102, 32)
+				name.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 27)
 				local detail = text(
 					item,
-					role.Locked and role.LockMessage or "Available now",
+					role.Locked and role.LockMessage or "Cleared to report for duty.",
 					12,
 					role.Locked and COLOURS.Muted or COLOURS.Success
 				)
-				detail.Position = UDim2.fromOffset(91, 47)
-				detail.Size = UDim2.new(1, -280, 0, 28)
-				local action = button(
-					item,
-					role.Locked
-							and (role.Action == "OpenApplication" and "View application" or "View access")
-						or "Select",
-					not role.Locked
-				)
-				action.AnchorPoint = Vector2.new(1, 0.5)
-				action.Position = UDim2.new(1, -18, 0.5, 0)
-				action.Size = UDim2.fromOffset(150, 42)
+				detail.Position = UDim2.fromOffset(102, 61)
+				detail.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 40)
+				detail.TextWrapped = true
+				detail.TextYAlignment = Enum.TextYAlignment.Top
+				detail.TextTruncate = Enum.TextTruncate.None
+
+				local actionLabel = "Report for duty"
+				if role.Locked then
+					actionLabel = if role.Action == "PromptGamepass"
+						then "Unlock role"
+						elseif role.Action == "OpenApplication" then "View application"
+						else "View requirements"
+				end
+				local action =
+					button(item, actionLabel, not role.Locked or role.Action == "PromptGamepass")
+				action.AnchorPoint = if narrowCard then Vector2.zero else Vector2.new(1, 0.5)
+				action.Position = if narrowCard
+					then UDim2.fromOffset(20, 104)
+					else UDim2.new(1, -20, 0.5, 0)
+				action.Size = if narrowCard
+					then UDim2.new(1, -40, 0, 38)
+					else UDim2.fromOffset(174, 44)
+				action.Selectable = true
 				action.Activated:Connect(function()
 					if role.Locked then
+						if role.Action == "PromptGamepass" then
+							local gamepassId = tonumber(role.GamepassId)
+							if not gamepassId or gamepassId <= 0 then
+								context.Controllers.NotificationController:Show(
+									"This pass is not available for purchase yet.",
+									"Pass unavailable"
+								)
+								return
+							end
+							local prompted, promptError =
+								context.Controllers.GamepassController:Prompt(gamepassId)
+							if not prompted then
+								context.Controllers.NotificationController:Show(
+									promptError or "The Roblox purchase prompt could not be opened.",
+									"Purchase unavailable"
+								)
+							end
+							return
+						end
 						context.Controllers.NotificationController:Show(
 							role.LockMessage,
-							"Access required"
+							if role.Action == "OpenApplication"
+								then "Application required"
+								else "Access required"
 						)
 						return
 					end

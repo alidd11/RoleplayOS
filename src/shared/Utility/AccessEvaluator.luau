@@ -143,15 +143,24 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 	if kind == "Combined" then
 		local matchAny = rule.Match == "Any"
 		local last = denied("ACCESS_DENIED")
+		local actionable = nil
 		for _, child in rule.Rules or {} do
 			local result = AccessEvaluator.evaluate(child, subject, current)
 			if result.Allowed == matchAny then
 				return result
 			end
 			last = result
+			-- An Any rule commonly describes access in different server tiers. A
+			-- branch for another tier fails with SERVER_KIND_REQUIRED, but that is
+			-- not the useful reason to show in the current tier. Preserve the first
+			-- denial from a branch which did apply (for example a missing pass in a
+			-- public server, or group membership in a whitelisted server).
+			if result.ReasonCode ~= "SERVER_KIND_REQUIRED" and actionable == nil then
+				actionable = result
+			end
 		end
 		if matchAny then
-			return last
+			return actionable or last
 		end
 		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
 	end
