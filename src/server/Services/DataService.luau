@@ -310,9 +310,57 @@ end
 -- and the caller is told at once. Without it a held session lease was retried
 -- like a network fault, and since a lease clears on a clock rather than on
 -- contention, that spent the full backoff to arrive at the same refusal.
-function DataService:_retry(operation: () -> any, final: ((any) -> boolean)?): (boolean, any)
+-- Waits for DataStore request budget before spending an attempt.
+--
+-- Roblox meters DataStore calls per server, at roughly sixty plus ten per
+-- player per minute, and a call made with no budget left is rejected. Without
+-- this, a rejection was indistinguishable from a network fault: it consumed one
+-- of the few retry attempts, backed off blindly, and could exhaust the attempts
+-- while the budget was busy recovering. The write was then reported as failed
+-- and the player's progress since their last save was gone.
+--
+-- The shutdown path is where this bites hardest, because that is every profile
+-- in the server writing at once, which is exactly when the budget runs out and
+-- exactly when there is no later save to put it right.
+--
+-- Waiting is bounded. Past the deadline the attempt is made anyway, so a
+-- misread budget delays a write rather than dropping it.
+function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
+	-- Twelve seconds normally, two while closing: Roblox allows about thirty
+	-- seconds to shut down, and waiting is only worth doing while there is still
+	-- time to use the budget once it arrives.
+	local deadline = os.clock() + (if self.closing then 2 else 12)
+	local waited = false
+	while DataStoreService:GetRequestBudgetForRequestType(requestType) < 1 do
+		if os.clock() >= deadline then
+			self.context.Logger:Warning("DataStore budget did not recover; writing anyway", {
+				RequestType = requestType.Name,
+			})
+			return
+		end
+		waited = true
+		task.wait(0.5)
+	end
+	if waited then
+		-- Logged, because throttling that nobody sees is throttling nobody fixes,
+		-- and the fix is usually saving less often rather than saving harder.
+		self.context.Logger:Warning("Waited for DataStore budget", {
+			RequestType = requestType.Name,
+		})
+	end
+end
+
+-- `requestType` defaults to UpdateAsync because every write path uses it, and a
+-- write is where exhausted budget costs data rather than costing a reload.
+function DataService:_retry(
+	operation: () -> any,
+	final: ((any) -> boolean)?,
+	requestType: Enum.DataStoreRequestType?
+): (boolean, any)
 	local lastError
+	local budgetType = requestType or Enum.DataStoreRequestType.UpdateAsync
 	for attempt = 1, self.context.Configuration.Framework.MaxSaveAttempts do
+		self:_awaitBudget(budgetType)
 		local ok, result = pcall(operation)
 		if ok then
 			return true, result
@@ -755,11 +803,30 @@ function DataService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	-- Shortens the budget wait for the rest of this shutdown.
+	--
+	-- Roblox allows about thirty seconds to close. Waiting twelve of them for
+	-- budget, per profile, spends the window that the writes themselves need.
+	self.closing = true
+
 	local pending = 0
+	local unsaved: { string } = {}
 	for _, player in Players:GetPlayers() do
 		pending += 1
 		task.spawn(function()
-			self:Save(player, true)
+			-- Wrapped, because a save that throws used to skip the decrement
+			-- below and leave `pending` above zero for ever. The loop then waited
+			-- out the entire shutdown window for a save that had already failed,
+			-- spending the time the remaining profiles needed.
+			local ok, err = pcall(function()
+				return self:Save(player, true)
+			end)
+			if not ok then
+				table.insert(
+					unsaved,
+					string.format("%s (%d): %s", player.Name, player.UserId, tostring(err))
+				)
+			end
 			pending -= 1
 		end)
 	end
@@ -767,9 +834,16 @@ function DataService:Destroy()
 	while pending > 0 and os.clock() < deadline do
 		task.wait()
 	end
-	if pending > 0 then
-		self.context.Logger:Warning("Shutdown save deadline reached", {
-			PendingProfiles = pending,
+	if pending > 0 or #unsaved > 0 then
+		-- Named, not counted.
+		--
+		-- Somebody whose profile did not save has lost whatever they earned since
+		-- their last autosave, and they will say so. A count cannot be checked
+		-- against that claim; a list can, and it is the difference between
+		-- answering them and guessing.
+		self.context.Logger:Error("Profiles may not have saved at shutdown", {
+			StillWriting = pending,
+			Failed = unsaved,
 		})
 	end
 end
