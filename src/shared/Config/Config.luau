@@ -1948,6 +1948,20 @@ local Config = {
 			Water = { Name = "Water", Price = 4, Hunger = 4 },
 			Apple = { Name = "Apple", Price = 6, Hunger = 12 },
 			Meal = { Name = "Hot meal", Price = 18, Hunger = 40 },
+			Sandwich = { Name = "Sandwich", Price = 9, Hunger = 22 },
+		},
+		-- One item every character starts with, carried rather than bought.
+		--
+		-- Hunger drains from the moment somebody spawns and the only way to answer
+		-- it was to already have money and already know where a vendor is. This is
+		-- the one meal that is simply in the bag, so a new player finds out what
+		-- hunger is by solving it once rather than by starving while they look.
+		--
+		-- Granted once per character, not once per life. A fresh one on every
+		-- respawn would make it unlimited food for anybody willing to die for it.
+		StarterFood = {
+			Enabled = true,
+			FoodId = "Sandwich",
 		},
 	},
 	Network = {
