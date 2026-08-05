@@ -264,6 +264,54 @@ function App.mount(context: any): ScreenGui
 	gradient.Rotation = 28
 	gradient.Parent = root
 
+	local loadingOverlay = Instance.new("Frame")
+	loadingOverlay.Name = "LoadingExperience"
+	loadingOverlay.Size = UDim2.fromScale(1, 1)
+	loadingOverlay.BackgroundColor3 = COLOURS.Canvas
+	loadingOverlay.BorderSizePixel = 0
+	loadingOverlay.ZIndex = 100
+	loadingOverlay.Parent = gui
+	local loadingTitle =
+		text(loadingOverlay, "EMERGENCY RESPONSE: PORTSMOUTH", 25, COLOURS.Text, true)
+	loadingTitle.AnchorPoint = Vector2.new(0.5, 0.5)
+	loadingTitle.Position = UDim2.fromScale(0.5, 0.44)
+	loadingTitle.Size = UDim2.new(1, -48, 0, 38)
+	loadingTitle.TextXAlignment = Enum.TextXAlignment.Center
+	loadingTitle.ZIndex = 101
+	local loadingStatus = text(loadingOverlay, "Preparing your profile…", 14, COLOURS.Muted)
+	loadingStatus.AnchorPoint = Vector2.new(0.5, 0.5)
+	loadingStatus.Position = UDim2.fromScale(0.5, 0.51)
+	loadingStatus.Size = UDim2.new(1, -48, 0, 26)
+	loadingStatus.TextXAlignment = Enum.TextXAlignment.Center
+	loadingStatus.ZIndex = 101
+	local loadingBar = Instance.new("Frame")
+	loadingBar.AnchorPoint = Vector2.new(0.5, 0.5)
+	loadingBar.Position = UDim2.fromScale(0.5, 0.57)
+	loadingBar.Size = UDim2.fromOffset(260, 3)
+	loadingBar.BackgroundColor3 = COLOURS.Border
+	loadingBar.BorderSizePixel = 0
+	loadingBar.ZIndex = 101
+	loadingBar.Parent = loadingOverlay
+	local loadingFill = Instance.new("Frame")
+	loadingFill.Size = UDim2.fromScale(0.16, 1)
+	loadingFill.BackgroundColor3 = COLOURS.Accent
+	loadingFill.BorderSizePixel = 0
+	loadingFill.ZIndex = 102
+	loadingFill.Parent = loadingBar
+	TweenService:Create(
+		loadingFill,
+		TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{ Position = UDim2.fromScale(0.84, 0) }
+	):Play()
+	local skipLoading = button(loadingOverlay, "Skip loading", false)
+	skipLoading.AnchorPoint = Vector2.new(0.5, 1)
+	skipLoading.Position = UDim2.new(0.5, 0, 1, -30)
+	skipLoading.Size = UDim2.fromOffset(150, 40)
+	skipLoading.ZIndex = 103
+	skipLoading.Activated:Connect(function()
+		loadingOverlay.Visible = false
+	end)
+
 	local sidebar = Instance.new("Frame")
 	sidebar.Size = UDim2.new(0, 250, 1, 0)
 	sidebar.BackgroundColor3 = COLOURS.Sidebar
@@ -534,8 +582,11 @@ function App.mount(context: any): ScreenGui
 	local renderPlay: () -> ()
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
+	local renderStore: () -> ()
+	local renderTutorials: () -> ()
 	local renderSettings: () -> ()
 	local renderControls: () -> ()
+	local currentRender: (() -> ())? = nil
 	-- Bumped by every render. A page that asks the server for anything yields,
 	-- and clearing the container before the yield does not help: two renders both
 	-- clear, both wait, and then both append, so the page appears twice. After a
@@ -864,6 +915,176 @@ function App.mount(context: any): ScreenGui
 					showDutySelection(role, dutyProfile)
 				end)
 			end
+		end
+	end
+
+	renderStore = function()
+		renderGeneration += 1
+		clear(scroll)
+		pageTitle.Text = "Store"
+		pageDescription.Text = "Optional access and upgrades for this experience."
+		sectionHeading(
+			"RoleplayOS passes",
+			"Purchases are handled by Roblox. Your access refreshes automatically."
+		)
+		if not menuData or not menuData.Gamepasses then
+			local loading = card(scroll, 90)
+			local loadingCopy = text(loading, "Loading available passes…", 14, COLOURS.Muted)
+			loadingCopy.Position = UDim2.fromOffset(20, 0)
+			loadingCopy.Size = UDim2.new(1, -40, 1, 0)
+			return
+		end
+
+		local compactStore = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
+		local currentCategory = ""
+		for _, pass in menuData.Gamepasses do
+			if pass.Category ~= currentCategory then
+				currentCategory = pass.Category
+				sectionHeading(currentCategory, "")
+			end
+			local item = card(scroll, if compactStore then 176 else 118)
+			local badge = Instance.new("Frame")
+			badge.Position = UDim2.fromOffset(18, 18)
+			badge.Size =
+				UDim2.fromOffset(if compactStore then 58 else 80, if compactStore then 58 else 80)
+			badge.BackgroundColor3 = if pass.Owned
+				then Color3.fromRGB(24, 73, 57)
+				else COLOURS.AccentSoft
+			badge.Parent = item
+			corner(badge, 12)
+			local monogram = text(
+				badge,
+				string.upper(string.sub(pass.Name, 1, 2)),
+				22,
+				if pass.Owned then COLOURS.Success else COLOURS.Accent,
+				true
+			)
+			monogram.Size = UDim2.fromScale(1, 1)
+			monogram.TextXAlignment = Enum.TextXAlignment.Center
+			local contentLeft = if compactStore then 90 else 116
+			local name = text(item, pass.Name, 17, COLOURS.Text, true)
+			name.Position = UDim2.fromOffset(contentLeft, 18)
+			name.Size = UDim2.new(1, -(contentLeft + if compactStore then 18 else 194), 0, 26)
+			local description = text(item, pass.Description, 12, COLOURS.Muted)
+			description.Position = UDim2.fromOffset(contentLeft, 45)
+			description.Size = UDim2.new(1, -(contentLeft + 18), 0, 48)
+			description.TextWrapped = true
+			local actionLabel = if pass.Owned
+				then "Owned"
+				elseif not pass.Configured then "Unavailable"
+				elseif not pass.AvailableInServer then "Public servers only"
+				else "View pass"
+			local purchase = button(item, actionLabel, not pass.Owned and pass.AvailableInServer)
+			purchase.AnchorPoint = if compactStore then Vector2.new(0, 1) else Vector2.new(1, 0.5)
+			purchase.Position = if compactStore
+				then UDim2.new(0, 18, 1, -16)
+				else UDim2.new(1, -18, 0.5, 0)
+			purchase.Size = if compactStore
+				then UDim2.new(1, -36, 0, 42)
+				else UDim2.fromOffset(158, 44)
+			purchase.Selectable = pass.Configured and pass.AvailableInServer and not pass.Owned
+			purchase.Active = purchase.Selectable
+			if purchase.Active then
+				purchase.Activated:Connect(function()
+					context.Controllers.GamepassController:Prompt(pass.GamepassId)
+				end)
+			else
+				purchase.BackgroundColor3 = COLOURS.SurfaceRaised
+				purchase.TextColor3 = if pass.Owned then COLOURS.Success else COLOURS.Muted
+			end
+		end
+	end
+
+	local tutorials = {
+		{
+			Title = "Starting your character",
+			Summary = "Create an identity, choose a role and enter Portsmouth.",
+			Body = "Create or select a civilian character under Players. Careers then shows every public and whitelisted role available to you. Locked cards explain the exact requirement.",
+		},
+		{
+			Title = "Emergency calls",
+			Summary = "Learn how calls reach Control, MDT and responding units.",
+			Body = "Use the phone to contact 999. Control creates and grades an incident, assigns available units and updates its status. Relevant emergency teams receive the server-local call through their MDT.",
+		},
+		{
+			Title = "Police and custody",
+			Summary = "Understand cautions, arrest, transport and booking.",
+			Body = "Police tools are server-authorised. Officers caution and restrain a nearby player, transport them to custody and complete booking. Charges determine the custody duration and persistent record.",
+		},
+		{
+			Title = "Vehicles and dealerships",
+			Summary = "Buy, spawn and keep your registered vehicles.",
+			Body = "Visit a dealership prompt to browse civilian vehicles. Owned vehicles retain their registration. Service depots show vehicles allowed by your current role, rank and division.",
+		},
+		{
+			Title = "Controls and accessibility",
+			Summary = "See the correct inputs for your current device.",
+			Body = "Open Controls for keyboard, touch, gamepad, console and VR bindings. Roblox prompts remain the authority for contextual interactions such as dealerships and dispatch seats.",
+		},
+	}
+
+	renderTutorials = function()
+		renderGeneration += 1
+		clear(scroll)
+		pageTitle.Text = "Tutorials"
+		pageDescription.Text = "Learn each system before starting your roleplay."
+		sectionHeading("Game guides", "Short, practical explanations of the live systems.")
+		local compactTutorials = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
+		for index, tutorial in tutorials do
+			local item = card(scroll, if compactTutorials then 166 else 124)
+			local number = text(item, string.format("%02d", index), 13, COLOURS.Accent, true)
+			number.Position = UDim2.fromOffset(20, 18)
+			number.Size = UDim2.fromOffset(34, 24)
+			local titleItem = text(item, tutorial.Title, 18, COLOURS.Text, true)
+			titleItem.Position = UDim2.fromOffset(58, 16)
+			titleItem.Size = UDim2.new(1, if compactTutorials then -76 else -230, 0, 28)
+			local summary = text(item, tutorial.Summary, 13, COLOURS.Muted)
+			summary.Position = UDim2.fromOffset(58, 44)
+			summary.Size = UDim2.new(1, if compactTutorials then -76 else -250, 0, 54)
+			summary.TextWrapped = true
+			local open = button(item, "Open guide", false)
+			open.AnchorPoint = if compactTutorials then Vector2.new(0, 1) else Vector2.new(1, 0.5)
+			open.Position = if compactTutorials
+				then UDim2.new(0, 18, 1, -14)
+				else UDim2.new(1, -18, 0.5, 0)
+			open.Size = if compactTutorials
+				then UDim2.new(1, -36, 0, 40)
+				else UDim2.fromOffset(150, 42)
+			open.Activated:Connect(function()
+				local shade = Instance.new("TextButton")
+				shade.Text = ""
+				shade.AutoButtonColor = false
+				shade.BackgroundColor3 = Color3.new(0, 0, 0)
+				shade.BackgroundTransparency = 0.2
+				shade.Size = UDim2.fromScale(1, 1)
+				shade.ZIndex = 20
+				shade.Parent = root
+				local guide = card(shade, 300)
+				guide.AnchorPoint = Vector2.new(0.5, 0.5)
+				guide.Position = UDim2.fromScale(0.5, 0.5)
+				local guideViewport = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
+				guide.Size = UDim2.fromOffset(
+					math.min(520, guideViewport.X - 32),
+					math.min(300, guideViewport.Y - 32)
+				)
+				guide.ZIndex = 21
+				local guideTitle = text(guide, tutorial.Title, 23, COLOURS.Text, true)
+				guideTitle.Position = UDim2.fromOffset(28, 24)
+				guideTitle.Size = UDim2.new(1, -56, 0, 36)
+				local guideBody = text(guide, tutorial.Body, 15, COLOURS.Muted)
+				guideBody.Position = UDim2.fromOffset(28, 70)
+				guideBody.Size = UDim2.new(1, -56, 0, 140)
+				guideBody.TextWrapped = true
+				guideBody.TextYAlignment = Enum.TextYAlignment.Top
+				local close = button(guide, "Close", true)
+				close.AnchorPoint = Vector2.new(1, 1)
+				close.Position = UDim2.new(1, -28, 1, -24)
+				close.Size = UDim2.fromOffset(140, 42)
+				close.Activated:Connect(function()
+					shade:Destroy()
+				end)
+				elevate(guide, 22)
+			end)
 		end
 	end
 
@@ -1288,6 +1509,7 @@ function App.mount(context: any): ScreenGui
 				activeNav.TextColor3 = COLOURS.Muted
 			end
 			activeNav = item
+			currentRender = render
 			item.BackgroundColor3 = COLOURS.AccentSoft
 			item.TextColor3 = COLOURS.Text
 			render()
@@ -1295,14 +1517,17 @@ function App.mount(context: any): ScreenGui
 		return item
 	end
 
-	local playNav = addNav("Play", renderPlay)
-	addNav("Careers", renderCareers)
-	addNav("Community", renderCommunity)
+	local playNav = addNav("Players", renderPlay)
+	addNav("Teams", renderCareers)
+	addNav("Store", renderStore)
+	addNav("Servers", renderCommunity)
+	addNav("Tutorials", renderTutorials)
 	addNav("Controls", function()
 		renderControls()
 	end)
 	addNav("Settings", renderSettings)
 	activeNav = playNav
+	currentRender = renderPlay
 	playNav.BackgroundColor3 = COLOURS.AccentSoft
 	playNav.TextColor3 = COLOURS.Text
 
@@ -1360,7 +1585,10 @@ function App.mount(context: any): ScreenGui
 		)
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
-		local horizontal = layout.Compact
+		-- One navigation language on every device: a top bar mirrors Roblox's
+		-- established menu pattern and avoids presenting desktop players with a
+		-- completely different sidebar information architecture.
+		local horizontal = true
 		local narrow = layout.SafeViewport.X < 600
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
@@ -1401,6 +1629,7 @@ function App.mount(context: any): ScreenGui
 			for _, item in navigation:GetChildren() do
 				if item:IsA("TextButton") then
 					item.Size = UDim2.new(1 / navItems, -5, 1, 0)
+					item.TextSize = if narrow then 10 else 14
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
@@ -1435,6 +1664,7 @@ function App.mount(context: any): ScreenGui
 			for _, item in navigation:GetChildren() do
 				if item:IsA("TextButton") then
 					item.Size = UDim2.new(1, 0, 0, 44)
+					item.TextSize = 14
 					item.TextXAlignment = Enum.TextXAlignment.Left
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
@@ -1459,7 +1689,10 @@ function App.mount(context: any): ScreenGui
 		version.Visible = data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
-		renderPlay()
+		loadingOverlay.Visible = false
+		if currentRender then
+			currentRender()
+		end
 	end)
 	-- Paint immediately so the menu is on screen while the first request is still
 	-- in flight. The StartMenuChanged handler above fills in real data on success.
