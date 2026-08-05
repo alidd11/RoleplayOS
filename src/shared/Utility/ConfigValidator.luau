@@ -8,6 +8,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		{
 			"Framework",
 			"ContentQuality",
+			"Performance",
 			"ExperienceAccess",
 			"Characters",
 			"Economy",

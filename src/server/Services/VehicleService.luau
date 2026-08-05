@@ -442,6 +442,10 @@ function VehicleService:_spawn(
 		return nil, "VEHICLE_MODEL_UNAVAILABLE"
 	end
 	local model = template:Clone()
+	-- Templates live outside the workspace, so the startup render budget pass
+	-- never reaches them. Without this the budget would apply to the vehicles
+	-- parked in the map and to none of the ones players actually drive.
+	self.context.Services:Get("WorldBudgetService"):Normalise(model)
 	model:PivotTo(spawnPart.CFrame)
 	self:_applyIdentity(model, vehicle, player.UserId)
 	vehicle.Mileage = math.max(0, vehicle.Mileage or 0)

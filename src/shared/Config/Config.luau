@@ -154,6 +154,31 @@ local Config = {
 		MinimumWorldAssetExtentStuds = 0.1,
 		MaximumWorldAssetExtentStuds = 80,
 	},
+	-- What the world is allowed to cost to draw.
+	--
+	-- Streaming decides how far away the world stops existing. This decides how
+	-- much it costs while it is here. Imported content answers that question with
+	-- the defaults of the tool it was exported from, which are always the most
+	-- expensive option, so it is answered here instead.
+	Performance = {
+		Enabled = true,
+		-- Instances touched before the startup pass yields the frame. Lower is
+		-- gentler on the first few seconds of a server and slower to finish.
+		InstancesPerStep = 500,
+		-- Precise meshes redrawn at full detail however far away they are, which
+		-- is how modelling tools export and never what a map wants.
+		MeshLevelOfDetail = true,
+		-- Distant models drawn as one cheap mesh rather than as all their parts.
+		ModelLevelOfDetail = true,
+		-- A shadow casting light costs far more than a light, and a lightbar is a
+		-- dozen of them strobing at once.
+		DisableLightShadows = true,
+		-- Studs. Zero leaves light ranges alone.
+		MaximumLightRangeStuds = 60,
+		-- Studs. Zero leaves sound falloff alone. Keeps a siren mixed for the
+		-- players near it rather than for everybody in the server.
+		MaximumSoundDistanceStuds = 400,
+	},
 	-- Roblox throttles group membership lookups per server, and answers a burst
 	-- with a 429 that is indistinguishable from any other failure. Every number
 	-- here exists to keep this framework under that ceiling, because a throttled
