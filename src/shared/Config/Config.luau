@@ -1536,6 +1536,20 @@ local Config = {
 	-- asks about and the record it writes into, so an officer searching a driver
 	-- in the MDT sees their points and their fines.
 	RoadSafety = {
+		-- Cameras are found by shape rather than by tag, so a camera model
+		-- dropped into the world works with nothing else done to it. A model
+		-- counts as a camera when it holds a part named Sensor and a
+		-- Configuration with a SpeedLimit, which is what the camera kit builds.
+		SensorName = "Sensor",
+		ConfigurationName = "Configuration",
+		SpeedLimitValueName = "SpeedLimit",
+		-- Optional, and only used for the flash.
+		CameraPartName = "Camera",
+		LightPartName = "Light",
+		-- One reading per vehicle per camera. Touched fires continuously while
+		-- anything rests against the sensor, so without this a car stopped on one
+		-- is fined until its owner has nothing left.
+		SensorCooldownSeconds = 8,
 		ToleranceMph = 2,
 		FineBase = 100,
 		FinePerMph = 10,

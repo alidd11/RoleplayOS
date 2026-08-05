@@ -16,17 +16,20 @@
 -- reports, because that is the only moment it is true of.
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
+local Workspace = game:GetService("Workspace")
 
 -- The name a camera system looks for. A BindableFunction rather than a module,
 -- so a script that knows nothing about RoleplayOS and cannot require anything
 -- from it can still ask.
 local BRIDGE_NAME = "RoleplayOSIssueFine"
 
-local RoadSafetyService = {}
+local RoadSafetyService = { sensors = {}, cooldowns = {} }
 
 function RoadSafetyService:Init(context: any)
 	self.context = context
+	self.connections = {}
 end
 
 -- A door for the camera system in the world.
@@ -51,6 +54,187 @@ function RoadSafetyService:Start()
 	end
 	bridge.Parent = ServerStorage
 	self.bridge = bridge
+	self:_adoptCameras()
+end
+
+-- Takes over every speed camera in the world.
+--
+-- A camera model holds a sensor part and a Configuration with a SpeedLimit,
+-- which is what the camera kit builds, so they are found by that shape rather
+-- than by a tag: a camera dropped into the map works with nothing else done to
+-- it, and no list anywhere needs updating.
+--
+-- The kit's own script should be deleted from the model. This does the same job
+-- and, unlike a script that can only check a team name, it knows whether the
+-- driver is actually on a blue light run.
+function RoadSafetyService:_adoptCameras()
+	local settings = self.context.Configuration.RoadSafety
+	local function consider(instance: Instance)
+		if not instance:IsA("Model") then
+			return
+		end
+		local sensor = instance:FindFirstChild(settings.SensorName)
+		local configuration = instance:FindFirstChild(settings.ConfigurationName)
+		local limit = configuration and configuration:FindFirstChild(settings.SpeedLimitValueName)
+		if not sensor or not sensor:IsA("BasePart") or not limit then
+			return
+		end
+		self:_disableKitScripts(instance)
+		self:_watchSensor(instance, sensor :: BasePart)
+	end
+
+	for _, instance in Workspace:GetDescendants() do
+		consider(instance)
+	end
+	table.insert(
+		self.connections,
+		Workspace.DescendantAdded:Connect(function(instance)
+			-- Deferred, because a model streams in a piece at a time and its
+			-- sensor may not have arrived at the moment the model does.
+			task.defer(consider, instance)
+		end)
+	)
+	local count = 0
+	for _ in self.sensors do
+		count += 1
+	end
+	self.context.Logger:Info("Speed cameras adopted", { Cameras = count })
+end
+
+-- Switches off the script the camera kit ships inside each model.
+--
+-- Leaving it running would fine twice, and its own attempt fails anyway: it
+-- subtracts from a leaderstats value this game does not have, so it raises
+-- rather than charging anybody. It also decides exemptions from a team name,
+-- which cannot express the rule that matters here, since an emergency driver is
+-- exempt while responding and not otherwise.
+--
+-- Disabled rather than destroyed, so the model is still the kit's model and the
+-- change is undone by ticking one box.
+function RoadSafetyService:_disableKitScripts(camera: Model)
+	for _, child in camera:GetDescendants() do
+		if child:IsA("Script") and not child:GetAttribute("RoleplayOSManaged") then
+			child.Disabled = true
+			child:SetAttribute("RoleplayOSManaged", true)
+		end
+	end
+end
+
+function RoadSafetyService:_watchSensor(camera: Model, sensor: BasePart)
+	if self.sensors[sensor] then
+		return
+	end
+	self.sensors[sensor] = camera:GetFullName()
+	table.insert(
+		self.connections,
+		sensor.Touched:Connect(function(hit)
+			self:_reading(camera, sensor, hit)
+		end)
+	)
+end
+
+-- Flashes the camera, where it has a light to flash with.
+function RoadSafetyService:_flash(camera: Model)
+	local settings = self.context.Configuration.RoadSafety
+	local head = camera:FindFirstChild(settings.CameraPartName)
+	local light = head and head:FindFirstChild(settings.LightPartName)
+	if not light then
+		return
+	end
+	task.spawn(function()
+		for _ = 1, 2 do
+			for _, child in light:GetChildren() do
+				if child:IsA("Light") then
+					child.Enabled = true
+				end
+			end
+			task.wait(0.1)
+			for _, child in light:GetChildren() do
+				if child:IsA("Light") then
+					child.Enabled = false
+				end
+			end
+			task.wait(0.4)
+		end
+	end)
+end
+
+-- The plate written on a vehicle when it was spawned, so a fine reaches the
+-- registered keeper rather than whoever happens to be behind the wheel.
+function RoadSafetyService:_registrationOf(seat: BasePart): (string?, Model?)
+	local model = seat:FindFirstAncestorOfClass("Model")
+	local outermost = model
+	while model do
+		local plate = model:GetAttribute("RoleplayOSRegistration")
+		if type(plate) == "string" and plate ~= "" then
+			return plate, model
+		end
+		outermost = model
+		model = model:FindFirstAncestorOfClass("Model")
+	end
+	return nil, outermost
+end
+
+function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePart)
+	if not hit:IsA("VehicleSeat") then
+		return
+	end
+	-- Touched fires on an empty seat as readily as an occupied one.
+	local occupant = hit.Occupant
+	if not occupant then
+		return
+	end
+	local character = occupant.Parent
+	local player = if character then Players:GetPlayerFromCharacter(character) else nil
+	if not player then
+		return
+	end
+
+	local settings = self.context.Configuration.RoadSafety
+	local now = os.clock()
+	local perSensor = self.cooldowns[sensor]
+	if not perSensor then
+		perSensor = {}
+		self.cooldowns[sensor] = perSensor
+	end
+	if (perSensor[hit] or 0) > now then
+		return
+	end
+
+	local configuration = camera:FindFirstChild(settings.ConfigurationName)
+	local limitValue = configuration and configuration:FindFirstChild(settings.SpeedLimitValueName)
+	local limit = if limitValue and limitValue:IsA("ValueBase")
+		then tonumber((limitValue :: any).Value)
+		else nil
+	if not limit or limit <= 0 then
+		return
+	end
+
+	-- AssemblyLinearVelocity rather than the deprecated Velocity, converted with
+	-- the same factor the rest of the framework uses for a speedometer.
+	local mph = hit.AssemblyLinearVelocity.Magnitude
+		* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+	if mph < limit + settings.ToleranceMph then
+		return
+	end
+	perSensor[hit] = now + settings.SensorCooldownSeconds
+
+	local registration, vehicle = self:_registrationOf(hit)
+	local issued = self:IssueFine({
+		Registration = registration,
+		Mph = mph,
+		LimitMph = limit,
+		Vehicle = vehicle,
+		Driver = player,
+		Location = camera.Name,
+		Kind = "SpeedCamera",
+	})
+	-- Flashed only when somebody was actually fined. Flashing a responding
+	-- ambulance and then not fining it tells the driver they were caught when
+	-- they were not.
+	if issued then
+		self:_flash(camera)
+	end
 end
 
 -- Whether a value read from an attribute or a value object means "lights on".
@@ -266,6 +450,12 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 end
 
 function RoadSafetyService:Destroy()
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+	table.clear(self.sensors)
+	table.clear(self.cooldowns)
 	if self.bridge then
 		self.bridge:Destroy()
 		self.bridge = nil
