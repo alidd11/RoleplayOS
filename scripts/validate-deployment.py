@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PROJECT = ROOT / "real-baseplate.project.json"
 CONFIG = ROOT / "src/shared/Config/Config.luau"
+EDITABLE = ROOT / "src/shared/Config/EDIT_HERE"
 
 
 def fail(message: str, errors: list[str]) -> None:
@@ -70,17 +71,20 @@ def main() -> int:
     check_preservation(tree.get("StarterPlayer"), "StarterPlayer")
 
     config = CONFIG.read_text(encoding="utf-8")
+    deployment = (EDITABLE / "01_Deployment.luau").read_text(encoding="utf-8")
+    groups = (EDITABLE / "02_Groups.luau").read_text(encoding="utf-8")
+    uniforms = (EDITABLE / "04_Uniforms.luau").read_text(encoding="utf-8")
     production_issues: list[str] = []
-    if not re.search(r'Environment\s*=\s*"Production"', config):
+    if not re.search(r'Environment\s*=\s*"Production"', deployment):
         production_issues.append('Framework.Environment is not "Production"')
-    if not contains_assignment(config, "UseMockDataInStudio", "false"):
+    if not contains_assignment(deployment, "UseMockDataInStudio", "false"):
         production_issues.append("UseMockDataInStudio is not false")
-    if not contains_assignment(config, "GrantMockEmergencyAccessInStudio", "false"):
+    if not contains_assignment(deployment, "GrantMockEmergencyAccessInStudio", "false"):
         production_issues.append("GrantMockEmergencyAccessInStudio is not false")
-    if 'DisplayName = "Universal Projects (temporary Control link)"' in config:
+    if re.search(r"Control\s*=\s*\{[^}]*GroupId\s*=\s*33809042", groups, re.DOTALL):
         production_issues.append("Control still uses the temporary Universal Projects group link")
-    if re.search(r'ShirtTemplate\s*=\s*""', config) or re.search(
-        r'TrousersTemplate\s*=\s*""', config
+    if re.search(r'ShirtTemplate\s*=\s*""', uniforms) or re.search(
+        r'TrousersTemplate\s*=\s*""', uniforms
     ):
         production_issues.append("one or more uniform template IDs are empty")
 

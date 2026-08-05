@@ -1805,4 +1805,60 @@ local Config = {
 	},
 }
 
+-- Ordinary game data lives in EDIT_HERE so a future maintainer does not need
+-- to modify this framework-sized module. Overrides are recursive: a pass ID can
+-- be replaced without copying its name, description or access rules.
+local editableData = {
+	require(script.EDIT_HERE["01_Deployment"]),
+	require(script.EDIT_HERE["02_Groups"]),
+	require(script.EDIT_HERE["03_Gamepasses"]),
+	require(script.EDIT_HERE["04_Uniforms"]),
+	require(script.EDIT_HERE["05_Balancing"]),
+}
+
+local originalGamepassIds = {}
+for id, definition in Config.Gamepasses do
+	originalGamepassIds[id] = definition.GamepassId
+end
+
+local function applyOverride(target: any, override: any)
+	for key, value in override do
+		if type(value) == "table" and type(target[key]) == "table" then
+			applyOverride(target[key], value)
+		else
+			target[key] = value
+		end
+	end
+end
+
+for _, override in editableData do
+	applyOverride(Config, override)
+end
+
+-- Pass IDs also occur inside role and vehicle access rules. Rewrite those
+-- references from the old ID to the edited ID so one change in 03_Gamepasses
+-- cannot leave half of an entitlement on the previous experience.
+local replacementGamepassIds = {}
+for id, oldGamepassId in originalGamepassIds do
+	local newGamepassId = Config.Gamepasses[id].GamepassId
+	if newGamepassId ~= oldGamepassId then
+		replacementGamepassIds[oldGamepassId] = newGamepassId
+	end
+end
+
+local function updateGamepassReferences(value: any)
+	if type(value) ~= "table" then
+		return
+	end
+	for key, child in value do
+		if key == "GamepassId" and type(child) == "number" then
+			value[key] = replacementGamepassIds[child] or child
+		elseif type(child) == "table" then
+			updateGamepassReferences(child)
+		end
+	end
+end
+
+updateGamepassReferences(Config)
+
 return table.freeze(Config)
