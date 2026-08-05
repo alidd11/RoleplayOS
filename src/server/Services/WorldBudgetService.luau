@@ -123,7 +123,34 @@ function WorldBudgetService:Normalise(root: Instance)
 	end
 end
 
+-- Reports what streaming is actually set to, rather than what it was asked to
+-- be set to.
+--
+-- These live in the project file because they cannot be set at runtime, which
+-- means a live sync is the only thing that applies them and a live sync can
+-- apply some and silently skip others. That happened: StreamingEnabled and the
+-- integrity mode took, the radius and the model behaviour stayed at their
+-- defaults, and nothing anywhere said so. One line in the server log is cheaper
+-- than finding it again by clicking through the Explorer.
+function WorldBudgetService:_reportStreaming()
+	local detail = {
+		MinRadius = Workspace.StreamingMinRadius,
+		TargetRadius = Workspace.StreamingTargetRadius,
+		IntegrityMode = Workspace.StreamingIntegrityMode.Name,
+		ModelBehaviour = Workspace.ModelStreamingBehavior.Name,
+	}
+	if Workspace.StreamingEnabled then
+		self.context.Logger:Info("Streaming is on", detail)
+	else
+		self.context.Logger:Warning(
+			"Streaming is OFF: every client is holding the whole map",
+			detail
+		)
+	end
+end
+
 function WorldBudgetService:Start()
+	self:_reportStreaming()
 	local settings = self:_settings()
 	if not settings.Enabled then
 		return
