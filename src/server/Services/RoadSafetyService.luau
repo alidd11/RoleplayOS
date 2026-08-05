@@ -83,22 +83,44 @@ function RoadSafetyService:_adoptCameras()
 		self:_watchSensor(instance, sensor :: BasePart)
 	end
 
-	for _, instance in Workspace:GetDescendants() do
-		consider(instance)
-	end
+	-- Spawned, never blocking. Every service after this one waits for Start to
+	-- return, and the endpoints are registered by the last of them, so a slow
+	-- walk here is not a slow startup: it is a server that accepts no requests
+	-- at all until it finishes. On a region sized map that is a long time.
+	task.spawn(function()
+		local scanned = 0
+		for _, instance in Workspace:GetDescendants() do
+			if instance:IsA("Model") then
+				consider(instance)
+			end
+			scanned += 1
+			-- Yielded periodically so the walk shares the frame rather than
+			-- holding it for however long a map of this size takes.
+			if scanned % 2000 == 0 then
+				task.wait()
+			end
+		end
+		local count = 0
+		for _ in self.sensors do
+			count += 1
+		end
+		self.context.Logger:Info("Speed cameras adopted", { Cameras = count })
+	end)
+
 	table.insert(
 		self.connections,
 		Workspace.DescendantAdded:Connect(function(instance)
+			-- Filtered before anything is scheduled. This fires for every part of
+			-- every model the map streams in, so deferring on all of them queues
+			-- thousands of calls that will each decide they had nothing to do.
+			if not instance:IsA("Model") then
+				return
+			end
 			-- Deferred, because a model streams in a piece at a time and its
 			-- sensor may not have arrived at the moment the model does.
 			task.defer(consider, instance)
 		end)
 	)
-	local count = 0
-	for _ in self.sensors do
-		count += 1
-	end
-	self.context.Logger:Info("Speed cameras adopted", { Cameras = count })
 end
 
 -- Switches off the script the camera kit ships inside each model.
