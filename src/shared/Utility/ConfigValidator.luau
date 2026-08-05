@@ -9,6 +9,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Framework",
 			"ContentQuality",
 			"Performance",
+			"EmergencyLighting",
 			"ExperienceAccess",
 			"Characters",
 			"Economy",

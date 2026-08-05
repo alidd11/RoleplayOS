@@ -677,6 +677,98 @@ local Config = {
 		PoliceForceName = "UP Hampshire & Isle of Wight Constabulary",
 	},
 	UKTime = { Enabled = true, UpdateSeconds = 15 },
+	-- Our own emergency lighting, rather than whichever kit a vehicle arrived
+	-- with.
+	--
+	-- The place currently runs at least two different kits, EasyLS and EpicLights,
+	-- both of them erroring, and the speed cameras had to guess at a dozen
+	-- attribute names to work out whether a vehicle was on a blue light run.
+	-- Owning this replaces the guess with one attribute that is true because this
+	-- framework set it.
+	--
+	-- The server owns the state and every client runs the flash pattern itself, so
+	-- a strobing lightbar costs nothing on the network however many are running.
+	EmergencyLighting = {
+		Enabled = true,
+		-- The attribute everything else reads. The cameras check this first.
+		StateAttribute = "RoleplayOSEmergencyLights",
+		StageAttribute = "RoleplayOSLightStage",
+		SirenAttribute = "RoleplayOSSiren",
+		-- Tagged on vehicles that have lights, so clients find them through
+		-- CollectionService as they stream in rather than by scanning the world.
+		Tag = "RoleplayOSEmergencyVehicle",
+		-- Who may run lights, and in what colour. Traffic officers run amber in
+		-- the UK, not blue, and a department missing from here has no lights at
+		-- all rather than defaulting to blue.
+		Departments = {
+			Police = {
+				Primary = Color3.fromRGB(0, 68, 255),
+				Secondary = Color3.fromRGB(235, 242, 255),
+			},
+			Ambulance = {
+				Primary = Color3.fromRGB(0, 92, 255),
+				Secondary = Color3.fromRGB(255, 235, 90),
+			},
+			Fire = {
+				Primary = Color3.fromRGB(0, 68, 255),
+				Secondary = Color3.fromRGB(255, 60, 40),
+			},
+			Highways = {
+				Primary = Color3.fromRGB(255, 148, 0),
+				Secondary = Color3.fromRGB(255, 196, 60),
+			},
+		},
+		-- Stage one is the rear cluster for a stationary scene, stage two is
+		-- everything. A vehicle parked at an incident should be visible without
+		-- dazzling the traffic it is warning.
+		Stages = 2,
+		FlashesPerSecond = 2.2,
+		-- How a light part is recognised inside a vehicle. Excluded names are
+		-- checked first, so an ordinary lamp is never taken for a blue light.
+		LightNamePatterns = {
+			"els",
+			"lightbar",
+			"beacon",
+			"strobe",
+			"blues",
+			"grille",
+			"lightz",
+			"led",
+		},
+		ExcludedNamePatterns = {
+			"head",
+			"interior",
+			"brake",
+			"reverse",
+			"fog",
+			"indicator",
+			"hazard",
+			"dash",
+			"plate",
+			"cabin",
+			"map",
+			"tail",
+			"number",
+		},
+		-- A cap rather than a target. A lightbar modelled as two hundred separate
+		-- parts would otherwise be two hundred parts changing colour twice a
+		-- second on every client that can see it.
+		MaximumLightParts = 64,
+		-- Deliberately empty.
+		--
+		-- Most of the sound errors in this place are free model audio that Roblox
+		-- stopped allowing, and putting a guessed asset id here would fail the same
+		-- way while looking configured. Upload the tones under the group and put
+		-- their ids in EDIT_HERE.
+		Sirens = {
+			Wail = "",
+			Yelp = "",
+			Phaser = "",
+			Horn = "",
+		},
+		SirenVolume = 0.5,
+		SirenRangeStuds = 320,
+	},
 	-- Rank ladders. A profile stores its rank as an index into this list, so
 	-- ranks may be appended freely but never reordered or removed from the
 	-- middle: doing so silently repromotes or demotes everyone above the change.
@@ -1866,6 +1958,9 @@ local Config = {
 		GlobalRefillPerSecond = 10,
 		Endpoints = {
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
+			-- Flicked often on a response, so generous, but still bounded so a held
+			-- key cannot become a packet flood.
+			SetEmergencyLights = { Capacity = 8, RefillPerSecond = 3 },
 			-- Reads every loaded profile in the server, so it is deliberately
 			-- slower to refill than a lookup a player would repeat.
 			GetShoulderNumberRoster = { Capacity = 3, RefillPerSecond = 0.2 },

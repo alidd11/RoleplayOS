@@ -74,6 +74,7 @@ local serviceOrder = {
 	"VendorService",
 	"SpawnService",
 	"DutyService",
+	"EmergencyLightsService",
 	"MDTService",
 	"PersonRecordService",
 	"VehicleRecordService",

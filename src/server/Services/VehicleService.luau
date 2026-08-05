@@ -465,6 +465,13 @@ function VehicleService:_spawn(
 	model.ModelStreamingMode = Enum.ModelStreamingMode.PersistentPerPlayer
 	model.Parent = workspace
 	model:AddPersistentPlayer(player)
+	-- Warning lights, where the vehicle has any and the department runs them.
+	-- Done here rather than on the template so the department is known: the same
+	-- model is a marked car for one service and scenery for another.
+	if isTeam then
+		local duty = self.context.Services:Get("DutyService"):Get(player)
+		self.context.Services:Get("EmergencyLightsService"):Adopt(model, duty and duty.DepartmentId)
+	end
 	local summary = {
 		VehicleId = vehicle.VehicleId,
 		DefinitionId = definition.Id,

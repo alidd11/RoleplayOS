@@ -152,6 +152,37 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("SetEmergencyLights", function(payload)
+		return type(payload) == "table"
+			and (payload.Stage == nil or type(payload.Stage) == "number")
+			and (payload.Lights == nil or type(payload.Lights) == "boolean")
+			and (payload.Siren == nil or type(payload.Siren) == "string")
+	end, function(player, payload, requestId)
+		local ok, reason = self.context.Services:Get("EmergencyLightsService"):Set(player, payload)
+		if not ok then
+			local messages = {
+				NOT_DRIVING = "You are not driving a vehicle.",
+				VEHICLE_HAS_NO_LIGHTS = "This vehicle has no warning lights.",
+				NOT_ON_DUTY = "You are not on duty.",
+				DEPARTMENT_HAS_NO_LIGHTS = "Your department does not run warning lights.",
+				LIGHTS_DISABLED = "Emergency lighting is switched off on this server.",
+			}
+			return {
+				Success = false,
+				Code = reason,
+				Message = (reason and messages[reason]) or "The lights could not be changed.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = self.context.Services:Get("EmergencyLightsService"):GetState(player),
+			RequestId = requestId,
+		}
+	end)
+
 	self.context.Network:RegisterFunction("BeginDuty", function(payload)
 		return type(payload) == "table"
 			and type(payload.DutyProfileId) == "string"

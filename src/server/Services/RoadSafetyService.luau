@@ -331,6 +331,22 @@ function RoadSafetyService:AreLightsOn(vehicle: Instance?): boolean
 	if not vehicle then
 		return false
 	end
+	-- The authoritative answer first.
+	--
+	-- Where this framework owns the lighting it set this attribute itself, so
+	-- there is nothing to infer and no fork to be wrong about. Everything below
+	-- is the fallback for a vehicle still running a third party kit, and it is
+	-- guesswork: it exists because two different kits in this place disagree
+	-- about where the state lives, and guessing wrong costs an emergency driver
+	-- a fine.
+	local owned = self.context.Configuration.EmergencyLighting
+	if owned and owned.Enabled then
+		local state = vehicle:GetAttribute(owned.StateAttribute)
+		if type(state) == "boolean" then
+			return state
+		end
+	end
+
 	local settings = self.context.Configuration.EmergencyLights
 	local roots: { Instance } = { vehicle }
 	local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
