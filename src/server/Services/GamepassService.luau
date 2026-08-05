@@ -2,11 +2,39 @@
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
-local GamepassService = { connections = {}, running = false }
+local GamepassService = { connections = {}, running = false, purchased = {} }
 function GamepassService:Init(context: any)
 	self.context = context
 	self.changedEvent = context.Network:RegisterEvent("GamepassOwnershipChanged")
 end
+-- Records a completed purchase and grants it at once.
+function GamepassService:Grant(player: Player, definition: any)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	if not session then
+		return
+	end
+	local key = tostring(definition.GamepassId)
+	local seen = self.purchased[player.UserId]
+	if not seen then
+		seen = {}
+		self.purchased[player.UserId] = seen
+	end
+	seen[key] = true
+	if session.Profile.GamepassCache[key] ~= true then
+		session.Profile.GamepassCache[key] = true
+		self.context.Services:Get("DataService"):MarkDirty(player)
+		self.changedEvent:FireClient(player, { GamepassId = definition.GamepassId, Owned = true })
+	end
+	-- Logged so a refund dispute is answered from the record rather than from
+	-- memory.
+	self.context.Logger:Info("Gamepass purchased", {
+		UserId = player.UserId,
+		Player = player.Name,
+		GamepassId = definition.GamepassId,
+		Name = definition.Name,
+	})
+end
+
 function GamepassService:Refresh(player: Player, definition: any): (boolean, string?)
 	if definition.GamepassId == 0 then
 		return false, "GAMEPASS_NOT_CONFIGURED"
@@ -23,6 +51,15 @@ function GamepassService:Refresh(player: Player, definition: any): (boolean, str
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if session then
 		local ownershipKey = tostring(definition.GamepassId)
+		local seen = self.purchased[player.UserId]
+		if seen and seen[ownershipKey] and not owned then
+			-- A pass bought in this session is not taken away by a later check
+			-- answering false, because the overwhelmingly likely reason for that
+			-- answer is Roblox's own cache still being behind. Wrongly revoking
+			-- something somebody paid for minutes ago is far worse than being
+			-- slow to notice a genuine refund, which the next session catches.
+			return true, nil
+		end
 		if session.Profile.GamepassCache[ownershipKey] ~= owned then
 			session.Profile.GamepassCache[ownershipKey] = owned
 			self.context.Services:Get("DataService"):MarkDirty(player)
@@ -66,7 +103,21 @@ function GamepassService:Start()
 				end
 				for _, definition in self.context.Configuration.Gamepasses do
 					if definition.GamepassId == gamepassId then
-						self:Refresh(player, definition)
+						-- Granted from this signal, not from an ownership check.
+						--
+						-- Roblox caches UserOwnsGamePassAsync, and that cache can
+						-- still answer false for up to a minute after a purchase
+						-- completes. Asking it here, which is what this did, meant
+						-- the likeliest answer at the one moment it is asked is that
+						-- the player who has just paid does not own the thing they
+						-- paid for. They then have to rejoin to get it, or ask for
+						-- their money back.
+						--
+						-- This signal is raised by MarketplaceService on the server,
+						-- not by the client, so it is trustworthy, and it is
+						-- authoritative about the purchase in a way the cache is not
+						-- yet.
+						self:Grant(player, definition)
 					end
 				end
 			end
@@ -88,6 +139,15 @@ function GamepassService:Start()
 		end)
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(refreshWhenReady))
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			-- The record only exists to stop a stale ownership check undoing a
+			-- purchase within the session it happened in, so it goes with the
+			-- session rather than growing for the life of the server.
+			self.purchased[player.UserId] = nil
+		end)
+	)
 	for _, player in Players:GetPlayers() do
 		refreshWhenReady(player)
 	end
