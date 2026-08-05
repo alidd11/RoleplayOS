@@ -2,7 +2,7 @@
 
 local Players = game:GetService("Players")
 
-local ExperienceAccessService = { connections = {} }
+local ExperienceAccessService = { Critical = true, connections = {} }
 
 function ExperienceAccessService:Init(context: any)
 	self.context = context

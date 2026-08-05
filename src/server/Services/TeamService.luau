@@ -1,7 +1,7 @@
 --!strict
 
 local Teams = game:GetService("Teams")
-local TeamService = { teams = {} }
+local TeamService = { Critical = true, teams = {} }
 
 function TeamService:Init(context: any)
 	self.context = context

@@ -1,5 +1,5 @@
 --!strict
-local NetworkService = {}
+local NetworkService = { Critical = true }
 local function tablePayload(value: any): (boolean, string?)
 	return type(value) == "table", "EXPECTED_TABLE"
 end

@@ -7,7 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
-local DataService = { sessions = {}, running = false, connections = {}, loading = {} }
+local DataService =
+	{ Critical = true, sessions = {}, running = false, connections = {}, loading = {} }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"

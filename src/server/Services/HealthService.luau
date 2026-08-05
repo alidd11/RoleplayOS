@@ -83,6 +83,15 @@ function HealthService:Start()
 			-- ever been, never how it is now.
 			sample.Refusals = self.context.Network:DrainCounts()
 			local problems = concerns(sample)
+			-- A server can now run with a service missing rather than refusing to
+			-- run at all, which is the right trade but only if the missing service
+			-- is visible. Otherwise it is discovered by a player standing in a
+			-- dealership that does nothing.
+			local failed = self.context.Services:Failed()
+			if #failed > 0 then
+				sample.FailedServices = table.concat(failed, ", ")
+				table.insert(problems, "services degraded")
+			end
 			if #problems > 0 then
 				sample.Concerns = table.concat(problems, ", ")
 				self.context.Logger:Warning("Server health", sample)

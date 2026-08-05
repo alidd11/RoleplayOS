@@ -5,7 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
-local CharacterService = {}
+local CharacterService = { Critical = true }
 function CharacterService:Init(context: any)
 	self.context = context
 end

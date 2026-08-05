@@ -2,7 +2,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local AccessEvaluator = require(ReplicatedStorage.RoleplayOS.Shared.AccessEvaluator)
-local AccessService = {}
+local AccessService = { Critical = true }
 
 local function collectGroupLinks(rule: any, result: { [string]: boolean })
 	if rule.AccessType == "Group" and type(rule.GroupLinkId) == "string" then

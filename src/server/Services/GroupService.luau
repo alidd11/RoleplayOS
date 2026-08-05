@@ -3,7 +3,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local RobloxGroupService = { cache = {}, connections = {}, failures = {} }
+local RobloxGroupService = { Critical = true, cache = {}, connections = {}, failures = {} }
 
 function RobloxGroupService:Init(context: any)
 	self.context = context
