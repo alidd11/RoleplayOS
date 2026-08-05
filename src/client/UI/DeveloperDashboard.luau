@@ -878,12 +878,29 @@ function App.mount(context: any): ScreenGui
 				local name = text(item, role.Name, 17, COLOURS.Text, true)
 				name.Position = UDim2.fromOffset(102, 32)
 				name.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 27)
-				local detail = text(
-					item,
-					role.Locked and role.LockMessage or "Cleared to report for duty.",
-					12,
-					role.Locked and COLOURS.Muted or COLOURS.Success
-				)
+				-- What this row can tell the player that the others cannot.
+				--
+				-- Every unlocked role used to read "Cleared to report for duty." in
+				-- green, which is the same sentence on every row a player can
+				-- actually use. A line repeated on every row carries no information,
+				-- and it was competing for attention with the locked rows, which are
+				-- the only ones that genuinely need reading. The button beside it
+				-- already says the role is available.
+				--
+				-- Where they would start is the thing they are about to be asked for,
+				-- so it is what the line says instead.
+				local detailText = role.LockMessage
+				if not role.Locked then
+					local spawns = role.Spawns or {}
+					if #spawns == 1 then
+						detailText = "Reports from " .. tostring(spawns[1].StationName)
+					elseif #spawns > 1 then
+						detailText = string.format("%d places to report", #spawns)
+					else
+						detailText = ""
+					end
+				end
+				local detail = text(item, detailText, 12, COLOURS.Muted)
 				detail.Position = UDim2.fromOffset(102, 61)
 				detail.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 40)
 				detail.TextWrapped = true
