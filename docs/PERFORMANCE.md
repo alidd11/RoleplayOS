@@ -27,8 +27,17 @@ Marking it persistent for everybody would put every vehicle in the server into
 every client's memory, which is the cost streaming exists to avoid.
 
 Workspace is marked `$ignoreUnknownInstances` in the project files. Rojo sets
-these five properties and does not touch the map, which does not live in this
+these properties and does not touch the map, which does not live in this
 repository and would otherwise be deleted as unmanaged.
+
+> **Verify these in Studio rather than assuming the sync applied them.** On a
+> live sync into an existing place, `StreamingEnabled` and
+> `StreamingIntegrityMode` were applied and `StreamingMinRadius` and
+> `ModelStreamingBehavior` were left at their defaults. Select `Workspace`,
+> filter properties for `Stream`, and check the values. Note that Studio
+> **hides every dependent streaming property when `StreamingEnabled` is
+> unticked**, so a short list there means the checkbox is off, not that the
+> properties are missing.
 
 ## 2. What the world costs while it is here
 
