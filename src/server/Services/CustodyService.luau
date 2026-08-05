@@ -1,5 +1,8 @@
 --!strict
 
+local RolePermissions =
+	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
+
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -192,9 +195,14 @@ function CustodyService:SpawnInCell(player: Player): (boolean, string?)
 	return true, nil
 end
 
+-- Custody is a power the role holds, not a department it belongs to.
+--
+-- This was `duty.DepartmentId == "Police"`, and PCSO is a Police role that is
+-- free on the public tier, so search, escort, caution and booking somebody into
+-- a half hour sentence were available to every player in the game.
 function CustodyService:_authorised(player: Player): boolean
 	local duty = self.context.Services:Get("DutyService"):Get(player)
-	return duty ~= nil and duty.DepartmentId == "Police"
+	return duty ~= nil and RolePermissions.has(self.context.Configuration, duty, "Custody")
 end
 
 function CustodyService:_lineOfSight(actor: Player, target: Player): boolean

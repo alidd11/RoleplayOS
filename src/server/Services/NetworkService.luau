@@ -165,6 +165,7 @@ function NetworkService:Start()
 				VEHICLE_HAS_NO_LIGHTS = "This vehicle has no warning lights.",
 				NOT_ON_DUTY = "You are not on duty.",
 				DEPARTMENT_HAS_NO_LIGHTS = "Your department does not run warning lights.",
+				ROLE_HAS_NO_LIGHTS = "Your role does not run warning lights.",
 				LIGHTS_DISABLED = "Emergency lighting is switched off on this server.",
 			}
 			return {

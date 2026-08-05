@@ -1,6 +1,8 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
+local RolePermissions =
+	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
 
 -- Emergency lighting this framework owns.
 --
@@ -139,6 +141,12 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 	end
 	if not settings.Departments[duty.DepartmentId] then
 		return false, "DEPARTMENT_HAS_NO_LIGHTS"
+	end
+	-- The department decides the colour; the role decides whether they run them
+	-- at all. A PCSO is a Police role and does not drive a blue light response,
+	-- and the exemption from every speed camera in the city rides on this.
+	if not RolePermissions.has(self.context.Configuration, duty, "EmergencyLights") then
+		return false, "ROLE_HAS_NO_LIGHTS"
 	end
 
 	local stage = model:GetAttribute(settings.StageAttribute)

@@ -1,14 +1,21 @@
 --!strict
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RolePermissions = require(ReplicatedStorage.RoleplayOS.Shared.RolePermissions)
 local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 local MDTService = {}
 function MDTService:Init(context: any)
 	self.context = context
 end
 function MDTService:Start() end
-function MDTService:HasPermission(departmentId: string, permission: string): boolean
-	local permissions = self.context.Configuration.MDT.PermissionByDepartment[departmentId] or {}
-	return table.find(permissions, permission) ~= nil
+-- Kept taking a department for any caller that still passes one, but the duty
+-- is what actually decides, because a role may hold less than its department.
+function MDTService:HasPermission(subject: any, permission: string): boolean
+	if type(subject) == "string" then
+		local permissions = self.context.Configuration.MDT.PermissionByDepartment[subject] or {}
+		return table.find(permissions, permission) ~= nil
+	end
+	return RolePermissions.has(self.context.Configuration, subject, permission)
 end
 function MDTService:GetDuty(player: Player): any?
 	return self.context.Services:Get("DutyService"):Get(player)
@@ -21,7 +28,7 @@ function MDTService:CanUse(player: Player): boolean
 end
 function MDTService:CanUsePermission(player: Player, permission: string): boolean
 	local duty = self:GetDuty(player)
-	return self:CanUse(player) and self:HasPermission(duty.DepartmentId, permission)
+	return self:CanUse(player) and self:HasPermission(duty, permission)
 end
 function MDTService:SanitiseQuery(query: any): (string?, string?)
 	if type(query) ~= "string" then

@@ -1046,6 +1046,15 @@ local Config = {
 			}),
 			LoadoutId = "PCSO",
 			UniformId = "PoliceStandard",
+			-- Stated rather than inherited.
+			--
+			-- This role is free on the public tier and its department is Police,
+			-- so inheriting the department handed every player in the game warrant
+			-- creation, custody booking, search, escort and the blue light
+			-- exemption. A PCSO has no power of arrest, which is the whole reason
+			-- the role exists separately, and that has to be written down
+			-- somewhere the code reads rather than only in a comment.
+			Permissions = { "PersonSearch", "VehicleSearch", "IncidentWrite" },
 		},
 		PoliceOfficer = {
 			Id = "PoliceOfficer",
@@ -1858,17 +1867,28 @@ local Config = {
 		MaximumIncidentIndexEntries = 2000,
 		AllowedDepartments = { "Police", "Ambulance", "Fire", "Control", "Highways", "Prison" },
 		PermissionByDepartment = {
+			-- Custody and EmergencyLights are named here rather than implied by
+			-- the department, because both used to be. Anybody whose duty said
+			-- Police could search, escort and book a detainee, and anybody in a
+			-- department with a colour could run blue lights.
 			Police = {
 				"PersonSearch",
 				"VehicleSearch",
 				"IncidentWrite",
 				"WarrantRead",
 				"WarrantWrite",
+				"Custody",
+				"EmergencyLights",
 			},
-			Ambulance = { "PersonSearch", "IncidentRead" },
-			Fire = { "PersonSearch", "IncidentRead" },
+			Ambulance = { "PersonSearch", "IncidentRead", "EmergencyLights" },
+			Fire = { "PersonSearch", "IncidentRead", "EmergencyLights" },
 			Control = { "PersonSearch", "VehicleSearch", "IncidentRead", "Dispatch" },
-			Highways = { "PersonSearch", "VehicleSearch", "IncidentWrite" },
+			Highways = {
+				"PersonSearch",
+				"VehicleSearch",
+				"IncidentWrite",
+				"EmergencyLights",
+			},
 			Prison = { "PersonSearch", "WarrantRead" },
 		},
 	},
