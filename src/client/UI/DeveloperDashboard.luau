@@ -519,6 +519,11 @@ function App.mount(context: any): ScreenGui
 	local renderCareers: () -> ()
 	local renderSettings: () -> ()
 	local renderControls: () -> ()
+	-- Bumped by every render. A page that asks the server for anything yields,
+	-- and clearing the container before the yield does not help: two renders both
+	-- clear, both wait, and then both append, so the page appears twice. After a
+	-- yield a render checks it is still the current one and gives up if not.
+	local renderGeneration = 0
 	dismissToWorld = function()
 		if not interfaceMotionEnabled() then
 			gui.Enabled = false
@@ -549,6 +554,7 @@ function App.mount(context: any): ScreenGui
 	end
 
 	renderPlay = function()
+		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Play"
 		pageDescription.Text = "Choose who you want to be today."
@@ -652,6 +658,7 @@ function App.mount(context: any): ScreenGui
 	end
 
 	renderCareers = function()
+		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Careers"
 		pageDescription.Text = "Every path is visible. Requirements are always clear."
@@ -736,6 +743,7 @@ function App.mount(context: any): ScreenGui
 	end
 
 	renderSettings = function()
+		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Advanced settings"
 		pageDescription.Text = "Accessible, responsive controls for this experience."
@@ -826,6 +834,7 @@ function App.mount(context: any): ScreenGui
 	-- the sidebar that opened something else entirely, which made it read as a
 	-- different product from the four either side of it.
 	renderControls = function()
+		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Controls"
 		pageDescription.Text = "Every action, and what it is bound to on your device."
@@ -932,6 +941,8 @@ function App.mount(context: any): ScreenGui
 	-- the first question in one line so the rest of the page can be the answer to
 	-- the second.
 	renderCommunity = function()
+		renderGeneration += 1
+		local generation = renderGeneration
 		clear(scroll)
 		pageTitle.Text = "Community"
 		pageDescription.Text = "Where you are playing, and where else you can."
@@ -957,6 +968,11 @@ function App.mount(context: any): ScreenGui
 		-- an explanation of what a community is.
 		local officialResponse =
 			context.Controllers.NetworkController:Request("GetOfficialServers", {})
+		-- Another page was opened while that was in flight, so this one is stale
+		-- and its container now belongs to whatever replaced it.
+		if generation ~= renderGeneration then
+			return
+		end
 		local officialRows = if officialResponse.Success
 				and type(officialResponse.Data) == "table"
 			then officialResponse.Data.Servers
