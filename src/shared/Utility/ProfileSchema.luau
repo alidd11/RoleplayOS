@@ -33,7 +33,13 @@ end
 local function reconcile(target: any, defaults: any)
 	for key, value in defaults do
 		if target[key] == nil then
-			target[key] = table.clone(value)
+			-- Only tables are cloned. table.clone raises on a scalar, and this
+			-- runs inside the UpdateAsync transform on every load, so the first
+			-- scalar default added to this schema would have failed every load
+			-- for every player at once, with the retry machinery reading it as an
+			-- outage and the join handler kicking for it. Nothing would have
+			-- pointed at the new setting.
+			target[key] = if type(value) == "table" then table.clone(value) else value
 		elseif type(value) == "table" and type(target[key]) == "table" then
 			reconcile(target[key], value)
 		end

@@ -2,7 +2,10 @@
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
-local GamepassService = { connections = {}, running = false, purchased = {} }
+-- Critical, because it is the only writer of a newly bought pass. Stepping over
+-- it leaves a server that looks healthy, honours every pass bought earlier, and
+-- silently takes Robux for every pass bought on it without delivering one.
+local GamepassService = { Critical = true, connections = {}, running = false, purchased = {} }
 function GamepassService:Init(context: any)
 	self.context = context
 	self.changedEvent = context.Network:RegisterEvent("GamepassOwnershipChanged")

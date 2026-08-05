@@ -819,13 +819,23 @@ function DataService:Destroy()
 			-- below and leave `pending` above zero for ever. The loop then waited
 			-- out the entire shutdown window for a save that had already failed,
 			-- spending the time the remaining profiles needed.
-			local ok, err = pcall(function()
+			-- Both outcomes are recorded, because Save reports a failed write by
+			-- returning false rather than by raising. Only the raise was being
+			-- caught, so the list this builds was always empty and a server could
+			-- shut down having saved nobody while logging nothing. The one record
+			-- that can answer "I lost my money" did not exist.
+			local ok, saved, reason = pcall(function()
 				return self:Save(player, true)
 			end)
 			if not ok then
 				table.insert(
 					unsaved,
-					string.format("%s (%d): %s", player.Name, player.UserId, tostring(err))
+					string.format("%s (%d): raised %s", player.Name, player.UserId, tostring(saved))
+				)
+			elseif not saved then
+				table.insert(
+					unsaved,
+					string.format("%s (%d): %s", player.Name, player.UserId, tostring(reason))
 				)
 			end
 			pending -= 1

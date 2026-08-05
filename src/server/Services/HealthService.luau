@@ -77,7 +77,20 @@ function HealthService:Start()
 		-- than of one still starting, which is always its worst minute.
 		task.wait(settings.FirstSampleSeconds)
 		while self.running do
-			local sample = self:_sample()
+			-- Guarded for the reason WorldBudgetService documents: an engine read
+			-- that throws kills the spawned thread, and this thread is the only
+			-- reader of Registry:Failed, so the one mechanism that reports a
+			-- stepped-over service would stop with nothing to show for it.
+			local sampled, sample = pcall(function()
+				return self:_sample()
+			end)
+			if not sampled then
+				self.context.Logger:Warning("Could not sample server health", {
+					Error = tostring(sample),
+				})
+				task.wait(settings.IntervalSeconds)
+				continue
+			end
 			-- Refusals are drained rather than totalled, so this reads as a rate
 			-- over the interval. A running total only says how bad the server has
 			-- ever been, never how it is now.

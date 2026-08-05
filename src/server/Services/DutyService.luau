@@ -62,6 +62,31 @@ function DutyService:Get(player: Player): any?
 	end
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
 	if not access.Allowed then
+		-- A check that could not be made is not a refusal.
+		--
+		-- Roblox answers a burst of group lookups with a 429, and GroupService
+		-- caches that failure through a backoff of up to two minutes. Every one
+		-- of those reads as GROUP_CHECK_FAILED, which is indistinguishable here
+		-- from "this person is not in the group" unless the reason is checked.
+		--
+		-- Ending a shift on it is not a small mistake. This is not a getter: it
+		-- unregisters the unit from every dispatcher's board, destroys the
+		-- radio, notebook and handcuffs, and leaves an officer on the police team
+		-- in uniform with no duty and no equipment, while the audit line says the
+		-- shift ended normally. VehicleService calls this every second for anyone
+		-- driving, and ending duty there throws them out of a moving car.
+		--
+		-- It also lands hardest where it matters least deservedly: on the public
+		-- place a gamepass satisfies the rule and the group branch is irrelevant,
+		-- so this only ever fires on the whitelisted and private servers, where
+		-- group rank is the whole basis of access.
+		--
+		-- The shift is kept and the next evaluation decides. A player genuinely
+		-- removed from the group is still ended the moment a check succeeds, so
+		-- this tolerates not knowing rather than tolerating not being allowed.
+		if access.ReasonCode == "GROUP_CHECK_FAILED" then
+			return duty
+		end
 		self:End(player)
 		return nil
 	end
