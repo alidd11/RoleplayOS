@@ -1517,6 +1517,19 @@ local Config = {
 		-- lets startup ask for the pads directly; without it every descendant of
 		-- the workspace is walked, which blocks startup on a large map.
 		PadTag = "RoleplayOSSpawnPad",
+		-- A map author may use the simple convention requested for production:
+		-- create one SpawnLocation and name it exactly after its Team. SpawnId
+		-- attributes still win where a station has multiple distinct pads.
+		TeamNameFallbacks = {
+			Civilian = "CityCivilian",
+			Police = "PoliceLockerRoom",
+			Ambulance = "AmbulanceLockerRoom",
+			Fire = "FireLockerRoom",
+			Control = "ControlRoom",
+			Transport = "TransportDepot",
+			Highways = "HighwaysDepot",
+			Prison = "PrisonStaff",
+		},
 	},
 	-- Vehicles are driven by a third-party chassis. RoleplayOS presents the
 	-- readouts itself so they match the rest of the interface, scale with the

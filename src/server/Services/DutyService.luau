@@ -104,16 +104,28 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		local uniformed, uniformReason =
 			self.context.Services:Get("UniformService"):Apply(player, role.UniformId)
 		if not uniformed then
-			player.Team = previousTeam
-			return false, uniformReason
+			-- Uniforms are presentation content, not an access boundary. Development
+			-- and newly migrated maps may not have their final template IDs yet; the
+			-- production validator still blocks publishing that state.
+			self.context.Logger:Warning("Duty started without configured uniform", {
+				UserId = player.UserId,
+				RoleId = request.RoleId,
+				Reason = uniformReason,
+			})
 		end
 	end
 	if role.LoadoutId then
 		local equipped, loadoutReason =
 			self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
 		if not equipped then
-			player.Team = previousTeam
-			return false, loadoutReason
+			-- Missing authored tools must not make the underlying team, spawn and
+			-- dispatch flows impossible to test. Tool actions remain unavailable
+			-- until their trusted assets exist; no substitute permission is granted.
+			self.context.Logger:Warning("Duty started with incomplete loadout", {
+				UserId = player.UserId,
+				RoleId = request.RoleId,
+				Reason = loadoutReason,
+			})
 		end
 	end
 	self.active[player.UserId] = {

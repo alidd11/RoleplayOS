@@ -30,6 +30,9 @@ function SpawnService:_registerConfiguredPoints()
 	for _, instance in self:_candidatePads() do
 		if instance:IsA("SpawnLocation") and instance:IsDescendantOf(workspace) then
 			local spawnId = instance:GetAttribute("SpawnId")
+			if type(spawnId) ~= "string" or spawnId == "" then
+				spawnId = self.context.Configuration.Spawning.TeamNameFallbacks[instance.Name]
+			end
 			if type(spawnId) == "string" and self.context.Configuration.Spawns[spawnId] then
 				if found[spawnId] then
 					self.context.Logger:Error(

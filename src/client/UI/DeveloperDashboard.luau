@@ -624,7 +624,7 @@ function App.mount(context: any): ScreenGui
 	renderPlay = function()
 		renderGeneration += 1
 		clear(scroll)
-		pageTitle.Text = "Play"
+		pageTitle.Text = "Players"
 		pageDescription.Text = "Choose who you want to be today."
 		sectionHeading(
 			"Your characters",
@@ -1029,6 +1029,15 @@ function App.mount(context: any): ScreenGui
 		pageTitle.Text = "Tutorials"
 		pageDescription.Text = "Learn each system before starting your roleplay."
 		sectionHeading("Game guides", "Short, practical explanations of the live systems.")
+		local utilities = card(scroll, 78)
+		local controls = button(utilities, "Controls", false)
+		controls.Position = UDim2.fromOffset(18, 17)
+		controls.Size = UDim2.new(0.5, -27, 0, 44)
+		controls.Activated:Connect(renderControls)
+		local settings = button(utilities, "Settings", false)
+		settings.Position = UDim2.new(0.5, 9, 0, 17)
+		settings.Size = UDim2.new(0.5, -27, 0, 44)
+		settings.Activated:Connect(renderSettings)
 		local compactTutorials = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
 		for index, tutorial in tutorials do
 			local item = card(scroll, if compactTutorials then 166 else 124)
@@ -1521,11 +1530,7 @@ function App.mount(context: any): ScreenGui
 	addNav("Teams", renderCareers)
 	addNav("Store", renderStore)
 	addNav("Servers", renderCommunity)
-	addNav("Tutorials", renderTutorials)
-	addNav("Controls", function()
-		renderControls()
-	end)
-	addNav("Settings", renderSettings)
+	addNav("Help", renderTutorials)
 	activeNav = playNav
 	currentRender = renderPlay
 	playNav.BackgroundColor3 = COLOURS.AccentSoft

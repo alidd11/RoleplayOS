@@ -94,9 +94,15 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	local starter, starterReason =
 		self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, id)
 	if not starter then
-		session.Profile.Characters[id] = nil
-		table.remove(session.Profile.CharacterSlots, #session.Profile.CharacterSlots)
-		return nil, starterReason or "STARTER_VEHICLE_UNAVAILABLE"
+		-- Vehicle registration uses a separate persistent reservation. A transient
+		-- failure there must not erase an otherwise valid character; retry lazily
+		-- when the character is selected instead.
+		character.StarterVehiclePending = true
+		self.context.Logger:Warning("Starter vehicle deferred after character creation", {
+			UserId = player.UserId,
+			CharacterId = id,
+			Reason = starterReason or "STARTER_VEHICLE_UNAVAILABLE",
+		})
 	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
@@ -132,6 +138,13 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 	end
 	session.ActiveCharacterId = characterId
 	character.LastPlayedAt = os.time()
+	if character.StarterVehiclePending == true then
+		local starter =
+			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
+		if starter then
+			character.StarterVehiclePending = nil
+		end
+	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return character, nil
 end

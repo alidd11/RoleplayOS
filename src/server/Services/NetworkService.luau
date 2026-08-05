@@ -161,13 +161,18 @@ function NetworkService:Start()
 	end, function(player, payload, requestId)
 		local started, reason = self.context.Services:Get("DutyService"):Begin(player, payload)
 		if not started then
+			local messages = {
+				SPAWN_POINT_UNAVAILABLE = "That team's spawn pad is missing or not configured.",
+				SPAWN_ROLE_NOT_ALLOWED = "That role cannot use the selected spawn point.",
+				SPAWN_TEAM_MISMATCH = "The spawn pad does not match the selected team.",
+				DUTY_PROFILE_NOT_FOUND = "Your duty profile is not ready. Reopen the menu and try again.",
+				TEAM_NOT_CONFIGURED = "That Roblox Team is not configured.",
+				ACTIVE_CUSTODY_SENTENCE = "You cannot report for duty during an active custody sentence.",
+			}
 			return {
 				Success = false,
 				Code = reason,
-				Message = reason == "SPAWN_POINT_UNAVAILABLE"
-						and "That station spawn is not available. Choose another station."
-					or reason == "SPAWN_ROLE_NOT_ALLOWED" and "That role cannot use the selected spawn point."
-					or "Duty could not be started.",
+				Message = (reason and messages[reason]) or "Duty could not be started.",
 				RequestId = requestId,
 			}
 		end
@@ -326,12 +331,19 @@ function NetworkService:Start()
 		local summary, reason =
 			self.context.Services:Get("CharacterService"):Create(player, payload.Identity)
 		if not summary then
+			local messages = {
+				INVALID_NAME = "Use 2-24 letters for both names.",
+				INVALID_DATE_OF_BIRTH = "Enter the date of birth as YYYY-MM-DD.",
+				AGE_OUT_OF_RANGE = "This character does not meet the configured age requirement.",
+				NO_CHARACTER_SLOT = "All available character slots are already in use.",
+				PROFILE_UNAVAILABLE = "Your profile is still loading. Try again in a moment.",
+				TEXT_FILTER_TIMEOUT = "Roblox moderation did not respond. Please try again.",
+				TEXT_FILTER_UNAVAILABLE = "Roblox could not approve that name. Try another name.",
+			}
 			return {
 				Success = false,
 				Code = reason,
-				Message = reason == "INVALID_NAME" and "Enter a valid first and last name."
-					or reason == "AGE_OUT_OF_RANGE" and "This character does not meet the configured age requirement."
-					or "The character could not be created.",
+				Message = (reason and messages[reason]) or "The character could not be created.",
 				RequestId = requestId,
 			}
 		end
