@@ -125,9 +125,6 @@ local Config = {
 		-- the entire profile.
 		MaximumApplicationHistory = 60,
 		MaximumEmploymentHistory = 40,
-		-- Speed and red light cameras write these without anybody asking, so this
-		-- is the history most able to grow on its own.
-		MaximumDrivingFines = 80,
 	},
 	ContentQuality = {
 		RequireCertification = true,
@@ -609,20 +606,6 @@ local Config = {
 		CooldownSeconds = 15,
 		MaximumSensors = 128,
 		RoadsRoleId = "RoadsPolicingOfficer",
-	},
-	RoadSafety = {
-		SpeedCameraTag = "RoleplayOSSpeedCamera",
-		AverageEntryTag = "RoleplayOSAverageSpeedEntry",
-		AverageExitTag = "RoleplayOSAverageSpeedExit",
-		StudsPerSecondToMph = 0.626,
-		ToleranceMph = 2,
-		FineBase = 100,
-		FinePerMph = 10,
-		MaximumFine = 1000,
-		PointsByExcess = { { 10, 3 }, { 20, 4 }, { 30, 6 }, { 999, 6 } },
-		SensorCooldownSeconds = 8,
-		AverageJourneyExpirySeconds = 1800,
-		StateCleanupSeconds = 60,
 	},
 	Custody = {
 		BookingDeskTag = "RoleplayOSCustodyDesk",
@@ -1588,6 +1571,10 @@ local Config = {
 		-- scrolling a large fleet.
 		MaximumPreviewsPerPlayer = 6,
 		StudsToMiles = 0.000173984,
+		-- Studs per second to miles per hour, for the speed shown on the dashboard
+		-- and recorded in telemetry. A unit rather than a rule, which is why it
+		-- outlived the speed camera system it used to sit beside.
+		StudsPerSecondToMph = 0.626,
 		MaximumTrackedSpeedStudsPerSecond = 350,
 		FuelPercentPerMile = 0.2,
 		IdleFuelPercentPerMinute = 0.04,

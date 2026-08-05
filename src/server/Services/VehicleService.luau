@@ -118,9 +118,7 @@ function VehicleService:_trackVehicle(player: Player, active: any, elapsed: numb
 		return
 	end
 	active.TelemetryValid = true
-	active.LastSpeedMph = distanceStuds
-		/ elapsed
-		* self.context.Configuration.RoadSafety.StudsPerSecondToMph
+	active.LastSpeedMph = distanceStuds / elapsed * settings.StudsPerSecondToMph
 	active.LastSampleAt = os.clock()
 	local vehicle = active.Vehicle
 	local distanceMiles = distanceStuds * settings.StudsToMiles

@@ -199,15 +199,6 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		table.insert(errors, "Invalid vehicle fuel configuration")
 	end
 	if
-		type(config.RoadSafety) ~= "table"
-		or type(config.RoadSafety.StateCleanupSeconds) ~= "number"
-		or config.RoadSafety.StateCleanupSeconds < 10
-		or type(config.RoadSafety.AverageJourneyExpirySeconds) ~= "number"
-		or config.RoadSafety.AverageJourneyExpirySeconds <= 0
-	then
-		table.insert(errors, "Invalid road safety state lifetime configuration")
-	end
-	if
 		type(config.MDT) ~= "table"
 		or type(config.MDT.MaximumIndexBucketEntries) ~= "number"
 		or config.MDT.MaximumIndexBucketEntries < config.MDT.PageSize
