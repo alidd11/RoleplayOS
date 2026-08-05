@@ -92,7 +92,22 @@ local ORDER = {
 -- Init must stay serial and in order: controllers read each other's stored
 -- dependencies. It does no networking, so it cannot yield indefinitely.
 for _, name in ORDER do
-	controllers[name]:Init(context)
+	-- Serial and in order, because controllers read each other's stored
+	-- dependencies, but isolated: one that throws here used to kill the script
+	-- before the start menu was mounted, so a single bad controller produced a
+	-- blank screen rather than a menu missing one feature.
+	local ok, problem = pcall(function()
+		controllers[name]:Init(context)
+	end)
+	if not ok then
+		warn(
+			string.format(
+				"RoleplayOS controller %s failed to initialise: %s",
+				name,
+				tostring(problem)
+			)
+		)
+	end
 end
 
 -- Start connects events and issues first requests, so it can yield on remotes
@@ -115,4 +130,12 @@ for _, name in ORDER do
 	end)
 end
 
-require(script.UI.DeveloperDashboard).mount(context)
+-- Mounted inside a pcall of its own. It is the last thing to run and the one
+-- the player actually looks at, so a failure here is the difference between a
+-- menu and an empty screen, and it should say so rather than vanish.
+local mounted, mountProblem = pcall(function()
+	require(script.UI.DeveloperDashboard).mount(context)
+end)
+if not mounted then
+	warn("RoleplayOS start menu failed to mount: " .. tostring(mountProblem))
+end

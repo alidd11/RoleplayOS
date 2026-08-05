@@ -10,13 +10,33 @@ local ENDPOINT_TIMEOUT_SECONDS = 15
 -- running.
 local REQUEST_TIMEOUT_SECONDS = 35
 
+-- Bounded. The remotes folder is created by the server, so if the server script
+-- dies during startup it never appears at all. Waiting for it without a limit
+-- blocked the serial Init loop forever, which meant the start menu, which is
+-- mounted after that loop, never appeared and nothing said why: a blank screen
+-- with no error is the least diagnosable failure this client has.
+--
+-- Giving up leaves the controller usable and every request reports that the
+-- server is unavailable, which is both true and visible.
+local REMOTES_TIMEOUT_SECONDS = 20
+
 function NetworkController:Init(_context: any)
-	self.remotes =
-		ReplicatedStorage:WaitForChild("RoleplayOS"):WaitForChild("Network"):WaitForChild("Remotes")
 	self.resolved = {}
+	local root = ReplicatedStorage:WaitForChild("RoleplayOS", REMOTES_TIMEOUT_SECONDS)
+	local network = if root then root:WaitForChild("Network", REMOTES_TIMEOUT_SECONDS) else nil
+	self.remotes = if network then network:WaitForChild("Remotes", REMOTES_TIMEOUT_SECONDS) else nil
+	if not self.remotes then
+		warn(
+			"RoleplayOS could not find the server's remotes. The server did not finish "
+				.. "starting, so nothing that needs it will work. The menu is still usable."
+		)
+	end
 end
 function NetworkController:Start() end
 function NetworkController:_awaitReady()
+	if not self.remotes then
+		return
+	end
 	if self.ready or self.remotes:GetAttribute("Ready") then
 		self.ready = true
 		return
@@ -31,6 +51,9 @@ function NetworkController:_awaitReady()
 	end
 end
 function NetworkController:Resolve(endpoint: string): RemoteFunction?
+	if not self.remotes then
+		return nil
+	end
 	local cached = self.resolved[endpoint]
 	if cached and cached.Parent then
 		return cached
@@ -51,6 +74,9 @@ end
 -- Bounded lookup for RemoteEvents. An untimed WaitForChild here yields forever
 -- when the server never reaches that registration, silently wedging the caller.
 function NetworkController:ResolveEvent(name: string): RemoteEvent?
+	if not self.remotes then
+		return nil
+	end
 	local remote = self.remotes:FindFirstChild(name)
 	if not remote then
 		self:_awaitReady()
