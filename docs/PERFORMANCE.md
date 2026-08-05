@@ -16,7 +16,6 @@ game "only renders things near you".
 
 | Property | Value | Why |
 | --- | --- | --- |
-| `StreamingMinRadius` | 192 | What is guaranteed loaded. Well above the default of 64 because a car at speed crosses a small radius faster than it can stream. The floor is set by the driving, not by walking. |
 | `StreamingTargetRadius` | 1024 | What is loaded when there is room. **The main dial to turn down if phones still struggle.** |
 | `StreamingIntegrityMode` | `PauseOutsideLoadedArea` | Holds a player still rather than letting them fall through ground that has not arrived. The failure mode of streaming in a driving game is falling out of the world at speed. |
 | `ModelStreamingBehavior` | `Improved` | Streams whole models, so a vehicle never arrives as a chassis without wheels. |
@@ -30,11 +29,14 @@ Workspace is marked `$ignoreUnknownInstances` in the project files. Rojo sets
 these properties and does not touch the map, which does not live in this
 repository and would otherwise be deleted as unmanaged.
 
-> **Verify these in Studio rather than assuming the sync applied them.** On a
-> live sync into an existing place, `StreamingEnabled` and
-> `StreamingIntegrityMode` were applied and `StreamingMinRadius` and
-> `ModelStreamingBehavior` were left at their defaults. Select `Workspace`,
-> filter properties for `Stream`, and check the values. Note that Studio
+> **`StreamingMinRadius` is not settable and is not listed above.** Studio's
+> property grid shows it, but it is not scriptable: reading it from Lua throws
+> "not a valid member of Workspace". That is why a Rojo sync leaves it at 64
+> rather than applying it, and why reading it in a log line took down the
+> service that was reporting on it.
+>
+> **Verify the rest in Studio rather than assuming the sync applied them.**
+> Select `Workspace` and filter properties for `Stream`. Note that Studio
 > **hides every dependent streaming property when `StreamingEnabled` is
 > unticked**, so a short list there means the checkbox is off, not that the
 > properties are missing.

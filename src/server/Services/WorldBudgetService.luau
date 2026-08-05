@@ -126,19 +126,35 @@ end
 -- Reports what streaming is actually set to, rather than what it was asked to
 -- be set to.
 --
--- These live in the project file because they cannot be set at runtime, which
--- means a live sync is the only thing that applies them and a live sync can
--- apply some and silently skip others. That happened: StreamingEnabled and the
--- integrity mode took, the radius and the model behaviour stayed at their
--- defaults, and nothing anywhere said so. One line in the server log is cheaper
--- than finding it again by clicking through the Explorer.
+-- These live in the project file because they cannot be set at runtime, so a
+-- live sync is the only thing that applies them, and a live sync can apply some
+-- and silently skip others. One line in the server log is cheaper than finding
+-- that again by clicking through the Explorer.
+--
+-- `StreamingMinRadius` is deliberately absent. Studio's property grid shows it,
+-- but it is not scriptable: reading it throws "not a valid member of Workspace".
+-- That is why Rojo skipped it rather than applying it, and reading it here threw
+-- during Start and took this entire service down with it, so the render budget
+-- below never ran at all. The only reason that was ever noticed is that the
+-- health log named the failed service.
+--
+-- Every read is inside the pcall for the same reason. This function exists to
+-- report on the engine, and it must not be the thing that breaks when the
+-- engine changes underneath it.
 function WorldBudgetService:_reportStreaming()
-	local detail = {
-		MinRadius = Workspace.StreamingMinRadius,
-		TargetRadius = Workspace.StreamingTargetRadius,
-		IntegrityMode = Workspace.StreamingIntegrityMode.Name,
-		ModelBehaviour = Workspace.ModelStreamingBehavior.Name,
-	}
+	local ok, detail = pcall(function()
+		return {
+			TargetRadius = Workspace.StreamingTargetRadius,
+			IntegrityMode = Workspace.StreamingIntegrityMode.Name,
+			ModelBehaviour = Workspace.ModelStreamingBehavior.Name,
+		}
+	end)
+	if not ok then
+		self.context.Logger:Warning("Could not read the streaming settings", {
+			Error = tostring(detail),
+		})
+		return
+	end
 	if Workspace.StreamingEnabled then
 		self.context.Logger:Info("Streaming is on", detail)
 	else
