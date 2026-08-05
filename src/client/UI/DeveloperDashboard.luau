@@ -24,6 +24,11 @@ local COLOURS = {
 	Text = Color3.fromRGB(240, 244, 251),
 	Muted = Color3.fromRGB(142, 154, 176),
 	Accent = Color3.fromRGB(91, 156, 255),
+	-- Fill for primary buttons. The accent is a good colour for text, strokes and
+	-- indicators against the dark canvas, and a poor one behind white label text:
+	-- that pairing measures about two and a half to one, well under the four and
+	-- a half a body label needs. This is the same hue, dark enough to carry it.
+	AccentFill = Color3.fromRGB(31, 95, 208),
 	AccentSoft = Color3.fromRGB(25, 51, 88),
 	Success = Color3.fromRGB(84, 211, 142),
 	Warning = Color3.fromRGB(245, 188, 78),
@@ -114,7 +119,7 @@ end
 local function button(parent: Instance, label: string, primary: boolean?): TextButton
 	local item = Instance.new("TextButton")
 	item.AutoButtonColor = false
-	item.BackgroundColor3 = if primary then COLOURS.Accent else COLOURS.SurfaceRaised
+	item.BackgroundColor3 = if primary then COLOURS.AccentFill else COLOURS.SurfaceRaised
 	item.Font = Enum.Font.GothamBold
 	item.Text = label
 	item.TextSize = 14
@@ -317,10 +322,13 @@ function App.mount(context: any): ScreenGui
 	sidebar.BackgroundColor3 = COLOURS.Sidebar
 	sidebar.BorderSizePixel = 0
 	sidebar.Parent = root
+	-- Divides the bar from the content beneath it. Authored for a sidebar down the
+	-- left, where it was a hairline on the right edge; in the bar layout that put
+	-- a one pixel tick in the top corner and left the bar with no edge at all.
 	local sidebarStroke = Instance.new("Frame")
-	sidebarStroke.AnchorPoint = Vector2.new(1, 0)
-	sidebarStroke.Position = UDim2.fromScale(1, 0)
-	sidebarStroke.Size = UDim2.new(0, 1, 1, 0)
+	sidebarStroke.AnchorPoint = Vector2.new(0, 1)
+	sidebarStroke.Position = UDim2.fromScale(0, 1)
+	sidebarStroke.Size = UDim2.new(1, 0, 0, 1)
 	sidebarStroke.BackgroundColor3 = COLOURS.Border
 	sidebarStroke.BorderSizePixel = 0
 	sidebarStroke.Parent = sidebar
@@ -381,6 +389,9 @@ function App.mount(context: any): ScreenGui
 	flow.Parent = scroll
 
 	local menuData: any = nil
+	-- Seeded from the character the player last used, which the server already
+	-- sends and nothing read. Without it a returning player picks the same
+	-- character again on every join before they can do anything else.
 	local selectedCharacterId: string? = nil
 	local dismissToWorld: () -> ()
 	local function interfaceMotionEnabled(): boolean
@@ -530,7 +541,13 @@ function App.mount(context: any): ScreenGui
 		local modal = Instance.new("Frame")
 		modal.AnchorPoint = Vector2.new(0.5, 0.5)
 		modal.Position = UDim2.fromScale(0.5, 0.5)
-		modal.Size = UDim2.fromOffset(480, 390)
+		-- Clamped, like every other modal here. Fixed at 390 tall it was already
+		-- flush to both edges of a four hundred pixel phone before the top bar,
+		-- and it grows by a button for every spawn point, so the Cancel control
+		-- was pushed off screen at a station with more than a couple. This is the
+		-- last step before a player actually reaches the game.
+		local safe = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
+		modal.Size = UDim2.fromOffset(math.min(480, safe.X - 32), math.min(390, safe.Y - 32))
 		modal.BackgroundColor3 = COLOURS.Surface
 		modal.BorderSizePixel = 0
 		modal.ZIndex = 21
@@ -1634,7 +1651,10 @@ function App.mount(context: any): ScreenGui
 			for _, item in navigation:GetChildren() do
 				if item:IsA("TextButton") then
 					item.Size = UDim2.new(1 / navItems, -5, 1, 0)
-					item.TextSize = if narrow then 10 else 14
+					-- Never below twelve. These are the only way to move around the menu, and
+					-- ten pixels on the smallest screen is where they are least readable and
+					-- most needed.
+					item.TextSize = if narrow then 12 else 14
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
@@ -1690,6 +1710,16 @@ function App.mount(context: any): ScreenGui
 
 	context.Events.StartMenuChanged.Event:Connect(function(data)
 		menuData = data
+		if not selectedCharacterId and type(data.LastCharacterId) == "string" then
+			-- Only when nothing is chosen yet, so a refresh never moves a choice
+			-- the player has just made out from under them.
+			for _, character in data.Characters or {} do
+				if character.CharacterId == data.LastCharacterId then
+					selectedCharacterId = data.LastCharacterId
+					break
+				end
+			end
+		end
 		brand.Text = data.Framework.GameName
 		version.Visible = data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
