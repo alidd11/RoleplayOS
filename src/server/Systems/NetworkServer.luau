@@ -134,7 +134,46 @@ function NetworkServer:RegisterFunction(
 			}
 		end
 		inFlight[requestId] = now
-		local ok, result = pcall(handler, player, payload, requestId)
+
+		-- The handler runs alongside a deadline rather than being waited on.
+		--
+		-- OnServerInvoke returns when the handler does, and InvokeServer yields
+		-- the caller until it does, so a handler that stalls leaves the player
+		-- staring at a button that never comes back. Every long wait reported in
+		-- this game has been that: a web call, a data store, a filter, and an
+		-- interface with no way to know it was never going to hear back.
+		--
+		-- A client side timeout only decides how long the player stares. The
+		-- server answering is what stops it happening, so it always answers, and
+		-- a handler that is still running is left to finish into nothing.
+		--
+		-- The slot is deliberately not released on a timeout: that handler is
+		-- still holding whatever it was holding, and the reclaim above frees it
+		-- once it is genuinely presumed lost.
+		local finished, ok, result = false, false, nil
+		task.spawn(function()
+			local handlerOk, handlerResult = pcall(handler, player, payload, requestId)
+			ok, result = handlerOk, handlerResult
+			finished = true
+		end)
+		local handlerDeadline = os.clock() + (self.config.HandlerTimeoutSeconds or 8)
+		while not finished and os.clock() < handlerDeadline do
+			task.wait(0.03)
+		end
+		if not finished then
+			self.logger:Error("Remote handler did not answer in time", {
+				Endpoint = name,
+				RequestId = requestId,
+				UserId = player.UserId,
+				Seconds = self.config.HandlerTimeoutSeconds or 8,
+			})
+			return {
+				Success = false,
+				Code = "SERVER_TIMEOUT",
+				Message = "That is taking longer than it should. Try again.",
+				RequestId = requestId,
+			}
+		end
 		inFlight[requestId] = nil
 		if not ok then
 			self.logger:Error("Remote handler failed", {

@@ -5,10 +5,14 @@ local NetworkController = {}
 -- server service. A client request issued during that window must wait for the
 -- endpoint rather than reporting the feature as missing.
 local ENDPOINT_TIMEOUT_SECONDS = 15
--- Longer than the server's own abandon ceiling, so a request the server has
--- already given up on is reported here rather than appearing to still be
--- running.
-local REQUEST_TIMEOUT_SECONDS = 35
+-- The client's last resort, not its first.
+--
+-- The server now answers every request within its own handler deadline, so
+-- reaching this at all means the reply never arrived rather than that the
+-- handler was slow. Kept a little above the server's ceiling so the server is
+-- what explains a slow request, and short enough that a player is never left
+-- looking at a dead button for half a minute.
+local REQUEST_TIMEOUT_SECONDS = 14
 
 -- Bounded. The remotes folder is created by the server, so if the server script
 -- dies during startup it never appears at all. Waiting for it without a limit

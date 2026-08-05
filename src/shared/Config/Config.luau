@@ -1826,6 +1826,13 @@ local Config = {
 		MaximumNodes = 256,
 		MaximumStringBytes = 2048,
 		MaximumConcurrentRequests = 4,
+		-- How long a handler is given before the server answers without it.
+		--
+		-- Every endpoint here should reply in well under a second; anything
+		-- approaching this is doing something it should not be doing inside a
+		-- request. Set below the client's own patience so the server is what
+		-- answers, rather than the client giving up on a server still thinking.
+		HandlerTimeoutSeconds = 8,
 		-- A request still running after this long is presumed lost and stops
 		-- occupying a concurrency slot, so one stuck handler cannot refuse every
 		-- later request from that player for the rest of the session.
