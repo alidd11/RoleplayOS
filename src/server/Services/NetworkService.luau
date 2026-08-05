@@ -688,6 +688,11 @@ function NetworkService:Start()
 					or reason == "DEALERSHIP_TERMINAL_REQUIRED"
 					or reason == "DEALERSHIP_TERMINAL_MISMATCH"
 				then "Vehicle purchases can only be made inside the selected dealership."
+				elseif reason == "PURCHASE_IN_PROGRESS" then
+					-- Said plainly, because the player reaching this has just been
+					-- told their last attempt timed out and is trying again. Telling
+					-- them it is still going is what stops them buying twice.
+					"Your last purchase is still going through. Give it a moment."
 				else "The purchase could not be completed.",
 			Data = vehicle,
 			RequestId = requestId,

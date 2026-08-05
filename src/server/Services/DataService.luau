@@ -330,7 +330,10 @@ function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
 	-- Twelve seconds normally, two while closing: Roblox allows about thirty
 	-- seconds to shut down, and waiting is only worth doing while there is still
 	-- time to use the budget once it arrives.
-	local deadline = os.clock() + (if self.closing then 2 else 12)
+	-- Six, not twelve. The network layer gives a handler eight seconds, so a
+	-- twelve second wait guaranteed that any request reaching it was reported to
+	-- the player as a timeout while the work carried on behind them.
+	local deadline = os.clock() + (if self.closing then 2 else 6)
 	local waited = false
 	while DataStoreService:GetRequestBudgetForRequestType(requestType) < 1 do
 		if os.clock() >= deadline then

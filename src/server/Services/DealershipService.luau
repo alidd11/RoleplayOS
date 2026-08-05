@@ -1,6 +1,13 @@
 --!strict
 local HttpService = game:GetService("HttpService")
-local DealershipService = {}
+-- `buying` marks a purchase that has been paid for and not yet finished.
+--
+-- Creating the vehicle reaches DataStore, which can wait on request budget for
+-- longer than the network layer waits for the handler. The player is charged,
+-- then told the request timed out, then presses buy again: without this the
+-- second attempt is accepted and takes a second payment for a second car while
+-- the first is still being made.
+local DealershipService = { buying = {} }
 function DealershipService:Init(context: any)
 	self.context = context
 end
@@ -107,6 +114,23 @@ function DealershipService:Purchase(
 	if not access.Allowed then
 		return nil, access.ReasonCode
 	end
+	if self.buying[player.UserId] then
+		return nil, "PURCHASE_IN_PROGRESS"
+	end
+	self.buying[player.UserId] = true
+	local vehicle, creationError =
+		self:_purchase(player, characterId, definitionId, colour, definition)
+	self.buying[player.UserId] = nil
+	return vehicle, creationError
+end
+
+function DealershipService:_purchase(
+	player: Player,
+	characterId: string,
+	definitionId: string,
+	colour: any,
+	definition: any
+): (any?, string?)
 	local transaction = {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = characterId,
@@ -136,16 +160,32 @@ function DealershipService:Purchase(
 			{ TransactionId = transaction.TransactionId, Error = creationError }
 		)
 		if (definition.Price or 0) > 0 then
-			self.context.Services:Get("EconomyService"):Apply(player, {
-				TransactionId = HttpService:GenerateGUID(false),
-				CharacterId = characterId,
-				Amount = definition.Price,
-				Direction = "Credit",
-				ReasonCode = "VEHICLE_PURCHASE_REFUND",
-				Description = "Automatic refund: " .. definition.Name,
-				RelatedEntityId = transaction.TransactionId,
-				Metadata = {},
-			})
+			local refunded, refundError =
+				self.context.Services:Get("EconomyService"):Apply(player, {
+					TransactionId = HttpService:GenerateGUID(false),
+					CharacterId = characterId,
+					Amount = definition.Price,
+					Direction = "Credit",
+					ReasonCode = "VEHICLE_PURCHASE_REFUND",
+					Description = "Automatic refund: " .. definition.Name,
+					RelatedEntityId = transaction.TransactionId,
+					Metadata = {},
+				})
+			if not refunded then
+				-- The refund's answer was being discarded. A player who switched
+				-- character or left during the creation attempt fails
+				-- CHARACTER_NOT_ACTIVE here, and their money was simply gone with
+				-- nothing written down: the error above reports the car, not the
+				-- cash. This is the line that answers them.
+				self.context.Logger:Error("Vehicle refund failed; the player is owed", {
+					UserId = player.UserId,
+					CharacterId = characterId,
+					Amount = definition.Price,
+					Vehicle = definitionId,
+					TransactionId = transaction.TransactionId,
+					Error = tostring(refundError),
+				})
+			end
 		end
 	end
 	return vehicle, creationError
