@@ -183,7 +183,9 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 		return false, "INVALID_REQUEST"
 	end
 	local registration = request.Registration
-	if type(registration) ~= "string" or registration == "" then
+	local driver = request.Driver
+	local hasDriver = typeof(driver) == "Instance" and driver:IsA("Player")
+	if (type(registration) ~= "string" or registration == "") and not hasDriver then
 		return false, "INVALID_REGISTRATION"
 	end
 	local speed = tonumber(request.Mph)
@@ -198,7 +200,20 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 		return false, "WITHIN_TOLERANCE"
 	end
 
-	local player, character = self:_keeper(registration)
+	-- The registered keeper where the plate resolves to one, and the person at
+	-- the wheel otherwise. A camera can read a plate off a civilian's own car,
+	-- but a service vehicle belongs to nobody and somebody should still answer
+	-- for driving it at seventy through a thirty.
+	local player, character = nil, nil
+	if type(registration) == "string" and registration ~= "" then
+		player, character = self:_keeper(registration)
+	end
+	if not player and hasDriver then
+		player = driver
+		local session = self.context.Services:Get("DataService"):GetSession(driver)
+		local characterId = session and session.ActiveCharacterId
+		character = characterId and session.Profile.Characters[characterId]
+	end
 	if not player or not character then
 		return false, "KEEPER_UNAVAILABLE"
 	end
@@ -206,11 +221,7 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 	-- Judged against whoever is driving, which is not necessarily the keeper: an
 	-- officer on a response in a car registered to somebody else is still on a
 	-- response, and the keeper should not be fined for it.
-	local driver = request.Driver
-	if typeof(driver) ~= "Instance" or not driver:IsA("Player") then
-		driver = player
-	end
-	if self:IsExempt(driver, request.Vehicle) then
+	if self:IsExempt(if hasDriver then driver else player, request.Vehicle) then
 		return false, "EXEMPT_EMERGENCY_RESPONSE"
 	end
 
@@ -219,7 +230,9 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 	local record = {
 		FineId = HttpService:GenerateGUID(false),
 		IssuedAt = os.time(),
-		Registration = registration,
+		Registration = if type(registration) == "string" and registration ~= ""
+			then registration
+			else "UNREGISTERED",
 		Location = if type(request.Location) == "string" then request.Location else "Speed camera",
 		Type = if type(request.Kind) == "string" then request.Kind else "SpeedCamera",
 		RecordedMph = math.floor(speed + 0.5),

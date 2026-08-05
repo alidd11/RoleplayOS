@@ -1852,12 +1852,31 @@ local Config = {
 -- Ordinary game data lives in EDIT_HERE so a future maintainer does not need
 -- to modify this framework-sized module. Overrides are recursive: a pass ID can
 -- be replaced without copying its name, description or access rules.
+-- EDIT_HERE sits beside this module, not inside it. The folder on disk holding
+-- both becomes the Folder these are children of, so this module and EDIT_HERE
+-- are siblings; reading it as a child found nothing, and the raise took the
+-- whole configuration with it. Every controller requires this, so a client
+-- whose configuration will not load has no interface at all: the start menu
+-- simply never appeared, and the reason was three levels down a stack trace.
+local editableFolder = script.Parent and script.Parent:FindFirstChild("EDIT_HERE")
+	or script:FindFirstChild("EDIT_HERE")
+
+local function editable(name: string): any
+	local module = editableFolder and editableFolder:FindFirstChild(name)
+	if not module or not module:IsA("ModuleScript") then
+		-- Named plainly rather than left as an index error. A missing override
+		-- file should say which one, not fail as "attempt to index nil".
+		error("RoleplayOS configuration is missing EDIT_HERE/" .. name, 0)
+	end
+	return require(module)
+end
+
 local editableData = {
-	require(script.EDIT_HERE["01_Deployment"]),
-	require(script.EDIT_HERE["02_Groups"]),
-	require(script.EDIT_HERE["03_Gamepasses"]),
-	require(script.EDIT_HERE["04_Uniforms"]),
-	require(script.EDIT_HERE["05_Balancing"]),
+	editable("01_Deployment"),
+	editable("02_Groups"),
+	editable("03_Gamepasses"),
+	editable("04_Uniforms"),
+	editable("05_Balancing"),
 }
 
 local originalGamepassIds = {}
