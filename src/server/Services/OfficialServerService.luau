@@ -23,7 +23,7 @@ local TeleportService = game:GetService("TeleportService")
 -- and a data store would be the wrong tool at that rate for something disposable.
 local OCCUPANCY_MAP = "RoleplayOSOfficialOccupancy"
 
-local OfficialServerService = { codes = {}, reserving = {} }
+local OfficialServerService = { Critical = true, codes = {}, reserving = {} }
 
 function OfficialServerService:Init(context: any)
 	self.context = context

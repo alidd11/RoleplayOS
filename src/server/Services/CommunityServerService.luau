@@ -1,6 +1,6 @@
 --!strict
 
-local CommunityServerService = {}
+local CommunityServerService = { Critical = true }
 
 function CommunityServerService:Init(context: any)
 	self.context = context

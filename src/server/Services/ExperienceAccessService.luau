@@ -14,6 +14,29 @@ end
 -- emergency roles are bought rather than applied for. A server asks for a group
 -- only when it is one of the whitelisted ones, and it asks for that server's
 -- group rather than a single experience wide one.
+-- Whether this place is configured as a whitelisted world.
+--
+-- Read straight from the configuration against this server's own place id,
+-- deliberately not through the services that decide the gate, because the point
+-- is to catch those failing.
+function ExperienceAccessService:_shouldBeGated(): boolean
+	local official = self.context.Configuration.OfficialServers
+	local entries = official and official.Entries
+	if type(entries) ~= "table" then
+		return false
+	end
+	for _, entry in entries do
+		if
+			entry.Whitelisted == true
+			and tonumber(entry.PlaceId) == game.PlaceId
+			and type(entry.RequiredGroupLinkId) == "string"
+		then
+			return true
+		end
+	end
+	return false
+end
+
 function ExperienceAccessService:_check(player: Player)
 	local config = self.context.Configuration.ExperienceAccess
 	if not player:IsDescendantOf(Players) then
@@ -21,6 +44,26 @@ function ExperienceAccessService:_check(player: Player)
 	end
 	local linkId = self.context.Services:Get("CommunityServerService"):RequiredGroupLinkId()
 	if not linkId then
+		-- No gate resolved. On the public place that is the correct answer and
+		-- the whole reason it is the public place.
+		--
+		-- On the whitelisted world it is a configuration failure, and a silent
+		-- one: whether a server is whitelisted is decided by whether a group link
+		-- resolves, so a link that fails to resolve does not read as a broken
+		-- gate, it reads as a server that never had one. The place would report
+		-- itself Public and admit anybody, and nothing anywhere would look wrong.
+		--
+		-- The place id is the one thing this server always knows about itself and
+		-- it is not derived from anything above, so it is checked here directly.
+		-- Refusing entry to a world that cannot prove it is gated is the only
+		-- safe way to be wrong.
+		if self:_shouldBeGated() then
+			self.context.Logger:Error("Whitelisted place could not resolve its group gate", {
+				PlaceId = game.PlaceId,
+				UserId = player.UserId,
+			})
+			player:Kick("This world could not confirm its access settings. Please rejoin shortly.")
+		end
 		return
 	end
 	local groupService = self.context.Services:Get("GroupService")
