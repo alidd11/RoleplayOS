@@ -453,7 +453,14 @@ function VehicleService:_spawn(
 		model:SetAttribute("RoleplayOSTeamVehicle", true)
 		model:SetAttribute("RoleplayOSTeamName", definition.TeamName)
 	end
+	-- Kept loaded for the person driving it and streamed normally for everybody
+	-- else. A vehicle is the one model a player cannot afford to have unload
+	-- underneath them, and marking it persistent for everyone would put every
+	-- vehicle in the server into every client's memory, which is the cost
+	-- streaming exists to avoid.
+	model.ModelStreamingMode = Enum.ModelStreamingMode.PersistentPerPlayer
 	model.Parent = workspace
+	model:AddPersistentPlayer(player)
 	local summary = {
 		VehicleId = vehicle.VehicleId,
 		DefinitionId = definition.Id,

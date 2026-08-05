@@ -8,6 +8,16 @@
     "**/*~"
   ],
   "tree": {
+    "Workspace": {
+      "$ignoreUnknownInstances": true,
+      "$properties": {
+        "StreamingEnabled": true,
+        "StreamingMinRadius": 192,
+        "StreamingTargetRadius": 1024,
+        "StreamingIntegrityMode": "PauseOutsideLoadedArea",
+        "ModelStreamingBehavior": "Improved"
+      }
+    },
     "$className": "DataModel",
     "ReplicatedStorage": {
       "RoleplayOS": {
