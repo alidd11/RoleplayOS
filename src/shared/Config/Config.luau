@@ -1,12 +1,25 @@
 --!strict
 
+-- Everywhere that is not the published place. Written out rather than negated,
+-- because the evaluator has no negation and the list is short and explicit.
+local ELSEWHERE = { "Whitelisted", "Private", "Reserved" }
+
+-- An emergency role, gated differently in each tier.
+--
+-- On the public place the gamepass is the only way in. Being in the service's
+-- Roblox group grants nothing there: the group is how the whitelisted community
+-- is staffed, and letting it through on the public place gave every member of
+-- it the paid teams for nothing.
+--
+-- Everywhere else the group is the only way in, and the gamepass grants
+-- nothing. Those are worlds people applied to be part of, and a purchase is not
+-- an application.
 local function publicPassOr(existingRule: any, gamepassId: number): any
 	return {
 		AccessType = "Combined",
 		Match = "Any",
 		DisplayWhenLocked = true,
 		Rules = {
-			existingRule,
 			{
 				AccessType = "Combined",
 				Match = "All",
@@ -15,18 +28,35 @@ local function publicPassOr(existingRule: any, gamepassId: number): any
 					{ AccessType = "Gamepass", GamepassId = gamepassId },
 				},
 			},
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kinds = ELSEWHERE },
+					existingRule,
+				},
+			},
 		},
 	}
 end
 
+-- A role that is open to everybody on the public place and held by the group
+-- everywhere else.
 local function publicOr(existingRule: any): any
 	return {
 		AccessType = "Combined",
 		Match = "Any",
 		DisplayWhenLocked = true,
 		Rules = {
-			existingRule,
 			{ AccessType = "ServerKind", Kind = "Public" },
+			{
+				AccessType = "Combined",
+				Match = "All",
+				Rules = {
+					{ AccessType = "ServerKind", Kinds = ELSEWHERE },
+					existingRule,
+				},
+			},
 		},
 	}
 end

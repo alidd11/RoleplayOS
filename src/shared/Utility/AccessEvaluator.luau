@@ -49,6 +49,17 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
 	end
 	if kind == "ServerKind" then
+		-- Kind names one, Kinds names several. Several is how "anywhere except the
+		-- public place" is written, since there is no negation here and listing
+		-- the alternatives is clearer than inventing one.
+		if rule.Kinds ~= nil then
+			for _, allowed in rule.Kinds do
+				if subject.ServerKind == allowed then
+					return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+				end
+			end
+			return denied("SERVER_KIND_REQUIRED", rule.Message, { RequiredKinds = rule.Kinds })
+		end
 		if subject.ServerKind == rule.Kind then
 			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
 		end
