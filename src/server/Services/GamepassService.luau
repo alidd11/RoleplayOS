@@ -2,6 +2,7 @@
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local WebCallPacer = require(script.Parent.Parent.Systems.WebCallPacer)
 -- Critical, because it is the only writer of a newly bought pass. Stepping over
 -- it leaves a server that looks healthy, honours every pass bought earlier, and
 -- silently takes Robux for every pass bought on it without delivering one.
@@ -85,13 +86,18 @@ end
 -- up with each other. Nothing is waiting on this: a pass that resolves a second
 -- later is invisible, whereas a throttled one reads as unowned.
 function GamepassService:RefreshAll(player: Player)
-	local spacing = self.context.Configuration.Groups.WarmSpacingSeconds or 0.6
 	for _, definition in self.context.Configuration.Gamepasses do
 		if not self.running or not player.Parent then
 			return
 		end
+		-- Shared with the group lookups, because Roblox meters both against the
+		-- same server. Sixteen passes per player used to be sixteen waits per
+		-- player, so a full server made fifty of these a second between them.
+		WebCallPacer:Wait()
+		if not self.running or not player.Parent then
+			return
+		end
 		self:Refresh(player, definition)
-		task.wait(spacing * (0.5 + math.random()))
 	end
 end
 

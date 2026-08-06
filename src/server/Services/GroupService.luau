@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local WebCallPacer = require(script.Parent.Parent.Systems.WebCallPacer)
 local RunService = game:GetService("RunService")
 
 local RobloxGroupService = { Critical = true, cache = {}, connections = {}, failures = {} }
@@ -138,9 +139,13 @@ function RobloxGroupService:Warm(player: Player)
 			return
 		end
 		if linkId ~= gate then
-			-- Jittered so that several players joining together do not line their
-			-- lookups up with each other and rebuild the burst.
-			task.wait(self.settings.WarmSpacingSeconds * (0.5 + math.random()))
+			-- Paced against the whole server rather than against this player.
+			--
+			-- The wait here used to be per player, which decorrelates two joiners
+			-- from each other and does nothing about the total: thirty people
+			-- arriving together ran thirty of these loops at once and the
+			-- aggregate rate scaled with the size of the crowd.
+			WebCallPacer:Wait()
 			if not player:IsDescendantOf(Players) then
 				return
 			end
