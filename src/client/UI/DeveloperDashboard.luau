@@ -336,13 +336,42 @@ function App.mount(context: any): ScreenGui
 		TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 		{ Position = UDim2.fromScale(0.84, 0) }
 	):Play()
-	local skipLoading = button(loadingOverlay, "Skip loading", false)
+	-- Named for what it does rather than for giving up. A player who reaches for
+	-- this is not impatient, they are stuck, and "Skip loading" tells them they
+	-- are about to miss something rather than that they can get out.
+	local skipLoading = button(loadingOverlay, "Continue anyway", false)
 	skipLoading.AnchorPoint = Vector2.new(0.5, 1)
 	skipLoading.Position = UDim2.new(0.5, 0, 1, -30)
-	skipLoading.Size = UDim2.fromOffset(150, 40)
+	skipLoading.Size = UDim2.fromOffset(190, 44)
 	skipLoading.ZIndex = 103
 	skipLoading.Activated:Connect(function()
 		loadingOverlay.Visible = false
+	end)
+
+	-- Retrying is the thing that actually fixes this, and there was no way to do
+	-- it short of rejoining the server.
+	local retryLoading = button(loadingOverlay, "Retry", true)
+	retryLoading.AnchorPoint = Vector2.new(0.5, 1)
+	retryLoading.Position = UDim2.new(0.5, 0, 1, -82)
+	retryLoading.Size = UDim2.fromOffset(190, 44)
+	retryLoading.ZIndex = 103
+	retryLoading.Visible = false
+	retryLoading.Activated:Connect(function()
+		retryLoading.Active = false
+		retryLoading.Text = "Retrying…"
+		loadingStatus.Text = "Reconnecting to the server…"
+		loadingStatus.TextColor3 = COLOURS.Muted
+		task.spawn(function()
+			local response = context.Controllers.StartMenuController:Refresh()
+			retryLoading.Text = "Retry"
+			retryLoading.Active = true
+			if response.Success then
+				loadingOverlay.Visible = false
+				return
+			end
+			loadingStatus.Text = "Could not reach the server."
+			loadingStatus.TextColor3 = COLOURS.Danger
+		end)
 	end)
 
 	local sidebar = Instance.new("Frame")
@@ -1789,10 +1818,31 @@ function App.mount(context: any): ScreenGui
 	renderPlay()
 	task.spawn(function()
 		local response = context.Controllers.StartMenuController:Refresh()
-		if not response.Success then
-			status.Text = "●  CONNECTION ERROR"
-			status.TextColor3 = COLOURS.Danger
+		if response.Success then
+			return
 		end
+		status.Text = "●  CONNECTION ERROR"
+		status.TextColor3 = COLOURS.Danger
+		-- The overlay comes down on failure too.
+		--
+		-- It was hidden in exactly one place, inside the handler that fires only
+		-- when the first request succeeds. So a player whose request failed was
+		-- left on a full screen cover, at ZIndex 100, with the progress bar still
+		-- sliding back and forth for ever, while this very message was written to
+		-- a label underneath it. The only way out was a button labelled "Skip
+		-- loading", which reads like an impatience shortcut rather than the exit
+		-- from a broken state.
+		--
+		-- This is the first twenty seconds of the game for everybody and the only
+		-- screen a new player has seen, so it is the worst place in the interface
+		-- to say nothing.
+		loadingStatus.Text = "Could not reach the server."
+		loadingStatus.TextColor3 = COLOURS.Danger
+		retryLoading.Visible = true
+		context.Controllers.NotificationController:Show(
+			"Could not reach the server. Reopen the menu to retry, or rejoin if it keeps failing.",
+			"Error"
+		)
 	end)
 
 	if interfaceMotionEnabled() then
