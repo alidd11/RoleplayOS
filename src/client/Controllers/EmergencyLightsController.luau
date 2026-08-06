@@ -471,12 +471,10 @@ function EmergencyLightsController:CycleSiren()
 	local tones = { "", "Wail", "Yelp", "Phaser" }
 	local current = table.find(tones, self.state.Siren or "") or 1
 	local nextIndex = current % #tones + 1
-	self:_request({
-		Siren = tones[nextIndex],
-	})
-	if self.state.Siren ~= "" and (self.state.Stage or 0) == 0 then
-		self:_request({ Stage = self.settings.Stages })
-	end
+	-- One request. The follow-up that used to be here read self.state, which the
+	-- reply above had already replaced, so it tested the answer rather than the
+	-- question and never fired. The server raises the stage itself now.
+	self:_request({ Siren = tones[nextIndex] })
 end
 
 function EmergencyLightsController:Start()

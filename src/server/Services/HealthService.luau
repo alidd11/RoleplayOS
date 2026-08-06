@@ -67,7 +67,15 @@ local function concerns(sample: any): { string }
 end
 
 function HealthService:Start()
+	-- Read defensively, because this service is the only reader of the failed
+	-- service list. An unguarded config read is exactly what took WorldBudgetService
+	-- down, and if it takes this one down the mechanism that reports a service
+	-- being stepped over goes dark, with nothing left able to say that it has.
 	local settings = self.context.Configuration.Health
+	if type(settings) ~= "table" then
+		self.context.Logger:Warning("Health settings are missing; reporting is off", {})
+		return
+	end
 	if not settings.Enabled or not RunService:IsRunning() then
 		return
 	end

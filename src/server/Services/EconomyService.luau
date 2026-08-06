@@ -1,14 +1,28 @@
 --!strict
 
+local Players = game:GetService("Players")
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
 local HttpService = game:GetService("HttpService")
 
-local EconomyService = { seen = {}, order = {}, transferring = {} }
+local EconomyService = { seen = {}, order = {}, transferring = {}, connections = {} }
 function EconomyService:Init(context: any)
 	self.context = context
 end
-function EconomyService:Start() end
+function EconomyService:Start()
+	-- The in-progress marker is cleared when a player leaves as well as on every
+	-- exit from Transfer. Anything raising between setting and clearing it would
+	-- otherwise leave that player unable to send money for the rest of the
+	-- server's life, since the table was only emptied on shutdown.
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			self.transferring[player.UserId] = nil
+			self.seen[player.UserId] = nil
+		end)
+	)
+end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[transaction.CharacterId]
@@ -164,6 +178,10 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		nil
 end
 function EconomyService:Destroy()
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
 	table.clear(self.seen)
 	table.clear(self.order)
 	table.clear(self.transferring)

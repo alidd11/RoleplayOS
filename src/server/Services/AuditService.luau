@@ -1,6 +1,11 @@
 --!strict
 
-local AuditService = { entries = {} }
+-- Critical, because EconomyService records here after it has already moved the
+-- money and marked the profile dirty. Stepped over, every transaction in the
+-- game would raise once the balance had changed: the player is told the request
+-- failed, the money has gone anyway, and the only record of it going is the
+-- thing that just failed.
+local AuditService = { Critical = true, entries = {} }
 function AuditService:Init(context: any)
 	self.context = context
 end

@@ -174,6 +174,16 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 		model:SetAttribute(settings.LowPowerAttribute, request.LowPower)
 	end
 
+	-- Asking for a tone turns the lights on.
+	--
+	-- A siren with no lights is not a state anybody wants, and the rule below
+	-- clears the tone whenever the stage is zero, so a request for one with the
+	-- lights off used to cancel itself. The client tried to compensate with a
+	-- second request and could not: the first reply had already overwritten the
+	-- state it was testing, so the button did nothing at all, forever.
+	if stage == 0 and type(request.Siren) == "string" and request.Siren ~= "" then
+		stage = settings.Stages
+	end
 	model:SetAttribute(settings.StageAttribute, stage)
 	local anyCircuit = false
 	for circuit in settings.Circuits do
