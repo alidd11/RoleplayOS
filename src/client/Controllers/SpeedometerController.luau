@@ -70,6 +70,10 @@ local function label(parent: Instance, font: Enum.Font, size: number, colour: Co
 	item.Text = ""
 	item.TextColor3 = colour
 	item.TextSize = size
+	-- Carried by every label, because there is no panel behind them any more and
+	-- a readout has to survive both a bright sky and a dark road.
+	item.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	item.TextStrokeTransparency = 0.45
 	item.Parent = parent
 	return item
 end
@@ -90,16 +94,17 @@ function SpeedometerController:_mount()
 	frame.Name = "Cluster"
 	frame.AnchorPoint = Vector2.new(0.5, 1)
 	frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
-	frame.BackgroundColor3 = C.Panel
-	frame.BackgroundTransparency = 0.06
+	-- No panel behind it. A cluster in a car is not a card laid over the
+	-- windscreen: the instruments sit on the world and the black rectangle was
+	-- taking a sixth of the screen to hold six things that can hold themselves.
+	--
+	-- Legibility moves onto the parts instead. Every label carries a dark text
+	-- stroke, which is what keeps a white readout on a bright sky and a dark road
+	-- both readable, and is the reason a background was there in the first place.
+	frame.BackgroundTransparency = 1
 	frame.BorderSizePixel = 0
 	frame.Visible = false
 	frame.Parent = gui
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 16)
-	local edge = Instance.new("UIStroke")
-	edge.Color = Color3.fromRGB(46, 60, 80)
-	edge.Transparency = 0.35
-	edge.Parent = frame
 
 	-- A round dial with a needle, built out of rotated frames.
 	--
@@ -195,6 +200,7 @@ function SpeedometerController:_mount()
 	gearBadge.Position = UDim2.new(1, -18, 0, 22)
 	gearBadge.Size = UDim2.fromOffset(50, 50)
 	gearBadge.BackgroundColor3 = C.Track
+	gearBadge.BackgroundTransparency = 0.25
 	gearBadge.BorderSizePixel = 0
 	gearBadge.Parent = frame
 	Instance.new("UICorner", gearBadge).CornerRadius = UDim.new(0, 11)

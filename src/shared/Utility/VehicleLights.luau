@@ -90,18 +90,44 @@ function VehicleLights.isLightPart(settings: any, part: BasePart, root: Instance
 	return looksLikeLamp(part)
 end
 
--- Whether the part sits ahead of the vehicle's centre, or nil if that cannot
--- be worked out.
+-- Whether the part sits ahead of the vehicle's centre, or nil if that cannot be
+-- worked out.
+--
+-- The reference frame is built from two different things on purpose.
+--
+-- Which way the car faces comes from its driving seat. GetPivot was used for
+-- this and it is not safe to: a model with no PrimaryPart and no authored pivot
+-- reports world-axis rotation, frozen from however the template happened to be
+-- oriented when it was saved. A fleet exported facing world X would have had
+-- every one of its cars split left and right instead of front and rear, with
+-- FRONT BLUE lighting the driver's side. A seat is always fitted facing the way
+-- the car drives, which is the one part of a vehicle that cannot be mounted
+-- sideways and still work.
+--
+-- Where the middle is comes from the bounding box rather than from the seat or
+-- the pivot. Both of those sit forward of centre in a van or an appliance, which
+-- pushes parts that are genuinely in front into the rear half.
 --
 -- Roblox looks down negative Z, so a negative Z is towards the front.
 local function isAtFront(part: BasePart, root: Instance): boolean?
-	local ok, pivot = pcall(function()
-		return (root :: any):GetPivot()
+	local ok, box, orientation = pcall(function()
+		local model = root :: any
+		local centre = model:GetBoundingBox()
+		local seat = model:FindFirstChildWhichIsA("VehicleSeat", true)
+			or model:FindFirstChildWhichIsA("Seat", true)
+		return centre, if seat then seat.CFrame - seat.CFrame.Position else nil
 	end)
-	if not ok then
+	if not ok or typeof(box) ~= "CFrame" then
 		return nil
 	end
-	return pivot:PointToObjectSpace(part.Position).Z < 0
+	-- No seat is no answer rather than a guess. Falling back to the box's own
+	-- rotation would reintroduce exactly the world-axis problem above, and a
+	-- silently wrong circuit is worse than an unassigned one.
+	if typeof(orientation) ~= "CFrame" then
+		return nil
+	end
+	local reference = CFrame.new(box.Position) * orientation
+	return reference:PointToObjectSpace(part.Position).Z < 0
 end
 
 local function isRed(colour: Color3): boolean

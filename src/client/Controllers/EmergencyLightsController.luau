@@ -258,7 +258,10 @@ function EmergencyLightsController:_mount()
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.ClipToDeviceSafeArea = true
-	gui.DisplayOrder = 14
+	-- Below the driving pedals, which sit at twelve. They share the bottom right
+	-- of a phone screen and the pedals are the ones you cannot do without: if the
+	-- two ever overlap again, the throttle should be what receives the touch.
+	gui.DisplayOrder = 11
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
@@ -492,11 +495,29 @@ function EmergencyLightsController:Start()
 			local scale =
 				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(238, 402), 24)
 			if layout.Compact then
-				scale = math.min(scale, 0.78)
+				-- Stood on the pedals, above them in the display order, so an
+				-- officer on a phone could not reach the accelerator.
+				--
+				-- Four hundred and two tall at the compact scale is over three
+				-- hundred pixels, centred on a landscape phone screen of about
+				-- three hundred and fifty: it covered the bottom right corner
+				-- where the throttle and brake live. Anchoring the panel's bottom
+				-- above whatever the pedals reserve keeps the two apart on any
+				-- screen, rather than by picking a number that happens to work on
+				-- one.
+				local reserve = if layout.InputMode == "Touch"
+					then layout.HotbarBottom + Config.DrivingControls.PedalSize + 34
+					else layout.HotbarBottom + 16
+				local usable = math.max(layout.SafeViewport.Y - reserve - 20, 140)
+				scale = math.min(scale, usable / 402, 0.78)
+				self.panel.AnchorPoint = Vector2.new(1, 1)
+				self.panel.Position = UDim2.new(1, -(layout.SafeRight + 16), 1, -reserve)
+			else
+				self.panel.AnchorPoint = Vector2.new(1, 0.5)
+				self.panel.Position =
+					UDim2.new(1, -(layout.SafeRight + 16), 0.5, math.floor(layout.NativeTop * 0.25))
 			end
 			self.panelScale.Scale = scale
-			self.panel.Position =
-				UDim2.new(1, -(layout.SafeRight + 16), 0.5, math.floor(layout.NativeTop * 0.25))
 			local driver = layout.State == "Driver"
 			if self.driver ~= driver then
 				self.driver = driver
