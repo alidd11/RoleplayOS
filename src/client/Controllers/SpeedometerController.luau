@@ -6,6 +6,15 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
+-- The dial's geometry. Every part of it is placed from these, so the ticks, the
+-- needle and the hub cannot drift apart when one of them is adjusted.
+local DIAL_CENTRE = Vector2.new(86, 122)
+local DIAL_RADIUS = 68
+-- Zero is straight up, so the sweep is centred on the vertical and runs from
+-- lower left to lower right the way a car's dial does.
+local SWEEP_START = -125
+local SWEEP_ARC = 250
+
 local SpeedometerController = { connections = {}, seat = nil, accumulator = 0 }
 function SpeedometerController:Init(context: any)
 	self.context = context
@@ -66,7 +75,7 @@ function SpeedometerController:_mount()
 	local frame = Instance.new("Frame")
 	frame.Name = "Cluster"
 	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Size = UDim2.fromOffset(272, 108)
+	frame.Size = UDim2.fromOffset(272, 150)
 	frame.BackgroundColor3 = C.Panel
 	frame.BackgroundTransparency = 0.06
 	frame.BorderSizePixel = 0
@@ -78,51 +87,81 @@ function SpeedometerController:_mount()
 	edge.Transparency = 0.35
 	edge.Parent = frame
 
-	-- A segmented sweep rather than a needle. Roblox has no arc primitive, and a
-	-- bar of discrete segments is both honest about that and closer to the
-	-- instrument clusters modern cars actually ship.
-	local sweep = Instance.new("Frame")
-	sweep.Name = "Sweep"
-	sweep.BackgroundTransparency = 1
-	sweep.Position = UDim2.fromOffset(16, 12)
-	sweep.Size = UDim2.new(1, -32, 0, 6)
-	sweep.Parent = frame
-	local sweepLayout = Instance.new("UIListLayout")
-	sweepLayout.FillDirection = Enum.FillDirection.Horizontal
-	sweepLayout.Padding = UDim.new(0, 2)
-	sweepLayout.Parent = sweep
+	-- A round dial with a needle, built out of rotated frames.
+	--
+	-- Roblox has no arc primitive, so the arc is a ring of thin frames anchored
+	-- at their base to the dial centre and rotated into place: rotation happens
+	-- about the anchor point, so a frame as tall as the radius puts its far end
+	-- exactly where the tick belongs. The needle is the same trick with one long
+	-- frame.
+	--
+	-- This replaced a straight bar of segments. The bar was honest about the
+	-- engine's limits and read as a progress bar rather than an instrument, and
+	-- an instrument is the thing a driving game wants: you should be able to take
+	-- the speed in from the needle's angle without reading the number.
 	self.segments = {}
 	local count = self.settings.SweepSegments
 	for index = 1, count do
-		local segment = Instance.new("Frame")
-		segment.BackgroundColor3 = C.Track
-		segment.BorderSizePixel = 0
-		segment.LayoutOrder = index
-		segment.Size = UDim2.new(1 / count, -2, 1, 0)
-		segment.Parent = sweep
-		Instance.new("UICorner", segment).CornerRadius = UDim.new(0, 2)
-		self.segments[index] = segment
+		local spoke = Instance.new("Frame")
+		spoke.Name = "Tick" .. index
+		spoke.AnchorPoint = Vector2.new(0.5, 1)
+		spoke.BackgroundTransparency = 1
+		spoke.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
+		spoke.Size = UDim2.fromOffset(3, DIAL_RADIUS)
+		spoke.Rotation = SWEEP_START + SWEEP_ARC * ((index - 1) / math.max(count - 1, 1))
+		spoke.Parent = frame
+		local mark = Instance.new("Frame")
+		mark.BackgroundColor3 = C.Track
+		mark.BorderSizePixel = 0
+		mark.Size = UDim2.new(1, 0, 0, if index % 5 == 1 then 12 else 7)
+		mark.Parent = spoke
+		Instance.new("UICorner", mark).CornerRadius = UDim.new(1, 0)
+		self.segments[index] = mark
 	end
+
+	local needle = Instance.new("Frame")
+	needle.Name = "Needle"
+	needle.AnchorPoint = Vector2.new(0.5, 1)
+	needle.BackgroundColor3 = C.Live
+	needle.BorderSizePixel = 0
+	needle.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
+	needle.Size = UDim2.fromOffset(3, DIAL_RADIUS - 16)
+	needle.Rotation = SWEEP_START
+	needle.ZIndex = 3
+	needle.Parent = frame
+	Instance.new("UICorner", needle).CornerRadius = UDim.new(1, 0)
+	self.needle = needle
+
+	local hub = Instance.new("Frame")
+	hub.Name = "Hub"
+	hub.AnchorPoint = Vector2.new(0.5, 0.5)
+	hub.BackgroundColor3 = C.Track
+	hub.BorderSizePixel = 0
+	hub.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
+	hub.Size = UDim2.fromOffset(14, 14)
+	hub.ZIndex = 4
+	hub.Parent = frame
+	Instance.new("UICorner", hub).CornerRadius = UDim.new(1, 0)
 
 	local speed = label(frame, Enum.Font.RobotoMono, 44, C.Text)
 	speed.Name = "Speed"
 	speed.Text = "0"
-	speed.Position = UDim2.fromOffset(16, 22)
-	speed.Size = UDim2.fromOffset(132, 50)
-	speed.TextXAlignment = Enum.TextXAlignment.Right
+	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 58, DIAL_CENTRE.Y - 62)
+	speed.Size = UDim2.fromOffset(116, 44)
+	speed.TextXAlignment = Enum.TextXAlignment.Center
 	self.speed = speed
 
 	local unit = label(frame, Enum.Font.GothamBold, 12, C.Muted)
 	unit.Text = "MPH"
-	unit.Position = UDim2.fromOffset(154, 44)
-	unit.Size = UDim2.fromOffset(46, 16)
-	unit.TextXAlignment = Enum.TextXAlignment.Left
+	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 40, DIAL_CENTRE.Y - 22)
+	unit.Size = UDim2.fromOffset(80, 14)
+	unit.TextXAlignment = Enum.TextXAlignment.Center
 
 	-- Gear badge, as a cluster shows the selected gear rather than spelling it.
 	local gearBadge = Instance.new("Frame")
 	gearBadge.Name = "Gear"
 	gearBadge.AnchorPoint = Vector2.new(1, 0)
-	gearBadge.Position = UDim2.new(1, -16, 0, 26)
+	gearBadge.Position = UDim2.new(1, -16, 0, 18)
 	gearBadge.Size = UDim2.fromOffset(44, 44)
 	gearBadge.BackgroundColor3 = C.Track
 	gearBadge.BorderSizePixel = 0
@@ -136,16 +175,17 @@ function SpeedometerController:_mount()
 
 	local plate = label(frame, Enum.Font.GothamMedium, 10, C.Muted)
 	plate.Name = "Registration"
-	plate.Position = UDim2.fromOffset(16, 80)
-	plate.Size = UDim2.fromOffset(150, 14)
-	plate.TextXAlignment = Enum.TextXAlignment.Left
+	plate.AnchorPoint = Vector2.new(1, 0)
+	plate.Position = UDim2.new(1, -16, 0, 70)
+	plate.Size = UDim2.fromOffset(96, 14)
+	plate.TextXAlignment = Enum.TextXAlignment.Right
 	self.plate = plate
 
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
 	fuelTrack.AnchorPoint = Vector2.new(1, 0)
-	fuelTrack.Position = UDim2.new(1, -16, 0, 82)
-	fuelTrack.Size = UDim2.fromOffset(90, 8)
+	fuelTrack.Position = UDim2.new(1, -16, 0, 108)
+	fuelTrack.Size = UDim2.fromOffset(96, 8)
 	fuelTrack.BackgroundColor3 = C.Track
 	fuelTrack.BorderSizePixel = 0
 	fuelTrack.Parent = frame
@@ -161,8 +201,8 @@ function SpeedometerController:_mount()
 	local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
 	fuelMark.Text = "FUEL"
 	fuelMark.AnchorPoint = Vector2.new(1, 0)
-	fuelMark.Position = UDim2.new(1, -110, 0, 79)
-	fuelMark.Size = UDim2.fromOffset(66, 14)
+	fuelMark.Position = UDim2.new(1, -16, 0, 92)
+	fuelMark.Size = UDim2.fromOffset(96, 12)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Right
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
@@ -185,6 +225,15 @@ end
 function SpeedometerController:_paintSweep(fraction: number)
 	local count = #self.segments
 	local lit = math.clamp(math.floor(fraction * count + 0.5), 0, count)
+	-- The needle moves before the early exit below, and follows the true fraction
+	-- rather than the lit tick count. Behind that exit it would only move when a
+	-- whole tick lit, which is the one thing a needle must not do: a dial that
+	-- jumps in twenty second steps reads worse than the bar it replaced.
+	self.needle.Rotation = SWEEP_START + SWEEP_ARC * math.clamp(fraction, 0, 1)
+	self.needle.BackgroundColor3 = if fraction > 0.86
+		then C.Danger
+		elseif fraction > 0.68 then C.Warn
+		else C.Live
 	if lit == self.lit then
 		return
 	end

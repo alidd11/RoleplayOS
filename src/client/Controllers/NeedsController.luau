@@ -124,6 +124,9 @@ function NeedsController:Start()
 			-- pad colour is corrected either way.
 			if not response.Success and sprinting then
 				sprintPad.BackgroundColor3 = Color3.fromRGB(22, 30, 44)
+				-- An empty message is a refusal not worth mentioning: sitting in a
+				-- car is the obvious one, and telling somebody they cannot run
+				-- while they are driving is noise, not help.
 				if response.Message ~= "" then
 					self.context.Controllers.NotificationController:Show(response.Message, "Needs")
 				end

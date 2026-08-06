@@ -1034,8 +1034,10 @@ function NetworkService:Start()
 			-- the key being broken.
 			Message = if changed
 				then ""
-				elseif reason == "SPRINT_UNAVAILABLE" then "You cannot run right now."
-				else "You are too tired to run.",
+				elseif reason == "SPRINT_EXHAUSTED" then "You need to catch your breath."
+				elseif reason == "SPRINT_TOO_HUNGRY" then "You are too hungry to run."
+				elseif reason == "SPRINT_WHILE_SEATED" then ""
+				else "You cannot run right now.",
 			RequestId = requestId,
 		}
 	end)

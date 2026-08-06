@@ -52,10 +52,31 @@ function NeedsService:SetSprinting(player: Player, sprinting: any): (boolean, st
 	end
 	local state = self:_state(player)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-	if not state or not humanoid or humanoid.Health <= 0 or humanoid.Sit then
+	if not state or not humanoid or humanoid.Health <= 0 then
 		return false, "SPRINT_UNAVAILABLE"
 	end
-	state.Sprinting = sprinting and state.Stamina > 1 and state.Hunger > 2
+	-- Sitting is its own answer, not a failure. Everything used to collapse into
+	-- one code, so pressing shift in a car told the driver they could not run
+	-- right now, which is true, useless, and indistinguishable from being too
+	-- tired.
+	if humanoid.Sit then
+		return false, "SPRINT_WHILE_SEATED"
+	end
+	-- Being out of breath or hungry now reports as a refusal.
+	--
+	-- This assigned `sprinting and stamina > 1 and hunger > 2` and then returned
+	-- success unconditionally, so the one case a player most needs explaining —
+	-- holding shift and simply not running — was reported as having worked. The
+	-- key looked broken because the server said yes and did nothing.
+	if sprinting then
+		if state.Stamina <= 1 then
+			return false, "SPRINT_EXHAUSTED"
+		end
+		if state.Hunger <= 2 then
+			return false, "SPRINT_TOO_HUNGRY"
+		end
+	end
+	state.Sprinting = sprinting
 	-- Apply the speed now rather than waiting for the next tick. The step loop
 	-- runs twice a second, so deferring left up to half a second of dead input
 	-- after the key went down, which reads as the sprint key not working.
