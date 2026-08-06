@@ -45,12 +45,30 @@ end
 -- light is never taken for a blue light. A vehicle whose lights cannot be
 -- recognised simply has none, which is visible and fixable, rather than every
 -- lamp on the car strobing.
-function EmergencyLightsService:_isLightPart(part: BasePart): boolean
+-- Whether a part belongs to the vehicle's warning lights.
+--
+-- The part's own name is checked first, then the names of everything between it
+-- and the vehicle. Kits do not name the individual bulbs after the bar: the
+-- lightbars in this place hold parts called LBR1, HL1 and Rear inside a model
+-- called Lightbar, so matching only the part's own name found nothing at all,
+-- FindLights returned zero, and the vehicle was never tagged. The whole feature
+-- was invisible for a naming convention.
+--
+-- Exclusions are applied at every level, so a part inside a Headlights model is
+-- still excluded, and so is a headlight sitting loose inside a Lights model.
+function EmergencyLightsService:_isLightPart(part: BasePart, root: Instance): boolean
 	local settings = self:_settings()
-	if matchesAny(part.Name, settings.ExcludedNamePatterns) then
-		return false
+	local node: Instance? = part
+	while node and node ~= root do
+		if matchesAny(node.Name, settings.ExcludedNamePatterns) then
+			return false
+		end
+		if matchesAny(node.Name, settings.LightNamePatterns) then
+			return true
+		end
+		node = node.Parent
 	end
-	return matchesAny(part.Name, settings.LightNamePatterns)
+	return false
 end
 
 -- The light parts of a vehicle, capped.
@@ -62,7 +80,7 @@ function EmergencyLightsService:FindLights(model: Instance): { BasePart }
 	local settings = self:_settings()
 	local found: { BasePart } = {}
 	for _, descendant in model:GetDescendants() do
-		if descendant:IsA("BasePart") and self:_isLightPart(descendant) then
+		if descendant:IsA("BasePart") and self:_isLightPart(descendant, model) then
 			table.insert(found, descendant)
 			if #found >= settings.MaximumLightParts then
 				break
