@@ -379,11 +379,35 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 		self.panel.Visible = false
 		return
 	end
-	local response = self.context.Controllers.NetworkController:Request("GetEmergencyLights", {})
-	if response.Success then
-		self.state = response.Data
-		self.panel.Visible = self.state.Available == true
-		self:_paint()
+	-- Asked more than once.
+	--
+	-- This ran only on the transition into driving, and the server does not
+	-- necessarily know about the vehicle yet at that moment: the seat replicates
+	-- to this client before the spawn has finished being recorded. One question
+	-- asked a fraction too early left the panel hidden until the player got out
+	-- and back in, which reads as the feature being broken.
+	for attempt = 1, 4 do
+		if self.driver ~= true then
+			return
+		end
+		local response =
+			self.context.Controllers.NetworkController:Request("GetEmergencyLights", {})
+		if response.Success and type(response.Data) == "table" then
+			self.state = response.Data
+			self.panel.Visible = self.state.Available == true
+			self:_paint()
+			if self.state.Available == true then
+				return
+			end
+			-- Said once, and only to the output, because the usual reasons are
+			-- ordinary: most drivers are civilians in their own car. It exists so
+			-- that somebody wondering why the panel is missing can find out
+			-- instead of guessing at five things at once.
+			if attempt == 1 and self.state.Reason then
+				print("[RoleplayOS] Lighting panel hidden: " .. tostring(self.state.Reason))
+			end
+		end
+		task.wait(0.75)
 	end
 end
 

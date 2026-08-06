@@ -216,12 +216,23 @@ end
 function EmergencyLightsService:GetState(player: Player): any
 	local settings = self:_settings()
 	local model = self:_drivenVehicle(player)
-	if
-		not model
-		or not CollectionService:HasTag(model, settings.Tag)
-		or not self:_authorised(player)
-	then
-		return { Available = false, Stage = 0, Lights = false, Siren = "" }
+	-- Which gate closed, not just that one did.
+	--
+	-- All three of these produced the same silent Available = false, so a panel
+	-- that did not appear gave no way to tell whether the player was in a vehicle
+	-- this framework never spawned, in one whose lights could not be recognised,
+	-- or simply not allowed to use them. Three very different problems with one
+	-- symptom and nothing to separate them.
+	local reason: string? = nil
+	if not model then
+		reason = "NOT_DRIVING_A_FRAMEWORK_VEHICLE"
+	elseif not CollectionService:HasTag(model, settings.Tag) then
+		reason = "VEHICLE_HAS_NO_RECOGNISED_LIGHTS"
+	elseif not self:_authorised(player) then
+		reason = "ROLE_MAY_NOT_USE_LIGHTS"
+	end
+	if reason then
+		return { Available = false, Reason = reason, Stage = 0, Lights = false, Siren = "" }
 	end
 	local circuits = {}
 	for circuit in settings.Circuits do
