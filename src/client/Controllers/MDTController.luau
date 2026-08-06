@@ -833,8 +833,19 @@ function MDTController:Start()
 		-- instead let the terminal spill under the top bar and device cutouts.
 		self.scale.Scale =
 			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(720, 470), 24)
-		if layout.Vehicle then
-			self.shell.Visible = false
+		-- Closed on getting into a vehicle, not on every layout publish.
+		--
+		-- This ran on each publish, and the orchestrator publishes whenever the
+		-- last input type changes, which on a mouse is constantly. Pressing M in a
+		-- car reopened the terminal and the next mouse movement shut it again, so
+		-- an officer could not re-read the call they were driving to. Closing it
+		-- once on the way in keeps the windscreen clear without making the
+		-- terminal unusable for the whole journey.
+		if layout.Vehicle ~= self.inVehicle then
+			self.inVehicle = layout.Vehicle
+			if layout.Vehicle then
+				self.shell.Visible = false
+			end
 		end
 	end)
 	-- Dispatch pushes a change event whenever a call or unit moves state, so the

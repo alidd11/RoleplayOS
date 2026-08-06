@@ -423,10 +423,13 @@ local Config = {
 		-- seen once it is there.
 		CompactMaximumRoads = 140,
 		CompactMaximumPoints = 36,
-		-- Studs either side of the player shown on the minimap. Projecting a
-		-- region-sized world whole leaves every road a few thousandths of the
-		-- surface wide, which reads as a smear.
-		WindowRadius = 900,
+		-- Studs either side of the player shown on the minimap.
+		--
+		-- Nine hundred put nearly two thousand studs of city across a panel a few
+		-- inches wide, which is not a map, it is a texture. The point of a corner
+		-- minimap is the next junction and the street you are on, so the window is
+		-- tight enough that a road is a road.
+		WindowRadius = 420,
 		-- How far the player moves before the window is redrawn.
 		RedrawDistance = 60,
 		-- Minimum gap between full passes over the tagged geometry. Only this
@@ -435,8 +438,15 @@ local Config = {
 		-- Panel footprint before the interface scale is applied. Anything that
 		-- has to sit clear of the minimap reads this rather than repeating the
 		-- numbers, so the two cannot drift apart when the panel is resized.
-		PanelSize = Vector2.new(184, 208),
-		CompactPanelSize = Vector2.new(150, 170),
+		-- Wider than tall, and considerably smaller than it was.
+		--
+		-- This was 184 by 208, portrait, with a titled panel around it, and it ate
+		-- a serious piece of the screen for something you glance at. A minimap in
+		-- a driving game is landscape because the road ahead is the part that
+		-- matters, and it carries no chrome because every pixel of frame is a
+		-- pixel not showing the city. Roughly half the area it used to be.
+		PanelSize = Vector2.new(178, 114),
+		CompactPanelSize = Vector2.new(142, 92),
 		-- Fraction of the screen height the panel is centred on while driving,
 		-- where it moves to the left edge.
 		VehicleAnchorY = 0.52,

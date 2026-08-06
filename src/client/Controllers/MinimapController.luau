@@ -76,15 +76,13 @@ function MinimapController:_mount()
 	shellStroke.Transparency = 0.15
 	shellStroke.Parent = shell
 
-	local title = makeLabel(shell, "AREA MAP", 10)
-	title.Position = UDim2.fromOffset(12, 5)
-	title.Size = UDim2.new(1, -24, 0, 20)
-	title.TextColor3 = C.Muted
-
+	-- No title. It read "AREA MAP" above a picture of the area, which is a label
+	-- for a thing that does not need one, and it cost twenty six pixels of height
+	-- plus the padding around it on a panel people want smaller.
 	local viewport = Instance.new("Frame")
 	viewport.Name = "VectorMap"
-	viewport.Position = UDim2.fromOffset(8, 26)
-	viewport.Size = UDim2.new(1, -16, 1, -34)
+	viewport.Position = UDim2.fromOffset(5, 5)
+	viewport.Size = UDim2.new(1, -10, 1, -10)
 	viewport.BackgroundColor3 = C.Map
 	viewport.BorderSizePixel = 0
 	viewport.ClipsDescendants = true
@@ -326,7 +324,11 @@ function MinimapController:Start()
 			self.compact = layout.Compact
 			self.drawnAt = nil
 		end
-		self.shell.Visible = not layout.Vehicle or not layout.Compact
+		-- Visible while driving, including on a phone, where it used to be hidden
+		-- outright. A map you cannot see while driving is the one moment it exists
+		-- for, and a mobile officer was sent to an address they saw once with no
+		-- way to find it.
+		self.shell.Visible = true
 		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 		-- Sits above centre on touch, where a sprint pad shares the right edge and
 		-- a centred minimap would land on top of it.
