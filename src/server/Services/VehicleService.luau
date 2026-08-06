@@ -87,6 +87,25 @@ function VehicleService:_watchDeath(player: Player, character: Model)
 	end)
 end
 
+-- Switches the chassis's engine, where the chassis has a switch to throw.
+--
+-- Set on the server so it is authoritative and survives whatever the driver's
+-- client believes. A chassis without the value is simply not stopped this way,
+-- which is visible in the fuel gauge rather than silent.
+function VehicleService:_setEngineRunning(model: Instance, seat: Instance?, running: boolean)
+	local chassis = self.context.Configuration.Chassis
+	local name = chassis and chassis.EngineValueName
+	if type(name) ~= "string" or name == "" then
+		return
+	end
+	local folder = (seat and seat:FindFirstChild(chassis.ValuesFolderName))
+		or model:FindFirstChild(chassis.ValuesFolderName, true)
+	local switch = folder and folder:FindFirstChild(name)
+	if switch and switch:IsA("BoolValue") then
+		switch.Value = running
+	end
+end
+
 function VehicleService:Start()
 	local settings = self.context.Configuration.VehicleSpawning
 	for _, terminal in CollectionService:GetTagged(settings.TerminalTag) do
@@ -213,11 +232,18 @@ function VehicleService:_trackVehicle(player: Player, active: any, elapsed: numb
 				seat:SetAttribute("RoleplayOSOriginalMaxSpeed", seat.MaxSpeed)
 			end
 			seat.MaxSpeed = 0
+			-- MaxSpeed alone stops a plain vehicle seat and nothing else. The
+			-- engine switch is what reaches a chassis that makes its own torque.
+			self:_setEngineRunning(active.Model, seat, false)
 		elseif vehicle.Fuel > 0 then
 			local original = seat:GetAttribute("RoleplayOSOriginalMaxSpeed")
 			if type(original) == "number" then
 				seat.MaxSpeed = original
 				seat:SetAttribute("RoleplayOSOriginalMaxSpeed", nil)
+				-- Started again on refuelling. There is no ignition control in the
+				-- game, so a car whose engine was cut and never switched back on
+				-- would be dead for good and the fuel would have bought nothing.
+				self:_setEngineRunning(active.Model, seat, true)
 			end
 		end
 	end
@@ -559,6 +585,9 @@ function VehicleService:_spawn(
 		then
 			seat:SetAttribute("RoleplayOSOriginalMaxSpeed", seat.MaxSpeed)
 			seat.MaxSpeed = 0
+			-- Spawned with an empty tank, so it arrives dead rather than driving
+			-- until the first tracking tick notices.
+			self:_setEngineRunning(model, seat, false)
 		end
 	end
 	local active = {

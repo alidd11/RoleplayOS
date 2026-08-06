@@ -1855,6 +1855,14 @@ local Config = {
 		-- Written as well as the seat's own throttle, so a chassis that keeps its
 		-- input in this folder is driven without needing to know which fork it is.
 		ThrottleValueName = "Throttle",
+		-- The chassis's own engine switch, where it has one.
+		--
+		-- Running out of fuel used to set the seat's MaxSpeed to zero, which stops
+		-- a plain Roblox vehicle seat and does nothing whatsoever to A-Chassis:
+		-- it makes its own torque from this folder and never reads MaxSpeed. An
+		-- empty tank therefore had no effect at all on the cars this game
+		-- actually uses. Cutting the engine is the one lever that reaches them.
+		EngineValueName = "IsOn",
 		-- Engine speed the sweep treats as full. Used only for the display.
 		Redline = 8000,
 		-- Road speed the sweep treats as full where no engine speed is reported.

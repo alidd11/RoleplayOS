@@ -118,6 +118,14 @@ end
 -- costs nothing and removes the need to know which fork this is. A chassis that
 -- writes its own values every frame simply overwrites ours, which is harmless.
 function DrivingControlsController:_apply(seat: VehicleSeat, throttle: number)
+	-- A dry tank is nought throttle whatever the pedal says. The server has
+	-- already cut the engine and zeroed the seat, and this closes the last route
+	-- in: the touch pedals write the chassis's input value directly, so without
+	-- it a phone player could still drive a car with no fuel in it.
+	local fuel = seat:GetAttribute("RoleplayOSFuel")
+	if type(fuel) == "number" and fuel <= 0 then
+		throttle = 0
+	end
 	seat.ThrottleFloat = throttle
 	local values = seat:FindFirstChild(self.chassis.ValuesFolderName)
 		or (seat.Parent and seat.Parent:FindFirstChild(self.chassis.ValuesFolderName))
