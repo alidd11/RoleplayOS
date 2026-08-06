@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
+local VehicleLights = require(ReplicatedStorage.RoleplayOS.Shared.VehicleLights)
 
 -- Runs the flash pattern for every emergency vehicle this client can see.
 --
@@ -53,54 +54,8 @@ function EmergencyLightsController:Init(context: any)
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 end
 
--- Whether a part belongs to the vehicle's warning lights.
---
--- The part's own name is checked first, then the names of everything between it
--- and the vehicle. Kits do not name the individual bulbs after the bar: the
--- lightbars in this place hold parts called LBR1, HL1 and Rear inside a model
--- called Lightbar, so matching only the part's own name found nothing at all,
--- FindLights returned zero, and the vehicle was never tagged. The whole feature
--- was invisible for a naming convention.
---
--- Exclusions are applied at every level, so a part inside a Headlights model is
--- still excluded, and so is a headlight sitting loose inside a Lights model.
---
--- Deliberately identical to the server's copy: the server decides whether to
--- tag the vehicle and the client decides what to flash, so if the two rules
--- ever disagree the result is a tagged vehicle with nothing lighting up.
-function EmergencyLightsController:_isLightPart(part: BasePart, root: Instance): boolean
-	local node: Instance? = part
-	while node and node ~= root do
-		local name = string.lower(node.Name)
-		for _, pattern in self.settings.ExcludedNamePatterns do
-			if string.find(name, pattern, 1, true) then
-				return false
-			end
-		end
-		for _, pattern in self.settings.LightNamePatterns do
-			if string.find(name, pattern, 1, true) then
-				return true
-			end
-		end
-		node = node.Parent
-	end
-	return false
-end
-
-function EmergencyLightsController:_circuit(part: BasePart): string?
-	local explicit = part:GetAttribute("RoleplayOSLightCircuit")
-	if type(explicit) == "string" and self.settings.Circuits[explicit] then
-		return explicit
-	end
-	local name = string.lower(part.Name)
-	for circuit, patterns in self.settings.Circuits do
-		for _, pattern in patterns do
-			if string.find(name, pattern, 1, true) then
-				return circuit
-			end
-		end
-	end
-	return nil
+function EmergencyLightsController:_circuit(part: BasePart, root: Instance): string?
+	return VehicleLights.circuitFor(self.settings, part, root)
 end
 
 -- Records what a light part looked like before it was ever flashed, so it can
@@ -113,14 +68,14 @@ function EmergencyLightsController:_adopt(model: Instance)
 	local parts = {}
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("BasePart") and descendant:GetAttribute("RoleplayOSLight") ~= false then
-			if self:_isLightPart(descendant, model) then
+			if VehicleLights.isLightPart(self.settings, descendant, model) then
 				local light = descendant:FindFirstChildWhichIsA("Light")
 				table.insert(parts, {
 					Part = descendant,
 					Colour = descendant.Color,
 					Material = descendant.Material,
 					Light = light,
-					Circuit = self:_circuit(descendant),
+					Circuit = self:_circuit(descendant, model),
 					Brightness = if light then light.Brightness else nil,
 					-- Alternates the two sides of the bar, which is what makes it
 					-- read as a lightbar rather than as a lamp switching on and off.

@@ -3,6 +3,7 @@
 local CollectionService = game:GetService("CollectionService")
 local RolePermissions =
 	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
+local VehicleLights = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.VehicleLights)
 
 -- Emergency lighting this framework owns.
 --
@@ -29,48 +30,12 @@ function EmergencyLightsService:_settings(): any
 	return self.context.Configuration.EmergencyLighting
 end
 
-local function matchesAny(name: string, patterns: { string }): boolean
-	local lowered = string.lower(name)
-	for _, pattern in patterns do
-		if string.find(lowered, pattern, 1, true) then
-			return true
-		end
-	end
-	return false
-end
-
 -- Whether a part is one of the vehicle's warning lights.
 --
 -- Excluded names are checked first and never match, so a headlamp or a brake
 -- light is never taken for a blue light. A vehicle whose lights cannot be
 -- recognised simply has none, which is visible and fixable, rather than every
 -- lamp on the car strobing.
--- Whether a part belongs to the vehicle's warning lights.
---
--- The part's own name is checked first, then the names of everything between it
--- and the vehicle. Kits do not name the individual bulbs after the bar: the
--- lightbars in this place hold parts called LBR1, HL1 and Rear inside a model
--- called Lightbar, so matching only the part's own name found nothing at all,
--- FindLights returned zero, and the vehicle was never tagged. The whole feature
--- was invisible for a naming convention.
---
--- Exclusions are applied at every level, so a part inside a Headlights model is
--- still excluded, and so is a headlight sitting loose inside a Lights model.
-function EmergencyLightsService:_isLightPart(part: BasePart, root: Instance): boolean
-	local settings = self:_settings()
-	local node: Instance? = part
-	while node and node ~= root do
-		if matchesAny(node.Name, settings.ExcludedNamePatterns) then
-			return false
-		end
-		if matchesAny(node.Name, settings.LightNamePatterns) then
-			return true
-		end
-		node = node.Parent
-	end
-	return false
-end
-
 -- The light parts of a vehicle, capped.
 --
 -- The cap is a guard rather than a target: a lightbar modelled as two hundred
@@ -80,7 +45,9 @@ function EmergencyLightsService:FindLights(model: Instance): { BasePart }
 	local settings = self:_settings()
 	local found: { BasePart } = {}
 	for _, descendant in model:GetDescendants() do
-		if descendant:IsA("BasePart") and self:_isLightPart(descendant, model) then
+		if
+			descendant:IsA("BasePart") and VehicleLights.isLightPart(settings, descendant, model)
+		then
 			table.insert(found, descendant)
 			if #found >= settings.MaximumLightParts then
 				break
