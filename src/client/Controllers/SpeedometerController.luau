@@ -6,14 +6,28 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
--- The dial's geometry. Every part of it is placed from these, so the ticks, the
--- needle and the hub cannot drift apart when one of them is adjusted.
-local DIAL_CENTRE = Vector2.new(86, 122)
-local DIAL_RADIUS = 68
--- Zero is straight up, so the sweep is centred on the vertical and runs from
--- lower left to lower right the way a car's dial does.
-local SWEEP_START = -125
-local SWEEP_ARC = 250
+-- The cluster's geometry, in one place.
+--
+-- The size was written twice, once when the panel was built and again in the
+-- layout binding, and the two disagreed the moment the dial needed a taller
+-- panel: the binding reset it to the old height, so the dial centre sat below
+-- the panel and the hub and the bottom of the needle rendered outside it.
+local CLUSTER_SIZE = Vector2.new(272, 150)
+
+-- A half dial rather than a full round one.
+--
+-- A car's rev counter sweeps past the horizontal and dips below its own centre,
+-- which needs height this panel does not have without pushing the readout into
+-- the hotbar. A semicircle spends all of its arc above the pivot, so the whole
+-- gauge fits the space and every tick stays inside the panel.
+--
+-- Zero is straight up, so the sweep runs from due left to due right through the
+-- top. Every part of the dial is placed from this centre and radius, so the
+-- ticks, the needle and the hub cannot drift apart when one is adjusted.
+local DIAL_CENTRE = Vector2.new(86, 118)
+local DIAL_RADIUS = 62
+local SWEEP_START = -90
+local SWEEP_ARC = 180
 
 local SpeedometerController = { connections = {}, seat = nil, accumulator = 0 }
 function SpeedometerController:Init(context: any)
@@ -75,7 +89,7 @@ function SpeedometerController:_mount()
 	local frame = Instance.new("Frame")
 	frame.Name = "Cluster"
 	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Size = UDim2.fromOffset(272, 150)
+	frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
 	frame.BackgroundColor3 = C.Panel
 	frame.BackgroundTransparency = 0.06
 	frame.BorderSizePixel = 0
@@ -125,7 +139,7 @@ function SpeedometerController:_mount()
 	needle.BackgroundColor3 = C.Live
 	needle.BorderSizePixel = 0
 	needle.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	needle.Size = UDim2.fromOffset(3, DIAL_RADIUS - 16)
+	needle.Size = UDim2.fromOffset(3, DIAL_RADIUS - 14)
 	needle.Rotation = SWEEP_START
 	needle.ZIndex = 3
 	needle.Parent = frame
@@ -138,23 +152,23 @@ function SpeedometerController:_mount()
 	hub.BackgroundColor3 = C.Track
 	hub.BorderSizePixel = 0
 	hub.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	hub.Size = UDim2.fromOffset(14, 14)
+	hub.Size = UDim2.fromOffset(12, 12)
 	hub.ZIndex = 4
 	hub.Parent = frame
 	Instance.new("UICorner", hub).CornerRadius = UDim.new(1, 0)
 
-	local speed = label(frame, Enum.Font.RobotoMono, 44, C.Text)
+	local speed = label(frame, Enum.Font.RobotoMono, 34, C.Text)
 	speed.Name = "Speed"
 	speed.Text = "0"
-	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 58, DIAL_CENTRE.Y - 62)
-	speed.Size = UDim2.fromOffset(116, 44)
+	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 58, DIAL_CENTRE.Y - 52)
+	speed.Size = UDim2.fromOffset(116, 36)
 	speed.TextXAlignment = Enum.TextXAlignment.Center
 	self.speed = speed
 
 	local unit = label(frame, Enum.Font.GothamBold, 12, C.Muted)
 	unit.Text = "MPH"
-	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 40, DIAL_CENTRE.Y - 22)
-	unit.Size = UDim2.fromOffset(80, 14)
+	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 40, DIAL_CENTRE.Y - 14)
+	unit.Size = UDim2.fromOffset(80, 13)
 	unit.TextXAlignment = Enum.TextXAlignment.Center
 
 	-- Gear badge, as a cluster shows the selected gear rather than spelling it.
@@ -278,7 +292,7 @@ function SpeedometerController:Start()
 		self.frame.Position = UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 8))
 		-- One authored size, scaled by the interface factor, rather than a second
 		-- set of measurements for compact screens that has to be kept in step.
-		self.frame.Size = UDim2.fromOffset(272, 108)
+		self.frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
 	end)
 	local player = Players.LocalPlayer
 	if player.Character then
