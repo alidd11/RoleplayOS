@@ -59,8 +59,11 @@ function MDTService:AccessSummary(player: Player): any
 		Allowed = true,
 		DepartmentId = duty.DepartmentId,
 		RoleId = duty.RoleId,
-		Permissions = self.context.Configuration.MDT.PermissionByDepartment[duty.DepartmentId]
-			or {},
+		-- Through the same resolver the enforcement uses. Read straight from the
+		-- department, this told a PCSO's terminal it held warrant, custody and
+		-- blue light authority that every individual action then refused. The
+		-- checks were right; the summary describing them was not.
+		Permissions = RolePermissions.forDuty(self.context.Configuration, duty),
 	}
 end
 function MDTService:Destroy() end

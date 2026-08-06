@@ -33,7 +33,10 @@ local function looksLikeLamp(part: BasePart): boolean
 	if part:FindFirstChildWhichIsA("Light") then
 		return true
 	end
-	if part.Material == Enum.Material.Neon or part.Material == Enum.Material.Glass then
+	-- Neon only. Glass used to count, and the one large glass part on a lightbar
+	-- is its clear outer lens, which covers the bulbs: treating it as a lamp
+	-- turned the whole dome solid neon and hid everything underneath it.
+	if part.Material == Enum.Material.Neon then
 		return true
 	end
 	local colour = part.Color
@@ -58,6 +61,13 @@ function VehicleLights.isLightPart(settings: any, part: BasePart, root: Instance
 	if part:GetAttribute("RoleplayOSLight") == true then
 		return true
 	end
+	-- The whole chain is walked, with no early exit on a match.
+	--
+	-- Breaking out as soon as something matched meant that when the part's own
+	-- name matched, no ancestor was ever examined, so a bulb called LED inside a
+	-- model called Headlights was accepted and strobed blue on a response. An
+	-- exclusion anywhere between the part and the vehicle now wins, which is the
+	-- behaviour the comment always claimed.
 	local node: Instance? = part
 	local named = false
 	while node and node ~= root do
@@ -66,7 +76,6 @@ function VehicleLights.isLightPart(settings: any, part: BasePart, root: Instance
 		end
 		if matches(node.Name, settings.LightNamePatterns) then
 			named = true
-			break
 		end
 		node = node.Parent
 	end

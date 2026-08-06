@@ -772,15 +772,20 @@ local Config = {
 		},
 		-- How a light part is recognised inside a vehicle. Excluded names are
 		-- checked first, so an ordinary lamp is never taken for a blue light.
+		-- Distinctive substrings only. "grille" and "led" were both here and both
+		-- matched bodywork: every imported car has a part called Grille, and
+		-- "led" is inside Welded, Panelled and Ledge. Either one passed on its own
+		-- name, which also skips the check that it looks like a lamp, so the
+		-- radiator grille turned neon on the grille button. A grille light inside
+		-- a lightbar is still found through the model it sits in, and anything
+		-- else can say so with the RoleplayOSLight attribute.
 		LightNamePatterns = {
 			"els",
 			"lightbar",
 			"beacon",
 			"strobe",
 			"blues",
-			"grille",
 			"lightz",
-			"led",
 		},
 		ExcludedNamePatterns = {
 			"head",

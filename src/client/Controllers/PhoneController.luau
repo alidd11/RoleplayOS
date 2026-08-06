@@ -457,7 +457,22 @@ function PhoneController:_renderBank()
 		if not send.Active then
 			return
 		end
-		local numericAmount = tonumber(string.gsub(amount.Text, "[^%d]", ""))
+		-- Parenthesised, and the stripping narrowed.
+		--
+		-- This was tonumber(string.gsub(...)). gsub returns the string AND the
+		-- number of substitutions, and as the last argument of a call both are
+		-- passed, so the count arrived as tonumber's base. Zero and one are both
+		-- outside the legal two to thirty six, so every amount raised, clean or
+		-- not, on the first line of the handler before anything else ran. The
+		-- button did nothing, said nothing, and no transfer request has ever left
+		-- this client.
+		--
+		-- The old pattern also deleted the decimal point rather than rejecting it,
+		-- which would have turned ten pounds fifty into one thousand and fifty. It
+		-- now removes only spacing, the pound sign and thousands commas, and
+		-- anything left that is not a digit is refused by the check below.
+		local cleaned = (string.gsub(amount.Text, "[%s£,]", ""))
+		local numericAmount = if string.match(cleaned, "^%d+$") then tonumber(cleaned) else nil
 		if not numericAmount or numericAmount <= 0 then
 			self.context.Controllers.NotificationController:Show(
 				"Enter a whole-pound amount greater than zero.",

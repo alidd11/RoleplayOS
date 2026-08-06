@@ -70,12 +70,19 @@ function EmergencyLightsController:_adopt(model: Instance)
 		if descendant:IsA("BasePart") and descendant:GetAttribute("RoleplayOSLight") ~= false then
 			if VehicleLights.isLightPart(self.settings, descendant, model) then
 				local light = descendant:FindFirstChildWhichIsA("Light")
+				local circuit = self:_circuit(descendant, model)
 				table.insert(parts, {
 					Part = descendant,
 					Colour = descendant.Color,
 					Material = descendant.Material,
 					Light = light,
-					Circuit = self:_circuit(descendant, model),
+					Circuit = circuit,
+					-- Built once. This was concatenated inside the flash loop, so
+					-- ten vehicles in view generated several thousand throwaway
+					-- strings a second for a name that never changes.
+					CircuitAttribute = if circuit
+						then self.settings.CircuitAttributePrefix .. circuit
+						else nil,
 					Brightness = if light then light.Brightness else nil,
 					-- Alternates the two sides of the bar, which is what makes it
 					-- read as a lightbar rather than as a lamp switching on and off.
@@ -153,9 +160,8 @@ function EmergencyLightsController:_step()
 			-- Stage one is the rear cluster only, for a vehicle stopped at a
 			-- scene: visible to the traffic it is warning without lighting up
 			-- the whole street.
-			local circuitOn = record.Circuit
-				and model:GetAttribute(settings.CircuitAttributePrefix .. record.Circuit)
-					== true
+			local circuitOn = record.CircuitAttribute ~= nil
+				and model:GetAttribute(record.CircuitAttribute) == true
 			local inStage = stage >= settings.Stages
 				or (stage == 1 and (record.Circuit == "RearBlue" or record.Circuit == "RearReds"))
 				or (stage == 1 and record.Circuit == nil and index % 2 == 0)
@@ -382,6 +388,7 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	if not driver then
 		self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 		self.panel.Visible = false
+		self:_bindControls(false)
 		return
 	end
 	-- Asked more than once.
@@ -400,6 +407,7 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 		if response.Success and type(response.Data) == "table" then
 			self.state = response.Data
 			self.panel.Visible = self.state.Available == true
+			self:_bindControls(self.state.Available == true)
 			self:_paint()
 			if self.state.Available == true then
 				return
@@ -416,23 +424,41 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	end
 end
 
-function EmergencyLightsController:_bindControls()
-	-- F is the lights, G steps the siren. Bound through ContextActionService so
-	-- Roblox's own priority handling applies and a gamepad and a touch button
-	-- come free rather than being rebuilt here.
+-- Bound only while there is a panel to control, and unbound the moment there is
+-- not.
+--
+-- These used to be bound for everybody, all the time. A civilian pressing F sent
+-- a request that failed NOT_DRIVING and was deliberately swallowed, so the key
+-- did nothing and said nothing. Worse, the gamepad binding was ButtonY, which
+-- the phone also binds, and this handler passed the input on: one press of Y
+-- toggled the lightbar and opened the phone.
+--
+-- The gamepad now uses the d-pad, which nothing else claims, and the handler
+-- sinks rather than passes, which is safe precisely because it is only bound
+-- while the player is driving a vehicle that has lights.
+function EmergencyLightsController:_bindControls(available: boolean)
+	if available == self.bound then
+		return
+	end
+	self.bound = available
+	if not available then
+		ContextActionService:UnbindAction(ACTION_LIGHTS)
+		ContextActionService:UnbindAction(ACTION_SIREN)
+		return
+	end
 	ContextActionService:BindAction(ACTION_LIGHTS, function(_, state)
 		if state == Enum.UserInputState.Begin then
 			self:Toggle()
 		end
-		return Enum.ContextActionResult.Pass
-	end, false, Enum.KeyCode.F, Enum.KeyCode.ButtonY)
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.F, Enum.KeyCode.DPadUp)
 
 	ContextActionService:BindAction(ACTION_SIREN, function(_, state)
 		if state == Enum.UserInputState.Begin then
 			self:CycleSiren()
 		end
-		return Enum.ContextActionResult.Pass
-	end, false, Enum.KeyCode.G, Enum.KeyCode.ButtonB)
+		return Enum.ContextActionResult.Sink
+	end, false, Enum.KeyCode.G, Enum.KeyCode.DPadRight)
 end
 
 function EmergencyLightsController:Toggle()
@@ -528,8 +554,6 @@ function EmergencyLightsController:Start()
 			self:_step()
 		end)
 	)
-
-	self:_bindControls()
 end
 
 function EmergencyLightsController:Destroy()

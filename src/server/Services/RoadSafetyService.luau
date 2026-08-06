@@ -522,7 +522,16 @@ function RoadSafetyService:AreLightsOn(vehicle: Instance?): boolean
 	if owned and owned.Enabled then
 		local state = vehicle:GetAttribute(owned.StateAttribute)
 		if type(state) == "boolean" then
-			return state
+			-- A response, not merely something lit.
+			--
+			-- The state attribute became true for any of twelve circuits once the
+			-- full panel arrived, so an officer parked at a scene with the rear
+			-- floods on, no 360 and no siren, was exempt from every camera in the
+			-- city until they pressed reset. The exemption is for a vehicle
+			-- responding to an incident, which is what a stage above zero means;
+			-- scene lighting is the opposite of a response.
+			local stage = vehicle:GetAttribute(owned.StageAttribute)
+			return state and type(stage) == "number" and stage > 0
 		end
 	end
 
