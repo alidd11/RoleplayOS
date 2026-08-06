@@ -186,7 +186,6 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	--
 	-- This is a narrowing, not a fix. Making it truly atomic needs a ledger both
 	-- profiles are reconciled against, which is a bigger change than this is.
-	local data = self.context.Services:Get("DataService")
 	local recipientSaved = data:Save(recipient)
 	local senderSaved = data:Save(sender)
 	if not recipientSaved or not senderSaved then
