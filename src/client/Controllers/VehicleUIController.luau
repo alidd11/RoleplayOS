@@ -71,6 +71,7 @@ function VehicleUIController:_setSeat(seatPart: BasePart?)
 	if self.vehicleMode == enabled and self.state == state then
 		return
 	end
+	local wasEnabled = self.vehicleMode
 	self.vehicleMode = enabled
 	self.state = state
 	if not enabled then
@@ -82,6 +83,19 @@ function VehicleUIController:_setSeat(seatPart: BasePart?)
 		end
 	end
 	self:_broadcast()
+	-- Announced, at last.
+	--
+	-- Two controllers have always listened for this and nothing has ever fired
+	-- it, so both of their handlers were dead code: the dealership panel stayed
+	-- open when the player got into a car, and the phone never learned it was in
+	-- one, so its hotkey was never suppressed while driving.
+	--
+	-- Only on a transition. Moving between the driver's seat and a passenger seat
+	-- changes the state without changing whether this is a vehicle at all, and
+	-- the listeners act on the boolean.
+	if wasEnabled ~= enabled then
+		self.context.Events.VehicleModeChanged:Fire(enabled)
+	end
 end
 
 function VehicleUIController:_watchCharacter(character: Model)
