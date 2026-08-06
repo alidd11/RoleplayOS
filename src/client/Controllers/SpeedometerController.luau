@@ -12,7 +12,7 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- layout binding, and the two disagreed the moment the dial needed a taller
 -- panel: the binding reset it to the old height, so the dial centre sat below
 -- the panel and the hub and the bottom of the needle rendered outside it.
-local CLUSTER_SIZE = Vector2.new(272, 150)
+local CLUSTER_SIZE = Vector2.new(320, 176)
 
 -- A half dial rather than a full round one.
 --
@@ -24,8 +24,8 @@ local CLUSTER_SIZE = Vector2.new(272, 150)
 -- Zero is straight up, so the sweep runs from due left to due right through the
 -- top. Every part of the dial is placed from this centre and radius, so the
 -- ticks, the needle and the hub cannot drift apart when one is adjusted.
-local DIAL_CENTRE = Vector2.new(86, 118)
-local DIAL_RADIUS = 62
+local DIAL_CENTRE = Vector2.new(100, 138)
+local DIAL_RADIUS = 74
 local SWEEP_START = -90
 local SWEEP_ARC = 180
 
@@ -127,7 +127,7 @@ function SpeedometerController:_mount()
 		local mark = Instance.new("Frame")
 		mark.BackgroundColor3 = C.Track
 		mark.BorderSizePixel = 0
-		mark.Size = UDim2.new(1, 0, 0, if index % 5 == 1 then 12 else 7)
+		mark.Size = UDim2.new(1, 0, 0, if index % 5 == 1 then 14 else 8)
 		mark.Parent = spoke
 		Instance.new("UICorner", mark).CornerRadius = UDim.new(1, 0)
 		self.segments[index] = mark
@@ -139,7 +139,7 @@ function SpeedometerController:_mount()
 	needle.BackgroundColor3 = C.Live
 	needle.BorderSizePixel = 0
 	needle.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	needle.Size = UDim2.fromOffset(3, DIAL_RADIUS - 14)
+	needle.Size = UDim2.fromOffset(4, DIAL_RADIUS - 16)
 	needle.Rotation = SWEEP_START
 	needle.ZIndex = 3
 	needle.Parent = frame
@@ -152,31 +152,31 @@ function SpeedometerController:_mount()
 	hub.BackgroundColor3 = C.Track
 	hub.BorderSizePixel = 0
 	hub.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	hub.Size = UDim2.fromOffset(12, 12)
+	hub.Size = UDim2.fromOffset(14, 14)
 	hub.ZIndex = 4
 	hub.Parent = frame
 	Instance.new("UICorner", hub).CornerRadius = UDim.new(1, 0)
 
-	local speed = label(frame, Enum.Font.RobotoMono, 34, C.Text)
+	local speed = label(frame, Enum.Font.RobotoMono, 40, C.Text)
 	speed.Name = "Speed"
 	speed.Text = "0"
-	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 58, DIAL_CENTRE.Y - 52)
-	speed.Size = UDim2.fromOffset(116, 36)
+	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 66, DIAL_CENTRE.Y - 62)
+	speed.Size = UDim2.fromOffset(132, 42)
 	speed.TextXAlignment = Enum.TextXAlignment.Center
 	self.speed = speed
 
 	local unit = label(frame, Enum.Font.GothamBold, 12, C.Muted)
 	unit.Text = "MPH"
-	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 40, DIAL_CENTRE.Y - 14)
-	unit.Size = UDim2.fromOffset(80, 13)
+	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 45, DIAL_CENTRE.Y - 17)
+	unit.Size = UDim2.fromOffset(90, 14)
 	unit.TextXAlignment = Enum.TextXAlignment.Center
 
 	-- Gear badge, as a cluster shows the selected gear rather than spelling it.
 	local gearBadge = Instance.new("Frame")
 	gearBadge.Name = "Gear"
 	gearBadge.AnchorPoint = Vector2.new(1, 0)
-	gearBadge.Position = UDim2.new(1, -16, 0, 18)
-	gearBadge.Size = UDim2.fromOffset(44, 44)
+	gearBadge.Position = UDim2.new(1, -18, 0, 22)
+	gearBadge.Size = UDim2.fromOffset(50, 50)
 	gearBadge.BackgroundColor3 = C.Track
 	gearBadge.BorderSizePixel = 0
 	gearBadge.Parent = frame
@@ -190,16 +190,16 @@ function SpeedometerController:_mount()
 	local plate = label(frame, Enum.Font.GothamMedium, 10, C.Muted)
 	plate.Name = "Registration"
 	plate.AnchorPoint = Vector2.new(1, 0)
-	plate.Position = UDim2.new(1, -16, 0, 70)
-	plate.Size = UDim2.fromOffset(96, 14)
+	plate.Position = UDim2.new(1, -18, 0, 84)
+	plate.Size = UDim2.fromOffset(108, 15)
 	plate.TextXAlignment = Enum.TextXAlignment.Right
 	self.plate = plate
 
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
 	fuelTrack.AnchorPoint = Vector2.new(1, 0)
-	fuelTrack.Position = UDim2.new(1, -16, 0, 108)
-	fuelTrack.Size = UDim2.fromOffset(96, 8)
+	fuelTrack.Position = UDim2.new(1, -18, 0, 128)
+	fuelTrack.Size = UDim2.fromOffset(108, 9)
 	fuelTrack.BackgroundColor3 = C.Track
 	fuelTrack.BorderSizePixel = 0
 	fuelTrack.Parent = frame
@@ -215,8 +215,8 @@ function SpeedometerController:_mount()
 	local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
 	fuelMark.Text = "FUEL"
 	fuelMark.AnchorPoint = Vector2.new(1, 0)
-	fuelMark.Position = UDim2.new(1, -16, 0, 92)
-	fuelMark.Size = UDim2.fromOffset(96, 12)
+	fuelMark.Position = UDim2.new(1, -18, 0, 108)
+	fuelMark.Size = UDim2.fromOffset(108, 13)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Right
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
@@ -289,7 +289,7 @@ function SpeedometerController:Start()
 		-- Clear of Roblox's toolbar rather than pinned to the bottom edge, which
 		-- put the readout underneath the equipped tools. The needs bars move to
 		-- the left while driving, so the bottom centre is free for this.
-		self.frame.Position = UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 8))
+		self.frame.Position = UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 14))
 		-- One authored size, scaled by the interface factor, rather than a second
 		-- set of measurements for compact screens that has to be kept in step.
 		self.frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
