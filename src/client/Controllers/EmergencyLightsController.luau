@@ -20,6 +20,11 @@ local VehicleLights = require(ReplicatedStorage.RoleplayOS.Shared.VehicleLights)
 -- world, so one streaming in is picked up the moment it arrives.
 local EmergencyLightsController = { connections = {}, tracked = {} }
 
+-- The two shapes the panel takes. Tall on a desktop, wide on a phone, because a
+-- landscape phone has height to spare in neither direction but width in one.
+local FULL_PANEL = Vector2.new(238, 402)
+local COMPACT_PANEL = Vector2.new(420, 188)
+
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
@@ -51,6 +56,7 @@ function EmergencyLightsController:Init(context: any)
 	-- here on its own rather than being leaked until the player leaves.
 	self.tracked = setmetatable({}, { __mode = "k" })
 	self.buttons = {}
+	self.secondary = {}
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 end
 
@@ -268,7 +274,7 @@ function EmergencyLightsController:_mount()
 	local panel = Instance.new("Frame")
 	panel.Name = "Controller"
 	panel.AnchorPoint = Vector2.new(1, 0.5)
-	panel.Size = UDim2.fromOffset(238, 402)
+	panel.Size = UDim2.fromOffset(FULL_PANEL.X, FULL_PANEL.Y)
 	panel.BackgroundColor3 = Color3.fromRGB(16, 19, 21)
 	panel.BorderSizePixel = 0
 	panel.Visible = false
@@ -300,7 +306,9 @@ function EmergencyLightsController:_mount()
 	grid.Position = UDim2.fromOffset(12, 34)
 	grid.Size = UDim2.new(1, -24, 0, 244)
 	grid.Parent = panel
+	self.grid = grid
 	local layout = Instance.new("UIGridLayout")
+	self.gridLayout = layout
 	layout.CellSize = UDim2.fromOffset(66, 55)
 	layout.CellPadding = UDim2.fromOffset(8, 8)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -316,27 +324,59 @@ function EmergencyLightsController:_mount()
 	local sirens = self:_button(panel, "Sirens", "SIRENS", Color3.fromRGB(204, 61, 51))
 	sirens.Position = UDim2.fromOffset(12, 288)
 	sirens.Size = UDim2.fromOffset(102, 47)
+	self.secondary[#self.secondary + 1] = sirens
 	sirens.Activated:Connect(function()
 		self:CycleSiren()
 	end)
 	local response = self:_button(panel, "Response", "999", Color3.fromRGB(42, 83, 184))
 	response.Position = UDim2.fromOffset(124, 288)
 	response.Size = UDim2.fromOffset(102, 47)
+	self.secondary[#self.secondary + 1] = response
 	response.Activated:Connect(function()
 		self:_request({ Stage = self.settings.Stages, Siren = "Wail" })
 	end)
 	local scene = self:_button(panel, "AtScene", "AT SCENE", Color3.fromRGB(174, 169, 93))
 	scene.Position = UDim2.fromOffset(12, 345)
 	scene.Size = UDim2.fromOffset(102, 45)
+	self.secondary[#self.secondary + 1] = scene
 	scene.Activated:Connect(function()
 		self:_request({ Stage = 1, Siren = "" })
 	end)
 	local reset = self:_button(panel, "Reset", "RESET", Color3.fromRGB(77, 139, 91))
 	reset.Position = UDim2.fromOffset(124, 345)
 	reset.Size = UDim2.fromOffset(102, 45)
+	self.secondary[#self.secondary + 1] = reset
 	reset.Activated:Connect(function()
 		self:_request({ Reset = true, Siren = "" })
 	end)
+end
+
+-- Switches the panel between its tall shape and its wide one.
+--
+-- Both hold the same sixteen controls; only the number of columns and the row
+-- of secondary buttons differ, so nothing has to be rebuilt and no state is
+-- lost when a phone is rotated.
+function EmergencyLightsController:_reshape(compact: boolean)
+	if self.compactShape == compact then
+		return
+	end
+	self.compactShape = compact
+	local size = if compact then COMPACT_PANEL else FULL_PANEL
+	local columns = if compact then 6 else 3
+	local cell = if compact then Vector2.new(60, 48) else Vector2.new(66, 55)
+	self.panel.Size = UDim2.fromOffset(size.X, size.Y)
+	self.gridLayout.CellSize = UDim2.fromOffset(cell.X, cell.Y)
+	local rows = math.ceil(#CIRCUIT_CONTROLS / columns)
+	self.grid.Size = UDim2.new(1, -24, 0, rows * cell.Y + (rows - 1) * 8)
+	local top = 34 + rows * cell.Y + (rows - 1) * 8 + 10
+	local across = if compact then 4 else 2
+	local width = math.floor((size.X - 24 - (across - 1) * 8) / across)
+	for index, item in self.secondary do
+		local column = (index - 1) % across
+		local row = math.floor((index - 1) / across)
+		item.Position = UDim2.fromOffset(12 + column * (width + 8), top + row * 53)
+		item.Size = UDim2.fromOffset(width, 46)
+	end
 end
 
 function EmergencyLightsController:_paint()
@@ -492,8 +532,7 @@ function EmergencyLightsController:Start()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind(
 		"EmergencyLights",
 		function(layout)
-			local scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(238, 402), 24)
+			local scale = self.context.Controllers.UIOrchestrator:FitScale(layout, FULL_PANEL, 24)
 			if layout.Compact then
 				-- Stood on the pedals, above them in the display order, so an
 				-- officer on a phone could not reach the accelerator.
@@ -508,11 +547,25 @@ function EmergencyLightsController:Start()
 				local reserve = if layout.InputMode == "Touch"
 					then layout.HotbarBottom + Config.DrivingControls.PedalSize + 34
 					else layout.HotbarBottom + 16
+				-- Laid out wide rather than tall on a phone.
+				--
+				-- Two hundred and thirty eight by four hundred and two is a
+				-- portrait panel, and a landscape phone has about three hundred
+				-- and fifty pixels of height and eight hundred of width. Fitting
+				-- the tall version into what is left above the pedals meant a
+				-- scale near a third, which is twenty pixel buttons: present, and
+				-- unusable. Six columns instead of three spends the width the
+				-- screen actually has.
+				self:_reshape(true)
 				local usable = math.max(layout.SafeViewport.Y - reserve - 20, 140)
-				scale = math.min(scale, usable / 402, 0.78)
+				scale = math.min(
+					self.context.Controllers.UIOrchestrator:FitScale(layout, COMPACT_PANEL, 24),
+					usable / COMPACT_PANEL.Y
+				)
 				self.panel.AnchorPoint = Vector2.new(1, 1)
 				self.panel.Position = UDim2.new(1, -(layout.SafeRight + 16), 1, -reserve)
 			else
+				self:_reshape(false)
 				self.panel.AnchorPoint = Vector2.new(1, 0.5)
 				self.panel.Position =
 					UDim2.new(1, -(layout.SafeRight + 16), 0.5, math.floor(layout.NativeTop * 0.25))
