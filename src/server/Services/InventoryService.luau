@@ -25,6 +25,12 @@ function InventoryService:Add(
 	if not character then
 		return false, "CHARACTER_NOT_OWNED"
 	end
+	-- Created rather than assumed. Iterating this directly is what throws on a
+	-- character old enough to predate the field, and a migration protects the
+	-- profiles that pass through it rather than every caller for ever.
+	if type(character.Inventory) ~= "table" then
+		character.Inventory = {}
+	end
 	local found
 	for _, item in character.Inventory do
 		if item.DefinitionId == definitionId then
@@ -64,6 +70,9 @@ function InventoryService:Remove(
 	local character = session and session.Profile.Characters[characterId]
 	if not character then
 		return false, "CHARACTER_NOT_OWNED"
+	end
+	if type(character.Inventory) ~= "table" then
+		return false, "NOT_HELD"
 	end
 	for index, item in character.Inventory do
 		if item.DefinitionId == definitionId then

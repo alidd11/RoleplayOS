@@ -64,7 +64,7 @@ end
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 7,
+		SchemaVersion = 8,
 		Branding = {
 			GameName = "Emergency Response: Portsmouth",
 			ShowRoleplayOSMark = true,

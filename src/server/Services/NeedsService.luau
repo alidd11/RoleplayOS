@@ -416,13 +416,29 @@ function NeedsService:Start()
 			self.connections,
 			player.CharacterAdded:Connect(function()
 				task.defer(function()
-					self:EnsureStarterFood(player)
+					-- Guarded, because a deferred throw goes nowhere. This is how
+					-- the starter meal failed silently for a character whose
+					-- inventory container predated the field: no item, no error,
+					-- and nothing to suggest the feature existed at all.
+					local ok, problem = pcall(self.EnsureStarterFood, self, player)
+					if not ok then
+						self.context.Logger:Warning("Starter food could not be granted", {
+							UserId = player.UserId,
+							Error = tostring(problem),
+						})
+					end
 				end)
 			end)
 		)
 		if player.Character then
 			task.defer(function()
-				self:EnsureStarterFood(player)
+				local ok, problem = pcall(self.EnsureStarterFood, self, player)
+				if not ok then
+					self.context.Logger:Warning("Starter food could not be granted", {
+						UserId = player.UserId,
+						Error = tostring(problem),
+					})
+				end
 			end)
 		end
 	end

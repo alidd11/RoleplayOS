@@ -113,6 +113,36 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 			}
 		data.SchemaVersion = 7
 	end
+	if data.SchemaVersion == 7 then
+		-- Every container a character is created with, backfilled on the ones
+		-- that were not.
+		--
+		-- Nineteen fields are written at birth and only three of them had ever
+		-- been migrated, so a character made before any of the other sixteen
+		-- existed simply does not have it. That is not a quiet nil either:
+		-- InventoryService iterates `character.Inventory` directly, so the first
+		-- thing to touch one of these on an older character throws.
+		--
+		-- Listed rather than copied from the creation table on purpose. Only the
+		-- empty containers belong here; Identity, CharacterId and the timestamps
+		-- are real data and inventing them would be worse than the nil.
+		for _, character in data.Characters or {} do
+			if type(character) == "table" then
+				character.Appearance = character.Appearance or {}
+				character.Employment = character.Employment or {}
+				character.Vehicles = character.Vehicles or {}
+				character.Properties = character.Properties or {}
+				character.FurnitureInventory = character.FurnitureInventory or {}
+				character.FurniturePlacements = character.FurniturePlacements or {}
+				character.Inventory = character.Inventory or {}
+				character.Licences = character.Licences or {}
+				character.CriminalRecord = character.CriminalRecord or {}
+				character.MedicalRecord = character.MedicalRecord or {}
+				character.Progression = character.Progression or {}
+			end
+		end
+		data.SchemaVersion = 8
+	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))
 	return data, nil
