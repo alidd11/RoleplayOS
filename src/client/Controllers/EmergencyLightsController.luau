@@ -105,6 +105,14 @@ function EmergencyLightsController:_restore(entry: any)
 				end
 			end
 		end
+		-- Forgotten, not just written. The step above skips a write when it
+		-- matches what it last wrote, so leaving these set would have it compare
+		-- against values that are no longer on the part and skip the write that
+		-- lights it again.
+		record.LastMaterial = nil
+		record.LastColour = nil
+		record.LastOn = nil
+		record.LastBrightness = nil
 	end
 	entry.Lit = false
 end
@@ -153,16 +161,39 @@ function EmergencyLightsController:_step()
 				or (stage == 1 and record.Circuit == nil and index % 2 == 0)
 				or circuitOn
 			local on = inStage and record.Side == phase
-			record.Part.Material = if on then Enum.Material.Neon else record.Material
-			record.Part.Color = if on
+			-- Written only when it changes.
+			--
+			-- This loop runs nearly nine times a second while the pattern itself
+			-- only changes four times, so half of every write was already
+			-- redundant, and a part that is off was being reassigned its own
+			-- unchanged off values for as long as the lights were running. Ten
+			-- emergency vehicles in view came to roughly eleven thousand property
+			-- writes a second on every client, almost none of which changed
+			-- anything. On a full server that is the whole cost of this feature
+			-- and none of its effect.
+			local material = if on then Enum.Material.Neon else record.Material
+			local colour = if on
 				then (if record.Side == 0 then primary else secondary)
 				else record.Colour
+			if record.LastMaterial ~= material then
+				record.LastMaterial = material
+				record.Part.Material = material
+			end
+			if record.LastColour ~= colour then
+				record.LastColour = colour
+				record.Part.Color = colour
+			end
 			if record.Light then
-				record.Light.Enabled = on
-				if record.Brightness then
-					record.Light.Brightness = if lowPower
-						then record.Brightness * 0.45
-						else record.Brightness
+				if record.LastOn ~= on then
+					record.LastOn = on
+					record.Light.Enabled = on
+				end
+				local brightness = if record.Brightness
+					then (if lowPower then record.Brightness * 0.45 else record.Brightness)
+					else nil
+				if brightness ~= nil and record.LastBrightness ~= brightness then
+					record.LastBrightness = brightness
+					record.Light.Brightness = brightness
 				end
 			end
 		end
