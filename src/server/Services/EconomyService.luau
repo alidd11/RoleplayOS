@@ -2,7 +2,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
-local EconomyService = { seen = {}, order = {} }
+local HttpService = game:GetService("HttpService")
+
+local EconomyService = { seen = {}, order = {}, transferring = {} }
 function EconomyService:Init(context: any)
 	self.context = context
 end
@@ -62,8 +64,108 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	})
 	return true, nil
 end
+
+-- Moves bank funds between two active characters in this server. The client
+-- supplies neither character id nor balance; both are resolved again here.
+function EconomyService:Transfer(sender: Player, recipient: Player, amount: any): (any?, string?)
+	if sender == recipient then
+		return nil, "SELF_TRANSFER"
+	end
+	local valid, reason = Validator.amount(amount)
+	if not valid then
+		return nil, reason
+	end
+	if amount > self.context.Configuration.Economy.TransferMaximum then
+		return nil, "TRANSFER_LIMIT"
+	end
+	if self.transferring[sender.UserId] then
+		return nil, "TRANSFER_IN_PROGRESS"
+	end
+	local data = self.context.Services:Get("DataService")
+	local senderSession = data:GetSession(sender)
+	local recipientSession = data:GetSession(recipient)
+	local senderId = senderSession and senderSession.ActiveCharacterId
+	local recipientId = recipientSession and recipientSession.ActiveCharacterId
+	local senderCharacter = senderId and senderSession.Profile.Characters[senderId]
+	local recipientCharacter = recipientId and recipientSession.Profile.Characters[recipientId]
+	if not senderCharacter then
+		return nil, "ACTIVE_CHARACTER_REQUIRED"
+	end
+	if not recipientCharacter then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+	if amount > senderCharacter.Economy.Balance then
+		return nil, "INSUFFICIENT_FUNDS"
+	end
+
+	self.transferring[sender.UserId] = true
+	local transferId = HttpService:GenerateGUID(false)
+	local recipientName = recipientCharacter.Identity.FirstName
+		.. " "
+		.. recipientCharacter.Identity.LastName
+	local senderName = senderCharacter.Identity.FirstName
+		.. " "
+		.. senderCharacter.Identity.LastName
+	local debited, debitReason = self:Apply(sender, {
+		TransactionId = HttpService:GenerateGUID(false),
+		CharacterId = senderId,
+		Amount = amount,
+		Direction = "Debit",
+		ReasonCode = "PLAYER_TRANSFER_SENT",
+		Description = "Transfer to " .. recipientName,
+		RelatedEntityId = transferId,
+		Metadata = { RecipientUserId = recipient.UserId },
+	})
+	if not debited then
+		self.transferring[sender.UserId] = nil
+		return nil, debitReason
+	end
+	local credited, creditReason = self:Apply(recipient, {
+		TransactionId = HttpService:GenerateGUID(false),
+		CharacterId = recipientId,
+		Amount = amount,
+		Direction = "Credit",
+		ReasonCode = "PLAYER_TRANSFER_RECEIVED",
+		Description = "Transfer from " .. senderName,
+		RelatedEntityId = transferId,
+		Metadata = { SenderUserId = sender.UserId },
+	})
+	if not credited then
+		local refunded, refundReason = self:Apply(sender, {
+			TransactionId = HttpService:GenerateGUID(false),
+			CharacterId = senderId,
+			Amount = amount,
+			Direction = "Credit",
+			ReasonCode = "PLAYER_TRANSFER_REFUND",
+			Description = "Automatic transfer refund",
+			RelatedEntityId = transferId,
+			Metadata = {},
+		})
+		self.transferring[sender.UserId] = nil
+		if not refunded then
+			self.context.Logger:Error("Player transfer refund failed", {
+				SenderUserId = sender.UserId,
+				RecipientUserId = recipient.UserId,
+				Amount = amount,
+				TransferId = transferId,
+				CreditError = creditReason,
+				RefundError = refundReason,
+			})
+		end
+		return nil, creditReason
+	end
+	self.transferring[sender.UserId] = nil
+	return {
+		TransferId = transferId,
+		Amount = amount,
+		Recipient = recipientName,
+		Balance = senderCharacter.Economy.Balance,
+	},
+		nil
+end
 function EconomyService:Destroy()
 	table.clear(self.seen)
 	table.clear(self.order)
+	table.clear(self.transferring)
 end
 return EconomyService

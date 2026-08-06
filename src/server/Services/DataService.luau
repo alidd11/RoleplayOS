@@ -354,6 +354,13 @@ function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
 	end
 end
 
+-- Exposes the current budget without allowing monitoring services to cross the
+-- persistent-storage boundary. DataService remains the only service that talks
+-- to Roblox DataStore APIs directly.
+function DataService:GetRequestBudget(requestType: Enum.DataStoreRequestType): number
+	return DataStoreService:GetRequestBudgetForRequestType(requestType)
+end
+
 -- `requestType` defaults to UpdateAsync because every write path uses it, and a
 -- write is where exhausted budget costs data rather than costing a reload.
 function DataService:_retry(

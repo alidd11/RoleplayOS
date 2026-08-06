@@ -80,6 +80,19 @@ local function input(parent: Instance, placeholder: string, multiline: boolean?)
 	return item
 end
 
+local function money(value: any): string
+	local amount = math.floor(tonumber(value) or 0)
+	local formatted = tostring(math.abs(amount))
+	while true do
+		local changed
+		formatted, changed = string.gsub(formatted, "^(%d+)(%d%d%d)", "%1,%2")
+		if changed == 0 then
+			break
+		end
+	end
+	return (if amount < 0 then "-£" else "£") .. formatted
+end
+
 function PhoneController:Init(context: any)
 	self.context = context
 	self.page = "Home"
@@ -352,8 +365,7 @@ function PhoneController:_appIcon(parent: Instance, app: any): Frame
 	return tile
 end
 
--- Home screen: a four-column grid of apps, the wallet included so a character
--- can read their own credentials without equipping the physical card.
+-- Home screen: a four-column grid of apps.
 function PhoneController:_renderHome()
 	local grid = Instance.new("Frame")
 	grid.BackgroundTransparency = 1
@@ -381,10 +393,10 @@ function PhoneController:_renderHome()
 				Colour = Color3.fromRGB(120, 132, 158),
 			},
 			{
-				Page = "Wallet",
-				Glyph = "▤",
-				Name = "Wallet",
-				Colour = Color3.fromRGB(58, 92, 168),
+				Page = "Bank",
+				Glyph = "£",
+				Name = "Bank",
+				Colour = Color3.fromRGB(24, 91, 181),
 			},
 			{
 				Name = "Torch",
@@ -402,52 +414,124 @@ function PhoneController:_renderHome()
 	end
 end
 
--- Wallet: the holder's own identification, rendered as a card.
-function PhoneController:_renderWallet()
-	local identity = self.phoneData and self.phoneData.Identity
-	if not identity then
-		local empty = label(self.content, "No identification available.", 12)
+function PhoneController:_renderBank()
+	local bank = self.phoneData and self.phoneData.Bank
+	if not bank then
+		local empty = label(self.content, "Banking is temporarily unavailable.", 12)
 		empty.Size = UDim2.new(1, 0, 0, 40)
 		empty.TextColor3 = C.Muted
 		return
 	end
-	local card = Instance.new("Frame")
-	card.BackgroundColor3 = Color3.fromRGB(30, 44, 78)
-	card.BorderSizePixel = 0
-	card.Size = UDim2.new(1, 0, 0, 172)
-	card.Parent = self.content
-	corner(card, 16)
+	local balanceCard = Instance.new("Frame")
+	balanceCard.BackgroundColor3 = Color3.fromRGB(24, 65, 137)
+	balanceCard.BorderSizePixel = 0
+	balanceCard.Size = UDim2.new(1, 0, 0, 92)
+	balanceCard.Parent = self.content
+	corner(balanceCard, 16)
+	local caption = label(balanceCard, "AVAILABLE BALANCE", 9, true)
+	caption.Position = UDim2.fromOffset(14, 12)
+	caption.Size = UDim2.new(1, -28, 0, 14)
+	caption.TextColor3 = Color3.fromRGB(173, 204, 255)
+	local balance = label(balanceCard, money(bank.Balance), 25, true)
+	balance.Position = UDim2.fromOffset(14, 28)
+	balance.Size = UDim2.new(1, -28, 0, 34)
+	local cash = label(balanceCard, "Cash carried  " .. money(bank.Cash), 9)
+	cash.Position = UDim2.fromOffset(14, 66)
+	cash.Size = UDim2.new(1, -28, 0, 14)
+	cash.TextColor3 = Color3.fromRGB(173, 204, 255)
 
-	local kind = label(card, "IDENTITY CARD", 9, true)
-	kind.Position = UDim2.fromOffset(16, 14)
-	kind.Size = UDim2.new(1, -32, 0, 14)
-	kind.TextColor3 = Color3.fromRGB(150, 178, 236)
+	local recipient = input(self.content, "Recipient phone number")
+	recipient.Position = UDim2.fromOffset(0, 104)
+	recipient.Size = UDim2.new(0.61, -4, 0, 42)
+	recipient.TextYAlignment = Enum.TextYAlignment.Center
+	recipient.AutomaticSize = Enum.AutomaticSize.None
+	local amount = input(self.content, "Amount")
+	amount.Position = UDim2.new(0.61, 4, 0, 104)
+	amount.Size = UDim2.new(0.39, -4, 0, 42)
+	amount.TextYAlignment = Enum.TextYAlignment.Center
+	amount.AutomaticSize = Enum.AutomaticSize.None
+	local send = button(self.content, "SEND MONEY", C.Blue)
+	send.Position = UDim2.fromOffset(0, 154)
+	send.Size = UDim2.new(1, 0, 0, 40)
+	send.Activated:Connect(function()
+		if not send.Active then
+			return
+		end
+		local numericAmount = tonumber(string.gsub(amount.Text, "[^%d]", ""))
+		if not numericAmount or numericAmount <= 0 then
+			self.context.Controllers.NotificationController:Show(
+				"Enter a whole-pound amount greater than zero.",
+				"Bank"
+			)
+			return
+		end
+		send.Active = false
+		send.Text = "SENDING…"
+		local response = self.context.Controllers.NetworkController:Request(
+			"PhoneTransferFunds",
+			{ Number = recipient.Text, Amount = numericAmount }
+		)
+		self.context.Controllers.NotificationController:Show(response.Message, "Bank")
+		if response.Success then
+			amount.Text = ""
+			recipient.Text = ""
+			self:Refresh()
+			return
+		end
+		send.Active = true
+		send.Text = "SEND MONEY"
+	end)
 
-	local name = label(
-		card,
-		string.format("%s %s", tostring(identity.FirstName), tostring(identity.LastName)),
-		19,
-		true
-	)
-	name.Position = UDim2.fromOffset(16, 34)
-	name.Size = UDim2.new(1, -32, 0, 28)
-
-	local born = label(card, "DATE OF BIRTH  " .. tostring(identity.DateOfBirth), 11)
-	born.Position = UDim2.fromOffset(16, 66)
-	born.Size = UDim2.new(1, -32, 0, 18)
-	born.TextColor3 = C.Muted
-
-	local number = label(card, "MOBILE  " .. tostring(self.phoneData.Number), 11)
-	number.Position = UDim2.fromOffset(16, 88)
-	number.Size = UDim2.new(1, -32, 0, 18)
-	number.TextColor3 = C.Muted
-
-	local notice =
-		label(card, "Showing this card to somebody still requires the physical card in hand.", 10)
-	notice.Position = UDim2.fromOffset(16, 118)
-	notice.Size = UDim2.new(1, -32, 0, 40)
-	notice.TextWrapped = true
-	notice.TextColor3 = Color3.fromRGB(126, 146, 186)
+	local activityTitle = label(self.content, "RECENT ACTIVITY", 9, true)
+	activityTitle.Position = UDim2.fromOffset(2, 208)
+	activityTitle.Size = UDim2.new(1, -4, 0, 16)
+	activityTitle.TextColor3 = C.Muted
+	local history = Instance.new("ScrollingFrame")
+	history.BackgroundTransparency = 1
+	history.BorderSizePixel = 0
+	history.Position = UDim2.fromOffset(0, 230)
+	history.Size = UDim2.new(1, 0, 1, -230)
+	history.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	history.CanvasSize = UDim2.new()
+	history.ScrollBarThickness = 2
+	history.Parent = self.content
+	local historyLayout = Instance.new("UIListLayout")
+	historyLayout.Padding = UDim.new(0, 7)
+	historyLayout.Parent = history
+	local transactions = bank.Transactions or {}
+	for _, transaction in transactions do
+		local row = Instance.new("Frame")
+		row.BackgroundColor3 = C.Card
+		row.BorderSizePixel = 0
+		row.Size = UDim2.new(1, -4, 0, 48)
+		row.Parent = history
+		corner(row, 10)
+		local description = label(row, tostring(transaction.Description), 9, true)
+		description.Position = UDim2.fromOffset(10, 6)
+		description.Size = UDim2.new(1, -100, 0, 18)
+		description.TextTruncate = Enum.TextTruncate.AtEnd
+		local transactionAmount = label(
+			row,
+			(if transaction.Direction == "Credit" then "+" else "−") .. money(transaction.Amount),
+			10,
+			true
+		)
+		transactionAmount.AnchorPoint = Vector2.new(1, 0)
+		transactionAmount.Position = UDim2.new(1, -10, 0, 7)
+		transactionAmount.Size = UDim2.fromOffset(82, 18)
+		transactionAmount.TextXAlignment = Enum.TextXAlignment.Right
+		transactionAmount.TextColor3 = if transaction.Direction == "Credit" then C.Green else C.Text
+		local timestamp =
+			label(row, os.date("%d %b · %H:%M", tonumber(transaction.Timestamp) or os.time()), 8)
+		timestamp.Position = UDim2.fromOffset(10, 27)
+		timestamp.Size = UDim2.new(1, -20, 0, 14)
+		timestamp.TextColor3 = C.Muted
+	end
+	if #transactions == 0 then
+		local empty = label(history, "No transactions yet.", 10)
+		empty.Size = UDim2.new(1, 0, 0, 40)
+		empty.TextColor3 = C.Muted
+	end
 end
 
 function PhoneController:_clear()
@@ -469,8 +553,8 @@ function PhoneController:_render()
 	self.content.Size = if home then UDim2.new(1, -28, 1, -158) else UDim2.new(1, -28, 1, -134)
 	if self.page == "Home" then
 		self:_renderHome()
-	elseif self.page == "Wallet" then
-		self:_renderWallet()
+	elseif self.page == "Bank" then
+		self:_renderBank()
 	elseif self.page == "Contacts" then
 		local contacts = if self.phoneData then self.phoneData.Contacts else {}
 		local list = Instance.new("ScrollingFrame")
@@ -776,6 +860,12 @@ function PhoneController:Start()
 					self.context.Controllers.NotificationController:Show(
 						"New message received.",
 						"Messages"
+					)
+				elseif update.Kind == "BankTransfer" then
+					self:Refresh()
+					self.context.Controllers.NotificationController:Show(
+						string.format("%s received from %s.", money(update.Amount), update.From),
+						"Bank"
 					)
 				elseif update.Kind == "Call" then
 					self.activeCall = if update.Call.State == "Ended" then nil else update.Call

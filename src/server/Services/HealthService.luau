@@ -1,6 +1,5 @@
 --!strict
 
-local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
@@ -30,8 +29,9 @@ function HealthService:Init(context: any)
 end
 
 function HealthService:_sample(): any
-	local budget =
-		DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync)
+	local budget = self.context.Services
+		:Get("DataService")
+		:GetRequestBudget(Enum.DataStoreRequestType.UpdateAsync)
 	-- No instance count here on purpose. Walking every descendant of the data
 	-- model is the one genuinely expensive thing this could sample, and a health
 	-- monitor that costs a frame every minute is causing the problem it exists to

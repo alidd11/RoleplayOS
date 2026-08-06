@@ -12,4 +12,14 @@ return {
 		UseMockDataInStudio = true,
 		GrantMockEmergencyAccessInStudio = true,
 	},
+	Integrations = {
+		Discord = {
+			SpeedingFines = {
+				-- Create a webhook inside the configured Discord channel, save its
+				-- complete URL as the RoleplayOSSpeedingFinesWebhook Creator Hub
+				-- secret, enable HTTP requests, then change this to true.
+				Enabled = false,
+			},
+		},
+	},
 }

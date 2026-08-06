@@ -13,6 +13,7 @@ local DealershipController = { connections = {}, terminalConnections = {}, selec
 
 type VehicleView = {
 	Id: string,
+	DefinitionId: string,
 	Name: string,
 	Subtitle: string,
 	Registration: string?,
@@ -100,6 +101,7 @@ local function normalise(source: any): VehicleView
 		and source.CanSpawn ~= false
 	return {
 		Id = id,
+		DefinitionId = readString(source, { "DefinitionId" }, id),
 		Name = readString(source, { "Name", "DisplayName" }, id),
 		Subtitle = readString(source, { "Subtitle", "Class", "Description" }, "Vehicle"),
 		Registration = readString(source, { "Registration", "RegistrationNumber" }, ""),
@@ -121,6 +123,81 @@ function DealershipController:Init(context: any)
 	self.service = {}
 	self.dealershipId = nil
 	self.plateVehicleId = nil
+	self.renderConnections = {}
+end
+
+function DealershipController:_connectRendered(signal: RBXScriptSignal, callback: (...any) -> ())
+	table.insert(self.renderConnections, signal:Connect(callback))
+end
+
+function DealershipController:_clearRenderedConnections()
+	for _, connection in self.renderConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.renderConnections)
+end
+
+-- Draws the actual inserted vehicle rather than relying on a separately
+-- uploaded thumbnail that can drift from the model. The server supplies a
+-- script-free visual copy for this player only; the ViewportFrame owns another
+-- local clone, so preview-cache eviction cannot blank a card already on screen.
+function DealershipController:_vehiclePreview(
+	parent: Instance,
+	definitionId: string,
+	position: UDim2,
+	size: UDim2
+)
+	local viewport = Instance.new("ViewportFrame")
+	viewport.Name = "VehiclePreview"
+	viewport.Position = position
+	viewport.Size = size
+	viewport.BackgroundColor3 = Color3.fromRGB(11, 18, 28)
+	viewport.BorderSizePixel = 0
+	viewport.Ambient = Color3.fromRGB(150, 160, 178)
+	viewport.LightColor = Color3.fromRGB(245, 248, 255)
+	viewport.LightDirection = Vector3.new(-1, -0.8, -0.4)
+	viewport.Parent = parent
+	corner(viewport, 10)
+
+	local placeholder = label(viewport, "VEHICLE", 9, true)
+	placeholder.Size = UDim2.fromScale(1, 1)
+	placeholder.TextXAlignment = Enum.TextXAlignment.Center
+	placeholder.TextColor3 = colours.muted
+	local maximum = self.context.Configuration.VehicleSpawning.MaximumPreviewsPerPlayer or 6
+	if (self.previewRequests or 0) >= maximum then
+		return
+	end
+	self.previewRequests = (self.previewRequests or 0) + 1
+
+	task.spawn(function()
+		local response = self.context.Controllers.NetworkController:Request(
+			"RequestVehiclePreview",
+			{ DefinitionId = definitionId }
+		)
+		if not viewport.Parent or not response.Success then
+			return
+		end
+		local previews = Players.LocalPlayer.PlayerGui:FindFirstChild("RoleplayOSVehiclePreviews")
+		local source = previews and previews:WaitForChild(definitionId, 2)
+		if not source or not source:IsA("Model") then
+			return
+		end
+		local world = Instance.new("WorldModel")
+		world.Parent = viewport
+		local model = source:Clone()
+		model.Parent = world
+		local focus, bounds = model:GetBoundingBox()
+		local radius = math.max(bounds.X, bounds.Y, bounds.Z, 1)
+		local camera = Instance.new("Camera")
+		camera.FieldOfView = 32
+		camera.CFrame = CFrame.lookAt(
+			focus.Position + Vector3.new(radius * 0.9, radius * 0.42, radius * 1.25),
+			focus.Position
+		)
+		camera.Parent = viewport
+		viewport.CurrentCamera = camera
+		placeholder.Visible = false
+	end)
 end
 
 function DealershipController:_openPlate(vehicle: VehicleView)
@@ -301,13 +378,10 @@ function DealershipController:_showroomCard(vehicle: any)
 	colourButton.Position = UDim2.new(1, -226, 0, if compact then 19 else 32)
 	colourButton.Size = UDim2.fromOffset(98, if compact then 40 else 40)
 	colourButton.BackgroundColor3 = colours.raised
-	table.insert(
-		self.connections,
-		colourButton.Activated:Connect(function()
-			chosen = chosen % #palette + 1
-			colourButton.Text = tostring(palette[chosen])
-		end)
-	)
+	self:_connectRendered(colourButton.Activated, function()
+		chosen = chosen % #palette + 1
+		colourButton.Text = tostring(palette[chosen])
+	end)
 
 	local action = button(
 		card,
@@ -323,16 +397,22 @@ function DealershipController:_showroomCard(vehicle: any)
 		else colours.raised
 	action.Active = vehicle.Owned ~= true
 		and (buyable or (vehicle.Locked and vehicle.GamepassId ~= nil))
-	table.insert(
-		self.connections,
-		action.Activated:Connect(function()
-			if vehicle.Locked and vehicle.GamepassId then
-				self.context.Controllers.GamepassController:Prompt(vehicle.GamepassId)
-				return
-			end
-			self:_purchase(vehicle, tostring(palette[chosen]), action)
-		end)
+	self:_connectRendered(action.Activated, function()
+		if vehicle.Locked and vehicle.GamepassId then
+			self.context.Controllers.GamepassController:Prompt(vehicle.GamepassId)
+			return
+		end
+		self:_purchase(vehicle, tostring(palette[chosen]), action)
+	end)
+	self:_vehiclePreview(
+		card,
+		vehicle.DefinitionId,
+		UDim2.fromOffset(12, if compact then 8 else 12),
+		UDim2.fromOffset(if compact then 92 else 122, if compact then 62 else 80)
 	)
+	name.Position = UDim2.fromOffset(if compact then 116 else 150, if compact then 11 else 17)
+	price.Position = UDim2.fromOffset(if compact then 116 else 150, if compact then 33 else 43)
+	status.Position = UDim2.fromOffset(if compact then 116 else 150, if compact then 54 else 68)
 end
 
 function DealershipController:_purchase(vehicle: any, colour: string, action: TextButton)
@@ -361,6 +441,8 @@ function DealershipController:_purchase(vehicle: any, colour: string, action: Te
 end
 
 function DealershipController:_render()
+	self:_clearRenderedConnections()
+	self.previewRequests = 0
 	for _, child in self.list:GetChildren() do
 		if child:IsA("Frame") then
 			child:Destroy()
@@ -396,22 +478,24 @@ function DealershipController:_render()
 	for _, rawVehicle in vehicles do
 		local vehicle = normalise(rawVehicle)
 		local card = Instance.new("Frame")
-		card.Size = UDim2.new(1, -8, 0, 104)
+		local compact = self.compact == true
+		card.Size = UDim2.new(1, -8, 0, if compact then 78 else 104)
 		card.BackgroundColor3 = colours.surface
 		card.BorderSizePixel = 0
 		card.Parent = self.list
 		corner(card, 12)
 		local stripe = Instance.new("Frame")
-		stripe.Size = UDim2.fromOffset(4, 64)
-		stripe.Position = UDim2.fromOffset(0, 20)
+		stripe.Size = UDim2.fromOffset(4, if compact then 46 else 64)
+		stripe.Position = UDim2.fromOffset(0, if compact then 16 else 20)
 		stripe.BackgroundColor3 = if vehicle.Available then colours.success else colours.locked
 		stripe.BorderSizePixel = 0
 		stripe.Parent = card
 		local name = label(card, vehicle.Name, 15, true)
-		name.Position = UDim2.fromOffset(20, 17)
+		name.Position = UDim2.fromOffset(if compact then 116 else 150, if compact then 11 else 17)
 		name.Size = UDim2.new(1, -174, 0, 22)
 		local details = label(card, vehicle.Subtitle, 11, false)
-		details.Position = UDim2.fromOffset(20, 43)
+		details.Position =
+			UDim2.fromOffset(if compact then 116 else 150, if compact then 32 else 43)
 		details.Size = UDim2.new(1, -174, 0, 18)
 		details.TextColor3 = colours.muted
 		local access = label(
@@ -424,54 +508,55 @@ function DealershipController:_render()
 			10,
 			true
 		)
-		access.Position = UDim2.fromOffset(20, 68)
+		access.Position = UDim2.fromOffset(if compact then 116 else 150, if compact then 53 else 68)
 		access.Size = UDim2.new(1, -174, 0, 21)
 		access.TextColor3 = if vehicle.Available then colours.success else colours.locked
 		access.TextTruncate = Enum.TextTruncate.AtEnd
 		local canCustomise = self.selectedTab == "Owned" and self.dealershipId ~= nil
 		local spawn = button(card, if vehicle.Available then "SPAWN" else "LOCKED")
-		spawn.Position = UDim2.new(1, -138, 0, if canCustomise then 11 else 32)
+		spawn.Position =
+			UDim2.new(1, -138, 0, if compact then 19 else if canCustomise then 11 else 32)
 		spawn.Size = UDim2.fromOffset(118, 40)
 		spawn.BackgroundColor3 = if vehicle.Available then colours.accent else colours.raised
 		spawn.Active = vehicle.Available
 		if vehicle.Available then
-			table.insert(
-				self.connections,
-				spawn.Activated:Connect(function()
-					spawn.Active = false
-					spawn.Text = "SPAWNING…"
-					local endpoint = if self.selectedTab == "Owned"
-						then "SpawnOwnedVehicle"
-						else "SpawnServiceVehicle"
-					local payload = { TerminalId = self.terminalId }
-					if self.selectedTab == "Owned" then
-						payload.VehicleId = vehicle.Id
-					else
-						payload.DefinitionId = vehicle.Id
-					end
-					local response =
-						self.context.Controllers.NetworkController:Request(endpoint, payload)
-					self.context.Controllers.NotificationController:Show(response.Message, "Garage")
-					if response.Success then
-						self:_setOpen(false)
-					else
-						spawn.Active = true
-						spawn.Text = "SPAWN"
-					end
-				end)
-			)
+			self:_connectRendered(spawn.Activated, function()
+				spawn.Active = false
+				spawn.Text = "SPAWNING…"
+				local endpoint = if self.selectedTab == "Owned"
+					then "SpawnOwnedVehicle"
+					else "SpawnServiceVehicle"
+				local payload = { TerminalId = self.terminalId }
+				if self.selectedTab == "Owned" then
+					payload.VehicleId = vehicle.Id
+				else
+					payload.DefinitionId = vehicle.Id
+				end
+				local response =
+					self.context.Controllers.NetworkController:Request(endpoint, payload)
+				self.context.Controllers.NotificationController:Show(response.Message, "Garage")
+				if response.Success then
+					self:_setOpen(false)
+				else
+					spawn.Active = true
+					spawn.Text = "SPAWN"
+				end
+			end)
 		end
-		if canCustomise then
+		if canCustomise and not compact then
 			local custom = button(card, "CUSTOM PLATE")
 			custom.Position = UDim2.new(1, -138, 0, 56)
 			custom.Size = UDim2.fromOffset(118, 36)
-			table.insert(
-				self.connections,
-				custom.Activated:Connect(function()
-					self:_openPlate(vehicle)
-				end)
-			)
+			self:_connectRendered(custom.Activated, function()
+				self:_openPlate(vehicle)
+			end)
 		end
+		self:_vehiclePreview(
+			card,
+			vehicle.DefinitionId,
+			UDim2.fromOffset(12, if compact then 8 else 12),
+			UDim2.fromOffset(if compact then 92 else 122, if compact then 62 else 80)
+		)
 	end
 end
 
@@ -606,12 +691,12 @@ function DealershipController:_buildUI()
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	self.scale = scale
-	local eyebrow = label(panel, "ROLEPLAYOS  /  VEHICLES", 10, true)
+	local eyebrow = label(panel, "VEHICLE SERVICES", 10, true)
 	eyebrow.Position = UDim2.fromOffset(24, 19)
 	eyebrow.Size = UDim2.fromOffset(300, 18)
 	eyebrow.TextColor3 = colours.muted
 	self.eyebrow = eyebrow
-	local title = label(panel, "Dealership & Garage", 23, true)
+	local title = label(panel, "Vehicles", 23, true)
 	title.Position = UDim2.fromOffset(24, 39)
 	title.Size = UDim2.new(1, -100, 0, 32)
 	self.title = title
@@ -842,6 +927,7 @@ function DealershipController:Destroy()
 	end
 	table.clear(self.connections)
 	table.clear(self.terminalConnections)
+	self:_clearRenderedConnections()
 	if self.gui then
 		self.gui:Destroy()
 	end

@@ -345,6 +345,23 @@ local Config = {
 		MaximumTransactionHistory = 200,
 		TransferMaximum = 100000,
 	},
+	Integrations = {
+		Discord = {
+			SpeedingFines = {
+				-- Store the target channel's complete webhook URL in this Creator
+				-- Hub secret. A normal Discord channel link cannot receive posts.
+				Enabled = false,
+				SecretName = "RoleplayOSSpeedingFinesWebhook",
+				GuildId = "1532864611706077194",
+				ChannelId = "1534723525275811891",
+				DepartmentName = "UP Hampshire Isle of Wight Constabulary",
+				-- Enqueue also requires a group-authorised police officer and an
+				-- actual Whitelisted server. Public gamepasses never qualify.
+				MinimumIntervalSeconds = 1,
+				MaximumQueue = 100,
+			},
+		},
+	},
 	-- Wages. Without an income the economy only ever drains, so prices carry no
 	-- meaning: these rates are what every price in the game is measured against.
 	--
@@ -707,6 +724,9 @@ local Config = {
 		StateAttribute = "RoleplayOSEmergencyLights",
 		StageAttribute = "RoleplayOSLightStage",
 		SirenAttribute = "RoleplayOSSiren",
+		CircuitAttributePrefix = "RoleplayOSCircuit",
+		RunLockAttribute = "RoleplayOSRunLock",
+		LowPowerAttribute = "RoleplayOSLowPower",
 		-- Tagged on vehicles that have lights, so clients find them through
 		-- CollectionService as they stream in rather than by scanning the world.
 		Tag = "RoleplayOSEmergencyVehicle",
@@ -736,6 +756,20 @@ local Config = {
 		-- dazzling the traffic it is warning.
 		Stages = 2,
 		FlashesPerSecond = 2.2,
+		-- A model can identify a lamp explicitly with a RoleplayOSLightCircuit
+		-- attribute, or use one of these case-insensitive name fragments. Models
+		-- without circuit names still work through 360 and at-scene modes.
+		Circuits = {
+			FrontBlue = { "frontblue", "front blue", "front_blue" },
+			RearBlue = { "rearblue", "rear blue", "rear_blue" },
+			RearReds = { "rearred", "rear red", "rear_red" },
+			FrontScene = { "frontscene", "front scene", "front_scene" },
+			RearScene = { "rearscene", "rear scene", "rear_scene" },
+			Grille = { "grille", "grill" },
+			LeftAlley = { "leftalley", "left alley", "left_alley" },
+			RightAlley = { "rightalley", "right alley", "right_alley" },
+			Spots = { "spotlight", "spot light", "spots" },
+		},
 		-- How a light part is recognised inside a vehicle. Excluded names are
 		-- checked first, so an ordinary lamp is never taken for a blue light.
 		LightNamePatterns = {
@@ -1675,6 +1709,11 @@ local Config = {
 	-- asks about and the record it writes into, so an officer searching a driver
 	-- in the MDT sees their points and their fines.
 	RoadSafety = {
+		SpeedCameraTag = "RoleplayOSSpeedCamera",
+		AverageEntryTag = "RoleplayOSAverageSpeedEntry",
+		AverageExitTag = "RoleplayOSAverageSpeedExit",
+		AverageJourneyExpirySeconds = 1800,
+		StateCleanupSeconds = 60,
 		-- Cameras are found by shape rather than by tag, so a camera model
 		-- dropped into the world works with nothing else done to it. A model
 		-- counts as a camera when it holds a part named Sensor and a
@@ -1693,6 +1732,9 @@ local Config = {
 		FineBase = 100,
 		FinePerMph = 10,
 		MaximumFine = 1000,
+		-- Uses EconomyService rather than a leaderstats value. When the account
+		-- cannot cover the charge, the offence remains as an unpaid fine.
+		AutomaticallyDebitFines = true,
 		PointsByExcess = { { 10, 3 }, { 20, 4 }, { 30, 6 }, { 999, 6 } },
 		-- An emergency driver on a blue light run is exempt. The same driver with
 		-- the lights off is not, which is the whole point of the rule: the
@@ -2008,6 +2050,7 @@ local Config = {
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
 			SetEmergencyLights = { Capacity = 8, RefillPerSecond = 3 },
+			GetEmergencyLights = { Capacity = 5, RefillPerSecond = 1 },
 			-- Reads every loaded profile in the server, so it is deliberately
 			-- slower to refill than a lookup a player would repeat.
 			GetShoulderNumberRoster = { Capacity = 3, RefillPerSecond = 0.2 },
@@ -2048,6 +2091,9 @@ local Config = {
 			GetPresentedId = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
 			PhoneSendText = { Capacity = 5, RefillPerSecond = 0.5 },
+			-- Money movement is intentionally slower than messaging. Every accepted
+			-- request performs two persistent economy transactions.
+			PhoneTransferFunds = { Capacity = 3, RefillPerSecond = 0.2 },
 			PhonePlaceCall = { Capacity = 3, RefillPerSecond = 0.25 },
 			PhoneAnswerCall = { Capacity = 3, RefillPerSecond = 0.5 },
 			PhoneEndCall = { Capacity = 4, RefillPerSecond = 1 },

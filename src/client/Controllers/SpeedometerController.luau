@@ -162,7 +162,7 @@ function SpeedometerController:_mount()
 	fuelMark.Text = "FUEL"
 	fuelMark.AnchorPoint = Vector2.new(1, 0)
 	fuelMark.Position = UDim2.new(1, -110, 0, 79)
-	fuelMark.Size = UDim2.fromOffset(34, 14)
+	fuelMark.Size = UDim2.fromOffset(66, 14)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Right
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
@@ -282,10 +282,19 @@ function SpeedometerController:Start()
 			-- "NO PLATE" reads as a fault the driver ought to do something about,
 			-- when it only means this car was not spawned through the framework.
 			local registration = seat:GetAttribute("RoleplayOSRegistration")
+			local mileage = seat:GetAttribute("RoleplayOSMileage")
+			if type(mileage) ~= "number" and seat.Parent then
+				mileage = seat.Parent:GetAttribute("RoleplayOSMileage")
+			end
 			local plated = type(registration) == "string" and registration ~= ""
 			self.plate.Visible = plated
 			if plated then
-				self:_setText(self.plate, registration :: string)
+				self:_setText(
+					self.plate,
+					if type(mileage) == "number"
+						then string.format("%s  ·  %.1f MI", registration, mileage)
+						else registration :: string
+				)
 			end
 
 			-- The sweep follows engine speed where the chassis reports it, since
@@ -307,6 +316,7 @@ function SpeedometerController:Start()
 			self.fuelMark.Visible = metered
 			if metered then
 				local level = fuel :: number
+				self:_setText(self.fuelMark, string.format("FUEL %d%%", math.floor(level + 0.5)))
 				self.fuelFill.Size = UDim2.fromScale(math.clamp(level / 100, 0, 1), 1)
 				self.fuelFill.BackgroundColor3 = if level <= 10
 					then C.Danger

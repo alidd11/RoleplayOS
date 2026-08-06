@@ -11,6 +11,7 @@
 	03_Gamepasses  - pass IDs created for this experience
 	04_Uniforms    - Roblox shirt and trouser template IDs
 	05_Balancing   - starting cash, character slots and common timings
+	01_Deployment  - also enables production integrations after their secrets exist
 
 	Use numbers without quotes for Roblox IDs. Leave an unknown asset ID as an
 	empty string, never as a catalogue URL. Publish only after the production

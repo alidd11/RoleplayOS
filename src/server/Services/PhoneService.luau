@@ -149,6 +149,17 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 			end
 		end
 	end
+	local transactions = {}
+	local sourceTransactions = character.Economy.Transactions or {}
+	for index = #sourceTransactions, math.max(1, #sourceTransactions - 19), -1 do
+		local transaction = sourceTransactions[index]
+		table.insert(transactions, {
+			Amount = transaction.Amount,
+			Direction = transaction.Direction,
+			Description = transaction.Description or transaction.ReasonCode or "Transaction",
+			Timestamp = transaction.Timestamp,
+		})
+	end
 	return {
 		Number = phone.Number,
 		Messages = table.clone(phone.Messages),
@@ -162,11 +173,43 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 			DateOfBirth = character.Identity.DateOfBirth,
 			CharacterId = character.CharacterId,
 		},
+		Bank = {
+			Balance = character.Economy.Balance,
+			Cash = character.Economy.Cash,
+			Transactions = transactions,
+			TransferMaximum = self.context.Configuration.Economy.TransferMaximum,
+		},
 		EmergencyNumber = self.context.Configuration.Phone.EmergencyNumber,
 		ActiveCall = self.userCalls[player.UserId] and self.calls[self.userCalls[player.UserId]]
 			or nil,
 	},
 		nil
+end
+
+function PhoneService:TransferFunds(player: Player, rawNumber: any, rawAmount: any): (any?, string?)
+	local number = PhoneValidator.number(rawNumber)
+	if not number then
+		return nil, "INVALID_RECIPIENT_NUMBER"
+	end
+	local recipient = select(1, self:_findByNumber(number))
+	if not recipient then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+	local transfer, reason =
+		self.context.Services:Get("EconomyService"):Transfer(player, recipient, rawAmount)
+	if not transfer then
+		return nil, reason
+	end
+	local senderCharacter = self:_character(player)
+	local senderName = if senderCharacter
+		then senderCharacter.Identity.FirstName .. " " .. senderCharacter.Identity.LastName
+		else "Another player"
+	self.event:FireClient(recipient, {
+		Kind = "BankTransfer",
+		Amount = transfer.Amount,
+		From = senderName,
+	})
+	return transfer, nil
 end
 
 function PhoneService:SendText(player: Player, rawNumber: any, rawMessage: any): (any?, string?)

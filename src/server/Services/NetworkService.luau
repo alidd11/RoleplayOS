@@ -157,6 +157,11 @@ function NetworkService:Start()
 			and (payload.Stage == nil or type(payload.Stage) == "number")
 			and (payload.Lights == nil or type(payload.Lights) == "boolean")
 			and (payload.Siren == nil or type(payload.Siren) == "string")
+			and (payload.Circuit == nil or type(payload.Circuit) == "string")
+			and (payload.Enabled == nil or type(payload.Enabled) == "boolean")
+			and (payload.RunLock == nil or type(payload.RunLock) == "boolean")
+			and (payload.LowPower == nil or type(payload.LowPower) == "boolean")
+			and (payload.Reset == nil or type(payload.Reset) == "boolean")
 	end, function(player, payload, requestId)
 		local ok, reason = self.context.Services:Get("EmergencyLightsService"):Set(player, payload)
 		if not ok then
@@ -175,6 +180,17 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = self.context.Services:Get("EmergencyLightsService"):GetState(player),
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("GetEmergencyLights", function(payload)
+		return type(payload) == "table"
+	end, function(player, _, requestId)
 		return {
 			Success = true,
 			Code = "OK",
@@ -919,6 +935,32 @@ function NetworkService:Start()
 			Code = if message then "OK" else reason,
 			Message = if message then "Message sent." else "The message could not be sent.",
 			Data = message,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("PhoneTransferFunds", function(payload)
+		return type(payload) == "table"
+			and type(payload.Number) == "string"
+			and type(payload.Amount) == "number"
+	end, function(player, payload, requestId)
+		local transfer, reason = self.context.Services
+			:Get("PhoneService")
+			:TransferFunds(player, payload.Number, payload.Amount)
+		local messages = {
+			INSUFFICIENT_FUNDS = "You do not have enough money in your bank account.",
+			SELF_TRANSFER = "You cannot send money to yourself.",
+			TRANSFER_LIMIT = "That transfer exceeds the per-transfer limit.",
+			TRANSFER_IN_PROGRESS = "Your previous transfer is still being processed.",
+			INVALID_RECIPIENT_NUMBER = "Enter a valid phone number.",
+			PHONE_RECIPIENT_UNAVAILABLE = "That player is not available in this server.",
+		}
+		return {
+			Success = transfer ~= nil,
+			Code = if transfer then "OK" else reason,
+			Message = if transfer
+				then string.format("£%d sent to %s.", transfer.Amount, transfer.Recipient)
+				else messages[reason] or "The transfer could not be completed.",
+			Data = transfer,
 			RequestId = requestId,
 		}
 	end)

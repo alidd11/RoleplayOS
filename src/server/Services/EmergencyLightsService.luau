@@ -95,9 +95,22 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 	model:SetAttribute(settings.StateAttribute, false)
 	model:SetAttribute(settings.StageAttribute, 0)
 	model:SetAttribute(settings.SirenAttribute, "")
+	model:SetAttribute(settings.RunLockAttribute, false)
+	model:SetAttribute(settings.LowPowerAttribute, false)
+	for circuit in settings.Circuits do
+		model:SetAttribute(settings.CircuitAttributePrefix .. circuit, false)
+	end
 	model:SetAttribute("RoleplayOSLightPrimary", department.Primary)
 	model:SetAttribute("RoleplayOSLightSecondary", department.Secondary)
 	CollectionService:AddTag(model, settings.Tag)
+end
+
+function EmergencyLightsService:_authorised(player: Player): boolean
+	local duty = self.context.Services:Get("DutyService"):Get(player)
+	return duty ~= nil
+		and type(duty.DepartmentId) == "string"
+		and self:_settings().Departments[duty.DepartmentId] ~= nil
+		and RolePermissions.has(self.context.Configuration, duty, "EmergencyLights")
 end
 
 -- The vehicle this player is actually driving, or nil.
@@ -158,9 +171,33 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 	elseif request.Lights ~= nil then
 		stage = if request.Lights == true then settings.Stages else 0
 	end
+	if request.Reset == true then
+		stage = 0
+		for circuit in settings.Circuits do
+			model:SetAttribute(settings.CircuitAttributePrefix .. circuit, false)
+		end
+		model:SetAttribute(settings.RunLockAttribute, false)
+		model:SetAttribute(settings.LowPowerAttribute, false)
+	elseif type(request.Circuit) == "string" then
+		if settings.Circuits[request.Circuit] == nil or type(request.Enabled) ~= "boolean" then
+			return false, "INVALID_LIGHT_CIRCUIT"
+		end
+		model:SetAttribute(settings.CircuitAttributePrefix .. request.Circuit, request.Enabled)
+	elseif type(request.RunLock) == "boolean" then
+		model:SetAttribute(settings.RunLockAttribute, request.RunLock)
+	elseif type(request.LowPower) == "boolean" then
+		model:SetAttribute(settings.LowPowerAttribute, request.LowPower)
+	end
 
 	model:SetAttribute(settings.StageAttribute, stage)
-	model:SetAttribute(settings.StateAttribute, stage > 0)
+	local anyCircuit = false
+	for circuit in settings.Circuits do
+		if model:GetAttribute(settings.CircuitAttributePrefix .. circuit) == true then
+			anyCircuit = true
+			break
+		end
+	end
+	model:SetAttribute(settings.StateAttribute, stage > 0 or anyCircuit)
 
 	if type(request.Siren) == "string" then
 		-- An unknown tone is silence rather than an error. The tones are
@@ -179,8 +216,16 @@ end
 function EmergencyLightsService:GetState(player: Player): any
 	local settings = self:_settings()
 	local model = self:_drivenVehicle(player)
-	if not model or not CollectionService:HasTag(model, settings.Tag) then
+	if
+		not model
+		or not CollectionService:HasTag(model, settings.Tag)
+		or not self:_authorised(player)
+	then
 		return { Available = false, Stage = 0, Lights = false, Siren = "" }
+	end
+	local circuits = {}
+	for circuit in settings.Circuits do
+		circuits[circuit] = model:GetAttribute(settings.CircuitAttributePrefix .. circuit) == true
 	end
 	return {
 		Available = true,
@@ -188,6 +233,9 @@ function EmergencyLightsService:GetState(player: Player): any
 		Lights = model:GetAttribute(settings.StateAttribute) == true,
 		Siren = model:GetAttribute(settings.SirenAttribute) or "",
 		Tones = settings.Sirens,
+		Circuits = circuits,
+		RunLock = model:GetAttribute(settings.RunLockAttribute) == true,
+		LowPower = model:GetAttribute(settings.LowPowerAttribute) == true,
 	}
 end
 

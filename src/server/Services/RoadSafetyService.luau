@@ -15,6 +15,7 @@
 -- than to the person or the vehicle, and it is checked at the moment the camera
 -- reports, because that is the only moment it is true of.
 
+local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
@@ -25,11 +26,18 @@ local Workspace = game:GetService("Workspace")
 -- from it can still ask.
 local BRIDGE_NAME = "RoleplayOSIssueFine"
 
-local RoadSafetyService = { sensors = {}, cooldowns = {} }
+local RoadSafetyService = {
+	sensors = {},
+	taggedSensors = {},
+	cooldowns = {},
+	journeys = {},
+	running = false,
+}
 
 function RoadSafetyService:Init(context: any)
 	self.context = context
 	self.connections = {}
+	self.fineEvent = context.Network:RegisterEvent("RoadSafetyFine")
 end
 
 -- A door for the camera system in the world.
@@ -55,6 +63,7 @@ function RoadSafetyService:Start()
 	bridge.Parent = ServerStorage
 	self.bridge = bridge
 	self:_adoptCameras()
+	self:_startTaggedSensors()
 end
 
 -- Takes over every speed camera in the world.
@@ -155,6 +164,27 @@ function RoadSafetyService:_watchSensor(camera: Model, sensor: BasePart)
 	)
 end
 
+-- Resolves any body part touching a sensor to the vehicle's driver seat. Camera
+-- triggers normally touch a bumper, wheel or chassis first; requiring the
+-- enclosed VehicleSeat itself to cross the trigger misses most realistic cars.
+function RoadSafetyService:_seatFromHit(hit: BasePart): VehicleSeat?
+	if hit:IsA("VehicleSeat") then
+		return hit
+	end
+	local assembly = hit.AssemblyRootPart
+	local current: Instance? = hit
+	while current and current ~= Workspace do
+		if current:IsA("Model") then
+			local seat = current:FindFirstChildWhichIsA("VehicleSeat", true)
+			if seat and (not assembly or seat.AssemblyRootPart == assembly) then
+				return seat
+			end
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
 -- Flashes the camera, where it has a light to flash with.
 function RoadSafetyService:_flash(camera: Model)
 	local settings = self.context.Configuration.RoadSafety
@@ -198,11 +228,12 @@ function RoadSafetyService:_registrationOf(seat: BasePart): (string?, Model?)
 end
 
 function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePart)
-	if not hit:IsA("VehicleSeat") then
+	local seat = self:_seatFromHit(hit)
+	if not seat then
 		return
 	end
 	-- Touched fires on an empty seat as readily as an occupied one.
-	local occupant = hit.Occupant
+	local occupant = seat.Occupant
 	if not occupant then
 		return
 	end
@@ -219,7 +250,7 @@ function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePa
 		perSensor = {}
 		self.cooldowns[sensor] = perSensor
 	end
-	if (perSensor[hit] or 0) > now then
+	if (perSensor[seat] or 0) > now then
 		return
 	end
 
@@ -239,16 +270,17 @@ function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePa
 	if mph < limit + settings.ToleranceMph then
 		return
 	end
-	perSensor[hit] = now + settings.SensorCooldownSeconds
+	perSensor[seat] = now + settings.SensorCooldownSeconds
 
-	local registration, vehicle = self:_registrationOf(hit)
+	local registration, vehicle = self:_registrationOf(seat)
 	local issued = self:IssueFine({
 		Registration = registration,
 		Mph = mph,
 		LimitMph = limit,
 		Vehicle = vehicle,
 		Driver = player,
-		Location = camera.Name,
+		CameraId = camera:GetAttribute("CameraId") or camera.Name,
+		Location = camera:GetAttribute("Location") or camera.Name,
 		Kind = "SpeedCamera",
 	})
 	-- Flashed only when somebody was actually fined. Flashing a responding
@@ -257,6 +289,153 @@ function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePa
 	if issued then
 		self:_flash(camera)
 	end
+end
+
+function RoadSafetyService:_vehicleFromPart(hit: BasePart): (Model?, VehicleSeat?, Player?)
+	local seat = self:_seatFromHit(hit)
+	if not seat or not seat.Occupant then
+		return nil, seat, nil
+	end
+	local player = Players:GetPlayerFromCharacter(seat.Occupant.Parent)
+	local _, vehicle = self:_registrationOf(seat)
+	return vehicle, seat, player
+end
+
+function RoadSafetyService:_taggedFixed(sensor: BasePart, hit: BasePart)
+	local vehicle, seat, player = self:_vehicleFromPart(hit)
+	if not vehicle or not seat or not player then
+		return
+	end
+	local now = os.clock()
+	local perSensor = self.cooldowns[sensor]
+	if not perSensor then
+		perSensor = {}
+		self.cooldowns[sensor] = perSensor
+	end
+	if (perSensor[vehicle] or 0) > now then
+		return
+	end
+	local telemetry = self.context.Services:Get("VehicleService"):GetTelemetry(vehicle)
+	local mph = if telemetry
+		then telemetry.SpeedMph
+		else seat.AssemblyLinearVelocity.Magnitude
+			* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+	local issued = self:IssueFine({
+		Registration = vehicle:GetAttribute("RoleplayOSRegistration"),
+		Mph = mph,
+		LimitMph = sensor:GetAttribute("SpeedLimitMph") or 30,
+		Vehicle = vehicle,
+		Driver = player,
+		CameraId = sensor:GetAttribute("CameraId") or sensor.Name,
+		Location = sensor:GetAttribute("Location") or sensor.Name,
+		Kind = "Fixed",
+	})
+	perSensor[vehicle] = now
+		+ (if issued then self.context.Configuration.RoadSafety.SensorCooldownSeconds else 1)
+end
+
+function RoadSafetyService:_taggedAverage(sensor: BasePart, hit: BasePart, isEntry: boolean)
+	local vehicle, _, player = self:_vehicleFromPart(hit)
+	if not vehicle or not player then
+		return
+	end
+	local registration = vehicle:GetAttribute("RoleplayOSRegistration")
+	local identity = if type(registration) == "string" and registration ~= ""
+		then registration
+		else "driver:" .. tostring(player.UserId)
+	local corridor = sensor:GetAttribute("CorridorId") or "Default"
+	local key = identity .. ":" .. tostring(corridor)
+	if isEntry then
+		self.journeys[key] = { Time = os.clock(), Position = sensor.Position }
+		return
+	end
+	local entry = self.journeys[key]
+	self.journeys[key] = nil
+	if not entry then
+		return
+	end
+	local elapsed = os.clock() - entry.Time
+	if
+		elapsed <= 0
+		or elapsed > self.context.Configuration.RoadSafety.AverageJourneyExpirySeconds
+	then
+		return
+	end
+	local mph = (sensor.Position - entry.Position).Magnitude
+		/ elapsed
+		* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+	self:IssueFine({
+		Registration = registration,
+		Mph = mph,
+		LimitMph = sensor:GetAttribute("SpeedLimitMph") or 30,
+		Vehicle = vehicle,
+		Driver = player,
+		CameraId = sensor:GetAttribute("CameraId") or sensor.Name,
+		Location = sensor:GetAttribute("Location") or sensor.Name,
+		Kind = "Average",
+	})
+end
+
+function RoadSafetyService:_connectTag(tag: string, callback: (BasePart, BasePart) -> ())
+	local function watch(instance: Instance)
+		if
+			not instance:IsA("BasePart")
+			or self.taggedSensors[instance]
+			or self.sensors[instance]
+		then
+			return
+		end
+		self.taggedSensors[instance] = instance.Touched:Connect(function(hit)
+			callback(instance, hit)
+		end)
+	end
+	local function unwatch(instance: Instance)
+		local connection = self.taggedSensors[instance]
+		if connection then
+			connection:Disconnect()
+			self.taggedSensors[instance] = nil
+		end
+	end
+	for _, instance in CollectionService:GetTagged(tag) do
+		watch(instance)
+	end
+	table.insert(self.connections, CollectionService:GetInstanceAddedSignal(tag):Connect(watch))
+	table.insert(self.connections, CollectionService:GetInstanceRemovedSignal(tag):Connect(unwatch))
+end
+
+function RoadSafetyService:_startTaggedSensors()
+	local settings = self.context.Configuration.RoadSafety
+	self:_connectTag(settings.SpeedCameraTag, function(sensor, hit)
+		self:_taggedFixed(sensor, hit)
+	end)
+	self:_connectTag(settings.AverageEntryTag, function(sensor, hit)
+		self:_taggedAverage(sensor, hit, true)
+	end)
+	self:_connectTag(settings.AverageExitTag, function(sensor, hit)
+		self:_taggedAverage(sensor, hit, false)
+	end)
+	self.running = true
+	task.spawn(function()
+		while self.running do
+			task.wait(settings.StateCleanupSeconds)
+			local now = os.clock()
+			for sensor, perSensor in self.cooldowns do
+				for vehicle, expiresAt in perSensor do
+					if expiresAt <= now then
+						perSensor[vehicle] = nil
+					end
+				end
+				if next(perSensor) == nil then
+					self.cooldowns[sensor] = nil
+				end
+			end
+			for key, journey in self.journeys do
+				if now - journey.Time > settings.AverageJourneyExpirySeconds then
+					self.journeys[key] = nil
+				end
+			end
+		end
+	end)
 end
 
 -- Whether a value read from an attribute or a value object means "lights on".
@@ -518,12 +697,34 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 
 	local points = self:_points(excess)
 	local fine = math.min(settings.MaximumFine, settings.FineBase + excess * settings.FinePerMph)
+	local issuingOfficer = request.IssuingOfficer
+	local officerName, officerRank = nil, nil
+	if
+		typeof(issuingOfficer) == "Instance"
+		and issuingOfficer:IsA("Player")
+		and issuingOfficer.Parent == Players
+	then
+		local duty = self.context.Services:Get("DutyService"):Get(issuingOfficer)
+		if duty and duty.DepartmentId == "Police" then
+			local officerSession =
+				self.context.Services:Get("DataService"):GetSession(issuingOfficer)
+			local profile = officerSession
+				and officerSession.Profile.DutyProfiles[duty.DutyProfileId]
+			officerName = issuingOfficer.Name
+			officerRank = self.context.Services
+				:Get("DepartmentService")
+				:GetRankName("Police", if profile then tonumber(profile.Rank) or 1 else 1)
+		end
+	end
 	local record = {
 		FineId = HttpService:GenerateGUID(false),
 		IssuedAt = os.time(),
 		Registration = if type(registration) == "string" and registration ~= ""
 			then registration
 			else "UNREGISTERED",
+		CameraId = if type(request.CameraId) == "string" and request.CameraId ~= ""
+			then request.CameraId
+			else "UNKNOWN",
 		Location = if type(request.Location) == "string" then request.Location else "Speed camera",
 		Type = if type(request.Kind) == "string" then request.Kind else "SpeedCamera",
 		RecordedMph = math.floor(speed + 0.5),
@@ -531,10 +732,37 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 		Fine = fine,
 		Points = points,
 		Status = "Unpaid",
+		Driver = player.Name,
+		DriverUserId = player.UserId,
+		IssuingDepartment = self.context.Configuration.Integrations.Discord.SpeedingFines.DepartmentName,
+		IssuingOfficer = officerName,
+		IssuingOfficerRank = officerRank,
 	}
 
 	character.DrivingRecord = character.DrivingRecord or { Points = 0, Fines = {} }
 	character.DrivingRecord.Fines = character.DrivingRecord.Fines or {}
+	if settings.AutomaticallyDebitFines then
+		local paid, paymentReason = self.context.Services:Get("EconomyService"):Apply(player, {
+			TransactionId = "speed-camera:" .. record.FineId,
+			CharacterId = character.CharacterId,
+			Direction = "Debit",
+			Amount = fine,
+			ReasonCode = "SPEED_CAMERA_FINE",
+			RelatedEntityId = record.FineId,
+			Metadata = {
+				CameraId = record.CameraId,
+				Registration = record.Registration,
+				RecordedMph = record.RecordedMph,
+				LimitMph = record.LimitMph,
+			},
+		})
+		if paid then
+			record.Status = "Paid"
+			record.PaidAt = os.time()
+		else
+			record.PaymentFailureCode = paymentReason
+		end
+	end
 	table.insert(character.DrivingRecord.Fines, record)
 	-- Trimmed oldest first. Cameras issue these unattended, so this is the one
 	-- history in a profile that grows without anybody choosing to add to it, and
@@ -547,6 +775,17 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
+	self.fineEvent:FireClient(player, {
+		Fine = record.Fine,
+		Points = record.Points,
+		RecordedMph = record.RecordedMph,
+		LimitMph = record.LimitMph,
+		Status = record.Status,
+	})
+	-- External reporting is queued after persistence and never participates in
+	-- whether the fine succeeds. Automatic cameras are labelled as such; a
+	-- police-issued request can pass IssuingOfficer for the officer and rank.
+	self.context.Services:Get("DiscordFineService"):Enqueue(record, issuingOfficer)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = 0,
 		Action = "RoadSafety.OffenceIssued",
@@ -557,12 +796,18 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 end
 
 function RoadSafetyService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	for _, connection in self.taggedSensors do
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
 	table.clear(self.sensors)
+	table.clear(self.taggedSensors)
 	table.clear(self.cooldowns)
+	table.clear(self.journeys)
 	if self.bridge then
 		self.bridge:Destroy()
 		self.bridge = nil

@@ -6,8 +6,10 @@ they are set, and different failure modes.
 
 ## 1. How far away does the world stop existing
 
-`StreamingEnabled`, set in the project files under `Workspace`, because it
-cannot be changed at runtime.
+`StreamingEnabled` cannot be changed at runtime. Set it directly on `Workspace`
+in Roblox Studio because the safe production Rojo project deliberately does
+not manage `Workspace`; doing so would expand the sync boundary into the
+production map.
 
 Without it every client downloads and permanently holds the entire city, every
 vehicle in it, and all of their meshes, textures and sounds, whether or not the
@@ -25,9 +27,10 @@ stays loaded for the person driving and streams normally for everyone else.
 Marking it persistent for everybody would put every vehicle in the server into
 every client's memory, which is the cost streaming exists to avoid.
 
-Workspace is marked `$ignoreUnknownInstances` in the project files. Rojo sets
-these properties and does not touch the map, which does not live in this
-repository and would otherwise be deleted as unmanaged.
+Apply the values above to the place in Studio before publishing. The deployment
+validator prevents the production project from owning `Workspace`, while the
+DataModel and managed services retain `$ignoreUnknownInstances` so Rojo does
+not remove content outside RoleplayOS.
 
 > **`StreamingMinRadius` is not settable and is not listed above.** Studio's
 > property grid shows it, but it is not scriptable: reading it from Lua throws

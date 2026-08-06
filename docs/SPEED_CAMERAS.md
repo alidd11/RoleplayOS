@@ -1,7 +1,7 @@
 # Speed cameras
 
-Place a camera model in the world. Nothing else is needed: no tag, no
-configuration, no script edit.
+Place a compatible camera model in the world. Fixed and average-speed detection
+volumes using the existing RoleplayOS tags are also supported.
 
 ## How a camera is found
 
@@ -18,6 +18,25 @@ the kit's model and the change is undone by ticking one box.
 
 Speed limits are still read from each model's `Configuration.SpeedLimit`, so
 setting a limit works exactly as the kit intends.
+
+Set optional `CameraId` and `Location` attributes on the camera model. The ID is
+stored with every offence and must remain stable after the camera is moved or
+renamed; Location is the player-facing road or area name shown in records.
+
+The sensor may touch any part of a vehicle. RoleplayOS resolves the complete
+assembly and its occupied `VehicleSeat`; the seat itself does not need to pass
+through the sensor.
+
+## Tagged and average-speed cameras
+
+- Tag a fixed detection volume `RoleplayOSSpeedCamera` and set its optional
+  `SpeedLimitMph`, `Location`, and `CameraId` attributes.
+- Tag the first average-speed volume `RoleplayOSAverageSpeedEntry` and the last
+  `RoleplayOSAverageSpeedExit`.
+- Give both average-speed volumes the same `CorridorId` and `SpeedLimitMph`.
+
+Average speed is calculated from the distance between the two volumes and the
+server-measured journey time. Incomplete journeys expire automatically.
 
 ## The blue light exemption
 
@@ -71,6 +90,12 @@ through a thirty.
 Fines and penalty points land on the character's driving record, so they appear
 in the MDT and in the person record an officer searches.
 
+With `Config.RoadSafety.AutomaticallyDebitFines` enabled, payment goes through
+the server-authoritative `EconomyService`. Sufficient funds produce a matching
+economy transaction and mark the fine paid. If the balance is too low, no money
+is fabricated or taken below zero; the fine remains unpaid on the driving
+record. The imported pack's leaderstats scripts are not required.
+
 ## For another camera system
 
 `ServerStorage.RoleplayOSIssueFine` is a `BindableFunction` taking the same
@@ -85,8 +110,31 @@ local issued, reason = game:GetService("ServerStorage")
         LimitMph = limit,
         Vehicle = vehicleModel,
         Driver = driverPlayer,
+		-- Set only for a penalty deliberately issued by an officer. Automatic
+		-- camera detections omit this field.
+		IssuingOfficer = officerPlayer,
     })
 ```
+
+## Whitelisted police Discord reports
+
+Police-issued penalties can be posted to Discord guild `1532864611706077194`,
+channel `1534723525275811891`. A channel link cannot receive messages, so create
+an incoming webhook in that channel and save its complete URL as the Creator Hub
+secret `RoleplayOSSpeedingFinesWebhook`. Enable HTTP requests for the experience,
+then set `Integrations.Discord.SpeedingFines.Enabled` to `true` in
+`EDIT_HERE/01_Deployment`.
+
+Delivery requires all of the following and fails closed:
+
+1. the current server kind is exactly `Whitelisted`;
+2. `IssuingOfficer` is on active Police duty;
+3. Roblox confirms that officer belongs to the configured Police group; and
+4. the fine has already been persisted in RoleplayOS.
+
+Public gamepass access, private communities, ordinary reserved servers and
+automatic cameras never enter the Discord queue. A webhook failure is logged but
+cannot delay, cancel or roll back the in-game penalty.
 
 | Reason | Meaning |
 | --- | --- |
