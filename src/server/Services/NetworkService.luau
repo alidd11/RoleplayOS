@@ -940,19 +940,20 @@ function NetworkService:Start()
 	end)
 	self.context.Network:RegisterFunction("PhoneTransferFunds", function(payload)
 		return type(payload) == "table"
-			and type(payload.Number) == "string"
+			and type(payload.Recipient) == "string"
 			and type(payload.Amount) == "number"
 	end, function(player, payload, requestId)
 		local transfer, reason = self.context.Services
 			:Get("PhoneService")
-			:TransferFunds(player, payload.Number, payload.Amount)
+			:TransferFunds(player, payload.Recipient, payload.Amount)
 		local messages = {
 			INSUFFICIENT_FUNDS = "You do not have enough money in your bank account.",
 			SELF_TRANSFER = "You cannot send money to yourself.",
 			TRANSFER_LIMIT = "That transfer exceeds the per-transfer limit.",
 			TRANSFER_IN_PROGRESS = "Your previous transfer is still being processed.",
-			INVALID_RECIPIENT_NUMBER = "Enter a valid phone number.",
-			PHONE_RECIPIENT_UNAVAILABLE = "That player is not available in this server.",
+			INVALID_RECIPIENT_NAME = "Enter the username of the person you are paying.",
+			RECIPIENT_NAME_AMBIGUOUS = "More than one player is using that display name. Use their username.",
+			PHONE_RECIPIENT_UNAVAILABLE = "That player is not in this server.",
 		}
 		return {
 			Success = transfer ~= nil,

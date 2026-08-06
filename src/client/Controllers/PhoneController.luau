@@ -440,7 +440,10 @@ function PhoneController:_renderBank()
 	cash.Size = UDim2.new(1, -28, 0, 14)
 	cash.TextColor3 = Color3.fromRGB(173, 204, 255)
 
-	local recipient = input(self.content, "Recipient phone number")
+	-- By username. A phone number is something a player has to be told before
+	-- they can be paid and nothing in the game tells them one; a username is on
+	-- the nameplate above the person they are standing next to.
+	local recipient = input(self.content, "Recipient username")
 	recipient.Position = UDim2.fromOffset(0, 104)
 	recipient.Size = UDim2.new(0.61, -4, 0, 42)
 	recipient.TextYAlignment = Enum.TextYAlignment.Center
@@ -484,7 +487,7 @@ function PhoneController:_renderBank()
 		send.Text = "SENDING…"
 		local response = self.context.Controllers.NetworkController:Request(
 			"PhoneTransferFunds",
-			{ Number = recipient.Text, Amount = numericAmount }
+			{ Recipient = recipient.Text, Amount = numericAmount }
 		)
 		self.context.Controllers.NotificationController:Show(response.Message, "Bank")
 		if response.Success then

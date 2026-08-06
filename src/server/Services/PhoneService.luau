@@ -186,14 +186,46 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 		nil
 end
 
-function PhoneService:TransferFunds(player: Player, rawNumber: any, rawAmount: any): (any?, string?)
-	local number = PhoneValidator.number(rawNumber)
-	if not number then
-		return nil, "INVALID_RECIPIENT_NUMBER"
+-- Finds a player in this server by Roblox username, or by display name.
+--
+-- Case is ignored and surrounding spaces are trimmed, because somebody typing a
+-- name they read off a nameplate should not have to match its capitals. An
+-- ambiguous display name is refused rather than guessed at: two people can share
+-- one, and sending money to the wrong one of them is not recoverable.
+function PhoneService:_findByName(query: string): (Player?, string?)
+	local wanted = string.lower(string.match(query, "^%s*(.-)%s*$") or "")
+	if wanted == "" then
+		return nil, "INVALID_RECIPIENT_NAME"
 	end
-	local recipient = select(1, self:_findByNumber(number))
+	local byDisplay = nil
+	local displayMatches = 0
+	for _, other in Players:GetPlayers() do
+		if string.lower(other.Name) == wanted then
+			-- A username is unique on Roblox, so an exact one is the answer and
+			-- nothing else needs looking at.
+			return other, nil
+		end
+		if string.lower(other.DisplayName) == wanted then
+			displayMatches += 1
+			byDisplay = other
+		end
+	end
+	if displayMatches > 1 then
+		return nil, "RECIPIENT_NAME_AMBIGUOUS"
+	end
+	return byDisplay, if byDisplay then nil else "PHONE_RECIPIENT_UNAVAILABLE"
+end
+
+function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any): (any?, string?)
+	-- By username rather than by phone number. A number is something a player has
+	-- to be told before they can be paid, and there is nowhere in the game that
+	-- tells them: a name is on the nameplate above the person standing there.
+	if type(rawName) ~= "string" or #rawName > 64 then
+		return nil, "INVALID_RECIPIENT_NAME"
+	end
+	local recipient, findReason = self:_findByName(rawName)
 	if not recipient then
-		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+		return nil, findReason
 	end
 	local transfer, reason =
 		self.context.Services:Get("EconomyService"):Transfer(player, recipient, rawAmount)
