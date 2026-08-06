@@ -169,6 +169,42 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		return nil, creditReason
 	end
 	self.transferring[sender.UserId] = nil
+
+	-- Both halves are written now, and the recipient's first.
+	--
+	-- The two people live under separate DataStore keys, so a transfer that is
+	-- perfectly atomic in memory is not atomic on disk. Left to the autosave,
+	-- either could be written up to a minute later or not at all: if the
+	-- recipient's lands and the sender's does not, money has been created, and
+	-- the reverse destroys it.
+	--
+	-- Writing immediately shrinks that window from a minute to the length of two
+	-- calls. Recipient first, deliberately, because the orders of failure are not
+	-- equally bad: a transfer that vanishes can be given back from the line
+	-- below, while one that doubles is loose in the economy for good and there is
+	-- nothing to take it from.
+	--
+	-- This is a narrowing, not a fix. Making it truly atomic needs a ledger both
+	-- profiles are reconciled against, which is a bigger change than this is.
+	local data = self.context.Services:Get("DataService")
+	local recipientSaved = data:Save(recipient)
+	local senderSaved = data:Save(sender)
+	if not recipientSaved or not senderSaved then
+		-- Everything needed to put it right by hand, in one line, because the
+		-- audit trail is an in-memory ring that does not survive the shutdown
+		-- this would most likely be discovered after.
+		self.context.Logger:Error("Player transfer may not have persisted on both sides", {
+			TransferId = transferId,
+			Amount = amount,
+			SenderUserId = sender.UserId,
+			SenderCharacterId = senderId,
+			SenderSaved = senderSaved,
+			RecipientUserId = recipient.UserId,
+			RecipientCharacterId = recipientId,
+			RecipientSaved = recipientSaved,
+		})
+	end
+
 	return {
 		TransferId = transferId,
 		Amount = amount,
