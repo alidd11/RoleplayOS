@@ -10,6 +10,8 @@ local VehicleService = {
 	activeByModel = {},
 	cooldowns = {},
 	connections = {},
+	deathConnections = {},
+	spawnConnections = {},
 	accumulator = 0,
 }
 
@@ -57,6 +59,34 @@ function VehicleService:_configureTerminal(instance: Instance)
 		self.context.Configuration.VehicleSpawning.MaximumInteractionDistance
 end
 
+function VehicleService:_watchDeath(player: Player, character: Model)
+	-- Humanoid.Died rather than CharacterRemoving, because a character is also
+	-- removed for reasons that are not a death — a team change or a manual
+	-- LoadCharacter — and losing the car to those would be a different rule than
+	-- the one asked for. Death is the only trigger here.
+	local found = character:FindFirstChildWhichIsA("Humanoid")
+		or character:WaitForChild("Humanoid", 10)
+	local humanoid = if found and found:IsA("Humanoid") then found else nil
+	if not humanoid or player.Character ~= character then
+		-- The wait above yields, so by now the player may already be on a newer
+		-- character. Arming against the stale one would leave the live character
+		-- unwatched for the rest of the session.
+		return
+	end
+	local previous = self.deathConnections[player.UserId]
+	if previous then
+		previous:Disconnect()
+	end
+	self.deathConnections[player.UserId] = humanoid.Died:Connect(function()
+		-- No grace period. The window between dying and the car going is exactly
+		-- the window in which the player respawns, walks to a terminal and is
+		-- refused with ACTIVE_VEHICLE_EXISTS, and a pending timer would also have
+		-- to be cancelled against the car they spawn next or it would take that
+		-- one instead.
+		self:Despawn(player)
+	end)
+end
+
 function VehicleService:Start()
 	local settings = self.context.Configuration.VehicleSpawning
 	for _, terminal in CollectionService:GetTagged(settings.TerminalTag) do
@@ -73,8 +103,47 @@ function VehicleService:Start()
 		Players.PlayerRemoving:Connect(function(player)
 			self:Despawn(player)
 			self.cooldowns[player.UserId] = nil
+			for _, table_ in { self.deathConnections, self.spawnConnections } do
+				local connection = table_[player.UserId]
+				if connection then
+					connection:Disconnect()
+					table_[player.UserId] = nil
+				end
+			end
 		end)
 	)
+	-- Re-armed on every character, because each respawn brings a new humanoid and
+	-- a watch connected once at join stops firing the moment the player first
+	-- dies. Existing players are covered too: a service restart in Studio would
+	-- otherwise leave everybody already in the server unwatched.
+	local function watch(player: Player)
+		-- Kept per player rather than appended to the service's flat list.
+		--
+		-- A connection pushed into self.connections lives until the server closes,
+		-- and its closure holds the Player, so a four hour server that two hundred
+		-- people passed through would keep every one of them and their last
+		-- character reachable. It is the leak this codebase already has in five
+		-- other services and there was no reason to add a sixth.
+		local previous = self.spawnConnections[player.UserId]
+		if previous then
+			previous:Disconnect()
+		end
+		self.spawnConnections[player.UserId] = player.CharacterAdded:Connect(function(character)
+			self:_watchDeath(player, character)
+		end)
+		local character = player.Character
+		if character then
+			task.defer(function()
+				if player.Parent and player.Character == character then
+					self:_watchDeath(player, character)
+				end
+			end)
+		end
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
 	table.insert(
 		self.connections,
 		RunService.Heartbeat:Connect(function(dt)
@@ -638,7 +707,23 @@ function VehicleService:Despawn(player: Player)
 		self.context.Services:Get("DataService"):MarkDirty(player)
 	end
 	if current and current.Model.Parent then
+		self:_ejectOccupants(current.Model)
 		current.Model:Destroy()
+	end
+end
+
+function VehicleService:_ejectOccupants(model: Model)
+	-- A passenger left seated when the model goes keeps the sitting state with no
+	-- seat under them: they float, cannot walk and have to reset. Standing them up
+	-- first is the only thing that gets them out of a car whose owner just died.
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("Seat") or descendant:IsA("VehicleSeat") then
+			local occupant = descendant.Occupant
+			if occupant then
+				occupant.Sit = false
+				occupant:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+		end
 	end
 end
 
@@ -717,12 +802,21 @@ function VehicleService:Destroy()
 			self.context.Services:Get("DataService"):MarkDirty(player)
 		end
 		self:_disconnectActive(current)
+		self:_ejectOccupants(current.Model)
 		current.Model:Destroy()
 	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, connection in self.deathConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.deathConnections)
+	for _, connection in self.spawnConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.spawnConnections)
 	table.clear(self.activeByUserId)
 	table.clear(self.activeByModel)
 	table.clear(self.cooldowns)
