@@ -343,8 +343,17 @@ function MinimapController:Start()
 	end)
 	self.running = true
 	task.spawn(function()
+		local complained = false
 		while self.running do
-			self:_updateMarker()
+			-- Guarded, because this is the only thing that moves the marker and a
+			-- throw would leave the map frozen with the player's dot where it was
+			-- when it happened. Said once: at eight ticks a second a repeating
+			-- fault would fill the console on its own.
+			local ok, problem = pcall(self._updateMarker, self)
+			if not ok and not complained then
+				complained = true
+				warn("RoleplayOS minimap update failed: " .. tostring(problem))
+			end
 			task.wait(1 / self.settings.UpdateHz)
 		end
 	end)

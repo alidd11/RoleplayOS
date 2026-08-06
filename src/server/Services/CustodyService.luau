@@ -707,29 +707,41 @@ function CustodyService:Start()
 			task.wait(1)
 			local now = os.time()
 			for _, player in Players:GetPlayers() do
-				local sentence = self:_sentence(player)
-				if sentence then
-					local releaseAt = math.max(0, tonumber(sentence.ReleaseAt) or 0)
-					if releaseAt > now then
-						player:SetAttribute("RoleplayOSCustodyReleaseAt", releaseAt)
-						player:SetAttribute("RoleplayOSCustodyRemaining", releaseAt - now)
-					elseif releaseAt > 0 then
-						sentence.ReleaseAt = 0
-						sentence.UpdatedAt = now
-						player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
-						player:SetAttribute("RoleplayOSCustodyRemaining", 0)
-						player.RespawnLocation = nil
-						self.context.Services:Get("DataService"):MarkDirty(player)
-						self.context.Services:Get("AuditService"):Record({
-							ActorUserId = player.UserId,
-							Action = "Custody.SentenceCompleted",
-							Target = tostring(player.UserId),
-							Metadata = {},
-						})
-						pcall(function()
-							player:LoadCharacterAsync()
-						end)
+				-- Guarded per prisoner. This loop is the only thing that ends a
+				-- sentence, so a throw for one detainee left every detainee in the
+				-- server serving theirs for ever, with the server restarting as the
+				-- only way out.
+				local released, problem = pcall(function()
+					local sentence = self:_sentence(player)
+					if sentence then
+						local releaseAt = math.max(0, tonumber(sentence.ReleaseAt) or 0)
+						if releaseAt > now then
+							player:SetAttribute("RoleplayOSCustodyReleaseAt", releaseAt)
+							player:SetAttribute("RoleplayOSCustodyRemaining", releaseAt - now)
+						elseif releaseAt > 0 then
+							sentence.ReleaseAt = 0
+							sentence.UpdatedAt = now
+							player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
+							player:SetAttribute("RoleplayOSCustodyRemaining", 0)
+							player.RespawnLocation = nil
+							self.context.Services:Get("DataService"):MarkDirty(player)
+							self.context.Services:Get("AuditService"):Record({
+								ActorUserId = player.UserId,
+								Action = "Custody.SentenceCompleted",
+								Target = tostring(player.UserId),
+								Metadata = {},
+							})
+							pcall(function()
+								player:LoadCharacterAsync()
+							end)
+						end
 					end
+				end)
+				if not released then
+					self.context.Logger:Error("Custody sentence tick failed", {
+						UserId = player.UserId,
+						Error = tostring(problem),
+					})
 				end
 			end
 		end

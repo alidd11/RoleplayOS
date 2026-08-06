@@ -198,12 +198,21 @@ function LocationController:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(self.settings.UpdateSeconds)
-			local character = Players.LocalPlayer.Character
-			local root = character and character:FindFirstChild("HumanoidRootPart")
-			if root and root:IsA("BasePart") then
-				self:_show(self:_resolve(root.Position))
-			else
-				self:_show("", "")
+			-- Guarded for the same reason as the minimap: resolving a location
+			-- reads world geometry that can be mid-stream, and a throw would stop
+			-- the street name updating for the rest of the session.
+			local ok, problem = pcall(function()
+				local character = Players.LocalPlayer.Character
+				local root = character and character:FindFirstChild("HumanoidRootPart")
+				if root and root:IsA("BasePart") then
+					self:_show(self:_resolve(root.Position))
+				else
+					self:_show("", "")
+				end
+			end)
+			if not ok and not self.complained then
+				self.complained = true
+				warn("RoleplayOS location update failed: " .. tostring(problem))
 			end
 		end
 	end)
