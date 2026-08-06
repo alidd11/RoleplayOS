@@ -3,7 +3,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
-local NeedsService = { states = {}, connections = {} }
+local NeedsService = { states = {}, connections = {}, failureLog = {} }
 
 function NeedsService:Init(context: any)
 	self.context = context
@@ -364,6 +364,22 @@ function NeedsService:_step(player: Player, delta: number)
 	end
 end
 
+-- Reports a failure without flooding the log. This runs twice a second for every
+-- player, so a fault that repeats would write thousands of identical lines and
+-- bury whatever else went wrong.
+function NeedsService:_noteFailure(userId: number, problem: any)
+	local at = os.clock()
+	local previous = self.failureLog[userId]
+	if previous and at - previous < 60 then
+		return
+	end
+	self.failureLog[userId] = at
+	self.context.Logger:Error("Needs step failed", {
+		UserId = userId,
+		Error = tostring(problem),
+	})
+end
+
 function NeedsService:Start()
 	self.running = true
 	task.spawn(function()
@@ -374,7 +390,14 @@ function NeedsService:Start()
 			local delta = math.min(now - last, 1)
 			last = now
 			for _, player in Players:GetPlayers() do
-				self:_step(player, delta)
+				-- Guarded per player. A throw here used to end the loop outright,
+				-- and this loop is the whole of stamina, hunger and sprinting: one
+				-- player in an odd state would have frozen all three for everybody
+				-- in the server, silently, until it restarted.
+				local ok, problem = pcall(self._step, self, player, delta)
+				if not ok then
+					self:_noteFailure(player.UserId, problem)
+				end
 			end
 		end
 	end)
@@ -382,6 +405,7 @@ function NeedsService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.states[player.UserId] = nil
+			self.failureLog[player.UserId] = nil
 		end)
 	)
 	-- Handed out on every spawn rather than only on the first, because a respawn

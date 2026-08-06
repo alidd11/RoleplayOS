@@ -12,6 +12,7 @@ local VehicleService = {
 	connections = {},
 	deathConnections = {},
 	spawnConnections = {},
+	failureLog = {},
 	accumulator = 0,
 }
 
@@ -106,6 +107,24 @@ function VehicleService:_setEngineRunning(model: Instance, seat: Instance?, runn
 	end
 end
 
+-- Reports a failure without flooding the log.
+--
+-- These sit inside loops that run once or twice a second for every player, so a
+-- fault that repeats would write thousands of identical lines and bury whatever
+-- else went wrong. One line per subject per minute is enough to find it.
+function VehicleService:_noteFailure(kind: string, key: any, problem: any)
+	local now = os.clock()
+	local last = self.failureLog[key]
+	if last and now - last < 60 then
+		return
+	end
+	self.failureLog[key] = now
+	self.context.Logger:Error("Vehicle " .. kind .. " failed", {
+		UserId = key,
+		Error = tostring(problem),
+	})
+end
+
 function VehicleService:Start()
 	local settings = self.context.Configuration.VehicleSpawning
 	for _, terminal in CollectionService:GetTagged(settings.TerminalTag) do
@@ -175,7 +194,20 @@ function VehicleService:Start()
 			for userId, active in self.activeByUserId do
 				local player = Players:GetPlayerByUserId(userId)
 				if player then
-					self:_trackVehicle(player, active, elapsed)
+					-- Guarded per vehicle.
+					--
+					-- This is the only Heartbeat on the server and it drives every
+					-- vehicle in it. Unguarded, one throw for one car disconnects
+					-- the binding for good: fuel stops draining, mileage stops
+					-- counting, and an unauthorised driver stops being ejected,
+					-- for everybody, for the rest of the server's life, with
+					-- nothing logged. The chain below reaches duty, access,
+					-- groups, teams and the profile store, so there is plenty
+					-- that can throw.
+					local ok, problem = pcall(self._trackVehicle, self, player, active, elapsed)
+					if not ok then
+						self:_noteFailure("tracking", userId, problem)
+					end
 				end
 			end
 		end)
