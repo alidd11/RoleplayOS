@@ -1028,7 +1028,14 @@ function NetworkService:Start()
 		return {
 			Success = changed,
 			Code = if changed then "OK" else reason,
-			Message = "",
+			-- Said out loud. A refused sprint returned an empty message and the
+			-- client discarded the reply, so a player out of breath or too hungry
+			-- to run pressed shift and got nothing, with no way to tell that from
+			-- the key being broken.
+			Message = if changed
+				then ""
+				elseif reason == "SPRINT_UNAVAILABLE" then "You cannot run right now."
+				else "You are too tired to run.",
 			RequestId = requestId,
 		}
 	end)

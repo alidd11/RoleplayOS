@@ -2016,10 +2016,37 @@ local Config = {
 	},
 	Needs = {
 		WalkSpeed = 16,
-		MinimumSprintSpeed = 18,
-		MaximumSprintSpeed = 24,
-		StaminaDrainPerSecond = 14,
-		StaminaRecoveryPerSecond = 10,
+		-- The sprint used to run from eighteen to twenty four, and it was the
+		-- wrong way round: fastest at the instant you pressed it and slowest by
+		-- the time you noticed, ending at eighteen against a walk of sixteen. The
+		-- last seconds of every sprint were a twelve per cent difference nobody
+		-- can see, which is why holding shift read as doing nothing.
+		--
+		-- The floor is raised so a tiring run is still visibly a run. Stamina
+		-- decides how long you can run for; it should not decide whether running
+		-- looks like walking.
+		MinimumSprintSpeed = 22,
+		MaximumSprintSpeed = 28,
+		-- Fourteen a second emptied a full bar in seven seconds, and ten a second
+		-- took ten to refill it: seven seconds of running bought with ten of
+		-- walking. A sprint that short is over before it is useful.
+		StaminaDrainPerSecond = 9,
+		StaminaRecoveryPerSecond = 12,
+		-- Fitness, earned rather than bought.
+		--
+		-- A character who has played gets more out of the same bar: it empties
+		-- more slowly and fills faster. Drain and recovery are used rather than a
+		-- larger maximum because the bar stays a plain nought to a hundred, so it
+		-- reads the same on day one and day fifty and only behaves better.
+		--
+		-- Bounded deliberately. At the top of the curve a sprint lasts about
+		-- eighteen seconds against eleven, which is a real difference to play
+		-- with and not one that makes a veteran a different species.
+		Fitness = {
+			FullBonusLevel = 40,
+			MaximumDrainReduction = 0.4,
+			MaximumRecoveryBonus = 0.5,
+		},
 		HungerDrainPerSecond = 0.04,
 		Foods = {
 			Water = { Name = "Water", Price = 4, Hunger = 4 },

@@ -114,10 +114,20 @@ function NeedsController:Start()
 			then Color3.fromRGB(46, 104, 168)
 			else Color3.fromRGB(22, 30, 44)
 		task.spawn(function()
-			self.context.Controllers.NetworkController:Request(
+			local response = self.context.Controllers.NetworkController:Request(
 				"SetSprintState",
 				{ Sprinting = sprinting }
 			)
+			-- The reply was being thrown away, so a refused sprint looked exactly
+			-- like a dead key. Only a refusal to start is worth saying: failing to
+			-- stop running is not something anybody needs telling about, and the
+			-- pad colour is corrected either way.
+			if not response.Success and sprinting then
+				sprintPad.BackgroundColor3 = Color3.fromRGB(22, 30, 44)
+				if response.Message ~= "" then
+					self.context.Controllers.NotificationController:Show(response.Message, "Needs")
+				end
+			end
 		end)
 	end
 

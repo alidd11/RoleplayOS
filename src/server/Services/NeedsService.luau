@@ -63,6 +63,47 @@ function NeedsService:SetSprinting(player: Player, sprinting: any): (boolean, st
 	return true, nil
 end
 
+-- How much fitness the character has earned, as fractions to scale drain and
+-- recovery by.
+--
+-- Read from the level they already have rather than from a second counter, so
+-- there is one notion of how far along somebody is and playing the game is what
+-- moves it. A character with no progression yet is simply at the bottom of the
+-- curve, which is the same place everybody starts.
+function NeedsService:_fitness(
+	player: Player,
+	state: any
+): { DrainReduction: number, RecoveryBonus: number }
+	local settings = self.context.Configuration.Needs.Fitness
+	local none = { DrainReduction = 0, RecoveryBonus = 0 }
+	if type(settings) ~= "table" then
+		return none
+	end
+	-- Cached, because this runs twice a second for every player and resolving a
+	-- level walks the whole experience curve and rebuilds every track summary
+	-- underneath it. At a full server that is sixty of those a second to answer a
+	-- question whose answer changes a few times an hour.
+	local now = os.clock()
+	if state.Fitness and now - (state.FitnessAt or 0) < 15 then
+		return state.Fitness
+	end
+	state.FitnessAt = now
+	local ok, summary = pcall(function()
+		return self.context.Services:Get("ProgressionService"):Get(player)
+	end)
+	local level = if ok and type(summary) == "table" then tonumber(summary.Level) else nil
+	if not level then
+		state.Fitness = none
+		return none
+	end
+	local progress = math.clamp((level - 1) / math.max(settings.FullBonusLevel - 1, 1), 0, 1)
+	state.Fitness = {
+		DrainReduction = settings.MaximumDrainReduction * progress,
+		RecoveryBonus = settings.MaximumRecoveryBonus * progress,
+	}
+	return state.Fitness
+end
+
 -- Resolves the walk speed implied by the current needs state. Shared by the
 -- step loop and by immediate state changes so the two cannot disagree.
 function NeedsService:_applySpeed(player: Player, state: any, humanoid: Humanoid)
@@ -252,6 +293,8 @@ function NeedsService:_step(player: Player, delta: number)
 		return
 	end
 	local moving = humanoid.MoveDirection.Magnitude > 0.05
+	local needs = self.context.Configuration.Needs
+	local fitness = self:_fitness(player, state)
 	if
 		state.Sprinting
 		and moving
@@ -261,12 +304,12 @@ function NeedsService:_step(player: Player, delta: number)
 	then
 		state.Stamina = math.max(
 			0,
-			state.Stamina - self.context.Configuration.Needs.StaminaDrainPerSecond * delta
+			state.Stamina - needs.StaminaDrainPerSecond * (1 - fitness.DrainReduction) * delta
 		)
 	else
 		state.Stamina = math.min(
 			100,
-			state.Stamina + self.context.Configuration.Needs.StaminaRecoveryPerSecond * delta
+			state.Stamina + needs.StaminaRecoveryPerSecond * (1 + fitness.RecoveryBonus) * delta
 		)
 	end
 	if state.Stamina <= 0 or state.Hunger <= 2 then
