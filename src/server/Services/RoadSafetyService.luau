@@ -789,7 +789,10 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 	character.DrivingRecord.Points = math.min(99, (character.DrivingRecord.Points or 0) + points)
 
 	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
+	-- Person only. A fine changes the driving record and nothing about the cars,
+	-- and rewriting the fleet alongside it cost eleven DataStore writes per
+	-- camera flash out of a server budget of roughly six a second.
+	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character, "Person")
 	self.fineEvent:FireClient(player, {
 		Fine = record.Fine,
 		Points = record.Points,

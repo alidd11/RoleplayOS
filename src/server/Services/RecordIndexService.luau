@@ -155,7 +155,8 @@ function RecordIndexService:_upsertIndex(key: string, id: string, entry: any): (
 	return updated ~= nil, reason
 end
 
-function RecordIndexService:IndexCharacter(player: Player, character: any): (boolean, string?)
+-- The person record and the name index, and nothing else.
+function RecordIndexService:IndexPerson(player: Player, character: any): (boolean, string?)
 	local fullName = character.Identity.FirstName .. " " .. character.Identity.LastName
 	local personKey = recordKey("Person", character.CharacterId)
 	local person, reason = self:_updateRecord(personKey, function(existing)
@@ -197,6 +198,23 @@ function RecordIndexService:IndexCharacter(player: Player, character: any): (boo
 				return false, indexReason
 			end
 		end
+	end
+	return true, nil
+end
+
+-- The person record and everything they own.
+--
+-- Kept separate from IndexPerson above because the two change for completely
+-- different reasons and cost completely different amounts. A speeding fine
+-- touches the driving record and nothing else, and this used to rewrite the
+-- whole fleet with it: a driver with four cars cost eleven DataStore writes for
+-- one camera flash, against a budget of about six a second for the entire
+-- server. Thirty drivers being fined would have spent the whole server's
+-- allowance on records that had not changed.
+function RecordIndexService:IndexCharacter(player: Player, character: any): (boolean, string?)
+	local ok, reason = self:IndexPerson(player, character)
+	if not ok then
+		return false, reason
 	end
 	for _, vehicle in character.Vehicles or {} do
 		local indexed, vehicleReason = self:IndexVehicle(player, character, vehicle)
@@ -286,7 +304,11 @@ function RecordIndexService:ReindexVehicle(
 	return indexed, reason
 end
 
-function RecordIndexService:ScheduleCharacter(player: Player, character: any)
+-- `scope` says what changed. "Person" writes the person record and the name
+-- index; anything else also rewrites every vehicle they own. It defaults to the
+-- whole lot, so a caller that has not thought about it is no worse off than
+-- before, and the callers that only touch a record say so.
+function RecordIndexService:ScheduleCharacter(player: Player, character: any, scope: string?)
 	local key = "Person:" .. character.CharacterId
 	local existing = self.pendingSync[key]
 	if existing then
@@ -303,7 +325,9 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any)
 		local safe, raised = pcall(function()
 			repeat
 				state.Resync = false
-				ok, reason = self:IndexCharacter(player, character)
+				ok, reason = if scope == "Person"
+					then self:IndexPerson(player, character)
+					else self:IndexCharacter(player, character)
 			until not state.Resync
 		end)
 		self.pendingSync[key] = nil

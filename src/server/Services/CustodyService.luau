@@ -872,7 +872,9 @@ function CustodyService:Book(
 		self.context.Configuration.Custody.MaximumCriminalRecordHistory
 	)
 	self.context.Services:Get("DataService"):MarkDirty(target)
-	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(target, character)
+	-- Person only, for the same reason a fine is: a booking changes the custody
+	-- and criminal records and leaves the fleet exactly as it was.
+	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(target, character, "Person")
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = actor.UserId,
 		Action = "Custody.Booked",
