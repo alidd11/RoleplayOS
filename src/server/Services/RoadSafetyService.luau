@@ -619,15 +619,20 @@ function RoadSafetyService:IsExempt(player: Player, vehicle: Instance?): boolean
 	return duty ~= nil and type(duty.DepartmentId) == "string"
 end
 
--- Penalty points for how far over the limit somebody was, from the configured
--- bands. They are ordered, so the first band the excess falls inside wins.
-function RoadSafetyService:_points(excess: number): number
-	for _, band in self.context.Configuration.RoadSafety.PointsByExcess do
-		if excess <= band[1] then
-			return band[2]
+-- The penalty for how far over the limit somebody was.
+--
+-- Ordered, so the first band the excess falls inside wins, and the last has no
+-- ceiling so there is always an answer. Returning the whole band rather than
+-- the points alone keeps the fine and the points from being decided in two
+-- different places by two different rules.
+function RoadSafetyService:_band(excess: number): any
+	local bands = self.context.Configuration.RoadSafety.PenaltyBands
+	for _, band in bands do
+		if excess <= band.MaximumExcessMph then
+			return band
 		end
 	end
-	return 0
+	return bands[#bands]
 end
 
 -- The character to fine, found from the registration rather than from whoever
@@ -704,8 +709,9 @@ function RoadSafetyService:IssueFine(request: any): (boolean, string?)
 		return false, "EXEMPT_EMERGENCY_RESPONSE"
 	end
 
-	local points = self:_points(excess)
-	local fine = math.min(settings.MaximumFine, settings.FineBase + excess * settings.FinePerMph)
+	local band = self:_band(excess)
+	local points = band.Points
+	local fine = band.Fine
 	local issuingOfficer = request.IssuingOfficer
 	local officerName, officerRank = nil, nil
 	if

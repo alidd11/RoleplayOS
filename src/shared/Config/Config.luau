@@ -1744,13 +1744,35 @@ local Config = {
 		-- is fined until its owner has nothing left.
 		SensorCooldownSeconds = 8,
 		ToleranceMph = 2,
-		FineBase = 100,
-		FinePerMph = 10,
-		MaximumFine = 1000,
 		-- Uses EconomyService rather than a leaderstats value. When the account
 		-- cannot cover the charge, the offence remains as an unpaid fine.
 		AutomaticallyDebitFines = true,
-		PointsByExcess = { { 10, 3 }, { 20, 4 }, { 30, 6 }, { 999, 6 } },
+		-- Penalties follow the shape of UK sentencing rather than a formula.
+		--
+		-- This was a hundred pounds plus ten for every mile an hour over, which
+		-- is not how anybody is fined here and produced numbers nobody could
+		-- predict: twenty five over came to three hundred and fifty.
+		--
+		-- A minor excess is a fixed penalty notice, handed out at the roadside
+		-- for a hundred pounds and three points. Past that it stops being a
+		-- ticket and becomes a band, which is what a magistrate works from, and
+		-- the bands step rather than slide. A driver can therefore tell what an
+		-- offence will cost before committing it, which is the entire deterrent.
+		--
+		-- Real bands are a proportion of weekly income, which does not exist
+		-- here, so each carries a flat amount of roughly the right weight
+		-- against the wages in the Payroll section.
+		--
+		-- Ordered by excess. The first band the excess falls inside wins, and the
+		-- last one has no ceiling so there is always an answer.
+		PenaltyBands = {
+			{ Name = "Fixed penalty", MaximumExcessMph = 10, Fine = 100, Points = 3 },
+			{ Name = "Band B", MaximumExcessMph = 20, Fine = 400, Points = 4 },
+			{ Name = "Band C", MaximumExcessMph = 30, Fine = 700, Points = 6 },
+			-- Disqualification territory in reality. There is no licence to take
+			-- away yet, so it is the ceiling instead.
+			{ Name = "Band C", MaximumExcessMph = math.huge, Fine = 1000, Points = 6 },
+		},
 		-- An emergency driver on a blue light run is exempt. The same driver with
 		-- the lights off is not, which is the whole point of the rule: the
 		-- exemption belongs to the response, not to the person or the car.
