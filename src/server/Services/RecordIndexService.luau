@@ -325,9 +325,14 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any, sc
 		local safe, raised = pcall(function()
 			repeat
 				state.Resync = false
-				ok, reason = if scope == "Person"
-					then self:IndexPerson(player, character)
-					else self:IndexCharacter(player, character)
+				-- A statement rather than an if expression. An if expression
+				-- yields one value, so the second return would have been dropped
+				-- and every indexing failure logged with no reason attached.
+				if scope == "Person" then
+					ok, reason = self:IndexPerson(player, character)
+				else
+					ok, reason = self:IndexCharacter(player, character)
+				end
 			until not state.Resync
 		end)
 		self.pendingSync[key] = nil
