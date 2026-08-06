@@ -118,10 +118,18 @@ function SpeedometerController:_mount()
 	for index = 1, count do
 		local spoke = Instance.new("Frame")
 		spoke.Name = "Tick" .. index
-		spoke.AnchorPoint = Vector2.new(0.5, 1)
+		-- Twice the radius tall and anchored at its middle, so the frame's centre
+		-- sits exactly on the dial's centre.
+		--
+		-- The first version was half as tall and anchored at its base, on the
+		-- assumption that rotation pivots about the anchor point. It does not: it
+		-- pivots about the object's centre, so every tick swept a circle of half
+		-- the radius, centred half a radius too high. Anchoring at the middle
+		-- makes the two the same point, which is correct either way round.
+		spoke.AnchorPoint = Vector2.new(0.5, 0.5)
 		spoke.BackgroundTransparency = 1
 		spoke.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-		spoke.Size = UDim2.fromOffset(3, DIAL_RADIUS)
+		spoke.Size = UDim2.fromOffset(3, DIAL_RADIUS * 2)
 		spoke.Rotation = SWEEP_START + SWEEP_ARC * ((index - 1) / math.max(count - 1, 1))
 		spoke.Parent = frame
 		local mark = Instance.new("Frame")
@@ -133,18 +141,27 @@ function SpeedometerController:_mount()
 		self.segments[index] = mark
 	end
 
+	-- Same construction as the ticks: a frame centred on the pivot, twice as long
+	-- as the needle, with only its upper half drawn. Rotating it therefore swings
+	-- the visible half out from the centre rather than about some other point.
 	local needle = Instance.new("Frame")
 	needle.Name = "Needle"
-	needle.AnchorPoint = Vector2.new(0.5, 1)
-	needle.BackgroundColor3 = C.Live
-	needle.BorderSizePixel = 0
+	needle.AnchorPoint = Vector2.new(0.5, 0.5)
+	needle.BackgroundTransparency = 1
 	needle.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	needle.Size = UDim2.fromOffset(4, DIAL_RADIUS - 16)
+	needle.Size = UDim2.fromOffset(4, (DIAL_RADIUS - 14) * 2)
 	needle.Rotation = SWEEP_START
 	needle.ZIndex = 3
 	needle.Parent = frame
-	Instance.new("UICorner", needle).CornerRadius = UDim.new(1, 0)
-	self.needle = needle
+	local needleArm = Instance.new("Frame")
+	needleArm.Name = "Arm"
+	needleArm.BackgroundColor3 = C.Live
+	needleArm.BorderSizePixel = 0
+	needleArm.Size = UDim2.fromScale(1, 0.5)
+	needleArm.ZIndex = 3
+	needleArm.Parent = needle
+	Instance.new("UICorner", needleArm).CornerRadius = UDim.new(1, 0)
+	self.needle, self.needleArm = needle, needleArm
 
 	local hub = Instance.new("Frame")
 	hub.Name = "Hub"
@@ -244,7 +261,7 @@ function SpeedometerController:_paintSweep(fraction: number)
 	-- whole tick lit, which is the one thing a needle must not do: a dial that
 	-- jumps in twenty second steps reads worse than the bar it replaced.
 	self.needle.Rotation = SWEEP_START + SWEEP_ARC * math.clamp(fraction, 0, 1)
-	self.needle.BackgroundColor3 = if fraction > 0.86
+	self.needleArm.BackgroundColor3 = if fraction > 0.86
 		then C.Danger
 		elseif fraction > 0.68 then C.Warn
 		else C.Live
