@@ -55,6 +55,7 @@ function RadioController:Init(context: any)
 	self.snapshot = nil
 	self.vehicleMode = false
 	self.expanded = false
+	self.muted = false
 end
 
 function RadioController:_setExpanded(expanded: boolean)
@@ -117,34 +118,68 @@ function RadioController:_render()
 			UDim2.fromOffset(0, 38)
 		return
 	end
-	local channels = Instance.new("Frame")
-	channels.Name = "ChannelStrip"
-	channels.BackgroundTransparency = 1
-	channels.Size = UDim2.new(1, -92, 0, 34)
-	channels.Parent = self.content
-	local layout = Instance.new("UIListLayout")
-	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.Padding = UDim.new(0, 6)
-	layout.Parent = channels
-	for _, channel in snapshot.Channels do
-		local item = button(channels, channel.Name)
-		item.Size = UDim2.fromOffset(104, 34)
-		item.BackgroundColor3 = if channel.Id == snapshot.CurrentChannelId then C.Green else C.Card
-		item.Activated:Connect(function()
-			local response = self.context.Controllers.NetworkController:Request("RadioSetChannel", {
-				ChannelId = channel.Id,
-			})
-			if response.Success then
-				self.snapshot = response.Data
-				self:_render()
+	local channelBar = Instance.new("Frame")
+	channelBar.Name = "ZenithTopBar"
+	channelBar.BackgroundTransparency = 1
+	channelBar.Size = UDim2.new(1, 0, 0, 34)
+	channelBar.Parent = self.content
+	local function channelAt(offset: number): any?
+		local current = 1
+		for index, channel in snapshot.Channels do
+			if channel.Id == snapshot.CurrentChannelId then
+				current = index
+				break
 			end
-		end)
+		end
+		return snapshot.Channels[((current - 1 + offset) % #snapshot.Channels) + 1]
 	end
-	local panic = button(self.content, "PANIC")
+	local function chooseChannel(offset: number)
+		local channel = channelAt(offset)
+		if not channel then
+			return
+		end
+		local response = self.context.Controllers.NetworkController:Request("RadioSetChannel", {
+			ChannelId = channel.Id,
+		})
+		if response.Success then
+			self.snapshot = response.Data
+			self:_render()
+		end
+	end
+	local previous = button(channelBar, "‹")
+	previous.Size = UDim2.fromOffset(30, 34)
+	previous.Activated:Connect(function()
+		chooseChannel(-1)
+	end)
+	local channelTitle = button(channelBar, tostring(snapshot.CurrentChannelId))
+	channelTitle.Position = UDim2.fromOffset(36, 0)
+	channelTitle.Size = UDim2.new(1, -170, 0, 34)
+	channelTitle.BackgroundColor3 = C.Green
+	channelTitle.Activated:Connect(function()
+		chooseChannel(1)
+	end)
+	local nextChannel = button(channelBar, "›")
+	nextChannel.AnchorPoint = Vector2.new(1, 0)
+	nextChannel.Position = UDim2.new(1, -132, 0, 0)
+	nextChannel.Size = UDim2.fromOffset(30, 34)
+	nextChannel.Activated:Connect(function()
+		chooseChannel(1)
+	end)
+	local mute = button(channelBar, "MIC")
+	mute.AnchorPoint = Vector2.new(1, 0)
+	mute.Position = UDim2.new(1, -66, 0, 0)
+	mute.Size = UDim2.fromOffset(60, 34)
+	mute.Activated:Connect(function()
+		self.muted = not self.muted
+		mute.Text = if self.muted then "MUTED" else "MIC"
+		mute.BackgroundColor3 = if self.muted then C.Card else C.Accent
+	end)
+	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
+	panic.AnchorPoint = Vector2.new(1, 0)
+	panic.Position = UDim2.new(1, 0, 0, 0)
+	panic.Size = UDim2.fromOffset(60, 34)
 	panic.BackgroundColor3 = C.Immediate
-	panic.Position = UDim2.new(1, -84, 0, 0)
-	panic.Size = UDim2.fromOffset(84, 34)
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
 		self.context.Controllers.NotificationController:Show(response.Message, "RADIO PANIC")

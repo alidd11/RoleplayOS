@@ -1233,12 +1233,9 @@ local Config = {
 			TeamName = "Control",
 			DepartmentId = "Control",
 			Access = publicPassOr({
-				AccessType = "Combined",
-				Match = "All",
-				Rules = {
-					{ AccessType = "Application", DepartmentId = "Control" },
-					{ AccessType = "Group", GroupLinkId = "Control", MinimumGroupRank = 1 },
-				},
+				AccessType = "Group",
+				GroupLinkId = "Control",
+				MinimumGroupRank = 1,
 			}, 1935724637),
 			LoadoutId = "ControlStandard",
 		},
