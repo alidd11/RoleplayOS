@@ -158,6 +158,15 @@ function SpawnService:EnterCivilian(
 		player.Team = previousTeam
 		return false, spawnReason
 	end
+	local applied, appearanceReason =
+		self.context.Services:Get("CharacterService"):ApplyCivilianAppearance(player, characterId)
+	if not applied then
+		self.context.Logger:Warning("Civilian appearance could not be applied", {
+			UserId = player.UserId,
+			CharacterId = characterId,
+			Reason = appearanceReason,
+		})
+	end
 	session.Profile.AuditMetadata.LastCharacterId = characterId
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return true, nil

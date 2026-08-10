@@ -6,6 +6,80 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = { Critical = true }
+
+-- Only values read from a server-owned HumanoidDescription are persisted. The
+-- client never submits catalogue IDs, which keeps civilian outfit changes
+-- editable without turning the endpoint into an asset injection surface.
+local APPEARANCE_PROPERTIES = {
+	"BackAccessory",
+	"BodyTypeScale",
+	"DepthScale",
+	"Face",
+	"FaceAccessory",
+	"FrontAccessory",
+	"HairAccessory",
+	"HatAccessory",
+	"Head",
+	"HeadScale",
+	"HeightScale",
+	"LeftArm",
+	"LeftLeg",
+	"NeckAccessory",
+	"Pants",
+	"ProportionScale",
+	"RightArm",
+	"RightLeg",
+	"Shirt",
+	"ShoulderAccessory",
+	"Torso",
+	"WaistAccessory",
+	"WidthScale",
+	"GraphicTShirt",
+}
+
+local function captureAppearance(character: Model): ({ [string]: any }?, string?)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return nil, "CHARACTER_UNAVAILABLE"
+	end
+	local ok, description = pcall(function()
+		return humanoid:GetAppliedDescription()
+	end)
+	if not ok or not description then
+		return nil, "APPEARANCE_UNAVAILABLE"
+	end
+	local appearance: { [string]: any } = {}
+	for _, propertyName in APPEARANCE_PROPERTIES do
+		local propertyOk, value = pcall(function()
+			return (description :: any)[propertyName]
+		end)
+		if propertyOk and (type(value) == "string" or type(value) == "number") then
+			appearance[propertyName] = value
+		end
+	end
+	return appearance, nil
+end
+
+local function applyAppearance(character: Model, appearance: { [string]: any }): (boolean, string?)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false, "CHARACTER_UNAVAILABLE"
+	end
+	local description = Instance.new("HumanoidDescription")
+	for propertyName, value in appearance do
+		pcall(function()
+			(description :: any)[propertyName] = value
+		end)
+	end
+	local ok, reason = pcall(function()
+		humanoid:ApplyDescriptionReset(description)
+	end)
+	description:Destroy()
+	if not ok then
+		return false, tostring(reason)
+	end
+	return true, nil
+end
 function CharacterService:Init(context: any)
 	self.context = context
 end
@@ -142,6 +216,65 @@ function CharacterService:List(player: Player): { any }
 		return a.LastPlayedAt > b.LastPlayedAt
 	end)
 	return result
+end
+
+function CharacterService:ApplyCivilianAppearance(
+	player: Player,
+	characterId: string
+): (boolean, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not session or session.ActiveCharacterId ~= characterId or not character then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if self.context.Services:Get("DutyService"):Get(player) then
+		return false, "CIVILIAN_REQUIRED"
+	end
+	local runtimeCharacter = player.Character
+	if not runtimeCharacter then
+		return false, "CHARACTER_UNAVAILABLE"
+	end
+	local appearance = character.Appearance
+	if type(appearance) ~= "table" or next(appearance) == nil then
+		local captured, captureReason = captureAppearance(runtimeCharacter)
+		if not captured then
+			return false, captureReason
+		end
+		appearance = captured
+		character.Appearance = appearance
+		self.context.Services:Get("DataService"):MarkDirty(player)
+	end
+	runtimeCharacter:SetAttribute("RoleplayOSCivilianAppearance", true)
+	return applyAppearance(runtimeCharacter, appearance)
+end
+
+function CharacterService:SaveCurrentAppearance(
+	player: Player,
+	characterId: string
+): (boolean, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not session or session.ActiveCharacterId ~= characterId or not character then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if
+		self.context.Services:Get("DutyService"):Get(player)
+		or not player.Team
+		or player.Team.Name ~= "Civilian"
+	then
+		return false, "CIVILIAN_REQUIRED"
+	end
+	local runtimeCharacter = player.Character
+	if not runtimeCharacter then
+		return false, "CHARACTER_UNAVAILABLE"
+	end
+	local appearance, reason = captureAppearance(runtimeCharacter)
+	if not appearance then
+		return false, reason
+	end
+	character.Appearance = appearance
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return true, nil
 end
 function CharacterService:Select(player: Player, characterId: string): (any?, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)

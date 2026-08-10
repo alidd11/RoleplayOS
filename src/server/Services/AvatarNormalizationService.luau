@@ -17,6 +17,12 @@ local STANDARD_SCALES = {
 }
 
 local function normalize(character: Model)
+	local player = Players:GetPlayerFromCharacter(character)
+	if player and player.Team and player.Team.Name == "Civilian" then
+		-- Civilian characters own their appearance. Emergency duty is the only
+		-- path that should standardise the rig and replace personal clothing.
+		return
+	end
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R15 then
 		return

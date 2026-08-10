@@ -960,6 +960,35 @@ function App.mount(context: any): ScreenGui
 				choose.AnchorPoint = Vector2.new(0, 1)
 				choose.Position = UDim2.new(0, 16, 1, -14)
 				choose.Size = UDim2.new(1, -32, 0, 42)
+				if
+					selected
+					and Players.LocalPlayer.Team
+					and Players.LocalPlayer.Team.Name == "Civilian"
+				then
+					choose.Position = UDim2.new(0, 16, 1, -14)
+					choose.Size = UDim2.new(1, -32, 0, 36)
+					local saveOutfit = button(item, "Save current outfit", false)
+					saveOutfit.AnchorPoint = Vector2.new(0, 1)
+					saveOutfit.Position = UDim2.new(0, 16, 1, -56)
+					saveOutfit.Size = UDim2.new(1, -32, 0, 30)
+					saveOutfit.TextSize = 11
+					saveOutfit.Activated:Connect(function()
+						saveOutfit.Text = "Saving…"
+						local response =
+							context.Controllers.CharacterController:SaveCurrentAppearance(
+								character.CharacterId
+							)
+						if response.Success then
+							context.Controllers.NotificationController:Show(
+								"This civilian now keeps the current Roblox avatar outfit.",
+								"Outfit saved"
+							)
+							context.Controllers.StartMenuController:Refresh()
+						else
+							saveOutfit.Text = "Save current outfit"
+						end
+					end)
+				end
 				choose.Activated:Connect(function()
 					if selected then
 						enterCivilian(character.CharacterId)

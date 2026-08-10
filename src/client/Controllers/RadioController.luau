@@ -59,10 +59,98 @@ function RadioController:Init(context: any)
 	self.muted = false
 end
 
+function RadioController:_showCallsignModal()
+	if not self.gui or self.callsignModal then
+		return
+	end
+	local shade = Instance.new("TextButton")
+	shade.Name = "CallsignModalShade"
+	shade.Text = ""
+	shade.AutoButtonColor = false
+	shade.BackgroundColor3 = Color3.new(0, 0, 0)
+	shade.BackgroundTransparency = 0.35
+	shade.Size = UDim2.fromScale(1, 1)
+	shade.ZIndex = 20
+	shade.Parent = self.gui
+	local modal = Instance.new("Frame")
+	modal.Name = "CallsignModal"
+	modal.AnchorPoint = Vector2.new(0.5, 0.5)
+	modal.Position = UDim2.fromScale(0.5, 0.5)
+	modal.Size = UDim2.fromOffset(330, 218)
+	modal.BackgroundColor3 = C.Body
+	modal.BorderSizePixel = 0
+	modal.ZIndex = 21
+	modal.Parent = shade
+	corner(modal, 10)
+	local outline = Instance.new("UIStroke")
+	outline.Color = C.Border
+	outline.Thickness = 1.5
+	outline.Parent = modal
+	local title = text(modal, "UNIT CALLSIGN", 17, true)
+	title.Position = UDim2.fromOffset(20, 18)
+	title.Size = UDim2.new(1, -40, 0, 26)
+	local copy = text(modal, "Enter the callsign used by this crew member.", 11)
+	copy.TextColor3 = C.Muted
+	copy.Position = UDim2.fromOffset(20, 48)
+	copy.Size = UDim2.new(1, -40, 0, 20)
+	local input = Instance.new("TextBox")
+	input.Name = "CallsignInput"
+	input.BackgroundColor3 = C.Card
+	input.BorderSizePixel = 0
+	input.ClearTextOnFocus = false
+	input.Font = Enum.Font.GothamBold
+	input.PlaceholderText = "e.g. PC 1013"
+	input.PlaceholderColor3 = C.Muted
+	input.Text = if self.snapshot and self.snapshot.Callsign then self.snapshot.Callsign else ""
+	input.TextColor3 = C.Text
+	input.TextSize = 14
+	input.Position = UDim2.fromOffset(20, 80)
+	input.Size = UDim2.new(1, -40, 0, 42)
+	input.ZIndex = 22
+	input.Parent = modal
+	corner(input, 7)
+	local cancel = button(modal, "CANCEL")
+	cancel.Position = UDim2.new(0, 20, 1, -55)
+	cancel.Size = UDim2.new(0.5, -25, 0, 36)
+	cancel.ZIndex = 22
+	local save = button(modal, "SAVE CALLSIGN")
+	save.Position = UDim2.new(0.5, 5, 1, -55)
+	save.Size = UDim2.new(0.5, -25, 0, 36)
+	save.BackgroundColor3 = C.Green
+	save.ZIndex = 22
+	local function close()
+		if shade.Parent then
+			shade:Destroy()
+		end
+		self.callsignModal = nil
+	end
+	cancel.Activated:Connect(close)
+	save.Activated:Connect(function()
+		if input.Text == "" then
+			return
+		end
+		save.Text = "SAVING…"
+		local response = self.context.Controllers.NetworkController:Request("RadioSetCallsign", {
+			Callsign = input.Text,
+		})
+		if response.Success then
+			close()
+			self:refresh()
+		else
+			save.Text = "SAVE CALLSIGN"
+			self.context.Controllers.NotificationController:Show(response.Message, "Callsign")
+		end
+	end)
+	self.callsignModal = shade
+	input:CaptureFocus()
+end
+
 function RadioController:_setOpen(open: boolean)
 	self.open = open
 	if self.body then
+		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		self.body.Visible = open
+			and not (playerGui and playerGui:GetAttribute("RoleplayOSMDTOpen") == true)
 	end
 	local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if gui then
@@ -271,9 +359,12 @@ function RadioController:Start()
 	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 38
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	self.gui = gui
 	local panicSound = Instance.new("Sound")
 	panicSound.Name = "PanicConfirmation"
-	panicSound.SoundId = "rbxassetid://18714605481"
+	-- This is the panic-button tone from the imported Zenith radio package,
+	-- rather than the generic bank/robbery alarm used by other systems.
+	panicSound.SoundId = "rbxassetid://2600299714"
 	panicSound.Volume = 0.35
 	panicSound.Parent = SoundService
 	self.panicSound = panicSound
@@ -284,7 +375,7 @@ function RadioController:Start()
 	-- from the platform chrome; the additional offset leaves visual breathing
 	-- room below the Roblox top bar.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(360, 300)
+	body.Size = UDim2.fromOffset(350, 400)
 	body.BackgroundColor3 = C.Body
 	body.BackgroundTransparency = 0.12
 	body.BorderSizePixel = 0
@@ -304,6 +395,14 @@ function RadioController:Start()
 	callsign.Position = UDim2.fromOffset(14, 33)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
 	callsign.TextColor3 = C.Muted
+	local editCallsign = button(body, "EDIT")
+	editCallsign.AnchorPoint = Vector2.new(1, 0)
+	editCallsign.Position = UDim2.new(1, -14, 0, 12)
+	editCallsign.Size = UDim2.fromOffset(48, 24)
+	editCallsign.TextSize = 10
+	editCallsign.Activated:Connect(function()
+		self:_showCallsignModal()
+	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
 	content.Position = UDim2.fromOffset(14, 76)
@@ -313,51 +412,19 @@ function RadioController:Start()
 	content.Visible = true
 	self.header = header
 	self.callsign = callsign
-	local callsignInput = Instance.new("TextBox")
-	callsignInput.Name = "CallsignInput"
-	callsignInput.BackgroundColor3 = C.Card
-	callsignInput.BorderSizePixel = 0
-	callsignInput.ClearTextOnFocus = false
-	callsignInput.Font = Enum.Font.GothamBold
-	callsignInput.PlaceholderText = "Enter callsign"
-	callsignInput.PlaceholderColor3 = C.Muted
-	callsignInput.TextColor3 = C.Text
-	callsignInput.TextSize = 11
-	callsignInput.Text = ""
-	callsignInput.Position = UDim2.fromOffset(14, 54)
-	callsignInput.Size = UDim2.fromOffset(112, 22)
-	callsignInput.Visible = true
-	callsignInput.Parent = body
-	corner(callsignInput, 6)
-	callsignInput.FocusLost:Connect(function(enterPressed)
-		if not enterPressed or callsignInput.Text == "" then
-			return
-		end
-		local response = self.context.Controllers.NetworkController:Request("RadioSetCallsign", {
-			Callsign = callsignInput.Text,
-		})
-		if response.Success then
-			callsignInput.Text = response.Data.Callsign
-			self:refresh()
-		else
-			self.context.Controllers.NotificationController:Show(response.Message, "Callsign")
-		end
-	end)
-	self.callsignInput = callsignInput
 	self.bodyScale = Instance.new("UIScale")
 	self.bodyScale.Parent = body
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", function(layout)
-		callsignInput.Visible = true
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(10, layout.NativeTop + 4)
-			body.Size = UDim2.fromOffset(360, 300)
+			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
+			body.Size = UDim2.fromOffset(350, 400)
 			self.bodyScale.Scale =
 				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(220, 48), 20)
 		else
 			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(12, layout.NativeTop + 8)
-			body.Size = UDim2.fromOffset(360, 300)
+			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
+			body.Size = UDim2.fromOffset(350, 400)
 			self.bodyScale.Scale = math.clamp(
 				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,
@@ -369,6 +436,13 @@ function RadioController:Start()
 		self.connections,
 		self.context.Events.DutyChanged.Event:Connect(function(duty)
 			self:_setOpen(duty ~= nil)
+		end)
+	)
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	table.insert(
+		self.connections,
+		playerGui:GetAttributeChangedSignal("RoleplayOSMDTOpen"):Connect(function()
+			self:_setOpen(self.open)
 		end)
 	)
 	local initial = self.context.Controllers.NetworkController:Request("GetRadioSnapshot", {})

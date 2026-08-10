@@ -2400,6 +2400,7 @@ local Config = {
 			UpdateSettings = { Capacity = 6, RefillPerSecond = 1 },
 			CreateCharacter = { Capacity = 2, RefillPerSecond = 0.1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
+			SaveCivilianAppearance = { Capacity = 2, RefillPerSecond = 0.1 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },

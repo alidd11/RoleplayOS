@@ -436,6 +436,27 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("SaveCivilianAppearance", function(payload)
+		return type(payload) == "table" and type(payload.CharacterId) == "string"
+	end, function(player, payload, requestId)
+		local saved, reason = self.context.Services
+			:Get("CharacterService")
+			:SaveCurrentAppearance(player, payload.CharacterId)
+		local messages = {
+			CHARACTER_NOT_ACTIVE = "Select this character before saving its outfit.",
+			CIVILIAN_REQUIRED = "Save civilian outfits only while playing as a civilian.",
+			CHARACTER_UNAVAILABLE = "Your character is not ready yet.",
+			APPEARANCE_UNAVAILABLE = "Your current avatar outfit is not ready yet.",
+		}
+		return {
+			Success = saved,
+			Code = if saved then "OK" else reason,
+			Message = if saved
+				then "Civilian outfit saved."
+				else (reason and messages[reason]) or "The civilian outfit could not be saved.",
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SubmitApplication", function(payload)
 		return type(payload) == "table" and type(payload.FormId) == "string" and type(
 			payload.Answers

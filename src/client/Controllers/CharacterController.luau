@@ -27,5 +27,14 @@ function CharacterController:Select(characterId: string): any
 	end
 	return response
 end
+function CharacterController:SaveCurrentAppearance(characterId: string): any
+	local response = self.context.Controllers.NetworkController:Request("SaveCivilianAppearance", {
+		CharacterId = characterId,
+	})
+	if not response.Success then
+		self.context.Controllers.NotificationController:Show(response.Message, "Outfit unavailable")
+	end
+	return response
+end
 function CharacterController:Destroy() end
 return CharacterController
