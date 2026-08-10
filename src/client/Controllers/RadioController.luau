@@ -2,16 +2,19 @@
 
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
+local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local RadioController = { connections = {} }
 local ACTION = "RoleplayOSToggleRadio"
 local C = {
-	Body = Color3.fromRGB(12, 17, 23),
-	Panel = Color3.fromRGB(24, 32, 43),
-	Card = Color3.fromRGB(34, 44, 58),
-	Text = Color3.fromRGB(244, 247, 250),
-	Muted = Color3.fromRGB(158, 171, 191),
-	Green = Color3.fromRGB(62, 180, 116),
+	Body = TerminalTheme.Surface,
+	Panel = TerminalTheme.Raised,
+	Card = Color3.fromRGB(20, 45, 67),
+	Text = TerminalTheme.Text,
+	Muted = TerminalTheme.Muted,
+	Green = TerminalTheme.Secure,
+	Accent = TerminalTheme.Accent,
+	Border = TerminalTheme.Border,
 }
 
 local function corner(parent: Instance, radius: number)
@@ -51,6 +54,7 @@ function RadioController:Init(context: any)
 	self.context = context
 	self.open = false
 	self.snapshot = nil
+	self.vehicleMode = false
 end
 
 function RadioController:_setOpen(open: boolean)
@@ -82,6 +86,7 @@ function RadioController:_render()
 		return
 	end
 	local channels = Instance.new("Frame")
+	channels.Name = "ChannelStrip"
 	channels.BackgroundTransparency = 1
 	channels.Size = UDim2.new(1, 0, 0, 38)
 	channels.Parent = self.content
@@ -91,7 +96,7 @@ function RadioController:_render()
 	layout.Parent = channels
 	for _, channel in snapshot.Channels do
 		local item = button(channels, channel.Name)
-		item.Size = UDim2.fromOffset(92, 34)
+		item.Size = UDim2.fromOffset(104, 34)
 		item.BackgroundColor3 = if channel.Id == snapshot.CurrentChannelId then C.Green else C.Card
 		item.Activated:Connect(function()
 			local response = self.context.Controllers.NetworkController:Request("RadioSetChannel", {
@@ -104,6 +109,7 @@ function RadioController:_render()
 		end)
 	end
 	local log = Instance.new("ScrollingFrame")
+	log.Name = "MessageLog"
 	log.BackgroundColor3 = C.Panel
 	log.BorderSizePixel = 0
 	log.CanvasSize = UDim2.new()
@@ -128,6 +134,7 @@ function RadioController:_render()
 		line.Size = UDim2.new(1, 0, 0, 32)
 	end
 	local input = Instance.new("TextBox")
+	input.Name = "TransmitBox"
 	input.BackgroundColor3 = C.Card
 	input.BorderSizePixel = 0
 	input.ClearTextOnFocus = false
@@ -142,6 +149,7 @@ function RadioController:_render()
 	input.Parent = self.content
 	corner(input, 10)
 	local transmit = button(self.content, "SEND")
+	transmit.Name = "Transmit"
 	transmit.BackgroundColor3 = C.Green
 	transmit.Position = UDim2.new(1, -66, 0, -1)
 	transmit.Size = UDim2.fromOffset(66, 42)
@@ -216,8 +224,10 @@ function RadioController:Start()
 	)
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSRadio"
+	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 38
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local body = Instance.new("Frame")
@@ -227,21 +237,23 @@ function RadioController:Start()
 	-- from the platform chrome; the additional offset leaves visual breathing
 	-- room below the Roblox top bar.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(350, 330)
+	body.Size = UDim2.fromOffset(364, 360)
 	body.BackgroundColor3 = C.Body
 	body.BorderSizePixel = 0
 	body.Visible = false
 	body.Parent = gui
 	corner(body, 18)
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(75, 91, 108)
+	stroke.Color = C.Border
+	stroke.Thickness = 1.5
+	stroke.Transparency = 0.1
 	stroke.Parent = body
 	self.body = body
 	local header = text(body, "RADIO", 18, true)
-	header.Position = UDim2.fromOffset(18, 14)
+	header.Position = UDim2.fromOffset(18, 12)
 	header.Size = UDim2.fromOffset(150, 26)
 	local callsign = text(body, "Operational channel", 10)
-	callsign.Position = UDim2.fromOffset(18, 39)
+	callsign.Position = UDim2.fromOffset(18, 37)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
 	callsign.TextColor3 = C.Muted
 	local close = button(body, "×")
@@ -256,6 +268,34 @@ function RadioController:Start()
 	content.Size = UDim2.new(1, -36, 1, -82)
 	content.Parent = body
 	self.content = content
+	self.header = header
+	self.callsign = callsign
+	self.close = close
+	self.bodyScale = Instance.new("UIScale")
+	self.bodyScale.Parent = body
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", function(layout)
+		if layout.Compact then
+			body.AnchorPoint = Vector2.new(0.5, 0.5)
+			body.Position = UDim2.fromScale(0.5, 0.5)
+			body.Size = UDim2.fromOffset(364, 360)
+			self.bodyScale.Scale =
+				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(364, 360), 24)
+		elseif layout.Vehicle then
+			body.AnchorPoint = Vector2.new(0, 0.5)
+			body.Position = UDim2.new(0, 18, 0.5, 0)
+			body.Size = UDim2.fromOffset(364, math.min(360, layout.SafeViewport.Y - 96))
+			self.bodyScale.Scale = 1
+		else
+			body.AnchorPoint = Vector2.new(1, 0)
+			body.Position = UDim2.new(1, -18, 0, layout.NativeTop + 18)
+			body.Size = UDim2.fromOffset(364, 360)
+			self.bodyScale.Scale = math.clamp(
+				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
+				0.82,
+				1
+			)
+		end
+	end)
 	local event = self.context.Controllers.NetworkController:ResolveEvent("RadioChanged")
 	if event then
 		table.insert(
@@ -282,6 +322,9 @@ function RadioController:Destroy()
 	end
 	if self.body and self.body.Parent then
 		self.body.Parent:Destroy()
+	end
+	if self.unbindLayout then
+		self.unbindLayout()
 	end
 end
 
