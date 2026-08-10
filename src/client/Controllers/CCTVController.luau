@@ -43,12 +43,12 @@ function CCTVController:_mount()
 	local bar = Instance.new("Frame")
 	bar.AnchorPoint = Vector2.new(0.5, 1)
 	bar.Position = UDim2.new(0.5, 0, 1, -24)
-	bar.Size = UDim2.fromOffset(620, 64)
+	bar.Size = UDim2.fromOffset(540, 58)
 	bar.BackgroundColor3 = Color3.fromRGB(8, 13, 21)
 	bar.BorderSizePixel = 0
 	bar.Parent = gui
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
+	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = bar
 	-- The control bar is authored at a fixed width, so on a phone the exit
 	-- control fell outside the usable area and the viewer could not be left.
@@ -56,24 +56,24 @@ function CCTVController:_mount()
 	scale.Parent = bar
 	self.barScale = scale
 	local previous = button(bar, "‹ PREVIOUS")
-	previous.Position = UDim2.fromOffset(12, 12)
-	previous.Size = UDim2.fromOffset(120, 40)
+	previous.Position = UDim2.fromOffset(10, 12)
+	previous.Size = UDim2.fromOffset(104, 34)
 	local nextButton = button(bar, "NEXT ›")
-	nextButton.Position = UDim2.new(1, -252, 0, 12)
-	nextButton.Size = UDim2.fromOffset(120, 40)
+	nextButton.Position = UDim2.new(1, -218, 0, 12)
+	nextButton.Size = UDim2.fromOffset(104, 34)
 	local exit = button(bar, "EXIT CCTV")
-	exit.Position = UDim2.new(1, -122, 0, 12)
-	exit.Size = UDim2.fromOffset(110, 40)
+	exit.Position = UDim2.new(1, -104, 0, 12)
+	exit.Size = UDim2.fromOffset(94, 34)
 	exit.BackgroundColor3 = Color3.fromRGB(136, 39, 48)
 	self.exitButton = exit
 	local name = Instance.new("TextLabel")
 	name.Name = "CameraName"
-	name.Position = UDim2.fromOffset(142, 8)
-	name.Size = UDim2.fromOffset(214, 48)
+	name.Position = UDim2.fromOffset(120, 8)
+	name.Size = UDim2.fromOffset(200, 42)
 	name.BackgroundTransparency = 1
 	name.Font = Enum.Font.GothamBold
 	name.TextColor3 = Color3.fromRGB(240, 245, 252)
-	name.TextSize = 14
+	name.TextSize = 12
 	name.TextWrapped = true
 	name.Parent = bar
 	self.cameraName = name
@@ -155,7 +155,7 @@ function CCTVController:Start()
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("CCTV", function(layout)
 		self.barScale.Scale =
-			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(620, 64), 36)
+			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(540, 58), 28)
 	end)
 	ContextActionService:BindActionAtPriority(EXIT_ACTION, function(_, inputState)
 		if self.viewing and inputState == Enum.UserInputState.Begin then

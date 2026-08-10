@@ -172,6 +172,16 @@ local Config = {
 					RoleplayOSWarrantCardClient = "LocalScript",
 				},
 			},
+			PoliceWarrantCard = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied Police Officer Warrant Card package",
+				RealWorldReference = "UK police warrant card",
+				ReviewedBy = "RoleplayOS engineering security review",
+				AllowedUnsafeDescendants = {
+					RoleplayOSWarrantCardClient = "LocalScript",
+				},
+			},
 		},
 		WorldAssetTag = "RoleplayOSWorldAsset",
 		WorldAssetRootName = "RoleplayOSWorldAssets",
@@ -857,8 +867,9 @@ local Config = {
 		-- way while looking configured. Upload the tones under the group and put
 		-- their ids in EDIT_HERE.
 		Sirens = {
-			Wail = "",
-			Yelp = "",
+			-- Owned by Universal Projects. and verified in the group inventory.
+			Wail = "18707739719",
+			Yelp = "16312459952",
 			Phaser = "",
 			Horn = "",
 		},
@@ -1467,6 +1478,11 @@ local Config = {
 			Id = "MedicalBag",
 			AssetPath = { "Tools", "Services", "Ambulance", "MedicalBag" },
 			DepartmentId = "Ambulance",
+		},
+		PoliceWarrantCard = {
+			Id = "PoliceWarrantCard",
+			AssetPath = { "Tools", "Services", "Police", "Shared", "Warrant Card" },
+			DepartmentId = "Police",
 		},
 	},
 	Loadouts = {

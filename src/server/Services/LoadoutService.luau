@@ -138,6 +138,8 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(clone, backpack, loadoutId, toolId)
 		elseif toolId == "Handcuffs" and not template then
 			issue(ToolFactory.handcuffs(), backpack, loadoutId, toolId)
+		elseif toolId == "MedicalBag" and not template then
+			issue(ToolFactory.medicalBag(), backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
 			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name

@@ -55,24 +55,8 @@ function RadioController:Init(context: any)
 	self.open = false
 	self.snapshot = nil
 	self.vehicleMode = false
-	self.expanded = false
+	self.expanded = true
 	self.muted = false
-end
-
-function RadioController:_setExpanded(expanded: boolean)
-	self.expanded = expanded
-	if self.content then
-		self.content.Visible = expanded
-	end
-	if self.callsignInput then
-		self.callsignInput.Visible = expanded
-	end
-	if self.close then
-		self.close.Text = if expanded then "×" else "+"
-	end
-	if self.body then
-		self.body.Size = if expanded then UDim2.fromOffset(304, 286) else UDim2.fromOffset(220, 48)
-	end
 end
 
 function RadioController:_setOpen(open: boolean)
@@ -186,7 +170,7 @@ function RadioController:_render()
 	panic.Name = "Panic"
 	panic.AnchorPoint = Vector2.new(1, 0)
 	panic.Position = UDim2.fromScale(1, 0)
-	panic.Size = UDim2.fromOffset(54, 30)
+	panic.Size = UDim2.fromOffset(54, 28)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
@@ -300,13 +284,13 @@ function RadioController:Start()
 	-- from the platform chrome; the additional offset leaves visual breathing
 	-- room below the Roblox top bar.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(304, 286)
+	body.Size = UDim2.fromOffset(360, 300)
 	body.BackgroundColor3 = C.Body
-	body.BackgroundTransparency = 0.18
+	body.BackgroundTransparency = 0.12
 	body.BorderSizePixel = 0
 	body.Visible = false
 	body.Parent = gui
-	corner(body, 18)
+	corner(body, 8)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = C.Border
 	stroke.Thickness = 1.5
@@ -320,22 +304,15 @@ function RadioController:Start()
 	callsign.Position = UDim2.fromOffset(14, 33)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
 	callsign.TextColor3 = C.Muted
-	local close = button(body, "×")
-	close.Position = UDim2.new(1, -40, 0, 10)
-	close.Size = UDim2.fromOffset(26, 24)
-	close.Activated:Connect(function()
-		self:_setExpanded(not self.expanded)
-	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
 	content.Position = UDim2.fromOffset(14, 76)
 	content.Size = UDim2.new(1, -28, 1, -88)
 	content.Parent = body
 	self.content = content
-	content.Visible = false
+	content.Visible = true
 	self.header = header
 	self.callsign = callsign
-	self.close = close
 	local callsignInput = Instance.new("TextBox")
 	callsignInput.Name = "CallsignInput"
 	callsignInput.BackgroundColor3 = C.Card
@@ -349,7 +326,7 @@ function RadioController:Start()
 	callsignInput.Text = ""
 	callsignInput.Position = UDim2.fromOffset(14, 54)
 	callsignInput.Size = UDim2.fromOffset(112, 22)
-	callsignInput.Visible = false
+	callsignInput.Visible = true
 	callsignInput.Parent = body
 	corner(callsignInput, 6)
 	callsignInput.FocusLost:Connect(function(enterPressed)
@@ -370,21 +347,17 @@ function RadioController:Start()
 	self.bodyScale = Instance.new("UIScale")
 	self.bodyScale.Parent = body
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", function(layout)
-		callsignInput.Visible = self.expanded
+		callsignInput.Visible = true
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(10, layout.NativeTop + 4)
-			body.Size = if self.expanded
-				then UDim2.fromOffset(304, 286)
-				else UDim2.fromOffset(220, 48)
+			body.Size = UDim2.fromOffset(360, 300)
 			self.bodyScale.Scale =
 				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(220, 48), 20)
 		else
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(12, layout.NativeTop + 8)
-			body.Size = if self.expanded
-				then UDim2.fromOffset(304, 286)
-				else UDim2.fromOffset(220, 48)
+			body.Size = UDim2.fromOffset(360, 300)
 			self.bodyScale.Scale = math.clamp(
 				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,

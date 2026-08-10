@@ -2,7 +2,6 @@
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local ImportedSystemAdapterService = { Critical = false }
@@ -129,9 +128,11 @@ function ImportedSystemAdapterService:_installBank()
 	end
 	mergeChildren(replicatedInstaller, ReplicatedStorage)
 	mergeChildren(workspaceInstaller, workspace)
-	-- Mount executable content last, after its shared settings and world hierarchy
-	-- exist, matching the package's own installation instructions.
-	mergeChildren(serverInstaller, ServerScriptService)
+	-- Do not mount the vendor's executable server installer. The supplied
+	-- package contains obfuscated third-party code that requires external assets
+	-- and HTTP, while RoleplayOS owns the server-authoritative robbery flow in
+	-- BankRobberyService. Keeping the package's server scripts inert prevents
+	-- duplicate prompts, unauthorized requests and startup errors.
 	self.report.BankMounted = true
 
 	local bank = workspace:FindFirstChild("Bank Robbery System V2")

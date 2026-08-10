@@ -356,29 +356,6 @@
 					<Z>0.0249999762</Z>
 				</Vector3>
 			</Properties>
-			<Item class="Sound" referent="RBX2651C318EB6E4D059E871F166A97CAB6">
-				<Properties>
-					<BinaryString name="AttributesSerialize"></BinaryString>
-					<float name="EmitterSize">10</float>
-					<UniqueId name="HistoryId">00000000000000000000000000000000</UniqueId>
-					<NumberRange name="LoopRegion">0 60000 </NumberRange>
-					<bool name="Looped">false</bool>
-					<string name="Name">TaserSound</string>
-					<bool name="PlayOnRemove">false</bool>
-					<NumberRange name="PlaybackRegion">0 60000 </NumberRange>
-					<bool name="PlaybackRegionsEnabled">false</bool>
-					<float name="PlaybackSpeed">1</float>
-					<bool name="Playing">false</bool>
-					<token name="RollOffMode">0</token>
-					<Content name="SoundId"><url>rbxassetid://11854640726</url></Content>
-					<int64 name="SourceAssetId">277635663</int64>
-					<BinaryString name="Tags"></BinaryString>
-					<double name="TimePosition">0</double>
-					<UniqueId name="UniqueId">51f55daf9bdb2acc03b7dcb300002b56</UniqueId>
-					<float name="Volume">0.5</float>
-					<float name="xmlRead_MaxDistance_3">10000</float>
-				</Properties>
-			</Item>
 			<Item class="WeldConstraint" referent="RBXDDA5F026EAFA499D80FA1CBD16A7422C">
 				<Properties>
 					<string name="Name">RoleplayOSWeld</string>

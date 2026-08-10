@@ -1210,7 +1210,10 @@ function NetworkService:Start()
 		return {
 			Success = call ~= nil,
 			Code = if call then "OK" else reason,
-			Message = if call then "PANIC ALERT SENT." else "The panic alert could not be sent.",
+			Message = if call
+				then "PANIC ALERT SENT TO ALL ON-DUTY UNITS."
+				elseif reason == "PANIC_COOLDOWN" then "PANIC COOLDOWN ACTIVE."
+				else "The panic alert could not be sent.",
 			Data = call,
 			RequestId = requestId,
 		}

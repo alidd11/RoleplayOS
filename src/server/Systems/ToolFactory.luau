@@ -146,6 +146,43 @@ function ToolFactory.mdt(): Tool
 	return tool
 end
 
+function ToolFactory.medicalBag(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = "MedicalBag"
+	tool.ToolTip = "Medical response kit"
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool.Grip = CFrame.new(0, -0.12, -0.68) * CFrame.Angles(math.rad(82), 0, 0)
+	local handle = part(
+		tool,
+		"Handle",
+		Vector3.new(1.05, 0.7, 0.34),
+		Color3.fromRGB(205, 209, 214),
+		Enum.Material.SmoothPlastic
+	)
+	local crossVertical = part(
+		tool,
+		"MedicalCrossVertical",
+		Vector3.new(0.18, 0.42, 0.03),
+		Color3.fromRGB(194, 38, 48),
+		Enum.Material.SmoothPlastic
+	)
+	local crossHorizontal = part(
+		tool,
+		"MedicalCrossHorizontal",
+		Vector3.new(0.42, 0.18, 0.03),
+		Color3.fromRGB(194, 38, 48),
+		Enum.Material.SmoothPlastic
+	)
+	attach(handle, crossVertical, CFrame.new(0, 0, -0.185))
+	attach(handle, crossHorizontal, CFrame.new(0, 0, -0.185))
+	tool:SetAttribute("RoleplayOSInterfaceTool", "MedicalBag")
+	tool:SetAttribute("RoleplayOSBuiltInFallback", true)
+	tool:SetAttribute("RoleplayOSAssetSource", "RoleplayOS functional staging fallback")
+	tool:SetAttribute("RoleplayOSRealWorldReference", "UK ambulance medical response bag")
+	return tool
+end
+
 function ToolFactory.radio(): Tool
 	local tool = Instance.new("Tool")
 	tool.Name = "Radio"

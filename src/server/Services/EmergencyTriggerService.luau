@@ -5,7 +5,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 
-local EmergencyTriggerService = { connections = {}, cooldowns = {}, playerCooldowns = {} }
+local EmergencyTriggerService = {
+	connections = {},
+	cooldowns = {},
+	playerCooldowns = {},
+	panicCooldowns = {},
+}
 
 function EmergencyTriggerService:Init(context: any)
 	self.context = context
@@ -102,6 +107,11 @@ function EmergencyTriggerService:Panic(player: Player): (any?, string?)
 	if not duty then
 		return nil, "NOT_ON_DUTY"
 	end
+	local now = os.clock()
+	if (self.panicCooldowns[player.UserId] or 0) > now then
+		return nil, "PANIC_COOLDOWN"
+	end
+	self.panicCooldowns[player.UserId] = now + 30
 	local callsign = duty.Callsign or string.format("UNIT-%d", player.UserId % 1000)
 	local departments = { duty.DepartmentId }
 	if duty.DepartmentId ~= "Control" then
@@ -123,7 +133,7 @@ function EmergencyTriggerService:Panic(player: Player): (any?, string?)
 	end
 	for _, target in Players:GetPlayers() do
 		local targetDuty = self.context.Services:Get("DutyService"):Get(target)
-		if targetDuty and table.find(departments, targetDuty.DepartmentId) then
+		if targetDuty then
 			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
 		end
 	end
@@ -175,6 +185,7 @@ function EmergencyTriggerService:Destroy()
 	table.clear(self.connections)
 	table.clear(self.cooldowns)
 	table.clear(self.playerCooldowns)
+	table.clear(self.panicCooldowns)
 end
 
 return EmergencyTriggerService

@@ -511,7 +511,17 @@ function EmergencyLightsController:Toggle()
 end
 
 function EmergencyLightsController:CycleSiren()
-	local tones = { "", "Wail", "Yelp", "Phaser" }
+	local tones = { "" }
+	if self.state.Tones then
+		for _, tone in { "Wail", "Yelp", "Phaser", "Horn" } do
+			if self.state.Tones[tone] and self.state.Tones[tone] ~= "" then
+				table.insert(tones, tone)
+			end
+		end
+	end
+	if #tones == 1 then
+		return
+	end
 	local current = table.find(tones, self.state.Siren or "") or 1
 	local nextIndex = current % #tones + 1
 	-- One request. The follow-up that used to be here read self.state, which the
