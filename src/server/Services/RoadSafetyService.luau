@@ -31,6 +31,7 @@ local RoadSafetyService = {
 	taggedSensors = {},
 	cooldowns = {},
 	journeys = {},
+	seatByAssembly = setmetatable({}, { __mode = "k" }),
 	running = false,
 }
 
@@ -169,21 +170,54 @@ end
 -- Resolves any body part touching a sensor to the vehicle's driver seat. Camera
 -- triggers normally touch a bumper, wheel or chassis first; requiring the
 -- enclosed VehicleSeat itself to cross the trigger misses most realistic cars.
+-- Which vehicle seat a touched part belongs to, remembered per assembly.
+--
+-- Touched fires for every part that brushes a sensor, so a car crossing one
+-- raises it dozens of times: each wheel, the bumper, every panel, entering and
+-- again leaving. This walked the ancestor chain on every one of those and asked
+-- each Model for a descendant of a class, which is a full recursive scan of a
+-- two hundred part vehicle. The cooldown that exists to stop the repeated work
+-- is checked by the caller afterwards, so it never prevented any of it.
+--
+-- Every part of one vehicle shares an assembly root, so the answer is the same
+-- for all of them and is worth keeping. The table is weak keyed, so a despawned
+-- vehicle drops out on its own rather than being held alive by having once
+-- driven past a camera.
+--
+-- A miss is remembered too, as false rather than nil, because the parts that
+-- are not vehicles are the ones that touch sensors most: pedestrians, dropped
+-- tools, the road itself.
 function RoadSafetyService:_seatFromHit(hit: BasePart): VehicleSeat?
-	if hit:IsA("VehicleSeat") then
-		return hit
-	end
-	local current: Instance? = hit
-	while current and current ~= Workspace do
-		if current:IsA("Model") then
-			local seat = current:FindFirstChildWhichIsA("VehicleSeat", true)
-			if seat then
-				return seat
-			end
+	local assembly: Instance = hit.AssemblyRootPart or hit
+	local remembered = self.seatByAssembly[assembly]
+	if remembered ~= nil then
+		-- A remembered seat that has since been destroyed is re-resolved rather
+		-- than returned, so a respawned vehicle is not reported as the old one.
+		if remembered == false then
+			return nil
 		end
-		current = current.Parent
+		if (remembered :: VehicleSeat).Parent then
+			return remembered :: VehicleSeat
+		end
 	end
-	return nil
+	local found: VehicleSeat? = nil
+	if hit:IsA("VehicleSeat") then
+		found = hit
+	else
+		local current: Instance? = hit
+		while current and current ~= Workspace do
+			if current:IsA("Model") then
+				local seat = current:FindFirstChildWhichIsA("VehicleSeat", true)
+				if seat then
+					found = seat :: VehicleSeat
+					break
+				end
+			end
+			current = current.Parent
+		end
+	end
+	self.seatByAssembly[assembly] = found or false
+	return found
 end
 
 -- Flashes the camera, where it has a light to flash with.

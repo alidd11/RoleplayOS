@@ -134,9 +134,33 @@ function CallService:Close(callId: string, closedByUserId: number?): (boolean, s
 end
 function CallService:Snapshot(): { any }
 	local result = {}
-	for _, call in self.calls do
+	-- Resolved calls are dropped once they are old enough, here rather than on a
+	-- timer.
+	--
+	-- Closing a call marked it Resolved and left it in the table for the life of
+	-- the server, and this loop skipped over every one of them on every request.
+	-- A busy Control server accumulates hundreds in an evening, and with fifteen
+	-- terminals refreshing about once a second that is thousands of wasted
+	-- iterations a second by the third hour, growing all the while.
+	--
+	-- The delay before dropping one exists because a client that asked just
+	-- before it closed should still see it disappear rather than have it vanish
+	-- from under them. Dispatch.ActiveStateTtlSeconds has been in the
+	-- configuration all along with nothing reading it; this is what it was for.
+	--
+	-- Nothing is lost by dropping it: IncidentService has already persisted the
+	-- call at the moment it closed.
+	--
+	-- Pruned in the reader rather than on its own loop, because if nobody is
+	-- asking then nothing is walking the table and there is nothing to save.
+	local now = os.time()
+	local dispatch = self.context.Configuration.Dispatch
+	local ttl = (dispatch and tonumber(dispatch.ActiveStateTtlSeconds)) or 300
+	for callId, call in self.calls do
 		if call.Status ~= "Resolved" then
 			table.insert(result, table.clone(call))
+		elseif now - (tonumber(call.ClosedAt) or now) > ttl then
+			self.calls[callId] = nil
 		end
 	end
 	table.sort(result, function(a, b)
