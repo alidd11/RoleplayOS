@@ -215,8 +215,12 @@ function RadioController:Start()
 	gui.DisplayOrder = 38
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local body = Instance.new("Frame")
-	body.AnchorPoint = Vector2.new(1, 1)
-	body.Position = UDim2.new(1, -18, 1, -78)
+	body.AnchorPoint = Vector2.new(1, 0)
+	-- Zenith's intended placement is a compact right-side panel beneath Roblox's
+	-- top UI, not a bottom-hotbar overlay. CoreUISafeInsets protects the panel
+	-- from the platform chrome; the additional offset leaves visual breathing
+	-- room below the Roblox top bar.
+	body.Position = UDim2.new(1, -18, 0, 72)
 	body.Size = UDim2.fromOffset(350, 330)
 	body.BackgroundColor3 = C.Body
 	body.BorderSizePixel = 0
