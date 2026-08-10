@@ -233,35 +233,29 @@ function RadioController:_render()
 	end
 	local channelTitle = button(channelBar, channelName)
 	channelTitle.Position = UDim2.fromOffset(31, 0)
-	channelTitle.Size = UDim2.new(1, -62, 0, 30)
+	channelTitle.Size = UDim2.fromOffset(120, 30)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
-	nextChannel.AnchorPoint = Vector2.new(1, 0)
-	nextChannel.Position = UDim2.fromScale(1, 0)
-	nextChannel.Size = UDim2.fromOffset(26, 30)
+	nextChannel.Position = UDim2.fromOffset(155, 0)
+	nextChannel.Size = UDim2.fromOffset(24, 30)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
-	local actionBar = Instance.new("Frame")
-	actionBar.Name = "RadioActions"
-	actionBar.BackgroundTransparency = 1
-	actionBar.Position = UDim2.fromOffset(0, 38)
-	actionBar.Size = UDim2.new(1, 0, 0, 32)
-	actionBar.Parent = self.content
-	local mute = button(actionBar, "MIC")
-	mute.Size = UDim2.fromOffset(72, 30)
+	local mute = button(channelBar, "MIC")
+	mute.Position = UDim2.fromOffset(183, 0)
+	mute.Size = UDim2.fromOffset(54, 30)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
 		mute.BackgroundColor3 = if self.muted then C.Card else C.Accent
 	end)
-	local panic = button(actionBar, "PANIC")
+	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
-	panic.Position = UDim2.fromOffset(80, 0)
-	panic.Size = UDim2.fromOffset(78, 30)
+	panic.Position = UDim2.fromOffset(243, 0)
+	panic.Size = UDim2.fromOffset(65, 30)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
@@ -278,8 +272,8 @@ function RadioController:_render()
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	log.ScrollBarThickness = 3
-	log.Position = UDim2.fromOffset(0, 78)
-	log.Size = UDim2.new(1, 0, 1, -122)
+	log.Position = UDim2.fromOffset(0, 38)
+	log.Size = UDim2.new(1, 0, 1, -82)
 	log.Parent = self.content
 	corner(log, 10)
 	local logLayout = Instance.new("UIListLayout")
@@ -367,16 +361,15 @@ function RadioController:Start()
 	panicSound.Name = "PanicConfirmation"
 	-- This is the panic-button tone from the imported Zenith radio package,
 	-- rather than the generic bank/robbery alarm used by other systems.
-	panicSound.SoundId = "rbxassetid://2600299714"
+	panicSound.SoundId = "rbxassetid://1826283298"
 	panicSound.Volume = 0.35
 	panicSound.Parent = SoundService
 	self.panicSound = panicSound
 	local body = Instance.new("Frame")
 	body.AnchorPoint = Vector2.new(1, 0)
-	-- Zenith's intended placement is a compact right-side panel beneath Roblox's
-	-- top UI, not a bottom-hotbar overlay. CoreUISafeInsets protects the panel
-	-- from the platform chrome; the additional offset leaves visual breathing
-	-- room below the Roblox top bar.
+	-- The radio stays as a compact left-side panel beneath Roblox's top UI,
+	-- matching the native chat/control cluster rather than the bottom hotbar.
+	-- CoreUISafeInsets protects it from platform chrome and device cutouts.
 	body.Position = UDim2.new(1, -18, 0, 72)
 	body.Size = UDim2.fromOffset(350, 400)
 	body.BackgroundColor3 = C.Body

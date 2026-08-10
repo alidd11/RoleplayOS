@@ -96,6 +96,19 @@ local function alreadyIssued(player: Player, toolId: string): boolean
 	end
 	return false
 end
+
+local function removeImportedAnimations(tool: Tool)
+	-- The purchased taser package references animations that are not available
+	-- to this group-owned experience. Keep the reviewed taser client/server
+	-- scripts and let RoleplayOS's local pose controller handle the presentation,
+	-- but remove the unavailable animation objects before the tool is issued.
+	for _, descendant in tool:GetDescendants() do
+		if descendant:IsA("Animation") then
+			descendant:Destroy()
+		end
+	end
+end
+
 function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, string?)
 	local definition = self.context.Configuration.Loadouts[loadoutId]
 	if not definition then
@@ -142,6 +155,9 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(ToolFactory.medicalBag(), backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
+			if toolId == "Taser" then
+				removeImportedAnimations(clone)
+			end
 			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name
 			clone.CanBeDropped = false
 			issue(clone, backpack, loadoutId, toolId)

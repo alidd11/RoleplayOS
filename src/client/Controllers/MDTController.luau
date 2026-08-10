@@ -587,10 +587,14 @@ function MDTController:_homeTile(order: number, name: string, detail: string, pa
 end
 
 function MDTController:_buildHome()
-	self:_homeTile(1, "People", "Search person records, warnings and warrants.", "Person")
-	self:_homeTile(2, "Vehicles", "Look up a registration, keeper and markers.", "Vehicle")
-	self:_homeTile(3, "Incidents", "Review recent incidents recorded by control.", "Incident")
-	self:_homeTile(4, "Map", "Live picture of incidents, units and premises.", "Map")
+	for _, child in self.home:GetChildren() do
+		if not child:IsA("UIGridLayout") then
+			child:Destroy()
+		end
+	end
+	for order, tile in departmentUI(self.departmentId).Tiles do
+		self:_homeTile(order, tile[1], tile[2], tile[3])
+	end
 end
 
 -- Pulls a fresh server snapshot. The map only ever renders what the server

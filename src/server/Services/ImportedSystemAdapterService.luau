@@ -39,13 +39,31 @@ local function sourceRoot(): Instance?
 	return ServerStorage:FindFirstChild("RoleplayOSImportedSources")
 end
 
-local function mergeChildren(source: Instance?, destination: Instance)
+local function stripExecutableContent(root: Instance)
+	for _, descendant in root:GetDescendants() do
+		if
+			descendant:IsA("LuaSourceContainer")
+			or descendant:IsA("RemoteEvent")
+			or descendant:IsA("RemoteFunction")
+			or descendant:IsA("BindableEvent")
+			or descendant:IsA("BindableFunction")
+		then
+			descendant:Destroy()
+		end
+	end
+end
+
+local function mergeChildren(source: Instance?, destination: Instance, stripCode: boolean?)
 	if not source then
 		return
 	end
 	for _, child in source:GetChildren() do
 		if not destination:FindFirstChild(child.Name) then
-			child:Clone().Parent = destination
+			local clone = child:Clone()
+			if stripCode then
+				stripExecutableContent(clone)
+			end
+			clone.Parent = destination
 		end
 	end
 end
@@ -127,7 +145,7 @@ function ImportedSystemAdapterService:_installBank()
 		return
 	end
 	mergeChildren(replicatedInstaller, ReplicatedStorage)
-	mergeChildren(workspaceInstaller, workspace)
+	mergeChildren(workspaceInstaller, workspace, true)
 	-- Do not mount the vendor's executable server installer. The supplied
 	-- package contains obfuscated third-party code that requires external assets
 	-- and HTTP, while RoleplayOS owns the server-authoritative robbery flow in
