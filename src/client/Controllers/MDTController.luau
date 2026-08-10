@@ -202,6 +202,46 @@ function MDTController:_mount()
 	homeTab.Size = UDim2.fromOffset(104, 34)
 	self.homeTab = homeTab
 
+	-- The officer's own status, on every page.
+	--
+	-- Dispatch could attach a unit to a call and nothing could ever say the unit
+	-- had arrived, so every car on the board read as still driving to it however
+	-- long it had been at the scene. The endpoint for this has been registered
+	-- and rate limited on the server all along with nothing anywhere calling it.
+	--
+	-- Beside HOME rather than on a page of its own, because an officer pulling up
+	-- outside should be one press away from saying so, not three.
+	local statusStrip = Instance.new("Frame")
+	statusStrip.Name = "UnitStatus"
+	statusStrip.BackgroundTransparency = 1
+	statusStrip.Position = UDim2.fromOffset(134, 70)
+	statusStrip.Size = UDim2.new(1, -156, 0, 34)
+	statusStrip.Visible = false
+	statusStrip.Parent = shell
+	self.statusStrip = statusStrip
+	local statusRow = Instance.new("UIListLayout")
+	statusRow.FillDirection = Enum.FillDirection.Horizontal
+	statusRow.Padding = UDim.new(0, 8)
+	statusRow.SortOrder = Enum.SortOrder.LayoutOrder
+	statusRow.VerticalAlignment = Enum.VerticalAlignment.Center
+	statusRow.Parent = statusStrip
+
+	self.unitStatusButtons = {}
+	local statusChoices = {
+		{ Id = "Available", Label = "AVAILABLE" },
+		{ Id = "OnScene", Label = "ON SCENE" },
+		{ Id = "Unavailable", Label = "UNAVAILABLE" },
+	}
+	for index, choice in statusChoices do
+		local control = button(statusStrip, choice.Label)
+		control.LayoutOrder = index
+		control.Size = UDim2.fromOffset(112, 30)
+		control.Activated:Connect(function()
+			self:SetUnitStatus(choice.Id)
+		end)
+		self.unitStatusButtons[choice.Id] = control
+	end
+
 	-- The home screen the terminal opens on, and the only way into a page. Each
 	-- card says what its page is for, so an officer who has just picked the
 	-- terminal up is not required to already know where to look.
@@ -449,6 +489,13 @@ function MDTController:_renderTabs()
 	-- Nothing to return to from the home screen itself, so the control only
 	-- appears once the officer has opened a page.
 	self.homeTab.Visible = self.recordType ~= "Home"
+	-- The status strip shares that row, so it takes the space back on the home
+	-- screen rather than sitting behind a gap where the control used to be.
+	if self.statusStrip then
+		local afterHome = self.homeTab.Visible
+		self.statusStrip.Position = UDim2.fromOffset(if afterHome then 134 else 22, 70)
+		self.statusStrip.Size = UDim2.new(1, if afterHome then -156 else -44, 0, 34)
+	end
 	-- Home and the map each replace the records surface rather than sharing it,
 	-- so the search controls cannot be used against a page that has no search.
 	local mapping = self.recordType == "Map"
@@ -708,6 +755,34 @@ function MDTController:_performSearch()
 	end
 end
 
+-- Paints the strip from a status the server has confirmed.
+function MDTController:_renderUnitStatus(status: string?)
+	self.unitStatus = status
+	self.statusStrip.Visible = status ~= nil
+	for id, control in self.unitStatusButtons do
+		local selected = id == status
+		control.BackgroundColor3 = if selected then C.Accent else C.Raised
+		control.TextColor3 = if selected then C.Text else C.Muted
+	end
+end
+
+function MDTController:SetUnitStatus(status: string)
+	if status == self.unitStatus then
+		return
+	end
+	local response = self.context.Controllers.NetworkController:Request(
+		"DispatchSetUnitStatus",
+		{ Status = status }
+	)
+	if response.Success then
+		-- Painted from the server's answer rather than from the press, so a status
+		-- the server declined is never left showing as though it took.
+		self:_renderUnitStatus(response.Data and response.Data.Status or status)
+	else
+		self.context.Controllers.NotificationController:Show(response.Message, "Unit status")
+	end
+end
+
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
@@ -717,6 +792,9 @@ function MDTController:RefreshAccess()
 		self.secureLabel.Text = "●  "
 			.. tostring(response.Data.DepartmentId or "AUTHORISED"):upper()
 	end
+	-- A unit only exists while the officer is on duty, so going off duty takes
+	-- the strip away rather than leaving a stale status on screen.
+	self:_renderUnitStatus(if self.allowed then response.Data.UnitStatus else nil)
 	self.gui.Enabled = self.allowed
 	-- Access is surfaced through the toolbar tool (and M), not a second floating
 	-- HUD button competing with the minimap and mobile vehicle controls.

@@ -63,6 +63,30 @@ function CallService:Create(data: any): (any?, string?)
 	self.context.Services:Get("DispatchService"):Publish("CallCreated", call.CallId, self.revision)
 	return call, nil
 end
+-- Moves the call a unit is assigned to on scene when that unit arrives.
+--
+-- Open, Assigned and OnScene are the three stages a call has, and until now
+-- nothing could set the third: dispatch assigned a unit and the call stayed
+-- Assigned until it was closed, however long the unit had been standing at the
+-- scene. Control could not tell a car still driving to a call from one already
+-- working it, which is the distinction the stage exists to make.
+--
+-- Driven by the unit rather than set by hand, because the officer arriving is
+-- the thing that happened and dispatch should not have to be told twice.
+function CallService:NoteUnitOnScene(unitId: string): boolean
+	local unit = self.context.Services:Get("UnitService").units[unitId]
+	local callId = unit and unit.AssignedCallId
+	local call = callId and self.calls[callId]
+	if not call or call.Status ~= "Assigned" then
+		return false
+	end
+	call.Status = "OnScene"
+	call.Revision += 1
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallOnScene", callId, self.revision)
+	return true
+end
+
 function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	local call = self.calls[callId]
 	local unit = self.context.Services:Get("UnitService").units[unitId]

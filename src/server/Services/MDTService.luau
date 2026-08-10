@@ -55,6 +55,7 @@ function MDTService:AccessSummary(player: Player): any
 	if not self:CanUse(player) then
 		return { Allowed = false, Permissions = {} }
 	end
+	local unit = self.context.Services:Get("UnitService").units[tostring(player.UserId)]
 	return {
 		Allowed = true,
 		DepartmentId = duty.DepartmentId,
@@ -64,6 +65,14 @@ function MDTService:AccessSummary(player: Player): any
 		-- blue light authority that every individual action then refused. The
 		-- checks were right; the summary describing them was not.
 		Permissions = RolePermissions.forDuty(self.context.Configuration, duty),
+		-- The officer's own unit state, so the terminal can show what dispatch is
+		-- looking at rather than only what the officer last pressed. Their own
+		-- record only; the full board is a separate, separately gated request.
+		UnitStatus = unit and unit.Status or nil,
+		-- The statuses an officer may put themselves into. Assigned is absent by
+		-- design: being sent to a call is dispatch's decision, not a state a unit
+		-- may declare for itself.
+		UnitStatuses = { "Available", "OnScene", "Unavailable" },
 	}
 end
 function MDTService:Destroy() end

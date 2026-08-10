@@ -826,18 +826,32 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
-		local changed, reason = self.context.Services
-			:Get("UnitService")
-			:SetStatus(tostring(player.UserId), payload.Status)
+		local unitId = tostring(player.UserId)
+		-- Assigned is dispatch's to give. A unit that could set it on itself could
+		-- show as attending a call nobody sent it to.
+		if payload.Status == "Assigned" then
+			return {
+				Success = false,
+				Code = "STATUS_SET_BY_DISPATCH",
+				Message = "Only dispatch can attach a unit to a call.",
+				RequestId = requestId,
+			}
+		end
+		local changed, reason =
+			self.context.Services:Get("UnitService"):SetStatus(unitId, payload.Status)
 		if changed then
-			self.context.Services
-				:Get("DispatchService")
-				:Publish("UnitChanged", tostring(player.UserId), 0)
+			if payload.Status == "OnScene" then
+				self.context.Services:Get("CallService"):NoteUnitOnScene(unitId)
+			end
+			self.context.Services:Get("DispatchService"):Publish("UnitChanged", unitId, 0)
 		end
 		return {
 			Success = changed,
 			Code = if changed then "OK" else reason,
 			Message = if changed then "Status updated." else "The status could not be updated.",
+			-- Echoed so the terminal shows what the server recorded rather than
+			-- what the officer pressed.
+			Data = if changed then { Status = payload.Status } else nil,
 			RequestId = requestId,
 		}
 	end)
