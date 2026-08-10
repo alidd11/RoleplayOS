@@ -24,5 +24,6 @@ return {
 		PublicTransportTeam = { GamepassId = 1934302085, PriceInRobux = 59 },
 		PublicHighwaysTeam = { GamepassId = 1934122097, PriceInRobux = 79 },
 		PublicPrisonTeam = { GamepassId = 1937368306, PriceInRobux = 79 },
+		GangSystemAccess = { GamepassId = 1941013627, PriceInRobux = 499 },
 	},
 }

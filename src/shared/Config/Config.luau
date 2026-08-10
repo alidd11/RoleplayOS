@@ -563,6 +563,12 @@ local Config = {
 			Name = "Public Prison Service Team",
 			Description = "Join the Prison Service in public servers with authorised custody-site access and equipment.",
 		},
+		GangSystemAccess = {
+			Id = "GangSystemAccess",
+			GamepassId = 1941013627,
+			Name = "Gang System Access",
+			Description = "Unlock gang creation, membership management, leadership tools, communications, and associated criminal-roleplay features.",
+		},
 	},
 	EquipmentPasses = {
 		Knife = { GamepassId = 1937446295, TeamName = "Civilian", ToolNames = { "Knife" } },

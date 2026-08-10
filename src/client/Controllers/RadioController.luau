@@ -187,12 +187,18 @@ function RadioController:Start()
 			return
 		end
 		self.watchedTools[tool] = true
-		table.insert(self.connections, tool.Equipped:Connect(function()
-			self:_setOpen(true)
-		end))
-		table.insert(self.connections, tool.Unequipped:Connect(function()
-			self:_setOpen(false)
-		end))
+		table.insert(
+			self.connections,
+			tool.Equipped:Connect(function()
+				self:_setOpen(true)
+			end)
+		)
+		table.insert(
+			self.connections,
+			tool.Unequipped:Connect(function()
+				self:_setOpen(false)
+			end)
+		)
 	end
 	local backpack = Players.LocalPlayer:WaitForChild("Backpack")
 	for _, item in backpack:GetChildren() do
