@@ -12,6 +12,11 @@ local VehicleSpawnerService = {
 	cooldowns = {},
 	spawning = {},
 	connections = {},
+	-- Held per player and released when they leave, rather than appended to the
+	-- flat list above, so a long server does not accumulate one closure per
+	-- person who has ever played on it.
+	deathConnections = {},
+	spawnConnections = {},
 }
 
 local function rootPosition(player: Player): Vector3?
@@ -31,6 +36,34 @@ local function modelPosition(instance: Instance): Vector3?
 		return instance.Position
 	end
 	return nil
+end
+
+-- Stands anybody up before their seat stops existing.
+--
+-- A passenger left seated when the model is destroyed keeps the sitting state
+-- with no seat beneath them: they float, cannot walk, and have to reset. That
+-- applies to every route a vehicle disappears by, not only to the owner dying,
+-- so it is done wherever one is destroyed.
+local function ejectOccupants(vehicle: Instance)
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA("Seat") or descendant:IsA("VehicleSeat") then
+			local occupant = descendant.Occupant
+			if occupant then
+				occupant.Sit = false
+				occupant:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end
+		end
+	end
+end
+
+-- Removes the player's vehicle, whatever the reason.
+function VehicleSpawnerService:Remove(userId: number)
+	local vehicle = self.active[userId]
+	self.active[userId] = nil
+	if vehicle and vehicle.Parent then
+		ejectOccupants(vehicle)
+		vehicle:Destroy()
+	end
 end
 
 function VehicleSpawnerService:Init(context: any)
@@ -330,6 +363,7 @@ function VehicleSpawnerService:Spawn(
 		-- The replacement is now fully authorised and has a valid template and
 		-- registration. Only at this point is the player's previous car removed,
 		-- so a failed spawn can never leave them without their current vehicle.
+		ejectOccupants(existing)
 		existing:Destroy()
 		self.active[player.UserId] = nil
 	end
@@ -383,15 +417,65 @@ function VehicleSpawnerService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			local vehicle = self.active[player.UserId]
-			if vehicle then
-				vehicle:Destroy()
-			end
-			self.active[player.UserId] = nil
+			self:Remove(player.UserId)
 			self.cooldowns[player.UserId] = nil
 			self.spawning[player.UserId] = nil
+			for _, held in { self.deathConnections, self.spawnConnections } do
+				local connection = held[player.UserId]
+				if connection then
+					connection:Disconnect()
+					held[player.UserId] = nil
+				end
+			end
 		end)
 	)
+	-- The car goes when its driver does.
+	--
+	-- Nothing on this server reacted to a player dying, so a dead player's
+	-- vehicle stayed in the world until they left it. Spawning again replaces
+	-- it, so it was litter rather than a lock-out, but on a full server that is
+	-- an abandoned car with physics and lights running for every death.
+	--
+	-- Died rather than CharacterRemoving, because a character is also removed
+	-- for a team change or a manual respawn, and taking somebody's car for those
+	-- is a broader rule than the one asked for. Re-armed on every character,
+	-- since each respawn brings a new humanoid and a watch connected once at
+	-- join stops firing the moment they first die.
+	local function watchDeath(player: Player, character: Model)
+		local found = character:FindFirstChildWhichIsA("Humanoid")
+			or character:WaitForChild("Humanoid", 10)
+		if not found or not found:IsA("Humanoid") or player.Character ~= character then
+			return
+		end
+		local previous = self.deathConnections[player.UserId]
+		if previous then
+			previous:Disconnect()
+		end
+		self.deathConnections[player.UserId] = found.Died:Connect(function()
+			self:Remove(player.UserId)
+		end)
+	end
+	local function watch(player: Player)
+		local previous = self.spawnConnections[player.UserId]
+		if previous then
+			previous:Disconnect()
+		end
+		self.spawnConnections[player.UserId] = player.CharacterAdded:Connect(function(character)
+			watchDeath(player, character)
+		end)
+		local character = player.Character
+		if character then
+			task.defer(function()
+				if player.Parent and player.Character == character then
+					watchDeath(player, character)
+				end
+			end)
+		end
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
 end
 
 function VehicleSpawnerService:Destroy()
@@ -400,8 +484,15 @@ function VehicleSpawnerService:Destroy()
 	end
 	for _, vehicle in self.active do
 		if vehicle.Parent then
+			ejectOccupants(vehicle)
 			vehicle:Destroy()
 		end
+	end
+	for _, held in { self.deathConnections, self.spawnConnections } do
+		for _, connection in held do
+			connection:Disconnect()
+		end
+		table.clear(held)
 	end
 	table.clear(self.active)
 	table.clear(self.spawning)
