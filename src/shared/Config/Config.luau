@@ -1452,7 +1452,6 @@ local Config = {
 		RoadsPolicing = { Id = "RoadsPolicing", DepartmentId = "Police", Name = "Roads Policing" },
 	},
 	Tools = {
-		Radio = { Id = "Radio", AssetPath = { "Tools", "Shared", "Radio" } },
 		MDT = { Id = "MDT", AssetPath = { "Tools", "Shared", "MDT" } },
 		Handcuffs = {
 			Id = "Handcuffs",
