@@ -162,7 +162,6 @@ end
 function WorldBudgetService:_reportStreaming()
 	local ok, detail = pcall(function()
 		return {
-			TargetRadius = Workspace.StreamingTargetRadius,
 			IntegrityMode = Workspace.StreamingIntegrityMode.Name,
 			ModelBehaviour = Workspace.ModelStreamingBehavior.Name,
 		}
