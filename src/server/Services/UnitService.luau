@@ -34,6 +34,17 @@ function UnitService:SetStatus(unitId: string, status: string): (boolean, string
 	unit.Status = status
 	return true, nil
 end
+function UnitService:SetCallsign(unitId: string, callsign: string): (boolean, string?)
+	local unit = self.units[unitId]
+	if not unit then
+		return false, "UNIT_NOT_FOUND"
+	end
+	if type(callsign) ~= "string" or #callsign < 2 or #callsign > 16 then
+		return false, "INVALID_CALLSIGN"
+	end
+	unit.Callsign = callsign
+	return true, nil
+end
 function UnitService:Unregister(player: Player)
 	self.units[tostring(player.UserId)] = nil
 end

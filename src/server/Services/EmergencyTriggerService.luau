@@ -97,6 +97,45 @@ function EmergencyTriggerService:Trigger(instance: Instance, player: Player?): (
 	return call, nil
 end
 
+function EmergencyTriggerService:Panic(player: Player): (any?, string?)
+	local duty = self.context.Services:Get("DutyService"):Get(player)
+	if not duty then
+		return nil, "NOT_ON_DUTY"
+	end
+	local callsign = duty.Callsign or string.format("UNIT-%d", player.UserId % 1000)
+	local departments = { duty.DepartmentId }
+	if duty.DepartmentId ~= "Control" then
+		table.insert(departments, "Control")
+	end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local call, reason = self.context.Services:Get("CallService"):Create({
+		Priority = "Immediate",
+		Summary = callsign .. " PANIC BUTTON",
+		Location = "UNIT PANIC / " .. callsign,
+		Position = if root and root:IsA("BasePart")
+			then MapProjection.serialise(root.Position)
+			else nil,
+		DepartmentIds = departments,
+		Source = "RadioPanic",
+	})
+	if not call then
+		return nil, reason
+	end
+	for _, target in Players:GetPlayers() do
+		local targetDuty = self.context.Services:Get("DutyService"):Get(target)
+		if targetDuty and table.find(departments, targetDuty.DepartmentId) then
+			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
+		end
+	end
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = "Emergency.RadioPanic",
+		Target = call.CallId,
+		Metadata = { Callsign = callsign, Departments = departments, ServerId = game.JobId },
+	})
+	return call, nil
+end
+
 function EmergencyTriggerService:_watch(instance: Instance)
 	local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
 	if not prompt then

@@ -1,11 +1,9 @@
 --!strict
 
 local Players = game:GetService("Players")
-local ContextActionService = game:GetService("ContextActionService")
 local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local RadioController = { connections = {} }
-local ACTION = "RoleplayOSToggleRadio"
 local C = {
 	Body = TerminalTheme.Surface,
 	Panel = TerminalTheme.Raised,
@@ -15,6 +13,7 @@ local C = {
 	Green = TerminalTheme.Secure,
 	Accent = TerminalTheme.Accent,
 	Border = TerminalTheme.Border,
+	Immediate = TerminalTheme.Immediate,
 }
 
 local function corner(parent: Instance, radius: number)
@@ -55,6 +54,23 @@ function RadioController:Init(context: any)
 	self.open = false
 	self.snapshot = nil
 	self.vehicleMode = false
+	self.expanded = false
+end
+
+function RadioController:_setExpanded(expanded: boolean)
+	self.expanded = expanded
+	if self.content then
+		self.content.Visible = expanded
+	end
+	if self.callsignInput then
+		self.callsignInput.Visible = expanded
+	end
+	if self.close then
+		self.close.Text = if expanded then "×" else "+"
+	end
+	if self.body then
+		self.body.Size = if expanded then UDim2.fromOffset(364, 360) else UDim2.fromOffset(248, 58)
+	end
 end
 
 function RadioController:_setOpen(open: boolean)
@@ -79,6 +95,22 @@ function RadioController:_render()
 		child:Destroy()
 	end
 	local snapshot = self.snapshot
+	if self.header then
+		local channelName = if snapshot
+			then (function()
+				for _, channel in snapshot.Channels do
+					if channel.Id == snapshot.CurrentChannelId then
+						return channel.Name
+					end
+				end
+				return tostring(snapshot.CurrentChannelId)
+			end)()
+			else "OFF DUTY"
+		self.header.Text = "RADIO  ·  " .. channelName
+		self.callsign.Text = if snapshot
+			then "UNIT " .. tostring(snapshot.Callsign or "UNASSIGNED")
+			else "Operational channel"
+	end
 	if not snapshot then
 		text(self.content, "Radio unavailable", 16, true).Size = UDim2.new(1, 0, 0, 28)
 		text(self.content, "Report for duty to access operational channels.", 12).Position =
@@ -88,7 +120,7 @@ function RadioController:_render()
 	local channels = Instance.new("Frame")
 	channels.Name = "ChannelStrip"
 	channels.BackgroundTransparency = 1
-	channels.Size = UDim2.new(1, 0, 0, 38)
+	channels.Size = UDim2.new(1, -92, 0, 34)
 	channels.Parent = self.content
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
@@ -108,6 +140,15 @@ function RadioController:_render()
 			end
 		end)
 	end
+	local panic = button(self.content, "PANIC")
+	panic.Name = "Panic"
+	panic.BackgroundColor3 = C.Immediate
+	panic.Position = UDim2.new(1, -84, 0, 0)
+	panic.Size = UDim2.fromOffset(84, 34)
+	panic.Activated:Connect(function()
+		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
+		self.context.Controllers.NotificationController:Show(response.Message, "RADIO PANIC")
+	end)
 	local log = Instance.new("ScrollingFrame")
 	log.Name = "MessageLog"
 	log.BackgroundColor3 = C.Panel
@@ -115,8 +156,8 @@ function RadioController:_render()
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	log.ScrollBarThickness = 3
-	log.Position = UDim2.fromOffset(0, 48)
-	log.Size = UDim2.new(1, 0, 1, -112)
+	log.Position = UDim2.fromOffset(0, 44)
+	log.Size = UDim2.new(1, 0, 1, -98)
 	log.Parent = self.content
 	corner(log, 10)
 	local logLayout = Instance.new("UIListLayout")
@@ -130,8 +171,19 @@ function RadioController:_render()
 	pad.PaddingBottom = UDim.new(0, 10)
 	pad.Parent = log
 	for _, entry in snapshot.Messages do
-		local line = text(log, string.format("%s  %s", entry.Callsign, entry.Message), 11)
-		line.Size = UDim2.new(1, 0, 0, 32)
+		local row = Instance.new("Frame")
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, 0, 0, 38)
+		row.Parent = log
+		local line = text(row, string.format("%s  %s", entry.Callsign, entry.Message), 11)
+		line.Size = UDim2.new(1, 0, 1, -7)
+		local separator = Instance.new("Frame")
+		separator.BackgroundColor3 = C.Border
+		separator.BackgroundTransparency = 0.35
+		separator.BorderSizePixel = 0
+		separator.Position = UDim2.new(0, 0, 1, -1)
+		separator.Size = UDim2.new(1, 0, 0, 1)
+		separator.Parent = row
 	end
 	local input = Instance.new("TextBox")
 	input.Name = "TransmitBox"
@@ -144,14 +196,14 @@ function RadioController:_render()
 	input.Text = ""
 	input.TextColor3 = C.Text
 	input.TextSize = 12
-	input.Position = UDim2.fromOffset(0, -1)
+	input.Position = UDim2.new(0, 0, 1, -42)
 	input.Size = UDim2.new(1, -74, 0, 42)
 	input.Parent = self.content
 	corner(input, 10)
 	local transmit = button(self.content, "SEND")
 	transmit.Name = "Transmit"
 	transmit.BackgroundColor3 = C.Green
-	transmit.Position = UDim2.new(1, -66, 0, -1)
+	transmit.Position = UDim2.new(1, -66, 1, -42)
 	transmit.Size = UDim2.fromOffset(66, 42)
 	transmit.Activated:Connect(function()
 		if input.Text == "" then
@@ -180,48 +232,6 @@ function RadioController:refresh()
 end
 
 function RadioController:Start()
-	local function toggle(_, state)
-		if state == Enum.UserInputState.Begin then
-			self:_setOpen(not self.open)
-		end
-		return Enum.ContextActionResult.Sink
-	end
-	ContextActionService:BindAction(ACTION, toggle, false, Enum.KeyCode.R, Enum.KeyCode.ButtonX)
-	ContextActionService:SetTitle(ACTION, "RADIO")
-	ContextActionService:SetDescription(ACTION, "Open or close your operational radio.")
-	self.watchedTools = setmetatable({}, { __mode = "k" })
-	local function watchTool(tool: Instance)
-		if not tool:IsA("Tool") or tool.Name ~= "Radio" or self.watchedTools[tool] then
-			return
-		end
-		self.watchedTools[tool] = true
-		table.insert(
-			self.connections,
-			tool.Equipped:Connect(function()
-				self:_setOpen(true)
-			end)
-		)
-		table.insert(
-			self.connections,
-			tool.Unequipped:Connect(function()
-				self:_setOpen(false)
-			end)
-		)
-	end
-	local backpack = Players.LocalPlayer:WaitForChild("Backpack")
-	for _, item in backpack:GetChildren() do
-		watchTool(item)
-	end
-	table.insert(self.connections, backpack.ChildAdded:Connect(watchTool))
-	table.insert(
-		self.connections,
-		Players.LocalPlayer.CharacterAdded:Connect(function(character)
-			for _, item in character:GetChildren() do
-				watchTool(item)
-			end
-			table.insert(self.connections, character.ChildAdded:Connect(watchTool))
-		end)
-	)
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSRadio"
 	gui:SetAttribute("RoleplayOSManagedUI", true)
@@ -260,35 +270,67 @@ function RadioController:Start()
 	close.Position = UDim2.new(1, -45, 0, 12)
 	close.Size = UDim2.fromOffset(30, 28)
 	close.Activated:Connect(function()
-		self:_setOpen(false)
+		self:_setExpanded(not self.expanded)
 	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
-	content.Position = UDim2.fromOffset(18, 68)
+	content.Position = UDim2.fromOffset(18, 88)
 	content.Size = UDim2.new(1, -36, 1, -82)
 	content.Parent = body
 	self.content = content
+	content.Visible = false
 	self.header = header
 	self.callsign = callsign
 	self.close = close
+	local callsignInput = Instance.new("TextBox")
+	callsignInput.Name = "CallsignInput"
+	callsignInput.BackgroundColor3 = C.Card
+	callsignInput.BorderSizePixel = 0
+	callsignInput.ClearTextOnFocus = false
+	callsignInput.Font = Enum.Font.GothamBold
+	callsignInput.PlaceholderText = "Enter callsign"
+	callsignInput.PlaceholderColor3 = C.Muted
+	callsignInput.TextColor3 = C.Text
+	callsignInput.TextSize = 11
+	callsignInput.Text = ""
+	callsignInput.Position = UDim2.fromOffset(18, 58)
+	callsignInput.Size = UDim2.fromOffset(120, 24)
+	callsignInput.Visible = false
+	callsignInput.Parent = body
+	corner(callsignInput, 6)
+	callsignInput.FocusLost:Connect(function(enterPressed)
+		if not enterPressed or callsignInput.Text == "" then
+			return
+		end
+		local response = self.context.Controllers.NetworkController:Request("RadioSetCallsign", {
+			Callsign = callsignInput.Text,
+		})
+		if response.Success then
+			callsignInput.Text = response.Data.Callsign
+			self:refresh()
+		else
+			self.context.Controllers.NotificationController:Show(response.Message, "Callsign")
+		end
+	end)
+	self.callsignInput = callsignInput
 	self.bodyScale = Instance.new("UIScale")
 	self.bodyScale.Parent = body
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", function(layout)
+		callsignInput.Visible = self.expanded
 		if layout.Compact then
-			body.AnchorPoint = Vector2.new(0.5, 0.5)
-			body.Position = UDim2.fromScale(0.5, 0.5)
-			body.Size = UDim2.fromOffset(364, 360)
+			body.AnchorPoint = Vector2.new(0, 0)
+			body.Position = UDim2.fromOffset(10, layout.NativeTop + 10)
+			body.Size = if self.expanded
+				then UDim2.fromOffset(364, 360)
+				else UDim2.fromOffset(248, 58)
 			self.bodyScale.Scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(364, 360), 24)
-		elseif layout.Vehicle then
-			body.AnchorPoint = Vector2.new(0, 0.5)
-			body.Position = UDim2.new(0, 18, 0.5, 0)
-			body.Size = UDim2.fromOffset(364, math.min(360, layout.SafeViewport.Y - 96))
-			self.bodyScale.Scale = 1
+				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(248, 58), 20)
 		else
-			body.AnchorPoint = Vector2.new(1, 0)
-			body.Position = UDim2.new(1, -18, 0, layout.NativeTop + 18)
-			body.Size = UDim2.fromOffset(364, 360)
+			body.AnchorPoint = Vector2.new(0, 0)
+			body.Position = UDim2.fromOffset(18, layout.NativeTop + 18)
+			body.Size = if self.expanded
+				then UDim2.fromOffset(364, 360)
+				else UDim2.fromOffset(248, 58)
 			self.bodyScale.Scale = math.clamp(
 				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,
@@ -296,6 +338,17 @@ function RadioController:Start()
 			)
 		end
 	end)
+	table.insert(
+		self.connections,
+		self.context.Events.DutyChanged.Event:Connect(function(duty)
+			self:_setOpen(duty ~= nil)
+		end)
+	)
+	local initial = self.context.Controllers.NetworkController:Request("GetRadioSnapshot", {})
+	if initial.Success then
+		self.snapshot = initial.Data
+		self:_setOpen(true)
+	end
 	local event = self.context.Controllers.NetworkController:ResolveEvent("RadioChanged")
 	if event then
 		table.insert(
@@ -316,7 +369,6 @@ function RadioController:Start()
 end
 
 function RadioController:Destroy()
-	ContextActionService:UnbindAction(ACTION)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

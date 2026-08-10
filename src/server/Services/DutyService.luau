@@ -227,6 +227,7 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		player.Team = previousTeam
 		return false, unitReason
 	end
+	self.active[player.UserId].Callsign = callsign
 	task.spawn(function()
 		self.context.Services:Get("IdentificationService"):RefreshWithRetry(player)
 	end)
@@ -237,6 +238,33 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		Metadata = { StationId = request.StationId, SpawnId = request.SpawnId },
 	})
 	return true, nil
+end
+
+function DutyService:SetCallsign(player: Player, raw: string): (string?, string?)
+	local duty = self:Get(player)
+	if not duty then
+		return nil, "NOT_ON_DUTY"
+	end
+	local callsign = string.upper(string.sub(string.gsub(raw, "[^%w%- ]", ""), 1, 16))
+	callsign = string.gsub(callsign, "^%s+", "")
+	callsign = string.gsub(callsign, "%s+$", "")
+	if #callsign < 2 then
+		return nil, "INVALID_CALLSIGN"
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local profile = session and session.Profile.DutyProfiles[duty.DutyProfileId]
+	if not profile then
+		return nil, "DUTY_PROFILE_NOT_FOUND"
+	end
+	profile.Callsign = callsign
+	duty.Callsign = callsign
+	local updated, reason =
+		self.context.Services:Get("UnitService"):SetCallsign(tostring(player.UserId), callsign)
+	if not updated then
+		return nil, reason
+	end
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return callsign, nil
 end
 
 function DutyService:End(player: Player)

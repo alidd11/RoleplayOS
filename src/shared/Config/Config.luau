@@ -1473,23 +1473,23 @@ local Config = {
 	Loadouts = {
 		PoliceResponse = {
 			Id = "PoliceResponse",
-			ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" },
+			ToolIds = { "MDT", "Handcuffs", "Taser" },
 		},
 		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
 		-- gated on carrying them, so the distinction enforces itself.
-		PCSO = { Id = "PCSO", ToolIds = { "Radio", "MDT" } },
+		PCSO = { Id = "PCSO", ToolIds = { "MDT" } },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
-			ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" },
+			ToolIds = { "MDT", "Handcuffs", "Taser" },
 		},
-		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" } },
-		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" } },
-		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "Radio", "MDT", "MedicalBag" } },
-		FireStandard = { Id = "FireStandard", ToolIds = { "Radio", "MDT" } },
-		ControlStandard = { Id = "ControlStandard", ToolIds = { "Radio", "MDT" } },
-		TransportStandard = { Id = "TransportStandard", ToolIds = { "Radio" } },
-		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = { "Radio", "MDT" } },
-		PrisonStandard = { Id = "PrisonStandard", ToolIds = { "Radio", "MDT" } },
+		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "MDT", "Handcuffs", "Taser" } },
+		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "MDT", "Handcuffs", "Taser" } },
+		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "MDT", "MedicalBag" } },
+		FireStandard = { Id = "FireStandard", ToolIds = { "MDT" } },
+		ControlStandard = { Id = "ControlStandard", ToolIds = { "MDT" } },
+		TransportStandard = { Id = "TransportStandard", ToolIds = {} },
+		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = { "MDT" } },
+		PrisonStandard = { Id = "PrisonStandard", ToolIds = { "MDT" } },
 	},
 	Jobs = {
 		DeliveryDriver = {
@@ -2368,6 +2368,8 @@ local Config = {
 			GetRadioSnapshot = { Capacity = 5, RefillPerSecond = 1 },
 			RadioSetChannel = { Capacity = 8, RefillPerSecond = 2 },
 			RadioTransmit = { Capacity = 6, RefillPerSecond = 1 },
+			RadioSetCallsign = { Capacity = 3, RefillPerSecond = 0.2 },
+			RadioPanic = { Capacity = 2, RefillPerSecond = 0.05 },
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.

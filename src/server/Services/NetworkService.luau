@@ -242,6 +242,19 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("RadioSetCallsign", function(payload)
+		return type(payload) == "table" and type(payload.Callsign) == "string"
+	end, function(player, payload, requestId)
+		local callsign, reason =
+			self.context.Services:Get("DutyService"):SetCallsign(player, payload.Callsign)
+		return {
+			Success = callsign ~= nil,
+			Code = if callsign then "OK" else reason,
+			Message = if callsign then "Callsign updated." else "Enter a valid callsign.",
+			Data = if callsign then { Callsign = callsign } else nil,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("EnterCivilian", function(payload)
 		return type(payload) == "table"
 			and type(payload.CharacterId) == "string"
@@ -1187,6 +1200,18 @@ function NetworkService:Start()
 			Success = sent == true,
 			Code = if sent then "OK" else reason,
 			Message = if sent then "Transmitted." else "The message could not be transmitted.",
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("RadioPanic", function(payload)
+		return type(payload) == "table"
+	end, function(player, _, requestId)
+		local call, reason = self.context.Services:Get("EmergencyTriggerService"):Panic(player)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call then "PANIC ALERT SENT." else "The panic alert could not be sent.",
+			Data = call,
 			RequestId = requestId,
 		}
 	end)
