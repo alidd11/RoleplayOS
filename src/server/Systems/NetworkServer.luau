@@ -14,6 +14,16 @@ function NetworkServer.new(config: any, logger: any)
 		or Instance.new("Folder")
 	folder.Name = "Remotes"
 	folder.Parent = ReplicatedStorage.RoleplayOS.Network
+	-- Studio can retain runtime-created instances in the edit DataModel after a
+	-- stopped test or an installer save. Reusing that folder without clearing it
+	-- creates two children with the same endpoint name. FindFirstChild may then
+	-- hand the client the old RemoteFunction, which has no OnServerInvoke in the
+	-- new server and therefore yields forever. The server owns this folder, so a
+	-- fresh server always starts with a fresh endpoint set.
+	for _, child in folder:GetChildren() do
+		child:Destroy()
+	end
+	folder:SetAttribute("Ready", false)
 	local self = setmetatable({
 		folder = folder,
 		config = config,
@@ -22,6 +32,7 @@ function NetworkServer.new(config: any, logger: any)
 		limiters = {},
 		counts = {},
 		active = {},
+		authorizer = nil,
 		globalLimiter = RateLimiter.new(
 			config.GlobalCapacity or 30,
 			config.GlobalRefillPerSecond or 10
@@ -36,6 +47,13 @@ function NetworkServer.new(config: any, logger: any)
 		self.active[player.UserId] = nil
 	end)
 	return self
+end
+
+-- Installs the server-entry gate used by every RemoteFunction. This lives at
+-- the transport boundary so a newly joined player cannot call a less obvious
+-- endpoint while an asynchronous group-membership check is still running.
+function NetworkServer:SetAuthorizer(authorizer: (Player) -> boolean)
+	self.authorizer = authorizer
 end
 
 -- Counts outcomes by code.
@@ -64,6 +82,10 @@ function NetworkServer:RegisterFunction(
 	handler: (Player, any, string) -> any
 )
 	assert(self.endpoints[name] == nil, "Duplicate endpoint: " .. name)
+	local stale = self.folder:FindFirstChild(name)
+	if stale then
+		stale:Destroy()
+	end
 	local remote = Instance.new("RemoteFunction")
 	remote.Name = name
 	remote.Parent = self.folder
@@ -83,6 +105,18 @@ function NetworkServer:RegisterFunction(
 				Message = "Please wait before trying again.",
 				RequestId = requestId,
 			}
+		end
+		if self.authorizer then
+			local authorizerOk, authorized = pcall(self.authorizer, player)
+			if not authorizerOk or authorized ~= true then
+				self:_count("ACCESS_PENDING")
+				return {
+					Success = false,
+					Code = "ACCESS_PENDING",
+					Message = "Your server access is still being verified.",
+					RequestId = requestId,
+				}
+			end
 		end
 		local structurallySafe, structuralReason = PayloadInspector.validate(payload, self.config)
 		if not structurallySafe then
@@ -257,6 +291,10 @@ end
 
 function NetworkServer:RegisterEvent(name: string): RemoteEvent
 	assert(self.endpoints[name] == nil, "Duplicate endpoint: " .. name)
+	local stale = self.folder:FindFirstChild(name)
+	if stale then
+		stale:Destroy()
+	end
 	local remote = Instance.new("RemoteEvent")
 	remote.Name = name
 	remote.Parent = self.folder

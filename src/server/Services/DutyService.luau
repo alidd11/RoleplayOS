@@ -31,6 +31,29 @@ function DutyService:Start()
 					if role and role.LoadoutId then
 						self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
 					end
+					if role and role.AutoEquipUniform == true and role.UniformId then
+						local applied, reason = self.context.Services
+							:Get("UniformService")
+							:Apply(player, role.UniformId)
+						if not applied then
+							self.context.Logger:Warning(
+								"Automatic duty uniform could not be applied",
+								{
+									UserId = player.UserId,
+									RoleId = duty.RoleId,
+									UniformId = role.UniformId,
+									Reason = reason,
+								}
+							)
+						end
+					end
+					if duty.DepartmentId == "Police" then
+						local session = self.context.Services:Get("DataService"):GetSession(player)
+						local profile = session and session.Profile.DutyProfiles[duty.DutyProfileId]
+						self.context.Services
+							:Get("ImportedSystemAdapterService")
+							:ApplyEpaulettes(player, profile)
+					end
 					self.context.Services:Get("IdentificationService"):Refresh(player)
 				end)
 			end)
@@ -73,7 +96,7 @@ function DutyService:Get(player: Player): any?
 		-- unregisters the unit from every dispatcher's board, destroys the
 		-- radio, notebook and handcuffs, and leaves an officer on the police team
 		-- in uniform with no duty and no equipment, while the audit line says the
-		-- shift ended normally. VehicleService calls this every second for anyone
+		-- shift ended normally. Runtime authorisation checks this for anyone
 		-- driving, and ending duty there throws them out of a moving car.
 		--
 		-- It also lands hardest where it matters least deservedly: on the public
@@ -125,20 +148,9 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		player.Team = previousTeam
 		return false, finalSpawnReason
 	end
-	if role.UniformId then
-		local uniformed, uniformReason =
-			self.context.Services:Get("UniformService"):Apply(player, role.UniformId)
-		if not uniformed then
-			-- Uniforms are presentation content, not an access boundary. Development
-			-- and newly migrated maps may not have their final template IDs yet; the
-			-- production validator still blocks publishing that state.
-			self.context.Logger:Warning("Duty started without configured uniform", {
-				UserId = player.UserId,
-				RoleId = request.RoleId,
-				Reason = uniformReason,
-			})
-		end
-	end
+	-- Players arrive in their Roblox clothing and choose an authorised uniform
+	-- from the changing room. This keeps clothing selection visible and avoids
+	-- silently dressing somebody before the changing-room assets have loaded.
 	if role.LoadoutId then
 		local equipped, loadoutReason =
 			self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
@@ -163,6 +175,30 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		DivisionId = role.DivisionId,
 		TeamName = role.TeamName,
 	}
+	if role.AutoEquipUniform == true and role.UniformId then
+		local applied, uniformReason =
+			self.context.Services:Get("UniformService"):Apply(player, role.UniformId)
+		if not applied then
+			self.context.Logger:Warning("Duty started without its automatic uniform", {
+				UserId = player.UserId,
+				RoleId = request.RoleId,
+				UniformId = role.UniformId,
+				Reason = uniformReason,
+			})
+		end
+	end
+	if role.DepartmentId == "Police" then
+		local applied, epauletteReason = self.context.Services
+			:Get("ImportedSystemAdapterService")
+			:ApplyEpaulettes(player, profile)
+		if not applied then
+			self.context.Logger:Warning("Police epaulettes could not be applied", {
+				UserId = player.UserId,
+				RoleId = request.RoleId,
+				Reason = epauletteReason,
+			})
+		end
+	end
 	-- The rank abbreviation and shoulder number, issued now if this is the first
 	-- shift in this service. An explicitly set callsign on the profile still wins,
 	-- so a unit given a bespoke one by staff keeps it.
@@ -182,7 +218,9 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		player.Team = previousTeam
 		return false, unitReason
 	end
-	self.context.Services:Get("IdentificationService"):Refresh(player)
+	task.spawn(function()
+		self.context.Services:Get("IdentificationService"):RefreshWithRetry(player)
+	end)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		Action = "Duty.Started",
@@ -197,6 +235,8 @@ function DutyService:End(player: Player)
 	self.active[player.UserId] = nil
 	self.context.Services:Get("UnitService"):Unregister(player)
 	self.context.Services:Get("LoadoutService"):ClearIssued(player)
+	self.context.Services:Get("UniformService"):Restore(player)
+	self.context.Services:Get("ImportedSystemAdapterService"):ClearEpaulettes(player)
 	self.context.Services:Get("IdentificationService"):Refresh(player)
 	if duty then
 		self.context.Services:Get("AuditService"):Record({

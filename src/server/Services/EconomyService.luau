@@ -31,7 +31,14 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	end
 	local seen = self.seen[transaction.CharacterId] or {}
 	self.seen[transaction.CharacterId] = seen
-	local valid, reason = Validator.transaction(transaction, seen, character.Economy.Balance)
+	local account, accountReason = Validator.account(transaction.Account)
+	if not account then
+		return false, accountReason
+	end
+	local currentBalance = if account == "Cash"
+		then character.Economy.Cash
+		else character.Economy.Balance
+	local valid, reason = Validator.transaction(transaction, seen, currentBalance)
 	if not valid then
 		return false, reason
 	end
@@ -51,11 +58,20 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	end
 	transaction.Timestamp = os.time()
 	transaction.Result = "Applied"
+	transaction.Account = account
 	transaction.Metadata = transaction.Metadata or {}
 	if transaction.Direction == "Credit" then
-		character.Economy.Balance += transaction.Amount
+		if account == "Cash" then
+			character.Economy.Cash += transaction.Amount
+		else
+			character.Economy.Balance += transaction.Amount
+		end
 	else
-		character.Economy.Balance -= transaction.Amount
+		if account == "Cash" then
+			character.Economy.Cash -= transaction.Amount
+		else
+			character.Economy.Balance -= transaction.Amount
+		end
 	end
 	table.insert(character.Economy.Transactions, transaction)
 	while
@@ -71,6 +87,7 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 		Action = "Economy.Transaction",
 		Target = transaction.RelatedEntityId or transaction.CharacterId,
 		Metadata = {
+			Account = account,
 			Amount = transaction.Amount,
 			Direction = transaction.Direction,
 			ReasonCode = transaction.ReasonCode,
@@ -92,7 +109,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	if amount > self.context.Configuration.Economy.TransferMaximum then
 		return nil, "TRANSFER_LIMIT"
 	end
-	if self.transferring[sender.UserId] then
+	if self.transferring[sender.UserId] or self.transferring[recipient.UserId] then
 		return nil, "TRANSFER_IN_PROGRESS"
 	end
 	local data = self.context.Services:Get("DataService")
@@ -112,7 +129,15 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		return nil, "INSUFFICIENT_FUNDS"
 	end
 
+	-- Lock both profiles until both immediate saves finish. Locking only the
+	-- sender allowed A->B and B->A to overlap while the first Save yielded,
+	-- letting one write an older snapshot over the other transfer.
 	self.transferring[sender.UserId] = true
+	self.transferring[recipient.UserId] = true
+	local function releaseTransferLocks()
+		self.transferring[sender.UserId] = nil
+		self.transferring[recipient.UserId] = nil
+	end
 	local transferId = HttpService:GenerateGUID(false)
 	local recipientName = recipientCharacter.Identity.FirstName
 		.. " "
@@ -131,7 +156,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		Metadata = { RecipientUserId = recipient.UserId },
 	})
 	if not debited then
-		self.transferring[sender.UserId] = nil
+		releaseTransferLocks()
 		return nil, debitReason
 	end
 	local credited, creditReason = self:Apply(recipient, {
@@ -155,7 +180,11 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 			RelatedEntityId = transferId,
 			Metadata = {},
 		})
-		self.transferring[sender.UserId] = nil
+		-- Persist the restored balance before another transfer may use it.
+		if refunded then
+			data:Save(sender)
+		end
+		releaseTransferLocks()
 		if not refunded then
 			self.context.Logger:Error("Player transfer refund failed", {
 				SenderUserId = sender.UserId,
@@ -168,8 +197,6 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		end
 		return nil, creditReason
 	end
-	self.transferring[sender.UserId] = nil
-
 	-- Both halves are written now, and the recipient's first.
 	--
 	-- The two people live under separate DataStore keys, so a transfer that is
@@ -203,6 +230,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 			RecipientSaved = recipientSaved,
 		})
 	end
+	releaseTransferLocks()
 
 	return {
 		TransferId = transferId,

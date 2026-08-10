@@ -132,8 +132,8 @@ Delivery requires all of the following and fails closed:
 3. Roblox confirms that officer belongs to the configured Police group; and
 4. the fine has already been persisted in RoleplayOS.
 
-Public gamepass access, private communities, ordinary reserved servers and
-automatic cameras never enter the Discord queue. A webhook failure is logged but
+Public gamepass access, non-whitelisted servers and automatic cameras never
+enter the Discord queue. A webhook failure is logged but
 cannot delay, cancel or roll back the in-game penalty.
 
 | Reason | Meaning |

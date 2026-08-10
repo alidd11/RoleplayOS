@@ -1,5 +1,11 @@
 # Vehicles
 
+During development, a configured vehicle may set `WorkspaceModelName` to the exact
+name of an existing top-level vehicle in the RoleplayOS baseplate. Dealership previews
+and spawns can then use that model while the map is being assembled. This fallback is
+disabled in `Production`; release vehicles must be certified canonical templates under
+`ServerStorage/RoleplayOSAssets/Vehicles`.
+
 Dealership catalogues refer to configured vehicle IDs. Purchase revalidates catalogue membership and access, debits the configured price, then creates a GUID ownership record and generated registration. Ownership, colour, mileage, fuel, condition, insurance, tax and garage are persisted per character.
 
 Spawning checks active character ownership, terminal distance, spawn-point clearance, cooldown and the one-active-vehicle limit before cloning a configured ServerStorage model. Clearance checks recognise existing RoleplayOS vehicles and characters in the configured spawn volume.

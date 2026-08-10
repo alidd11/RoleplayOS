@@ -91,6 +91,7 @@ export type Transaction = {
 	CharacterId: string,
 	Amount: number,
 	Direction: "Credit" | "Debit",
+	Account: ("Bank" | "Cash")?,
 	ReasonCode: string,
 	Description: string,
 	Timestamp: number,
@@ -314,6 +315,7 @@ export type PlayerProfile = {
 	GamepassCache: { [string]: boolean },
 	CustodySentence: {
 		ReleaseAt: number,
+		RemainingSeconds: number,
 		TotalSeconds: number,
 		Offences: { any },
 		UpdatedAt: number,

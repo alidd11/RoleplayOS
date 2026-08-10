@@ -80,7 +80,7 @@ function VehicleOwnershipService:List(player: Player): { any }
 end
 
 function VehicleOwnershipService:GrantStarter(player: Player, characterId: string): (any?, string?)
-	local settings = self.context.Configuration.VehicleSpawning
+	local settings = self.context.Configuration.VehicleData
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not character then
@@ -210,6 +210,9 @@ function VehicleOwnershipService:SetCustomRegistration(
 			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
 	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services
+		:Get("VehiclePlateService")
+		:RefreshOwned(player.UserId, vehicle.VehicleId, registration)
 	self.context.Services
 		:Get("RecordIndexService")
 		:ScheduleVehicle(player, character, vehicle, previousRegistration)

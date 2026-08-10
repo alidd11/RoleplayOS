@@ -2,6 +2,8 @@
 *.rbxlx
 *.rbxm
 *.rbxmx
+!server-assets/**/*.rbxm
+!server-assets/**/*.rbxmx
 *.sourcemap.json
 build/
 Packages/

@@ -2,7 +2,7 @@
 
 Every purchased vehicle receives one generated registration when its persistent ownership record is created. The registration is stored with that exact vehicle, so later garage or dealership spawns reuse it. Team vehicles use a persistent key made from the player, team and vehicle definition, giving that player the same registration whenever they respawn the same team vehicle.
 
-Spawned models carry server-authored vehicle, registration and owner attributes. Existing parts named `RegistrationPlate`, `NumberPlate`, `LicencePlate` or `LicensePlate` receive the plate display. If a model has none, RoleplayOS adds lightweight welded front and rear plates.
+Spawned models carry server-authored vehicle, registration and owner attributes. RoleplayOS preserves the imported vehicle's own plate mesh, materials, decals and housing. It only updates text objects beneath parts named `RegistrationPlate`, `NumberPlate`, `LicencePlate` or `LicensePlate`, or objects explicitly marked with the `RoleplayOSPlateText` attribute. It never creates a replacement plate model. Unusual third-party naming can be supported by adding its exact names to `VehicleIdentity` or setting that attribute in Studio.
 
 The Custom Registration Plate pass is `1937140343`. Civilians can use the compact **Custom Plate** interface to select an owned vehicle and submit a 2–8 character value. Custom values are upper-cased, restricted to letters, numbers and spaces, length-limited, filtered with Roblox `TextService`, rejected if filtering changes the value, atomically reserved in a dedicated DataStore and audited. The reservation prevents two live servers from accepting the same custom plate. The server also checks pass entitlement and ownership; clients cannot assign a registration directly.
 

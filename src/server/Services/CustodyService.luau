@@ -38,12 +38,15 @@ end
 
 function CustodyService:GetSentence(player: Player): any
 	local sentence = self:_sentence(player)
-	local now = os.time()
-	local releaseAt = if sentence then math.max(0, tonumber(sentence.ReleaseAt) or 0) else 0
+	local remaining = if sentence
+		then math.max(0, math.floor(tonumber(sentence.RemainingSeconds) or 0))
+		else 0
 	return {
-		Active = releaseAt > now,
-		ReleaseAt = releaseAt,
-		RemainingSeconds = math.max(0, releaseAt - now),
+		Active = remaining > 0,
+		-- A display estimate only. RemainingSeconds is the persisted authority so
+		-- offline time never serves a sentence.
+		ReleaseAt = if remaining > 0 then os.time() + remaining else 0,
+		RemainingSeconds = remaining,
 		TotalSeconds = if sentence then math.max(0, tonumber(sentence.TotalSeconds) or 0) else 0,
 		Offences = if sentence and type(sentence.Offences) == "table"
 			then table.clone(sentence.Offences)
@@ -73,11 +76,21 @@ function CustodyService:_policy(): { any }
 	return policy
 end
 
-function CustodyService:GetPolicy(): any
+function CustodyService:GetPolicy(player: Player?): any
+	local mode = self.context.Services:Get("ServerModeService"):Kind()
+	local earlyRelease = self.context.Configuration.Custody.PublicEarlyRelease
+	local session = player and self.context.Services:Get("DataService"):GetSession(player)
+	local credits = if session and session.Profile.Consumables
+		then math.max(0, math.floor(tonumber(session.Profile.Consumables.EarlyReleaseCredits) or 0))
+		else 0
 	return {
 		Offences = self:_policy(),
 		MaximumStackedSentenceSeconds = self.context.Configuration.Custody.MaximumStackedSentenceSeconds,
 		SimulationNotice = self.context.Configuration.Custody.SimulationNotice,
+		ServerKind = mode,
+		BookingDeskRequired = mode == "Whitelisted",
+		EarlyReleaseCredits = if mode == "Public" then credits else 0,
+		EarlyReleaseProducts = if mode == "Public" then earlyRelease.Products else {},
 	}
 end
 
@@ -115,9 +128,10 @@ function CustodyService:ApplySentence(
 	if added <= 0 then
 		return nil, "NO_VALID_OFFENCES"
 	end
-	local remaining = math.max(0, (tonumber(sentence.ReleaseAt) or 0) - now)
+	local remaining = math.max(0, tonumber(sentence.RemainingSeconds) or 0)
 	local finalDuration = math.min(config.MaximumStackedSentenceSeconds, remaining + added)
-	sentence.ReleaseAt = now + finalDuration
+	sentence.RemainingSeconds = finalDuration
+	sentence.ReleaseAt = 0
 	sentence.TotalSeconds = math.max(0, tonumber(sentence.TotalSeconds) or 0) + added
 	sentence.UpdatedAt = now
 	sentence.Offences = sentence.Offences or {}
@@ -136,6 +150,56 @@ function CustodyService:ApplySentence(
 		Metadata = { Source = source, AddedSeconds = added, OffenceCount = #accepted },
 	})
 	return summary, nil
+end
+
+function CustodyService:AddDisconnectPenalty(player: Player): boolean
+	local sentence = self:_sentence(player)
+	local remaining = sentence and math.max(0, tonumber(sentence.RemainingSeconds) or 0) or 0
+	if remaining <= 0 then
+		return false
+	end
+	local config = self.context.Configuration.Custody
+	local added = math.max(0, tonumber(config.DisconnectPenaltySeconds) or 30)
+	sentence.RemainingSeconds = math.min(config.MaximumStackedSentenceSeconds, remaining + added)
+	sentence.ReleaseAt = 0
+	sentence.UpdatedAt = os.time()
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = "Custody.DisconnectPenalty",
+		Target = tostring(player.UserId),
+		Metadata = { AddedSeconds = added },
+	})
+	return true
+end
+
+function CustodyService:UseEarlyReleaseCredit(player: Player, sourceId: string?): (boolean, string?)
+	if self.context.Services:Get("ServerModeService"):Kind() ~= "Public" then
+		return false, "PUBLIC_SERVER_REQUIRED"
+	end
+	local dataService = self.context.Services:Get("DataService")
+	local session = dataService:GetSession(player)
+	if not session then
+		return false, "NO_SESSION"
+	end
+	if not self:HasActiveSentence(player) then
+		return false, "NO_ACTIVE_CUSTODY_SENTENCE"
+	end
+	local consumables = session.Profile.Consumables
+	local credits = math.max(0, math.floor(tonumber(consumables.EarlyReleaseCredits) or 0))
+	if credits <= 0 then
+		return false, "NO_EARLY_RELEASE_CREDITS"
+	end
+	consumables.EarlyReleaseCredits = credits - 1
+	local released, reason = self:_completeSentence(player, "EarlyReleaseCredit", sourceId)
+	if not released then
+		consumables.EarlyReleaseCredits = credits
+		dataService:MarkDirty(player)
+		return false, reason
+	end
+	dataService:MarkDirty(player)
+	self.event:FireClient(player, { Kind = "EarlyRelease", Credits = credits - 1 })
+	return true, nil
 end
 
 function CustodyService:_cellSpawn(): BasePart?
@@ -330,15 +394,21 @@ function CustodyService:SetCuffed(
 	if requestedMode == "Remove" and existing then
 		self:_release(target)
 	elseif requestedMode == "Apply" and not existing then
-		self.cuffed[targetUserId] = {
+		local newState = {
 			OfficerUserId = actor.UserId,
 			CuffedAt = os.time(),
 			CuffPosition = "Rear",
 		}
+		self.cuffed[targetUserId] = newState
 		target:SetAttribute("RoleplayOSCuffed", true)
 		target:SetAttribute("RoleplayOSCuffPosition", "Rear")
 		targetHumanoid.WalkSpeed = self.context.Configuration.Custody.CuffedWalkSpeed
 		targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+		-- Applying rear cuffs immediately establishes the physical escort pose:
+		-- detainee in front, officer behind and facing the back of their head.
+		-- The escort constraints remain server-owned and are removed by every
+		-- existing release/death/reset/disconnect path.
+		self:_escort(actor, target, newState)
 	end
 	local summary = self:_summary(targetUserId)
 	self.event:FireClient(target, { Kind = "State", State = summary })
@@ -372,8 +442,11 @@ function CustodyService:_escort(actor: Player, target: Player, state: any): (any
 	end
 	local officerAttachment = Instance.new("Attachment")
 	officerAttachment.Name = "RoleplayOSEscortPoint"
+	-- Roblox characters face local -Z. Placing the detainee on that side keeps
+	-- the officer behind them, looking toward the back of their head, while both
+	-- bodies share the same forward orientation.
 	officerAttachment.Position =
-		Vector3.new(0, 0, self.context.Configuration.Custody.EscortDistance)
+		Vector3.new(0, 0, -self.context.Configuration.Custody.EscortDistance)
 	officerAttachment.Parent = actorRoot
 	local targetAttachment = Instance.new("Attachment")
 	targetAttachment.Name = "RoleplayOSEscortTarget"
@@ -645,6 +718,24 @@ end
 
 function CustodyService:Start()
 	self.running = true
+	local function restoreSentence(player: Player)
+		task.spawn(function()
+			local deadline = os.clock() + 20
+			while
+				player.Parent
+				and not self.context.Services:Get("DataService"):GetSession(player)
+				and os.clock() < deadline
+			do
+				task.wait(0.1)
+			end
+			if player.Parent and self:HasActiveSentence(player) then
+				local summary = self:GetSentence(player)
+				player:SetAttribute("RoleplayOSCustodyReleaseAt", summary.ReleaseAt)
+				player:SetAttribute("RoleplayOSCustodyRemaining", summary.RemainingSeconds)
+				self:SpawnInCell(player)
+			end
+		end)
+	end
 	local function watch(player: Player)
 		table.insert(
 			self.connections,
@@ -668,6 +759,7 @@ function CustodyService:Start()
 				end)
 			end)
 		)
+		restoreSentence(player)
 	end
 	for _, player in Players:GetPlayers() do
 		watch(player)
@@ -676,14 +768,9 @@ function CustodyService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			if self.cuffed[player.UserId] then
-				self:ApplySentence(
-					player,
-					{ self.context.Configuration.Custody.DisconnectPenaltyCode },
-					"DisconnectWhileRestrained",
-					nil
-				)
-			end
+			-- Only an already processed sentence is penalised. Merely being cuffed
+			-- is not an arrest and must never create a sentence by itself.
+			self:AddDisconnectPenalty(player)
 			self.cuffed[player.UserId] = nil
 			local releaseUserIds = {}
 			for userId, state in self.cuffed do
@@ -714,26 +801,19 @@ function CustodyService:Start()
 				local released, problem = pcall(function()
 					local sentence = self:_sentence(player)
 					if sentence then
-						local releaseAt = math.max(0, tonumber(sentence.ReleaseAt) or 0)
-						if releaseAt > now then
-							player:SetAttribute("RoleplayOSCustodyReleaseAt", releaseAt)
-							player:SetAttribute("RoleplayOSCustodyRemaining", releaseAt - now)
-						elseif releaseAt > 0 then
+						local remaining = math.max(0, tonumber(sentence.RemainingSeconds) or 0)
+						if remaining > 0 then
+							remaining = math.max(0, remaining - 1)
+							sentence.RemainingSeconds = remaining
 							sentence.ReleaseAt = 0
 							sentence.UpdatedAt = now
-							player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
-							player:SetAttribute("RoleplayOSCustodyRemaining", 0)
-							player.RespawnLocation = nil
-							self.context.Services:Get("DataService"):MarkDirty(player)
-							self.context.Services:Get("AuditService"):Record({
-								ActorUserId = player.UserId,
-								Action = "Custody.SentenceCompleted",
-								Target = tostring(player.UserId),
-								Metadata = {},
-							})
-							pcall(function()
-								player:LoadCharacterAsync()
-							end)
+							player:SetAttribute("RoleplayOSCustodyReleaseAt", now + remaining)
+							player:SetAttribute("RoleplayOSCustodyRemaining", remaining)
+							if remaining == 0 then
+								self:_completeSentence(player, "Served", nil)
+							elseif remaining % 10 == 0 then
+								self.context.Services:Get("DataService"):MarkDirty(player)
+							end
 						end
 					end
 				end)
@@ -764,6 +844,55 @@ function CustodyService:Start()
 	end)
 end
 
+function CustodyService:_completeSentence(
+	player: Player,
+	source: string,
+	receiptId: string?
+): (boolean, string?)
+	local sentence = self:_sentence(player)
+	if sentence then
+		sentence.RemainingSeconds = 0
+		sentence.ReleaseAt = 0
+		sentence.UpdatedAt = os.time()
+	end
+	player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
+	player:SetAttribute("RoleplayOSCustodyRemaining", 0)
+	player.RespawnLocation = nil
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = "Custody.SentenceCompleted",
+		Target = tostring(player.UserId),
+		Metadata = { Source = source, ReceiptId = receiptId },
+	})
+	local civilianSpawnId = nil
+	local civilianStationId = nil
+	for spawnId, definition in self.context.Configuration.Spawns do
+		if definition.TeamName == "Civilian" then
+			civilianSpawnId = spawnId
+			civilianStationId = definition.StationId
+			break
+		end
+	end
+	if not civilianSpawnId or not civilianStationId then
+		return false, "CIVILIAN_SPAWN_NOT_CONFIGURED"
+	end
+	local assigned, assignReason =
+		self.context.Services:Get("RoleService"):Assign(player, "Civilian")
+	if not assigned then
+		return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
+	end
+	local spawned, spawnReason = self.context.Services:Get("SpawnService"):Spawn(player, {
+		RoleId = "Civilian",
+		StationId = civilianStationId,
+		SpawnId = civilianSpawnId,
+	})
+	if not spawned then
+		return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
+	end
+	return true, nil
+end
+
 function CustodyService:_atDesk(player: Player): boolean
 	local playerRoot = root(player)
 	if not playerRoot then
@@ -787,7 +916,8 @@ function CustodyService:Book(
 	reason: string,
 	offenceCodes: { string }?
 ): (any?, string?)
-	if not self:_authorised(actor) or not self:_atDesk(actor) then
+	local deskRequired = self.context.Services:Get("ServerModeService"):Kind() == "Whitelisted"
+	if not self:_authorised(actor) or (deskRequired and not self:_atDesk(actor)) then
 		return nil, "BOOKING_DESK_REQUIRED"
 	end
 	if not self.cuffed[targetUserId] then
@@ -808,7 +938,7 @@ function CustodyService:Book(
 	-- Text filtering yields, so all mutable authorisation and proximity checks are repeated.
 	if
 		not self:_authorised(actor)
-		or not self:_atDesk(actor)
+		or (deskRequired and (not self:_atDesk(actor) or not self:_atDesk(target)))
 		or not self.cuffed[targetUserId]
 		or not self:_near(actor, target, self.context.Configuration.Custody.MaximumBookingDistance)
 	then

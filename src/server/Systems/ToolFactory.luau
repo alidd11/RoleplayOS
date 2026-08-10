@@ -120,6 +120,32 @@ function ToolFactory.handcuffs(): Tool
 	return tool
 end
 
+function ToolFactory.mdt(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = "MDT"
+	tool.ToolTip = "Mobile Data Terminal"
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool.Grip = CFrame.new(0, -0.08, -0.72) * CFrame.Angles(math.rad(88), 0, 0)
+	local handle = part(
+		tool,
+		"Handle",
+		Vector3.new(1.18, 0.78, 0.09),
+		Color3.fromRGB(20, 24, 31),
+		Enum.Material.SmoothPlastic
+	)
+	local screen = part(
+		tool,
+		"Screen",
+		Vector3.new(1.04, 0.64, 0.025),
+		Color3.fromRGB(39, 104, 156),
+		Enum.Material.Glass
+	)
+	attach(handle, screen, CFrame.new(0, 0, -0.058))
+	tool:SetAttribute("RoleplayOSInterfaceTool", "MDT")
+	return tool
+end
+
 local function credentialBase(name: string, tooltip: string, width: number): (Tool, Part, Frame)
 	local tool = Instance.new("Tool")
 	tool.Name = name
@@ -302,130 +328,6 @@ function ToolFactory.drivingLicence(data: any): Tool
 		true
 	)
 	invalid.TextXAlignment = Enum.TextXAlignment.Center
-	return tool
-end
-
-function ToolFactory.warrantCard(data: any): Tool
-	local tool, handle, canvas = credentialBase("Warrant Card", "Present police warrant card", 2.24)
-	handle.Color = Color3.fromRGB(32, 24, 23)
-	canvas.BackgroundColor3 = Color3.fromRGB(35, 27, 26)
-	local left = Instance.new("Frame")
-	left.Position = UDim2.fromOffset(18, 18)
-	left.Size = UDim2.fromOffset(330, 504)
-	left.BackgroundColor3 = Color3.fromRGB(48, 36, 34)
-	left.BorderSizePixel = 0
-	left.Parent = canvas
-	rounded(left, 18)
-	local badge = Instance.new("Frame")
-	badge.AnchorPoint = Vector2.new(0.5, 0)
-	badge.Position = UDim2.fromScale(0.5, 0.12)
-	badge.Size = UDim2.fromOffset(190, 235)
-	badge.BackgroundColor3 = Color3.fromRGB(190, 157, 71)
-	badge.BorderSizePixel = 0
-	badge.Parent = left
-	rounded(badge, 35)
-	local badgeText = textLabel(
-		badge,
-		"POLICE\nWARRANT\nCARD",
-		UDim2.fromOffset(20, 35),
-		UDim2.new(1, -40, 1, -70),
-		24,
-		Color3.fromRGB(29, 36, 47),
-		true
-	)
-	badgeText.TextWrapped = true
-	badgeText.TextXAlignment = Enum.TextXAlignment.Center
-	local fiction = textLabel(
-		left,
-		"FICTIONAL ROLEPLAY CREDENTIAL",
-		UDim2.fromOffset(18, 430),
-		UDim2.new(1, -36, 0, 38),
-		16,
-		Color3.fromRGB(218, 195, 144),
-		true
-	)
-	fiction.TextXAlignment = Enum.TextXAlignment.Center
-	local card = Instance.new("Frame")
-	card.Position = UDim2.fromOffset(366, 18)
-	card.Size = UDim2.fromOffset(472, 504)
-	card.BackgroundColor3 = Color3.fromRGB(232, 235, 239)
-	card.BorderSizePixel = 0
-	card.Parent = canvas
-	rounded(card, 14)
-	local band = Instance.new("Frame")
-	band.Size = UDim2.new(1, 0, 0, 91)
-	band.BackgroundColor3 = Color3.fromRGB(20, 45, 70)
-	band.BorderSizePixel = 0
-	band.Parent = card
-	textLabel(
-		band,
-		data.ForceName,
-		UDim2.fromOffset(20, 10),
-		UDim2.new(1, -40, 0, 37),
-		22,
-		Color3.new(1, 1, 1),
-		true
-	)
-	textLabel(
-		band,
-		"POLICE WARRANT CARD",
-		UDim2.fromOffset(20, 48),
-		UDim2.new(1, -40, 0, 27),
-		17,
-		Color3.fromRGB(184, 211, 235),
-		true
-	)
-	local portrait = Instance.new("ImageLabel")
-	portrait.Position = UDim2.fromOffset(22, 116)
-	portrait.Size = UDim2.fromOffset(155, 190)
-	portrait.BackgroundColor3 = Color3.fromRGB(195, 202, 211)
-	portrait.BorderSizePixel = 0
-	portrait.Image = data.AvatarImage
-	portrait.ScaleType = Enum.ScaleType.Crop
-	portrait.Parent = card
-	rounded(portrait, 8)
-	local ink = Color3.fromRGB(26, 35, 44)
-	textLabel(card, "OFFICER", UDim2.fromOffset(198, 116), UDim2.fromOffset(250, 25), 15, ink, true)
-	textLabel(
-		card,
-		data.FullName,
-		UDim2.fromOffset(198, 141),
-		UDim2.fromOffset(250, 56),
-		23,
-		ink,
-		true
-	).TextWrapped =
-		true
-	textLabel(card, "RANK", UDim2.fromOffset(198, 212), UDim2.fromOffset(250, 25), 15, ink, true)
-	textLabel(card, data.Rank, UDim2.fromOffset(198, 237), UDim2.fromOffset(250, 38), 21, ink, true)
-	textLabel(
-		card,
-		"COLLAR / WARRANT NUMBER",
-		UDim2.fromOffset(22, 331),
-		UDim2.fromOffset(420, 26),
-		15,
-		ink,
-		true
-	)
-	textLabel(
-		card,
-		data.WarrantNumber,
-		UDim2.fromOffset(22, 359),
-		UDim2.fromOffset(420, 42),
-		25,
-		ink,
-		true
-	)
-	textLabel(
-		card,
-		"ROLEPLAY ONLY · NOT AN OFFICIAL POLICE DOCUMENT",
-		UDim2.fromOffset(22, 448),
-		UDim2.new(1, -44, 0, 34),
-		13,
-		Color3.fromRGB(145, 35, 40),
-		true
-	).TextXAlignment =
-		Enum.TextXAlignment.Center
 	return tool
 end
 

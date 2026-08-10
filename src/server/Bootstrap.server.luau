@@ -28,15 +28,16 @@ local serviceOrder = {
 	"RecordIndexService",
 	"SettingsService",
 	"AuditService",
-	"CommunityService",
-	"CommunityServerService",
+	"ServerModeService",
 	"OfficialServerService",
 	"GroupService",
 	"ExperienceAccessService",
 	"AccessService",
 	"GamepassService",
+	"DeveloperProductService",
 	"CharacterService",
 	"EconomyService",
+	"MoneyDropService",
 	"ProgressionService",
 	"ApplicationService",
 	"EmploymentService",
@@ -47,15 +48,14 @@ local serviceOrder = {
 	"ContentValidationService",
 	"WorldBudgetService",
 	"VehicleOwnershipService",
-	"VehiclePreviewService",
-	"VehicleService",
+	"VehiclePlateService",
+	"VehicleSpawnerService",
 	"DiscordFineService",
 	"RoadSafetyService",
 	"CustodyService",
 	"IdentificationService",
 	"UKTimeService",
 	"CCTVService",
-	"DealershipService",
 	"GarageService",
 	"PropertyService",
 	"PropertyInstanceService",
@@ -70,6 +70,7 @@ local serviceOrder = {
 	"TeamService",
 	"RoleService",
 	"StationService",
+	"AvatarNormalizationService",
 	"UniformService",
 	"LoadoutService",
 	"VendorService",
@@ -86,6 +87,8 @@ local serviceOrder = {
 	"DispatchService",
 	"ANPRService",
 	"EmergencyTriggerService",
+	"ImportedSystemAdapterService",
+	"BankRobberyService",
 	"PhoneVoiceService",
 	"PhoneService",
 	"NeedsService",
@@ -122,8 +125,15 @@ local ok, problem = pcall(function()
 	registry:Start(context)
 end)
 if not ok then
-	logger:Error("RoleplayOS startup failed", { Error = tostring(problem) })
+	local diagnostic = string.gsub(tostring(problem), "[\r\n]+", " ")
+	if #diagnostic > 180 then
+		diagnostic = string.sub(diagnostic, 1, 180)
+	end
+	logger:Error("RoleplayOS startup failed", { Error = diagnostic })
 	tearDown()
+	-- Keep the detailed diagnostic in trusted server logs. Returning internal
+	-- service paths and implementation errors in a player-facing kick leaks
+	-- architecture and turns a safe startup refusal into a security disclosure.
 	local message = "This server could not start safely. Please join another server."
 	for _, player in Players:GetPlayers() do
 		player:Kick(message)

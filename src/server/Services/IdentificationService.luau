@@ -1,9 +1,20 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ServerStorage = game:GetService("ServerStorage")
 local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 
 local IdentificationService = { connections = {} }
+
+local FORBIDDEN_ASSET_CLASSES: { [string]: boolean } = {
+	Script = true,
+	LocalScript = true,
+	ModuleScript = true,
+	RemoteEvent = true,
+	RemoteFunction = true,
+	BindableEvent = true,
+	BindableFunction = true,
+}
 
 local function documentNumber(characterId: string): string
 	return string.upper(string.sub(string.gsub(characterId, "%-", ""), 1, 12))
@@ -23,6 +34,100 @@ local function removeCredential(container: Instance?)
 			existing:Destroy()
 		end
 	end
+end
+
+local function setSurfaceText(root: Instance, partName: string, value: string)
+	local part = root:FindFirstChild(partName, true)
+	local field = part and part:FindFirstChildWhichIsA("TextBox", true)
+	if field and field:IsA("TextBox") then
+		field.Text = value
+		-- Preserve the purchased card's authored typography and sizing. Forcing
+		-- TextScaled/TextWrapped here made several independent fields expand into
+		-- each other and produced the jumbled presentation seen in Studio.
+		field.TextEditable = false
+		field.Active = false
+		field.Selectable = false
+	end
+end
+
+local function prepareWarrantCardPresentation(tool: Tool)
+	-- The purchased card was authored as a close-up display prop. At Roblox's
+	-- normal third-person camera distance its original grip fills most of the
+	-- screen, while its SurfaceGuis become unreadable under night lighting.
+	-- Preserve the model, welds and authored field layout, but issue a smaller,
+	-- presentation-ready copy with self-lit surfaces.
+	local handle = tool:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		local scaleContainer = Instance.new("Model")
+		handle.Parent = scaleContainer
+		scaleContainer:ScaleTo(0.78)
+		handle.Parent = tool
+		scaleContainer:Destroy()
+	end
+
+	local rotation = tool.Grip - tool.Grip.Position
+	tool.Grip = CFrame.new(0.18, -0.24, -0.58) * rotation
+
+	for _, descendant in tool:GetDescendants() do
+		if descendant:IsA("SurfaceGui") then
+			descendant.AlwaysOnTop = true
+			descendant.LightInfluence = 0
+			descendant.Brightness = 2
+		elseif descendant:IsA("TextBox") then
+			descendant.TextEditable = false
+			descendant.Active = false
+			descendant.Selectable = false
+		end
+	end
+end
+
+local function warrantCardTemplate(): Tool?
+	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
+	local tools = assets and assets:FindFirstChild("Tools")
+	local services = tools and tools:FindFirstChild("Services")
+	local police = services and services:FindFirstChild("Police")
+	local shared = police and police:FindFirstChild("Shared")
+	-- The purchased model's authored root is `WarrantCard`, while the player-
+	-- facing tool is deliberately `Warrant Card`. Requiring the display name in
+	-- ServerStorage made the installed asset invisible to this resolver.
+	local template = shared
+		and (shared:FindFirstChild("Warrant Card") or shared:FindFirstChild("WarrantCard"))
+	return if template and template:IsA("Tool") then template else nil
+end
+
+local function makeWarrantCard(data: any): Tool?
+	local template = warrantCardTemplate()
+	if not template then
+		warn("[RoleplayOS] Police warrant-card template is missing")
+		return nil
+	end
+	local tool = template:Clone()
+	tool.Name = "Warrant Card"
+	tool.CanBeDropped = false
+	prepareWarrantCardPresentation(tool)
+	for _, descendant in tool:GetDescendants() do
+		local reviewedWarrantClient = descendant:IsA("LocalScript")
+			and descendant.Name == "RoleplayOSWarrantCardClient"
+		if FORBIDDEN_ASSET_CLASSES[descendant.ClassName] and not reviewedWarrantClient then
+			descendant:Destroy()
+		elseif descendant:IsA("TextBox") then
+			descendant.TextEditable = false
+			descendant.Active = false
+			descendant.Selectable = false
+			if descendant.Text == "METROPOLITAN" then
+				descendant.Text = data.ForceName
+			end
+		end
+	end
+	setSurfaceText(tool, "Username", data.FullName)
+	setSurfaceText(tool, "UserNameID", data.WarrantNumber)
+	setSurfaceText(tool, "Rank", data.Rank)
+	local picture = tool:FindFirstChild("Picture", true)
+	local portrait = picture and picture:FindFirstChildWhichIsA("ImageLabel", true)
+	if portrait and portrait:IsA("ImageLabel") then
+		portrait.Image = data.AvatarImage
+	end
+	return tool
 end
 
 function IdentificationService:Init(context: any)
@@ -56,32 +161,73 @@ end
 function IdentificationService:Refresh(player: Player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
-		return
+		return false, "BACKPACK_UNAVAILABLE"
 	end
-	removeCredential(backpack)
-	removeCredential(player.Character)
 	local character = self:_character(player)
 	if not character or not player.Team then
-		return
+		return false, "CHARACTER_OR_TEAM_UNAVAILABLE"
 	end
 	if player.Team.Name == "Civilian" then
-		ToolFactory.drivingLicence(self:_identityData(player, character)).Parent = backpack
-		return
+		removeCredential(backpack)
+		removeCredential(player.Character)
+		removeCredential(player:FindFirstChild("StarterGear"))
+		local licence = ToolFactory.drivingLicence(self:_identityData(player, character))
+		licence.Parent = backpack
+		return true, nil
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
 	if not duty or duty.DepartmentId ~= "Police" then
-		return
+		return false, "POLICE_DUTY_REQUIRED"
 	end
 	local role = self.context.Configuration.Roles[duty.RoleId]
 	local identity = self:_identityData(player, character)
-	ToolFactory.warrantCard({
+	local warrantCard = makeWarrantCard({
 		FullName = identity.FullName,
 		Rank = if role then role.Name else "Police Officer",
 		ForceName = self.context.Configuration.Identification.PoliceForceName,
 		WarrantNumber = string.format("UP-%06d", player.UserId % 1000000),
 		AvatarImage = identity.AvatarImage,
-	}).Parent =
-		backpack
+	})
+	if warrantCard then
+		-- Build and validate the replacement before deleting the current credential.
+		-- CharacterAdded and Team signals can run while DutyService is rebuilding a
+		-- shift; deleting first made a harmless ordering race permanently remove the
+		-- officer's card from Backpack and StarterGear.
+		removeCredential(backpack)
+		removeCredential(player.Character)
+		removeCredential(player:FindFirstChild("StarterGear"))
+		warrantCard:SetAttribute("RoleplayOSCredential", "Police")
+		warrantCard:SetAttribute("RoleplayOSDutyIssued", true)
+		warrantCard.Parent = backpack
+		-- StarterGear is a recovery copy only. Roblox restores it after a reset,
+		-- while Refresh removes stale copies on team/duty changes.
+		local starterGear = player:FindFirstChild("StarterGear")
+		if starterGear then
+			warrantCard:Clone().Parent = starterGear
+		end
+		return true, nil
+	end
+	return false, "WARRANT_CARD_TEMPLATE_UNAVAILABLE"
+end
+
+function IdentificationService:RefreshWithRetry(player: Player)
+	for attempt = 1, 4 do
+		if not player.Parent then
+			return
+		end
+		local issued, reason = self:Refresh(player)
+		if issued then
+			return
+		end
+		if attempt < 4 then
+			task.wait(0.5 * attempt)
+		else
+			self.context.Logger:Warning("Credential could not be issued", {
+				UserId = player.UserId,
+				Reason = reason,
+			})
+		end
+	end
 end
 
 function IdentificationService:Start()
@@ -91,7 +237,7 @@ function IdentificationService:Start()
 			player.CharacterAdded:Connect(function()
 				task.delay(1, function()
 					if player.Parent then
-						self:Refresh(player)
+						self:RefreshWithRetry(player)
 					end
 				end)
 			end)
@@ -101,13 +247,13 @@ function IdentificationService:Start()
 			player:GetPropertyChangedSignal("Team"):Connect(function()
 				task.defer(function()
 					if player.Parent then
-						self:Refresh(player)
+						self:RefreshWithRetry(player)
 					end
 				end)
 			end)
 		)
 		if player.Character then
-			self:Refresh(player)
+			self:RefreshWithRetry(player)
 		end
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(watch))

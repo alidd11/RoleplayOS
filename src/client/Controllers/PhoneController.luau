@@ -105,7 +105,11 @@ end
 function PhoneController:_announce(open: boolean)
 	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
-		playerGui:SetAttribute("RoleplayOSDeviceOpen", open)
+		playerGui:SetAttribute("RoleplayOSPhoneOpen", open)
+		playerGui:SetAttribute(
+			"RoleplayOSDeviceOpen",
+			open or playerGui:GetAttribute("RoleplayOSMDTOpen") == true
+		)
 	end
 end
 
@@ -805,6 +809,7 @@ function PhoneController:Start()
 			return Enum.ContextActionResult.Pass
 		end
 		self.body.Visible = not self.body.Visible
+		self:_announce(self.body.Visible)
 		if self.body.Visible then
 			self:Refresh()
 			if UserInputService.GamepadEnabled then

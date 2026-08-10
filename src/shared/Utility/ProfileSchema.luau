@@ -4,11 +4,11 @@ local SettingsValidator = require(script.Parent.SettingsValidator)
 local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 7
+ProfileSchema.CURRENT_VERSION = 11
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 7,
+		SchemaVersion = 11,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -21,11 +21,15 @@ function ProfileSchema.default(userId: number): any
 		TeamVehicleRegistrations = {},
 		CustodySentence = {
 			ReleaseAt = 0,
+			RemainingSeconds = 0,
 			TotalSeconds = 0,
 			Offences = {},
 			UpdatedAt = 0,
 		},
-		Communities = {},
+		Consumables = {
+			EarlyReleaseCredits = 0,
+			ProcessedDeveloperReceipts = {},
+		},
 		AuditMetadata = {},
 	}
 end
@@ -75,7 +79,6 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		data.DutyProfiles = data.DutyProfiles or {}
 	end
 	if data.SchemaVersion == 1 then
-		data.Communities = data.Communities or {}
 		data.SchemaVersion = 2
 	end
 	if data.SchemaVersion == 2 then
@@ -142,6 +145,58 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 			end
 		end
 		data.SchemaVersion = 8
+	end
+	if data.SchemaVersion == 8 then
+		local sentence = data.CustodySentence
+		if type(sentence) ~= "table" then
+			sentence = {}
+			data.CustodySentence = sentence
+		end
+		-- Version 8 used an absolute wall-clock deadline, which kept counting
+		-- down while a player was offline. Preserve only the unserved portion at
+		-- migration time; version 9 thereafter stores playtime remaining.
+		sentence.RemainingSeconds = math.max(
+			0,
+			math.floor(
+				tonumber(sentence.RemainingSeconds)
+					or ((tonumber(sentence.ReleaseAt) or 0) - os.time())
+			)
+		)
+		sentence.ReleaseAt = 0
+		data.SchemaVersion = 9
+	end
+	if data.SchemaVersion == 9 then
+		-- Physical cash became an authoritative EconomyService account in version
+		-- 10. Older and partially corrupt profiles must be reconciled before any
+		-- cash drop or robbery attempts arithmetic on a missing field.
+		for _, character in data.Characters or {} do
+			if type(character) == "table" then
+				local economy = character.Economy
+				if type(economy) ~= "table" then
+					economy = {}
+					character.Economy = economy
+				end
+				economy.Balance = math.max(0, math.floor(tonumber(economy.Balance) or 0))
+				economy.Cash = math.max(0, math.floor(tonumber(economy.Cash) or 0))
+				if type(economy.Transactions) ~= "table" then
+					economy.Transactions = {}
+				end
+			end
+		end
+		data.SchemaVersion = 10
+	end
+	if data.SchemaVersion == 10 then
+		local consumables = data.Consumables
+		if type(consumables) ~= "table" then
+			consumables = {}
+			data.Consumables = consumables
+		end
+		consumables.EarlyReleaseCredits =
+			math.max(0, math.floor(tonumber(consumables.EarlyReleaseCredits) or 0))
+		if type(consumables.ProcessedDeveloperReceipts) ~= "table" then
+			consumables.ProcessedDeveloperReceipts = {}
+		end
+		data.SchemaVersion = 11
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

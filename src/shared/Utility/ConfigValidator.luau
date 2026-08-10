@@ -20,11 +20,12 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Jobs",
 			"Vehicles",
 			"Tools",
+			"Uniforms",
+			"UniformChangingRooms",
 			"Divisions",
 			"Properties",
 			"Furniture",
 			"Network",
-			"Communities",
 			"Spawns",
 			"Teams",
 			"GroupLinks",
@@ -47,6 +48,32 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or quality.QuarantineRootName == ""
 	then
 		table.insert(errors, "Invalid content certification configuration")
+	end
+	if quality.CertifiedAssets ~= nil then
+		if type(quality.CertifiedAssets) ~= "table" then
+			table.insert(errors, "ContentQuality.CertifiedAssets must be a table")
+		else
+			for assetId, certification in quality.CertifiedAssets do
+				if
+					type(assetId) ~= "string"
+					or assetId == ""
+					or type(certification) ~= "table"
+					or certification.Certified ~= true
+					or certification.ReviewVersion ~= quality.CertificationVersion
+					or type(certification.Source) ~= "string"
+					or #certification.Source < 3
+					or type(certification.RealWorldReference) ~= "string"
+					or #certification.RealWorldReference < 3
+					or type(certification.ReviewedBy) ~= "string"
+					or #certification.ReviewedBy < 3
+				then
+					table.insert(
+						errors,
+						"Invalid content certification manifest entry: " .. tostring(assetId)
+					)
+				end
+			end
+		end
 	end
 	local requiredKinds = {}
 	if
@@ -134,28 +161,70 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		if type(vehicle.Price) ~= "number" or vehicle.Price < 0 then
 			table.insert(errors, "Invalid vehicle price: " .. id)
 		end
-		if type(vehicle.AssetPath) ~= "table" or #vehicle.AssetPath < 2 then
+		if type(vehicle.Name) ~= "string" or vehicle.Name == "" then
+			table.insert(errors, "Invalid vehicle name: " .. id)
+		end
+		if
+			type(vehicle.AssetPath) ~= "table"
+			or #vehicle.AssetPath < 2
+			or table.find(vehicle.AssetPath, "") ~= nil
+		then
 			table.insert(errors, "Invalid vehicle asset path: " .. id)
+		end
+		if type(vehicle.Colours) ~= "table" or #vehicle.Colours == 0 then
+			table.insert(errors, "Vehicle has no colours: " .. id)
+		end
+		if vehicle.Category ~= "Civilian" and vehicle.Category ~= "Service" then
+			table.insert(errors, "Invalid vehicle category: " .. id)
+		elseif vehicle.Category == "Civilian" then
+			if vehicle.DepartmentId ~= nil or vehicle.DivisionId ~= nil then
+				table.insert(errors, "Civilian vehicle has a service assignment: " .. id)
+			end
+		elseif type(vehicle.DepartmentId) ~= "string" or vehicle.DepartmentId == "" then
+			table.insert(errors, "Service vehicle has no department: " .. id)
 		end
 		if vehicle.DepartmentId and not config.Departments[vehicle.DepartmentId] then
 			table.insert(errors, "Unknown vehicle department: " .. id)
 		end
 		if vehicle.DivisionId and not config.Divisions[vehicle.DivisionId] then
 			table.insert(errors, "Unknown vehicle division: " .. id)
+		elseif
+			vehicle.DivisionId
+			and config.Divisions[vehicle.DivisionId].DepartmentId ~= vehicle.DepartmentId
+		then
+			table.insert(errors, "Vehicle division does not belong to its department: " .. id)
 		end
 	end
-	local vehicleSpawning = config.VehicleSpawning or {}
-	for _, field in
-		{
-			"TrackingIntervalSeconds",
-			"StudsToMiles",
-			"MaximumTrackedSpeedStudsPerSecond",
-			"FuelPercentPerMile",
-			"PersistenceIntervalSeconds",
-		}
-	do
-		if type(vehicleSpawning[field]) ~= "number" or vehicleSpawning[field] <= 0 then
-			table.insert(errors, "Invalid vehicle spawning field: " .. field)
+	local vehicleSpawners = config.VehicleSpawners or {}
+	if
+		type(vehicleSpawners.FolderName) ~= "string"
+		or vehicleSpawners.FolderName == ""
+		or type(vehicleSpawners.MaximumInteractionDistance) ~= "number"
+		or vehicleSpawners.MaximumInteractionDistance < 4
+		or type(vehicleSpawners.CooldownSeconds) ~= "number"
+		or vehicleSpawners.CooldownSeconds < 0
+		or typeof(vehicleSpawners.SpawnClearance) ~= "Vector3"
+		or vehicleSpawners.SpawnClearance.X <= 0
+		or vehicleSpawners.SpawnClearance.Y <= 0
+		or vehicleSpawners.SpawnClearance.Z <= 0
+	then
+		table.insert(errors, "Invalid vehicle spawner configuration")
+	end
+	for dealershipId, dealership in config.Dealerships or {} do
+		local seen = {}
+		for _, vehicleId in dealership.VehicleIds or {} do
+			local vehicle = config.Vehicles[vehicleId]
+			if seen[vehicleId] or not vehicle or vehicle.Category ~= "Civilian" then
+				table.insert(
+					errors,
+					"Invalid or duplicate civilian vehicle "
+						.. tostring(vehicleId)
+						.. " in dealership "
+						.. tostring(dealershipId)
+				)
+			else
+				seen[vehicleId] = true
+			end
 		end
 	end
 	local network = config.Network or {}
@@ -195,13 +264,6 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		end
 	end
 	if
-		type(vehicleSpawning.IdleFuelPercentPerMinute) ~= "number"
-		or vehicleSpawning.IdleFuelPercentPerMinute < 0
-		or type(vehicleSpawning.StopVehicleWhenFuelEmpty) ~= "boolean"
-	then
-		table.insert(errors, "Invalid vehicle fuel configuration")
-	end
-	if
 		type(config.MDT) ~= "table"
 		or type(config.MDT.MaximumIndexBucketEntries) ~= "number"
 		or config.MDT.MaximumIndexBucketEntries < config.MDT.PageSize
@@ -222,6 +284,34 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		for _, toolId in loadout.ToolIds or {} do
 			if not config.Tools[toolId] then
 				table.insert(errors, "Unknown tool " .. toolId .. " in loadout " .. loadoutId)
+			end
+		end
+	end
+	local changingRooms = config.UniformChangingRooms or {}
+	if
+		type(changingRooms.FolderName) ~= "string"
+		or changingRooms.FolderName == ""
+		or type(changingRooms.PromptHoldDuration) ~= "number"
+		or changingRooms.PromptHoldDuration < 0
+		or type(changingRooms.MaximumInteractionDistance) ~= "number"
+		or changingRooms.MaximumInteractionDistance < 4
+		or type(changingRooms.Defaults) ~= "table"
+	then
+		table.insert(errors, "Invalid uniform changing-room configuration")
+	else
+		local roomIds = {}
+		for _, room in changingRooms.Defaults do
+			if
+				type(room.ChangingRoomId) ~= "string"
+				or room.ChangingRoomId == ""
+				or roomIds[room.ChangingRoomId]
+				or not config.Spawns[room.SpawnId]
+				or not config.Departments[room.DepartmentId]
+				or not config.Uniforms[room.UniformId]
+			then
+				table.insert(errors, "Invalid or duplicate uniform changing room")
+			else
+				roomIds[room.ChangingRoomId] = true
 			end
 		end
 	end
@@ -324,6 +414,53 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 				seen[value] = true
 			end
 		end
+	end
+	local robbery = config.BankRobbery
+	if
+		type(robbery) ~= "table"
+		or type(robbery.Tag) ~= "string"
+		or robbery.Tag == ""
+		or type(robbery.ActivationDistance) ~= "number"
+		or robbery.ActivationDistance < 4
+		or type(robbery.CompletionDistance) ~= "number"
+		or robbery.CompletionDistance < robbery.ActivationDistance
+		or type(robbery.RobberyDurationSeconds) ~= "number"
+		or robbery.RobberyDurationSeconds < 10
+		or type(robbery.CooldownSeconds) ~= "number"
+		or robbery.CooldownSeconds < robbery.RobberyDurationSeconds
+		or type(robbery.FailedCooldownSeconds) ~= "number"
+		or robbery.FailedCooldownSeconds < 5
+		or type(robbery.MinimumReward) ~= "number"
+		or robbery.MinimumReward < 1
+		or type(robbery.MaximumReward) ~= "number"
+		or robbery.MaximumReward < robbery.MinimumReward
+	then
+		table.insert(errors, "Invalid bank robbery configuration")
+	end
+	local drops = config.MoneyDrops
+	if
+		type(drops) ~= "table"
+		or type(drops.Enabled) ~= "boolean"
+		or type(drops.MinimumAmount) ~= "number"
+		or drops.MinimumAmount < 1
+		or drops.MinimumAmount % 1 ~= 0
+		or type(drops.MaximumAmount) ~= "number"
+		or drops.MaximumAmount < drops.MinimumAmount
+		or drops.MaximumAmount % 1 ~= 0
+		or type(drops.MaximumActivePerPlayer) ~= "number"
+		or drops.MaximumActivePerPlayer < 1
+		or type(drops.MaximumActiveGlobal) ~= "number"
+		or drops.MaximumActiveGlobal < drops.MaximumActivePerPlayer
+		or type(drops.DropAheadStuds) ~= "number"
+		or drops.DropAheadStuds < 0
+		or type(drops.PickupDistance) ~= "number"
+		or drops.PickupDistance < 4
+		or type(drops.PickupHoldSeconds) ~= "number"
+		or drops.PickupHoldSeconds < 0
+		or type(drops.LifetimeSeconds) ~= "number"
+		or drops.LifetimeSeconds < 10
+	then
+		table.insert(errors, "Invalid money drop configuration")
 	end
 	for templateId, template in config.Communities and config.Communities.Templates or {} do
 		if template.Id ~= templateId or not template.Roles[template.DefaultMemberRoleId] then

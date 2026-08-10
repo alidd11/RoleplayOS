@@ -46,6 +46,10 @@ RoleplayOS does not manage `Workspace`, `Terrain`, `Lighting`, `Teams`, `Starter
 
 Gameplay models must not remain loose in Workspace or in an ad-hoc ServerStorage folder. Keep one clean, script-free canonical model under `ServerStorage/RoleplayOSAssets`; spawners clone from there.
 
+The production Rojo project deliberately does not manage `Workspace` or `Teams`—including
+their service properties. Configure streaming and team objects in the authorised Studio
+place, then preserve them during every RoleplayOS sync.
+
 ```text
 RoleplayOSAssets
 ├── Vehicles
@@ -78,6 +82,7 @@ Folders describe where an asset belongs; they do not grant permission. Roles, gr
 - A usable `VehicleSeat` exists.
 - A primary/chassis part is defined and the assembly is welded or constrained correctly.
 - Registration display parts use one of the configured plate names.
+- Workspace vehicle-name fallbacks are development-only. Production spawns only reviewed templates beneath `ServerStorage > RoleplayOSAssets`.
 - The model contains no networking, DataStore calls or executable scripts.
 - The configured `AssetPath`, department and division agree with the folder.
 
@@ -94,7 +99,7 @@ Map objects stay in Workspace and are discovered through `CollectionService` tag
 
 | Object | Required tag | Important attributes |
 |---|---|---|
-| Team/player spawn | `RoleplayOSSpawn` where used by the configured spawn service | `SpawnId` matching `Config.Spawns`; Team name must match exactly |
+| Team/player spawn | `RoleplayOSSpawnPad` | `SpawnId` matching `Config.Spawns`; Team name must match exactly |
 | Vehicle terminal | `RoleplayOSVehicleTerminal` | stable terminal/dealership identifier |
 | Vehicle bay | `RoleplayOSVehicleSpawn` | terminal/dealership identifier; unobstructed spawn volume |
 | CCTV camera/viewpoint | `RoleplayOSCCTV` | stable `CameraId`, player-facing `DisplayName` |
@@ -124,7 +129,7 @@ The gate requires or highlights:
 
 - `Framework.Environment = "Production"`;
 - Studio mock data and mock emergency access disabled;
-- final Roblox group links and minimum ranks, including a non-temporary Control group;
+- final Roblox group links and minimum ranks; Control intentionally uses the main Universal Projects group;
 - all live gamepass IDs checked against this experience;
 - final uniform template IDs;
 - published API/DataStore access enabled only in the private staging place first;

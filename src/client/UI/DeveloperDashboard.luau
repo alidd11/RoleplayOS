@@ -1,7 +1,9 @@
 --!strict
 
 local GuiService = game:GetService("GuiService")
+local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 
 -- Roblox's unified top bar is a 36px band on an unscaled desktop client and
@@ -16,13 +18,13 @@ local NATIVE_CONTROL_GAP = 8
 
 local App = {}
 local COLOURS = {
-	Canvas = Color3.fromRGB(7, 10, 16),
-	Sidebar = Color3.fromRGB(11, 15, 23),
-	Surface = Color3.fromRGB(16, 21, 31),
-	SurfaceRaised = Color3.fromRGB(21, 28, 41),
-	Border = Color3.fromRGB(42, 52, 70),
+	Canvas = Color3.fromRGB(15, 20, 28),
+	Sidebar = Color3.fromRGB(18, 24, 34),
+	Surface = Color3.fromRGB(24, 31, 43),
+	SurfaceRaised = Color3.fromRGB(31, 40, 55),
+	Border = Color3.fromRGB(56, 68, 88),
 	Text = Color3.fromRGB(240, 244, 251),
-	Muted = Color3.fromRGB(142, 154, 176),
+	Muted = Color3.fromRGB(174, 184, 201),
 	Accent = Color3.fromRGB(91, 156, 255),
 	-- Fill for primary buttons. The accent is a good colour for text, strokes and
 	-- indicators against the dark canvas, and a poor one behind white label text:
@@ -52,13 +54,123 @@ local function rolePresentation(role: any): any
 		or { Icon = "ROLE", Colour = COLOURS.Accent, Label = "PUBLIC SERVICE" }
 end
 
-local function corner(parent: Instance, radius: number)
+local corner: (Instance, number) -> ()
+local stroke: (Instance, Color3?, number?) -> ()
+local cachedAvatarDescription: HumanoidDescription? = nil
+
+local function portraitPreview(
+	parent: Instance,
+	accent: Color3,
+	uniform: any?,
+	isCurrent: (() -> boolean)?
+): ViewportFrame
+	local viewport = Instance.new("ViewportFrame")
+	viewport.Name = "AvatarPreview"
+	viewport.BackgroundColor3 = Color3.fromRGB(28, 36, 49)
+	viewport.BorderSizePixel = 0
+	viewport.Ambient = Color3.fromRGB(255, 255, 255)
+	viewport.LightColor = Color3.fromRGB(255, 255, 255)
+	viewport.LightDirection = Vector3.new(-0.6, -0.45, -1)
+	viewport.Parent = parent
+	corner(viewport, 12)
+	stroke(viewport, accent, 0.68)
+
+	local wash = Instance.new("UIGradient")
+	wash.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(58, 75, 99)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(27, 35, 48)),
+	})
+	wash.Rotation = 90
+	wash.Parent = viewport
+
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 28
+	camera.CFrame = CFrame.lookAt(Vector3.new(0, 1.15, 7.6), Vector3.new(0, 1.05, 0))
+	camera.Parent = viewport
+	viewport.CurrentCamera = camera
+	local world = Instance.new("WorldModel")
+	world.Parent = viewport
+
+	task.spawn(function()
+		local ok, modelOrError = pcall(function()
+			if not cachedAvatarDescription then
+				cachedAvatarDescription =
+					Players:GetHumanoidDescriptionFromUserId(Players.LocalPlayer.UserId)
+			end
+			local description = cachedAvatarDescription:Clone()
+			if uniform then
+				local shirt = tonumber(uniform.ShirtTemplate)
+				local trousers = tonumber(uniform.TrousersTemplate)
+				if shirt and shirt > 0 then
+					description.Shirt = shirt
+				end
+				if trousers and trousers > 0 then
+					description.Pants = trousers
+				end
+			end
+			return Players:CreateHumanoidModelFromDescriptionAsync(
+				description,
+				Enum.HumanoidRigType.R15
+			)
+		end)
+		if not ok or typeof(modelOrError) ~= "Instance" then
+			return
+		end
+		local model = modelOrError :: Model
+		if not viewport.Parent or (isCurrent and not isCurrent()) then
+			model:Destroy()
+			return
+		end
+		for _, descendant in model:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				descendant.Anchored = true
+				descendant.CanCollide = false
+				descendant.CastShadow = false
+			elseif descendant:IsA("Script") or descendant:IsA("LocalScript") then
+				descendant:Destroy()
+			end
+		end
+		model:PivotTo(CFrame.Angles(0, math.rad(180), 0))
+		model.Parent = world
+	end)
+
+	return viewport
+end
+
+local function tileGrid(
+	parent: Instance,
+	itemCount: number,
+	itemHeight: number,
+	columns: number
+): Frame
+	local gap = 14
+	local rows = math.max(1, math.ceil(itemCount / columns))
+	local grid = Instance.new("Frame")
+	grid.Name = "PortraitGrid"
+	grid.BackgroundTransparency = 1
+	grid.Size = UDim2.new(1, 0, 0, rows * itemHeight + (rows - 1) * gap)
+	grid.Parent = parent
+	if parent:IsA("ScrollingFrame") then
+		local nextOrder = (parent:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+		parent:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
+		grid.LayoutOrder = nextOrder
+	end
+	local layout = Instance.new("UIGridLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	layout.CellPadding = UDim2.fromOffset(gap, gap)
+	layout.CellSize = UDim2.new(1 / columns, -gap * (columns - 1) / columns, 0, itemHeight)
+	layout.Parent = grid
+	return grid
+end
+
+corner = function(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
 	value.CornerRadius = UDim.new(0, radius)
 	value.Parent = parent
 end
 
-local function stroke(parent: Instance, colour: Color3?, transparency: number?)
+stroke = function(parent: Instance, colour: Color3?, transparency: number?)
 	local value = Instance.new("UIStroke")
 	value.Color = colour or COLOURS.Border
 	value.Transparency = transparency or 0
@@ -126,6 +238,11 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 	item.TextColor3 = COLOURS.Text
 	item.Size = UDim2.fromOffset(170, 44)
 	item.Parent = parent
+	if parent:IsA("ScrollingFrame") then
+		local nextOrder = (parent:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+		parent:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
+		item.LayoutOrder = nextOrder
+	end
 	corner(item, 10)
 	stroke(item, if primary then COLOURS.Accent else COLOURS.Border, if primary then 0.55 else 0)
 	pressable(item)
@@ -142,6 +259,7 @@ local function clear(container: Instance)
 			child:Destroy()
 		end
 	end
+	container:SetAttribute("RoleplayOSNextLayoutOrder", 0)
 end
 
 local function elevate(container: Instance, zIndex: number)
@@ -158,8 +276,20 @@ local function card(parent: Instance, height: number): Frame
 	item.BorderSizePixel = 0
 	item.Size = UDim2.new(1, 0, 0, height)
 	item.Parent = parent
+	if parent:IsA("ScrollingFrame") then
+		local nextOrder = (parent:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+		parent:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
+		item.LayoutOrder = nextOrder
+	end
 	corner(item, 12)
 	stroke(item)
+	local surfaceGradient = Instance.new("UIGradient")
+	surfaceGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(31, 41, 57)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 29, 41)),
+	})
+	surfaceGradient.Rotation = 90
+	surfaceGradient.Parent = item
 	return item
 end
 
@@ -212,14 +342,12 @@ function App.mount(context: any): ScreenGui
 	menuToggleGui.ResetOnSpawn = false
 	menuToggleGui.ScreenInsets = Enum.ScreenInsets.None
 	menuToggleGui.ClipToDeviceSafeArea = true
-	menuToggleGui.DisplayOrder = 5
+	-- Keep the control above the menu canvas as well as the gameplay HUD. It is
+	-- both the opener and the always-available close/back action.
+	menuToggleGui.DisplayOrder = 60
 	menuToggleGui.Parent = gui.Parent
-	-- The toggle is styled as an extra Roblox top-bar control rather than an
-	-- experience button: a square, fully rounded, icon-only pill on the same
-	-- translucent black as the native unibar, with no outline. Its size, radius
-	-- and glyph size are recomputed from the measured top-bar band by the
-	-- responsive binding below so it tracks whatever height Roblox reports on
-	-- the current device.
+	-- Keep the explicit MENU label the player asked for, while matching the height
+	-- and baseline of Roblox's native top-bar controls.
 	local menuToggle = Instance.new("TextButton")
 	menuToggle.Name = "OpenMenu"
 	menuToggle.Size = UDim2.fromOffset(NATIVE_CONTROL_SIZE, NATIVE_CONTROL_SIZE)
@@ -227,45 +355,16 @@ function App.mount(context: any): ScreenGui
 	menuToggle.BackgroundTransparency = 0.5
 	menuToggle.BorderSizePixel = 0
 	menuToggle.AutoButtonColor = true
-	menuToggle.Text = ""
+	menuToggle.Text = "MENU"
+	menuToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	menuToggle.TextSize = 14
+	menuToggle.Font = Enum.Font.GothamBold
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
-
-	-- Three drawn bars rather than a text glyph.
-	--
-	-- This was U+2630, the trigram character, which Roblox's Gotham fonts do not
-	-- contain. A font that has no glyph for a character draws the missing
-	-- character box instead, so the one control that opens the whole menu showed
-	-- players an empty square.
-	--
-	-- Roblox draws its own top bar icons as artwork rather than as characters,
-	-- which is also why theirs cannot fail this way. Drawing the bars follows
-	-- that and needs no uploaded asset, so it cannot fail on asset permissions
-	-- either, and it scales with the measured top bar instead of with a font.
-	local glyph = Instance.new("Frame")
-	glyph.Name = "Glyph"
-	glyph.AnchorPoint = Vector2.new(0.5, 0.5)
-	glyph.Position = UDim2.fromScale(0.5, 0.5)
-	glyph.Size = UDim2.fromScale(0.42, 0.34)
-	glyph.BackgroundTransparency = 1
-	glyph.Parent = menuToggle
-	for _, offset in { -0.5, 0, 0.5 } do
-		local bar = Instance.new("Frame")
-		bar.AnchorPoint = Vector2.new(0.5, 0.5)
-		bar.Position = UDim2.fromScale(0.5, 0.5 + offset)
-		bar.Size = UDim2.new(1, 0, 0, 2)
-		bar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-		bar.BorderSizePixel = 0
-		bar.Parent = glyph
-		local barCorner = Instance.new("UICorner")
-		barCorner.CornerRadius = UDim.new(1, 0)
-		barCorner.Parent = bar
-	end
-
 	-- A dedicated non-interactive backdrop extends above the legacy GUI origin.
 	-- This keeps the visual treatment full bleed even on clients which still
 	-- apply the historical top-bar offset to an inset-free ScreenGui.
@@ -277,8 +376,8 @@ function App.mount(context: any): ScreenGui
 	bleedBackdrop.Parent = gui
 	local bleedGradient = Instance.new("UIGradient")
 	bleedGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 12, 20)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 20, 32)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 27, 38)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 18, 27)),
 	})
 	bleedGradient.Rotation = 28
 	bleedGradient.Parent = bleedBackdrop
@@ -291,8 +390,9 @@ function App.mount(context: any): ScreenGui
 	root.Parent = gui
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(8, 12, 20)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 20, 32)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 30, 42)),
+		ColorSequenceKeypoint.new(0.52, Color3.fromRGB(17, 24, 35)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 18, 27)),
 	})
 	gradient.Rotation = 28
 	gradient.Parent = root
@@ -304,6 +404,35 @@ function App.mount(context: any): ScreenGui
 	loadingOverlay.BorderSizePixel = 0
 	loadingOverlay.ZIndex = 100
 	loadingOverlay.Parent = gui
+	-- A low-contrast edge wash suggests emergency lighting without putting two
+	-- obvious pulsing shapes behind the title. The centre remains calm and legible.
+	for index, definition in
+		{
+			{ Colour = Color3.fromRGB(25, 76, 150), Left = true, Delay = 0 },
+			{ Colour = Color3.fromRGB(120, 31, 45), Left = false, Delay = 1.1 },
+		}
+	do
+		local glow = Instance.new("Frame")
+		glow.Name = if index == 1 then "BlueEdgeWash" else "RedEdgeWash"
+		glow.AnchorPoint = Vector2.new(if definition.Left then 0 else 1, 0)
+		glow.Position = UDim2.fromScale(if definition.Left then 0 else 1, 0)
+		glow.Size = UDim2.fromScale(0.42, 1)
+		glow.BackgroundColor3 = definition.Colour
+		glow.BackgroundTransparency = 0
+		glow.BorderSizePixel = 0
+		glow.ZIndex = 100
+		glow.Parent = loadingOverlay
+		local edgeGradient = Instance.new("UIGradient")
+		edgeGradient.Color = ColorSequence.new(definition.Colour)
+		edgeGradient.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.84),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		edgeGradient.Rotation = if definition.Left then 0 else 180
+		edgeGradient.Parent = glow
+		-- A restrained static wash reads as emergency-service branding without
+		-- flashing behind text or spending render time while this overlay is hidden.
+	end
 	local loadingTitle =
 		text(loadingOverlay, "EMERGENCY RESPONSE: PORTSMOUTH", 25, COLOURS.Text, true)
 	loadingTitle.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -331,11 +460,16 @@ function App.mount(context: any): ScreenGui
 	loadingFill.BorderSizePixel = 0
 	loadingFill.ZIndex = 102
 	loadingFill.Parent = loadingBar
-	TweenService:Create(
+	local loadingTween = TweenService:Create(
 		loadingFill,
 		TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 		{ Position = UDim2.fromScale(0.84, 0) }
-	):Play()
+	)
+	loadingTween:Play()
+	local function finishLoading()
+		loadingTween:Cancel()
+		loadingOverlay.Visible = false
+	end
 	-- Named for what it does rather than for giving up. A player who reaches for
 	-- this is not impatient, they are stuck, and "Skip loading" tells them they
 	-- are about to miss something rather than that they can get out.
@@ -345,7 +479,7 @@ function App.mount(context: any): ScreenGui
 	skipLoading.Size = UDim2.fromOffset(190, 44)
 	skipLoading.ZIndex = 103
 	skipLoading.Activated:Connect(function()
-		loadingOverlay.Visible = false
+		finishLoading()
 	end)
 
 	-- Retrying is the thing that actually fixes this, and there was no way to do
@@ -366,7 +500,7 @@ function App.mount(context: any): ScreenGui
 			retryLoading.Text = "Retry"
 			retryLoading.Active = true
 			if response.Success then
-				loadingOverlay.Visible = false
+				finishLoading()
 				return
 			end
 			loadingStatus.Text = "Could not reach the server."
@@ -442,23 +576,42 @@ function App.mount(context: any): ScreenGui
 	scroll.ScrollBarImageColor3 = COLOURS.Border
 	scroll.Parent = content
 	local flow = Instance.new("UIListLayout")
+	flow.SortOrder = Enum.SortOrder.LayoutOrder
 	flow.Padding = UDim.new(0, 14)
 	flow.Parent = scroll
 
 	local menuData: any = nil
+	local selectedStoreCategory: string? = nil
 	-- Seeded from the character the player last used, which the server already
 	-- sends and nothing read. Without it a returning player picks the same
 	-- character again on every join before they can do anything else.
 	local selectedCharacterId: string? = nil
 	local dismissToWorld: () -> ()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local function updateMenuToggleAppearance(isOpen: boolean)
+		menuToggle.Text = "MENU"
+		menuToggle:SetAttribute("AccessibilityLabel", if isOpen then "Close menu" else "Open menu")
+	end
+	local function setMenuOpen(isOpen: boolean)
+		playerGui:SetAttribute("RoleplayOSMenuOpen", isOpen)
+		menuToggle.Visible = true
+		updateMenuToggleAppearance(isOpen)
+		pcall(function()
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, not isOpen)
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not isOpen)
+		end)
+	end
+	playerGui:GetAttributeChangedSignal("RoleplayOSMenuOpen"):Connect(function()
+		updateMenuToggleAppearance(playerGui:GetAttribute("RoleplayOSMenuOpen") == true)
+	end)
 	local function interfaceMotionEnabled(): boolean
 		local settings = context.Controllers.SettingsController:Get()
 		return not settings or settings.InterfaceMotion ~= false
 	end
 
 	local function openFromWorld()
+		setMenuOpen(true)
 		gui.Enabled = true
-		menuToggle.Visible = false
 		context.Controllers.StartMenuController:Refresh()
 		root.Position = UDim2.fromOffset(0, 0)
 		root.BackgroundTransparency = 0
@@ -473,7 +626,13 @@ function App.mount(context: any): ScreenGui
 		end
 	end
 
-	menuToggle.Activated:Connect(openFromWorld)
+	menuToggle.Activated:Connect(function()
+		if playerGui:GetAttribute("RoleplayOSMenuOpen") == true and gui.Enabled then
+			dismissToWorld()
+		else
+			openFromWorld()
+		end
+	end)
 
 	local function showModal()
 		local currentLayout = context.Controllers.UIOrchestrator:GetLayout()
@@ -661,15 +820,30 @@ function App.mount(context: any): ScreenGui
 	local renderSettings: () -> ()
 	local renderControls: () -> ()
 	local currentRender: (() -> ())? = nil
+	local function shortLandscape(): boolean
+		local viewport = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
+		return viewport.X > viewport.Y and viewport.Y < 720
+	end
+	local function portraitCardColumns(): number
+		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
+		if width >= 1180 then
+			return 4
+		elseif width >= 840 then
+			return 3
+		elseif width >= 560 then
+			return 2
+		end
+		return 1
+	end
 	-- Bumped by every render. A page that asks the server for anything yields,
 	-- and clearing the container before the yield does not help: two renders both
 	-- clear, both wait, and then both append, so the page appears twice. After a
 	-- yield a render checks it is still the current one and gives up if not.
 	local renderGeneration = 0
 	dismissToWorld = function()
+		setMenuOpen(false)
 		if not interfaceMotionEnabled() then
 			gui.Enabled = false
-			menuToggle.Visible = true
 			return
 		end
 		TweenService:Create(
@@ -679,20 +853,25 @@ function App.mount(context: any): ScreenGui
 		):Play()
 		task.delay(0.17, function()
 			gui.Enabled = false
-			menuToggle.Visible = true
 		end)
 	end
 
 	local function sectionHeading(titleValue: string, subtitle: string)
+		local compact = shortLandscape()
 		local wrapper = Instance.new("Frame")
 		wrapper.BackgroundTransparency = 1
-		wrapper.Size = UDim2.new(1, 0, 0, 54)
+		wrapper.Size = UDim2.new(1, 0, 0, if compact then 42 else 54)
 		wrapper.Parent = scroll
-		local titleItem = text(wrapper, titleValue, 19, COLOURS.Text, true)
-		titleItem.Size = UDim2.new(1, 0, 0, 28)
+		local nextOrder = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+		scroll:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
+		wrapper.LayoutOrder = nextOrder
+		local titleItem = text(wrapper, titleValue, 17, COLOURS.Text, true)
+		titleItem.Size = UDim2.new(1, 0, 0, if compact then 23 else 28)
+		titleItem.TextSize = if compact then 16 else 17
 		local subtitleItem = text(wrapper, subtitle, 13, COLOURS.Muted)
-		subtitleItem.Position = UDim2.fromOffset(0, 29)
-		subtitleItem.Size = UDim2.new(1, 0, 0, 20)
+		subtitleItem.Position = UDim2.fromOffset(0, if compact then 23 else 29)
+		subtitleItem.Size = UDim2.new(1, 0, 0, if compact then 17 else 20)
+		subtitleItem.TextSize = if compact then 11 else 13
 	end
 
 	renderPlay = function()
@@ -704,14 +883,27 @@ function App.mount(context: any): ScreenGui
 			"Your characters",
 			"Civilian lives keep their own money, vehicles and property."
 		)
+		local landscape = shortLandscape()
+		local function enterCivilian(characterId: string)
+			local spawnId = "CityCivilian"
+			for _, role in menuData.Roles do
+				if role.Id == "Civilian" and role.Spawns[1] then
+					spawnId = role.Spawns[1].SpawnId
+				end
+			end
+			local response = context.Controllers.DutyController:EnterCivilian(characterId, spawnId)
+			if response.Success then
+				dismissToWorld()
+			end
+		end
 		if not menuData or #menuData.Characters == 0 then
-			local empty = card(scroll, 150)
+			local empty = card(scroll, if landscape then 108 else 150)
 			local titleItem = text(empty, "Start your first story", 18, COLOURS.Text, true)
-			titleItem.Position = UDim2.fromOffset(20, 18)
+			titleItem.Position = UDim2.fromOffset(20, if landscape then 13 else 18)
 			titleItem.Size = UDim2.new(1, -210, 0, 28)
 			local copy =
 				text(empty, "Create a civilian identity to enter the city.", 13, COLOURS.Muted)
-			copy.Position = UDim2.fromOffset(20, 50)
+			copy.Position = UDim2.fromOffset(20, if landscape then 42 else 50)
 			copy.Size = UDim2.new(1, -210, 0, 50)
 			copy.TextWrapped = true
 			local create = button(empty, "Create character", true)
@@ -719,29 +911,52 @@ function App.mount(context: any): ScreenGui
 			create.Position = UDim2.new(1, -20, 0.5, 0)
 			create.Activated:Connect(showModal)
 		else
+			local columns = portraitCardColumns()
+			local tileHeight = if landscape then 258 else 284
+			local canCreate = menuData.EmptySlots > 0
+			local characterGrid = tileGrid(
+				scroll,
+				#menuData.Characters + (if canCreate then 1 else 0),
+				tileHeight,
+				columns
+			)
 			for _, character in menuData.Characters do
-				local item = card(scroll, 92)
-				local avatar = Instance.new("Frame")
-				avatar.Position = UDim2.fromOffset(18, 18)
-				avatar.Size = UDim2.fromOffset(56, 56)
-				avatar.BackgroundColor3 = COLOURS.AccentSoft
-				avatar.Parent = item
-				corner(avatar, 28)
-				local initials =
-					text(avatar, string.sub(character.FullName, 1, 1), 22, COLOURS.Accent, true)
-				initials.Size = UDim2.fromScale(1, 1)
-				initials.TextXAlignment = Enum.TextXAlignment.Center
+				local item = card(characterGrid, tileHeight)
+				item.ClipsDescendants = true
+				local selected = selectedCharacterId == character.CharacterId
+				local selectedRail = Instance.new("Frame")
+				selectedRail.BackgroundColor3 = if selected then COLOURS.Success else COLOURS.Accent
+				selectedRail.BorderSizePixel = 0
+				selectedRail.Size = UDim2.new(1, 0, 0, 4)
+				selectedRail.Parent = item
+				local preview = portraitPreview(
+					item,
+					COLOURS.Accent,
+					character.PreviewAppearance,
+					function()
+						return item.Parent == characterGrid
+					end
+				)
+				preview.Position = UDim2.fromOffset(12, 14)
+				preview.Size = UDim2.new(1, -24, 0, if landscape then 112 else 132)
 				local name = text(item, character.FullName, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(90, 20)
-				name.Size = UDim2.new(1, -280, 0, 27)
+				name.Position = UDim2.fromOffset(16, if landscape then 134 else 156)
+				name.Size = UDim2.new(1, -32, 0, 27)
 				local dob = text(item, "Born " .. character.DateOfBirth, 12, COLOURS.Muted)
-				dob.Position = UDim2.fromOffset(90, 48)
-				dob.Size = UDim2.new(1, -280, 0, 22)
-				local choose = button(item, "Choose", selectedCharacterId == character.CharacterId)
-				choose.AnchorPoint = Vector2.new(1, 0.5)
-				choose.Position = UDim2.new(1, -18, 0.5, 0)
-				choose.Size = UDim2.fromOffset(132, 42)
+				dob.Position = UDim2.fromOffset(16, if landscape then 160 else 182)
+				dob.Size = UDim2.new(1, -32, 0, 22)
+				local identity = text(item, "CIVILIAN CHARACTER", 11, COLOURS.Accent, true)
+				identity.Position = UDim2.fromOffset(16, if landscape then 183 else 205)
+				identity.Size = UDim2.new(1, -32, 0, 18)
+				local choose = button(item, if selected then "Enter city" else "Choose", selected)
+				choose.AnchorPoint = Vector2.new(0, 1)
+				choose.Position = UDim2.new(0, 16, 1, -14)
+				choose.Size = UDim2.new(1, -32, 0, 42)
 				choose.Activated:Connect(function()
+					if selected then
+						enterCivilian(character.CharacterId)
+						return
+					end
 					local response =
 						context.Controllers.CharacterController:Select(character.CharacterId)
 					if response.Success then
@@ -754,49 +969,35 @@ function App.mount(context: any): ScreenGui
 					end
 				end)
 			end
-			if menuData.EmptySlots > 0 then
-				local create = button(scroll, "+  New character", false)
-				create.Size = UDim2.new(1, 0, 0, 48)
+			if canCreate then
+				local createCard = card(characterGrid, tileHeight)
+				createCard.ClipsDescendants = true
+				local createPreview = Instance.new("Frame")
+				createPreview.BackgroundColor3 = COLOURS.SurfaceRaised
+				createPreview.BorderSizePixel = 0
+				createPreview.Position = UDim2.fromOffset(12, 14)
+				createPreview.Size = UDim2.new(1, -24, 0, if landscape then 112 else 132)
+				createPreview.Parent = createCard
+				corner(createPreview, 12)
+				stroke(createPreview, COLOURS.Accent, 0.62)
+				local plus = text(createPreview, "+", 42, COLOURS.Accent, true)
+				plus.Size = UDim2.fromScale(1, 1)
+				plus.TextXAlignment = Enum.TextXAlignment.Center
+				local createTitle = text(createCard, "New character", 17, COLOURS.Text, true)
+				createTitle.Position = UDim2.fromOffset(16, if landscape then 134 else 156)
+				createTitle.Size = UDim2.new(1, -32, 0, 27)
+				local createCopy =
+					text(createCard, "Create another civilian identity.", 13, COLOURS.Muted)
+				createCopy.Position = UDim2.fromOffset(16, if landscape then 163 else 185)
+				createCopy.Size = UDim2.new(1, -32, 0, 40)
+				createCopy.TextWrapped = true
+				local create = button(createCard, "Create character", false)
+				create.AnchorPoint = Vector2.new(0, 1)
+				create.Position = UDim2.new(0, 16, 1, -14)
+				create.Size = UDim2.new(1, -32, 0, 42)
 				create.Activated:Connect(showModal)
 			end
 		end
-		sectionHeading("Enter the city", "Public civilian play is always available.")
-		local enter = card(scroll, 108)
-		local titleItem = text(enter, "Civilian", 18, COLOURS.Text, true)
-		titleItem.Position = UDim2.fromOffset(20, 18)
-		titleItem.Size = UDim2.new(1, -210, 0, 28)
-		local copy = text(
-			enter,
-			"Explore, work, build a career and create your own story.",
-			13,
-			COLOURS.Muted
-		)
-		copy.Position = UDim2.fromOffset(20, 49)
-		copy.Size = UDim2.new(1, -210, 0, 40)
-		local action =
-			button(enter, selectedCharacterId and "Enter city" or "Choose a character", true)
-		action.AnchorPoint = Vector2.new(1, 0.5)
-		action.Position = UDim2.new(1, -20, 0.5, 0)
-		action.Activated:Connect(function()
-			if not selectedCharacterId then
-				context.Controllers.NotificationController:Show(
-					"Choose or create a character first.",
-					"Character required"
-				)
-				return
-			end
-			local spawnId = "CityCivilian"
-			for _, role in menuData.Roles do
-				if role.Id == "Civilian" and role.Spawns[1] then
-					spawnId = role.Spawns[1].SpawnId
-				end
-			end
-			local response =
-				context.Controllers.DutyController:EnterCivilian(selectedCharacterId, spawnId)
-			if response.Success then
-				dismissToWorld()
-			end
-		end)
 	end
 
 	renderCareers = function()
@@ -806,107 +1007,94 @@ function App.mount(context: any): ScreenGui
 		pageDescription.Text = "Join a department, report for duty and start your next shift."
 
 		local roles = menuData and menuData.Roles or {}
-		local compactCareers = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
+		local landscape = shortLandscape()
+		local careerGeneration = renderGeneration
 		local visibleCount = 0
-		local availableCount = 0
 		for _, role in roles do
-			if role.Visible then
+			if role.Visible and role.Id ~= "Civilian" and role.DepartmentId ~= "Civilian" then
 				visibleCount += 1
-				if not role.Locked then
-					availableCount += 1
-				end
 			end
 		end
 
-		local overview = card(scroll, if compactCareers then 166 else 116)
-		overview.BackgroundColor3 = Color3.fromRGB(13, 27, 47)
-		local overviewAccent = Instance.new("Frame")
-		overviewAccent.BackgroundColor3 = COLOURS.Accent
-		overviewAccent.BorderSizePixel = 0
-		overviewAccent.Size = UDim2.fromOffset(4, 76)
-		overviewAccent.Position = UDim2.fromOffset(0, 20)
-		overviewAccent.Parent = overview
-		corner(overviewAccent, 2)
-		local eyebrow = text(overview, "ROLEPLAYOS  /  CAREER DIRECTORY", 10, COLOURS.Accent, true)
-		eyebrow.Position = UDim2.fromOffset(22, 16)
-		eyebrow.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 18)
-		local overviewTitle = text(overview, "Where will you serve today?", 20, COLOURS.Text, true)
-		overviewTitle.Position = UDim2.fromOffset(22, 36)
-		overviewTitle.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 30)
-		local overviewCopy = text(
-			overview,
-			"Your access, rank and server determine which roles are ready.",
-			12,
-			COLOURS.Muted
+		sectionHeading(
+			"Departments",
+			string.format("%d roles available in this server.", visibleCount)
 		)
-		overviewCopy.Position = UDim2.fromOffset(22, 68)
-		overviewCopy.Size = UDim2.new(1, if compactCareers then -44 else -210, 0, 28)
-		overviewCopy.TextWrapped = true
-		local availability = Instance.new("Frame")
-		availability.AnchorPoint = if compactCareers then Vector2.zero else Vector2.new(1, 0.5)
-		availability.Position = if compactCareers
-			then UDim2.fromOffset(22, 106)
-			else UDim2.new(1, -20, 0.5, 0)
-		availability.Size = if compactCareers
-			then UDim2.new(1, -44, 0, 44)
-			else UDim2.fromOffset(154, 62)
-		availability.BackgroundColor3 = Color3.fromRGB(17, 36, 61)
-		availability.BorderSizePixel = 0
-		availability.Parent = overview
-		corner(availability, 10)
-		stroke(availability, COLOURS.Accent, 0.72)
-		local count = text(
-			availability,
-			string.format("%d / %d", availableCount, visibleCount),
-			21,
-			COLOURS.Text,
-			true
-		)
-		count.Position = UDim2.fromOffset(14, if compactCareers then 2 else 7)
-		count.Size = UDim2.new(if compactCareers then 0.34 else 1, -28, 0, 26)
-		local countCopy = text(availability, "ROLES AVAILABLE", 9, COLOURS.Success, true)
-		countCopy.Position = if compactCareers
-			then UDim2.new(0.34, 0, 0, 13)
-			else UDim2.fromOffset(14, 34)
-		countCopy.Size = UDim2.new(if compactCareers then 0.66 else 1, -14, 0, 18)
-
-		sectionHeading("Departments", "Select an available role or unlock the access you need.")
+		local columns = portraitCardColumns()
+		local tileHeight = if landscape then 262 else 286
+		local roleGrid = tileGrid(scroll, visibleCount, tileHeight, columns)
+		if visibleCount == 0 then
+			local empty = card(roleGrid, tileHeight)
+			local emptyTitle = text(empty, "No roles available", 18, COLOURS.Text, true)
+			emptyTitle.Position = UDim2.fromOffset(20, 22)
+			emptyTitle.Size = UDim2.new(1, -40, 0, 30)
+			local emptyCopy = text(
+				empty,
+				"This server has not made any departments available yet.",
+				13,
+				COLOURS.Muted
+			)
+			emptyCopy.Position = UDim2.fromOffset(20, 56)
+			emptyCopy.Size = UDim2.new(1, -40, 0, 52)
+			emptyCopy.TextWrapped = true
+		end
 		for _, role in roles do
-			if role.Visible then
+			if role.Visible and role.Id ~= "Civilian" and role.DepartmentId ~= "Civilian" then
 				local presentation = rolePresentation(role)
-				local narrowCard = compactCareers
-				local item = card(scroll, if narrowCard then 152 else 120)
+				local item = card(roleGrid, tileHeight)
 				item.Name = "Career_" .. tostring(role.Id)
 				item.ClipsDescendants = true
 				local rail = Instance.new("Frame")
 				rail.BackgroundColor3 = presentation.Colour
 				rail.BackgroundTransparency = if role.Locked then 0.42 else 0
 				rail.BorderSizePixel = 0
-				rail.Size = UDim2.new(0, 4, 1, 0)
+				rail.Size = UDim2.new(1, 0, 0, 4)
 				rail.Parent = item
-				local badge = Instance.new("Frame")
-				badge.Position = UDim2.fromOffset(20, 20)
-				badge.Size = UDim2.fromOffset(64, 64)
-				badge.BackgroundColor3 = presentation.Colour
-				badge.BackgroundTransparency = if role.Locked then 0.76 else 0.8
-				badge.Parent = item
-				corner(badge, 14)
-				stroke(badge, presentation.Colour, 0.46)
-				local icon = text(
-					badge,
-					presentation.Icon,
-					if string.len(presentation.Icon) > 3 then 11 else 15,
+				local preview = portraitPreview(
+					item,
 					presentation.Colour,
+					role.PreviewUniform,
+					function()
+						return renderGeneration == careerGeneration and item.Parent == roleGrid
+					end
+				)
+				preview.Position = UDim2.fromOffset(12, 14)
+				preview.Size = UDim2.new(1, -24, 0, if landscape then 102 else 118)
+				if role.Locked then
+					preview.ImageTransparency = 0.28
+				end
+				local departmentBadge = Instance.new("Frame")
+				departmentBadge.BackgroundColor3 = presentation.Colour
+				departmentBadge.BackgroundTransparency = 0.82
+				departmentBadge.BorderSizePixel = 0
+				departmentBadge.Position = UDim2.fromOffset(16, if landscape then 127 else 143)
+				departmentBadge.Size = UDim2.fromOffset(34, 34)
+				departmentBadge.Parent = item
+				corner(departmentBadge, 8)
+				stroke(departmentBadge, presentation.Colour, 0.48)
+				local badgeText =
+					text(departmentBadge, presentation.Icon, 10, presentation.Colour, true)
+				badgeText.Size = UDim2.fromScale(1, 1)
+				badgeText.TextXAlignment = Enum.TextXAlignment.Center
+				local category = text(item, presentation.Label, 10, presentation.Colour, true)
+				category.Position = UDim2.fromOffset(58, if landscape then 126 else 142)
+				category.Size = UDim2.new(1, -144, 0, 16)
+				local access = text(
+					item,
+					if role.Locked then "LOCKED" else "AVAILABLE",
+					10,
+					if role.Locked then COLOURS.Muted else COLOURS.Success,
 					true
 				)
-				icon.Size = UDim2.fromScale(1, 1)
-				icon.TextXAlignment = Enum.TextXAlignment.Center
-				local category = text(item, presentation.Label, 9, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(102, 15)
-				category.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 17)
+				access.AnchorPoint = Vector2.new(1, 0)
+				access.Position = UDim2.new(1, -16, 0, if landscape then 126 else 142)
+				access.Size = UDim2.fromOffset(70, 16)
+				access.TextXAlignment = Enum.TextXAlignment.Right
 				local name = text(item, role.Name, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(102, 32)
-				name.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 27)
+				name.Position = UDim2.fromOffset(58, if landscape then 142 else 158)
+				name.Size = UDim2.new(1, -74, 0, 28)
+				name.TextWrapped = true
+				name.TextTruncate = Enum.TextTruncate.None
 				-- What this row can tell the player that the others cannot.
 				--
 				-- Every unlocked role used to read "Cleared to report for duty." in
@@ -930,8 +1118,8 @@ function App.mount(context: any): ScreenGui
 					end
 				end
 				local detail = text(item, detailText, 12, COLOURS.Muted)
-				detail.Position = UDim2.fromOffset(102, 61)
-				detail.Size = UDim2.new(1, if narrowCard then -126 else -300, 0, 40)
+				detail.Position = UDim2.fromOffset(16, if landscape then 169 else 185)
+				detail.Size = UDim2.new(1, -32, 0, 30)
 				detail.TextWrapped = true
 				detail.TextYAlignment = Enum.TextYAlignment.Top
 				detail.TextTruncate = Enum.TextTruncate.None
@@ -943,15 +1131,21 @@ function App.mount(context: any): ScreenGui
 						elseif role.Action == "OpenApplication" then "View application"
 						else "View requirements"
 				end
-				local action =
-					button(item, actionLabel, not role.Locked or role.Action == "PromptGamepass")
-				action.AnchorPoint = if narrowCard then Vector2.zero else Vector2.new(1, 0.5)
-				action.Position = if narrowCard
-					then UDim2.fromOffset(20, 104)
-					else UDim2.new(1, -20, 0.5, 0)
-				action.Size = if narrowCard
-					then UDim2.new(1, -40, 0, 38)
-					else UDim2.fromOffset(174, 44)
+				local action = button(item, actionLabel, false)
+				action.AnchorPoint = Vector2.new(0, 1)
+				action.Position = UDim2.new(0, 16, 1, -14)
+				action.Size = UDim2.new(1, -32, 0, 42)
+				if not role.Locked then
+					action.BackgroundColor3 = presentation.Colour:Lerp(COLOURS.Surface, 0.78)
+					action.TextColor3 = presentation.Colour:Lerp(Color3.new(1, 1, 1), 0.28)
+					local actionStroke = action:FindFirstChildOfClass("UIStroke")
+					if actionStroke then
+						actionStroke.Color = presentation.Colour
+						actionStroke.Transparency = 0.5
+					end
+				elseif role.Action ~= "PromptGamepass" then
+					action.TextColor3 = COLOURS.Muted
+				end
 				action.Selectable = true
 				action.Activated:Connect(function()
 					if role.Locked then
@@ -1026,63 +1220,199 @@ function App.mount(context: any): ScreenGui
 			return
 		end
 
-		local compactStore = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
-		local currentCategory = ""
+		local safeWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
+		local columns = if safeWidth >= 1180
+			then 4
+			else if safeWidth >= 840 then 3 else if safeWidth >= 560 then 2 else 1
+		local categories = {}
+		local categoryOrder = {}
 		for _, pass in menuData.Gamepasses do
-			if pass.Category ~= currentCategory then
-				currentCategory = pass.Category
-				sectionHeading(currentCategory, "")
+			if not categories[pass.Category] then
+				categories[pass.Category] = {}
+				table.insert(categoryOrder, pass.Category)
 			end
-			local item = card(scroll, if compactStore then 176 else 118)
-			local badge = Instance.new("Frame")
-			badge.Position = UDim2.fromOffset(18, 18)
-			badge.Size =
-				UDim2.fromOffset(if compactStore then 58 else 80, if compactStore then 58 else 80)
-			badge.BackgroundColor3 = if pass.Owned
-				then Color3.fromRGB(24, 73, 57)
-				else COLOURS.AccentSoft
-			badge.Parent = item
-			corner(badge, 12)
-			local monogram = text(
-				badge,
-				string.upper(string.sub(pass.Name, 1, 2)),
-				22,
-				if pass.Owned then COLOURS.Success else COLOURS.Accent,
-				true
+			table.insert(categories[pass.Category], pass)
+		end
+		if selectedStoreCategory and not categories[selectedStoreCategory] then
+			selectedStoreCategory = nil
+		end
+		local categoryBar = Instance.new("ScrollingFrame")
+		categoryBar.Name = "ProductCategories"
+		categoryBar.BackgroundColor3 = COLOURS.Surface
+		categoryBar.BorderSizePixel = 0
+		categoryBar.Size = UDim2.new(1, 0, 0, 58)
+		categoryBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+		categoryBar.CanvasSize = UDim2.new()
+		categoryBar.ScrollBarThickness = 0
+		categoryBar.ScrollingDirection = Enum.ScrollingDirection.X
+		categoryBar.Parent = scroll
+		local categoryOrderIndex = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+		scroll:SetAttribute("RoleplayOSNextLayoutOrder", categoryOrderIndex)
+		categoryBar.LayoutOrder = categoryOrderIndex
+		corner(categoryBar, 12)
+		stroke(categoryBar)
+		local categoryPadding = Instance.new("UIPadding")
+		categoryPadding.PaddingLeft = UDim.new(0, 8)
+		categoryPadding.PaddingRight = UDim.new(0, 8)
+		categoryPadding.PaddingTop = UDim.new(0, 7)
+		categoryPadding.PaddingBottom = UDim.new(0, 7)
+		categoryPadding.Parent = categoryBar
+		local categoryLayout = Instance.new("UIListLayout")
+		categoryLayout.FillDirection = Enum.FillDirection.Horizontal
+		categoryLayout.Padding = UDim.new(0, 8)
+		categoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		categoryLayout.Parent = categoryBar
+		local tabs = { "All" }
+		for _, category in categoryOrder do
+			table.insert(tabs, tostring(category))
+		end
+		for _, category in tabs do
+			local selected = (category == "All" and selectedStoreCategory == nil)
+				or selectedStoreCategory == category
+			local tab = button(categoryBar, category, selected)
+			tab.Size = UDim2.fromOffset(math.max(116, 32 + #category * 8), 44)
+			tab.Activated:Connect(function()
+				selectedStoreCategory = if category == "All" then nil else category
+				renderStore()
+			end)
+		end
+		for _, category in categoryOrder do
+			if selectedStoreCategory and tostring(category) ~= selectedStoreCategory then
+				continue
+			end
+			local passes = categories[category]
+			local section = Instance.new("Frame")
+			section.Name = "StoreSection_" .. tostring(category)
+			section.BackgroundTransparency = 1
+			section.Size = UDim2.new(1, 0, 0, 54)
+			section.Parent = scroll
+			local nextOrder = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
+			scroll:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
+			section.LayoutOrder = nextOrder
+			local categoryTitle = text(section, tostring(category), 18, COLOURS.Text, true)
+			categoryTitle.Position = UDim2.fromOffset(2, 0)
+			categoryTitle.Size = UDim2.new(1, -4, 0, 26)
+			local categoryCopy = text(
+				section,
+				string.format("%d %s", #passes, if #passes == 1 then "option" else "options"),
+				11,
+				COLOURS.Muted
 			)
-			monogram.Size = UDim2.fromScale(1, 1)
-			monogram.TextXAlignment = Enum.TextXAlignment.Center
-			local contentLeft = if compactStore then 90 else 116
-			local name = text(item, pass.Name, 17, COLOURS.Text, true)
-			name.Position = UDim2.fromOffset(contentLeft, 18)
-			name.Size = UDim2.new(1, -(contentLeft + if compactStore then 18 else 194), 0, 26)
-			local description = text(item, pass.Description, 12, COLOURS.Muted)
-			description.Position = UDim2.fromOffset(contentLeft, 45)
-			description.Size = UDim2.new(1, -(contentLeft + 18), 0, 48)
-			description.TextWrapped = true
-			local actionLabel = if pass.Owned
-				then "Owned"
-				elseif not pass.Configured then "Unavailable"
-				elseif not pass.AvailableInServer then "Public servers only"
-				else "View pass"
-			local purchase = button(item, actionLabel, not pass.Owned and pass.AvailableInServer)
-			purchase.AnchorPoint = if compactStore then Vector2.new(0, 1) else Vector2.new(1, 0.5)
-			purchase.Position = if compactStore
-				then UDim2.new(0, 18, 1, -16)
-				else UDim2.new(1, -18, 0.5, 0)
-			purchase.Size = if compactStore
-				then UDim2.new(1, -36, 0, 42)
-				else UDim2.fromOffset(158, 44)
-			purchase.Selectable = pass.Configured and pass.AvailableInServer and not pass.Owned
-			purchase.Active = purchase.Selectable
-			if purchase.Active then
-				purchase.Activated:Connect(function()
-					context.Controllers.GamepassController:Prompt(pass.GamepassId)
-				end)
-			else
-				purchase.BackgroundColor3 = COLOURS.SurfaceRaised
-				purchase.TextColor3 = if pass.Owned then COLOURS.Success else COLOURS.Muted
+			categoryCopy.Position = UDim2.fromOffset(2, 25)
+			categoryCopy.Size = UDim2.new(1, -4, 0, 18)
+			local passGrid = Instance.new("Frame")
+			passGrid.Name = "Products"
+			passGrid.BackgroundTransparency = 1
+			passGrid.Position = UDim2.fromOffset(0, 52)
+			passGrid.Size = UDim2.fromScale(1, 0)
+			passGrid.Parent = section
+			local passLayout = Instance.new("UIGridLayout")
+			passLayout.SortOrder = Enum.SortOrder.LayoutOrder
+			passLayout.CellPadding = UDim2.fromOffset(14, 14)
+			passLayout.CellSize = UDim2.new(1 / columns, -14 * (columns - 1) / columns, 0, 250)
+			passLayout.Parent = passGrid
+			local function updateSectionHeight()
+				local contentHeight = passLayout.AbsoluteContentSize.Y
+				passGrid.Size = UDim2.new(1, 0, 0, contentHeight)
+				section.Size = UDim2.new(1, 0, 0, 52 + contentHeight)
 			end
+			passLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSectionHeight)
+			for _, pass in passes do
+				local item = card(passGrid, 250)
+				item.ClipsDescendants = true
+				local artwork = Instance.new("Frame")
+				artwork.Position = UDim2.fromOffset(12, 12)
+				artwork.Size = UDim2.new(1, -24, 0, 78)
+				artwork.BackgroundColor3 = if pass.Owned
+					then Color3.fromRGB(22, 60, 50)
+					else Color3.fromRGB(27, 43, 68)
+				artwork.BorderSizePixel = 0
+				artwork.Parent = item
+				corner(artwork, 10)
+				local artworkGradient = Instance.new("UIGradient")
+				artworkGradient.Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, artwork.BackgroundColor3),
+					ColorSequenceKeypoint.new(1, COLOURS.SurfaceRaised),
+				})
+				artworkGradient.Rotation = 18
+				artworkGradient.Parent = artwork
+				local imageId = tonumber(
+					pass.ImageAssetId or pass.IconAssetId or pass.ImageId or pass.IconImageId
+				)
+				if imageId and imageId > 0 then
+					local image = Instance.new("ImageLabel")
+					image.BackgroundTransparency = 1
+					image.Size = UDim2.fromScale(1, 1)
+					image.Image = "rbxassetid://" .. tostring(imageId)
+					image.ScaleType = Enum.ScaleType.Crop
+					image.Parent = artwork
+					corner(image, 10)
+				else
+					local monogram = text(
+						artwork,
+						string.upper(string.sub(pass.Name, 1, 2)),
+						25,
+						if pass.Owned then COLOURS.Success else COLOURS.Accent,
+						true
+					)
+					monogram.Size = UDim2.fromScale(1, 1)
+					monogram.TextXAlignment = Enum.TextXAlignment.Center
+				end
+				local name = text(item, pass.Name, 17, COLOURS.Text, true)
+				name.Position = UDim2.fromOffset(16, 98)
+				name.Size = UDim2.new(1, -32, 0, 25)
+				name.TextWrapped = true
+				name.TextTruncate = Enum.TextTruncate.None
+				local description = text(item, pass.Description, 12, COLOURS.Muted)
+				description.Position = UDim2.fromOffset(16, 126)
+				description.Size = UDim2.new(1, -32, 0, 40)
+				description.TextWrapped = true
+				description.TextYAlignment = Enum.TextYAlignment.Top
+				description.TextTruncate = Enum.TextTruncate.AtEnd
+				local price = tonumber(pass.PriceInRobux or pass.Price)
+				local stateCopy = if pass.Owned
+					then "OWNED"
+					elseif price and price > 0 then string.format("R$ %d", price)
+					elseif pass.Configured then "VIEW PRICE"
+					else "NOT CONFIGURED"
+				local state = text(
+					item,
+					stateCopy,
+					10,
+					if pass.Owned then COLOURS.Success else COLOURS.Accent,
+					true
+				)
+				state.Position = UDim2.fromOffset(16, 170)
+				state.Size = UDim2.new(1, -32, 0, 18)
+				local actionLabel = if pass.Owned
+					then "Owned"
+					elseif not pass.Configured then "Unavailable"
+					elseif not pass.AvailableInServer then "Public servers only"
+					else "View pass"
+				local purchase =
+					button(item, actionLabel, not pass.Owned and pass.AvailableInServer)
+				purchase.AnchorPoint = Vector2.new(0, 1)
+				purchase.Position = UDim2.new(0, 16, 1, -14)
+				purchase.Size = UDim2.new(1, -32, 0, 40)
+				purchase.Selectable = pass.Configured and pass.AvailableInServer and not pass.Owned
+				purchase.Active = purchase.Selectable
+				if purchase.Active then
+					purchase.Activated:Connect(function()
+						if pass.PurchaseType == "DeveloperProduct" then
+							MarketplaceService:PromptProductPurchase(
+								Players.LocalPlayer,
+								pass.ProductId
+							)
+						else
+							context.Controllers.GamepassController:Prompt(pass.GamepassId)
+						end
+					end)
+				else
+					purchase.BackgroundColor3 = COLOURS.SurfaceRaised
+					purchase.TextColor3 = if pass.Owned then COLOURS.Success else COLOURS.Muted
+				end
+			end
+			updateSectionHeight()
 		end
 	end
 
@@ -1390,8 +1720,8 @@ function App.mount(context: any): ScreenGui
 		renderGeneration += 1
 		local generation = renderGeneration
 		clear(scroll)
-		pageTitle.Text = "Community"
-		pageDescription.Text = "Where you are playing, and where else you can."
+		pageTitle.Text = "Servers"
+		pageDescription.Text = "Move between official sessions without losing your place."
 		local server = menuData and menuData.Server
 		local kind = server and server.Kind or "Public"
 		local community = server and server.Community
@@ -1424,32 +1754,41 @@ function App.mount(context: any): ScreenGui
 			then officialResponse.Data.Servers
 			else nil
 		if type(officialRows) == "table" and #officialRows > 0 then
-			sectionHeading("Official servers", "Run by the team. Pick one and play.")
+			sectionHeading(
+				"Official servers",
+				"Choose the environment that matches how you want to play."
+			)
 			for _, entry in officialRows do
-				local row = card(scroll, 104)
+				local row = card(scroll, 118)
 				local here = entry.Current == true
 				local marker = Instance.new("Frame")
 				marker.BackgroundColor3 = if here then COLOURS.Success else COLOURS.Accent
 				marker.BorderSizePixel = 0
-				marker.Position = UDim2.fromOffset(0, 18)
-				marker.Size = UDim2.fromOffset(4, 68)
+				marker.Position = UDim2.fromOffset(0, 16)
+				marker.Size = UDim2.fromOffset(5, 86)
 				marker.Parent = row
-				local tier = text(row, "WHITELISTED", 10, COLOURS.Accent, true)
+				local tier = text(
+					row,
+					if here then "CURRENT SESSION" else "OFFICIAL SERVER",
+					11,
+					if here then COLOURS.Success else COLOURS.Accent,
+					true
+				)
 				tier.Position = UDim2.fromOffset(22, 16)
 				tier.Size = UDim2.new(1, -190, 0, 16)
-				local name = text(row, tostring(entry.Name), 20, COLOURS.Text, true)
+				local name = text(row, tostring(entry.Name), 21, COLOURS.Text, true)
 				name.Position = UDim2.fromOffset(22, 34)
 				name.Size = UDim2.new(1, -190, 0, 28)
 				local blurb = text(row, tostring(entry.Description or ""), 12, COLOURS.Muted)
-				blurb.Position = UDim2.fromOffset(22, 62)
-				blurb.Size = UDim2.new(1, -190, 0, 30)
+				blurb.Position = UDim2.fromOffset(22, 66)
+				blurb.Size = UDim2.new(1, -210, 0, 38)
 				blurb.TextWrapped = true
 				local join = Instance.new("TextButton")
 				join.AutoButtonColor = false
 				join.AnchorPoint = Vector2.new(1, 0.5)
 				join.Position = UDim2.new(1, -20, 0.5, 0)
 				join.Size = UDim2.fromOffset(140, 48)
-				join.BackgroundColor3 = if here then COLOURS.Canvas else COLOURS.Accent
+				join.BackgroundColor3 = if here then COLOURS.SurfaceRaised else COLOURS.AccentFill
 				join.BorderSizePixel = 0
 				join.Font = Enum.Font.GothamBold
 				join.Text = if here then "YOU ARE HERE" else "JOIN"
@@ -1507,76 +1846,6 @@ function App.mount(context: any): ScreenGui
 		local whereBlurb = text(whereCard, KIND_BLURB[kind] or "", 12, COLOURS.Muted)
 		whereBlurb.Position = UDim2.fromOffset(20, 64)
 		whereBlurb.Size = UDim2.new(1, -40, 0, 18)
-
-		-- Your own community, last, because it applies to the fewest people.
-		if kind == "Private" and not community then
-			sectionHeading("Your community", "Link this server to a Roblox group you own.")
-			local setup = card(scroll, 132)
-			local copy = text(
-				setup,
-				"Members, staff permissions and access policies follow the group.",
-				12,
-				COLOURS.Muted
-			)
-			copy.Position = UDim2.fromOffset(20, 16)
-			copy.Size = UDim2.new(1, -40, 0, 20)
-			local groupIdInput = Instance.new("TextBox")
-			groupIdInput.BackgroundColor3 = COLOURS.Canvas
-			groupIdInput.BorderSizePixel = 0
-			groupIdInput.ClearTextOnFocus = false
-			groupIdInput.Font = Enum.Font.Gotham
-			groupIdInput.PlaceholderColor3 = COLOURS.Muted
-			groupIdInput.PlaceholderText = "Roblox group ID"
-			groupIdInput.Position = UDim2.fromOffset(20, 46)
-			groupIdInput.Size = UDim2.new(1, -212, 0, 44)
-			groupIdInput.Text = ""
-			groupIdInput.TextColor3 = COLOURS.Text
-			groupIdInput.TextSize = 14
-			groupIdInput.Parent = setup
-			corner(groupIdInput, 10)
-			local createCommunity = button(setup, "Create community", true)
-			createCommunity.AnchorPoint = Vector2.new(1, 0)
-			createCommunity.Position = UDim2.new(1, -20, 0, 46)
-			createCommunity.Size = UDim2.fromOffset(172, 44)
-			createCommunity.Activated:Connect(function()
-				local groupId = tonumber(groupIdInput.Text)
-				if not groupId or groupId <= 0 or groupId % 1 ~= 0 then
-					context.Controllers.NotificationController:Show(
-						"Enter the numeric ID of a Roblox group you own.",
-						"Group required"
-					)
-					return
-				end
-				createCommunity.Text = "Creating…"
-				local response = context.Controllers.CommunityController:CreatePrivate(groupId)
-				if response.Success then
-					context.Controllers.StartMenuController:Refresh()
-				else
-					createCommunity.Text = "Create community"
-				end
-			end)
-			local note = text(
-				setup,
-				"You must own the group. Everyone joining still needs to be a member of the host community.",
-				11,
-				COLOURS.Muted
-			)
-			note.Position = UDim2.fromOffset(20, 98)
-			note.Size = UDim2.new(1, -40, 0, 20)
-			note.TextWrapped = true
-		elseif kind == "Public" then
-			sectionHeading("Your own community", "Private servers can run to their own rules.")
-			local hint = card(scroll, 74)
-			local hintCopy = text(
-				hint,
-				"Start a private server for this experience, then set it up from this page.",
-				13,
-				COLOURS.Muted
-			)
-			hintCopy.Position = UDim2.fromOffset(20, 0)
-			hintCopy.Size = UDim2.new(1, -40, 1, 0)
-			hintCopy.TextWrapped = true
-		end
 	end
 
 	local activeNav: TextButton? = nil
@@ -1647,6 +1916,7 @@ function App.mount(context: any): ScreenGui
 		end
 		return math.max(1, count)
 	end
+	local lastResponsiveKey: string? = nil
 
 	context.Controllers.UIOrchestrator:Bind("DeveloperDashboard", function(layout)
 		local safeTop = layout.NativeTop
@@ -1658,21 +1928,13 @@ function App.mount(context: any): ScreenGui
 		-- instead of the taller safe region our own panels reserve.
 		local reportedBand = math.floor(GuiService.TopbarInset.Height + 0.5)
 		local nativeBand = if reportedBand > 0 then reportedBand else NATIVE_BAND_HEIGHT
-		local controlSize =
-			math.floor(nativeBand * (NATIVE_CONTROL_SIZE / NATIVE_BAND_HEIGHT) + 0.5)
-		menuToggle.Size = UDim2.fromOffset(controlSize, controlSize)
-		menuToggleCorner.CornerRadius = UDim.new(0, controlSize / 2)
-		-- The bars keep their proportions against the measured control, and each
-		-- one stays at least a pixel so it never rounds away on a small screen.
-		glyph.Size = UDim2.fromOffset(
-			math.floor(controlSize * 0.42 + 0.5),
-			math.floor(controlSize * 0.34 + 0.5)
-		)
-		for _, bar in glyph:GetChildren() do
-			if bar:IsA("Frame") then
-				bar.Size = UDim2.new(1, 0, 0, math.max(1, math.floor(controlSize * 0.055 + 0.5)))
-			end
-		end
+		-- Roblox's reported top-bar inset includes breathing room around the actual
+		-- controls. Using the entire inset made this control visibly taller and
+		-- shifted it above the native cluster on scaled displays.
+		local controlSize = math.clamp(math.floor(nativeBand * 0.78 + 0.5), 32, 52)
+		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
+		menuToggle.Size = UDim2.fromOffset(menuWidth, controlSize)
+		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
 		-- Sit immediately right of the native control cluster. NativeLeft is the
 		-- measured left edge of the region Roblox leaves free, so trust it when it
 		-- is reported and fall back to the historical estimate only when Roblox
@@ -1684,7 +1946,7 @@ function App.mount(context: any): ScreenGui
 		menuToggle.Position = UDim2.fromOffset(
 			math.min(
 				nativeControlWidth + NATIVE_CONTROL_GAP,
-				math.max(NATIVE_CONTROL_GAP, layout.Viewport.X - controlSize - NATIVE_CONTROL_GAP)
+				math.max(NATIVE_CONTROL_GAP, layout.Viewport.X - menuWidth - NATIVE_CONTROL_GAP)
 			),
 			-- Centre within the native band, never above the screen edge.
 			math.max(0, math.floor((nativeBand - controlSize) / 2))
@@ -1716,7 +1978,7 @@ function App.mount(context: any): ScreenGui
 					else 270,
 				30
 			)
-			brand.TextSize = 15
+			brand.TextSize = 14
 			brand.TextWrapped = false
 			brand.TextTruncate = Enum.TextTruncate.AtEnd
 			version.Position = UDim2.fromOffset(headerLeft + 1, safeTop + 37)
@@ -1738,7 +2000,7 @@ function App.mount(context: any): ScreenGui
 					-- Never below twelve. These are the only way to move around the menu, and
 					-- ten pixels on the smallest screen is where they are least readable and
 					-- most needed.
-					item.TextSize = if narrow then 12 else 14
+					item.TextSize = if narrow then 12 else 13
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
@@ -1747,13 +2009,15 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = false
-			header.Position = UDim2.fromOffset(safeLeft + 20, 10)
-			header.Size = UDim2.new(1, -(40 + safeLeft + safeRight), 0, 54)
-			pageTitle.TextSize = 24
+			local contentWidth = math.min(1680, math.max(280, layout.SafeViewport.X - 48))
+			local contentLeft = safeLeft + math.max(20, (layout.SafeViewport.X - contentWidth) / 2)
+			header.Position = UDim2.fromOffset(contentLeft, 6)
+			header.Size = UDim2.fromOffset(contentWidth, 28)
+			pageTitle.Visible = false
 			pageDescription.Visible = false
-			status.Position = UDim2.new(1, -safeRight, 0, 3)
-			scroll.Position = UDim2.fromOffset(safeLeft + 20, 68)
-			scroll.Size = UDim2.new(1, -(40 + safeLeft + safeRight), 1, -(76 + layout.SafeBottom))
+			status.Position = UDim2.fromScale(1, 0)
+			scroll.Position = UDim2.fromOffset(contentLeft, 38)
+			scroll.Size = UDim2.new(0, contentWidth, 1, -(46 + layout.SafeBottom))
 		else
 			-- The sidebar hugs the left edge, so it absorbs the left reserve and
 			-- the content pane starts after it. Only the sidebar needs to know.
@@ -1782,6 +2046,7 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = true
+			pageTitle.Visible = true
 			header.Position = UDim2.fromOffset(44, safeTop + 30)
 			header.Size = UDim2.new(1, -(88 + safeRight), 0, 76)
 			pageTitle.TextSize = 30
@@ -1790,6 +2055,19 @@ function App.mount(context: any): ScreenGui
 			scroll.Position = UDim2.fromOffset(44, safeTop + 118)
 			scroll.Size = UDim2.new(1, -(88 + safeRight), 1, -(safeTop + 146 + layout.SafeBottom))
 		end
+		-- Cards have genuinely different compositions at these breakpoints, not
+		-- merely different widths. Repaint only when a breakpoint changes so a
+		-- phone rotation or window resize never leaves desktop cards squeezed into
+		-- a mobile column, without doing work on every viewport-size signal.
+		local responsiveKey = string.format(
+			"%d:%s",
+			portraitCardColumns(),
+			if shortLandscape() then "short" else "standard"
+		)
+		if lastResponsiveKey and responsiveKey ~= lastResponsiveKey and currentRender then
+			task.defer(currentRender)
+		end
+		lastResponsiveKey = responsiveKey
 	end)
 
 	context.Events.StartMenuChanged.Event:Connect(function(data)
@@ -1808,13 +2086,14 @@ function App.mount(context: any): ScreenGui
 		version.Visible = data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
-		loadingOverlay.Visible = false
+		finishLoading()
 		if currentRender then
 			currentRender()
 		end
 	end)
 	-- Paint immediately so the menu is on screen while the first request is still
 	-- in flight. The StartMenuChanged handler above fills in real data on success.
+	setMenuOpen(true)
 	renderPlay()
 	task.spawn(function()
 		local response = context.Controllers.StartMenuController:Refresh()

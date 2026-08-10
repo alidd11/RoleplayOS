@@ -35,16 +35,35 @@ local function pedal(parent: Instance, name: string, glyph: string, colour: Colo
 	item.Font = Enum.Font.GothamBold
 	item.Text = glyph
 	item.TextColor3 = Color3.fromRGB(240, 245, 252)
-	item.TextSize = 22
+	item.TextSize = 14
 	item.Visible = false
 	item.Parent = parent
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 20)
+	corner.CornerRadius = UDim.new(0, 12)
 	corner.Parent = item
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(86, 108, 140)
 	stroke.Transparency = 0.4
 	stroke.Parent = item
+	local grooves = Instance.new("Frame")
+	grooves.Name = "PedalGrooves"
+	grooves.AnchorPoint = Vector2.new(0.5, 0)
+	grooves.BackgroundTransparency = 1
+	grooves.Position = UDim2.new(0.5, 0, 0, 13)
+	grooves.Size = UDim2.new(0.62, 0, 0, 34)
+	grooves.Parent = item
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 5)
+	list.Parent = grooves
+	for _ = 1, 4 do
+		local ridge = Instance.new("Frame")
+		ridge.BackgroundColor3 = Color3.fromRGB(210, 220, 232)
+		ridge.BackgroundTransparency = 0.35
+		ridge.BorderSizePixel = 0
+		ridge.Size = UDim2.new(1, 0, 0, 3)
+		ridge.Parent = grooves
+		Instance.new("UICorner", ridge).CornerRadius = UDim.new(1, 0)
+	end
 	return item
 end
 
@@ -68,8 +87,35 @@ function DrivingControlsController:_mount()
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
-	self.accelerate = pedal(gui, "Accelerate", "▲", Color3.fromRGB(30, 92, 56))
-	self.brake = pedal(gui, "Brake", "▼", Color3.fromRGB(104, 40, 46))
+	self.accelerate = pedal(gui, "Accelerate", "ACCEL", Color3.fromRGB(30, 92, 56))
+	self.brake = pedal(gui, "Brake", "BRAKE", Color3.fromRGB(104, 40, 46))
+	self.accelerate.TextYAlignment = Enum.TextYAlignment.Bottom
+	self.brake.TextYAlignment = Enum.TextYAlignment.Bottom
+	self.accelerate.TextStrokeTransparency = 0.65
+	self.brake.TextStrokeTransparency = 0.65
+
+	-- Roblox replaces its normal mobile jump control while a humanoid occupies a
+	-- VehicleSeat. Provide an explicit, familiar exit control so a touch player
+	-- is never trapped in a car. The server-replicated restraint attribute is the
+	-- sole exception: a cuffed detainee cannot use this to escape transport.
+	self.exit = pedal(gui, "ExitVehicle", "EXIT", Color3.fromRGB(34, 48, 68))
+	self.exit.TextSize = 13
+	table.insert(
+		self.connections,
+		self.exit.Activated:Connect(function()
+			local player = Players.LocalPlayer
+			if player:GetAttribute("RoleplayOSCuffed") == true then
+				return
+			end
+			local character = player.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if humanoid and humanoid.SeatPart then
+				humanoid.Sit = false
+				humanoid.Jump = true
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			end
+		end)
+	)
 
 	local scale = Instance.new("UIScale")
 	scale.Parent = gui
@@ -178,21 +224,42 @@ function DrivingControlsController:Start()
 				and layout.State == "Driver"
 			self.accelerate.Visible = shown
 			self.brake.Visible = shown
+			self.exit.Visible = layout.InputMode == "Touch"
+				and layout.Vehicle
+				and Players.LocalPlayer:GetAttribute("RoleplayOSCuffed") ~= true
 			self.scale.Scale = layout.HudScale
 			local size = self.settings.PedalSize
-			local right = layout.SafeRight + 20
-			local bottom = layout.HotbarBottom + 16
-			-- Side by side as a pedal box, brake to the left of the accelerator as
-			-- in a car. Both stay on the right: the left of the screen belongs to
-			-- Roblox's steering thumbstick, and a brake placed under the steering
-			-- thumb would be pressed by accident constantly.
-			self.accelerate.Size = UDim2.fromOffset(size, size)
-			self.brake.Size = UDim2.fromOffset(math.floor(size * 0.82), size)
-			self.accelerate.AnchorPoint = Vector2.new(1, 1)
+			local pedalWidth = math.floor(size * 0.7)
+			local pedalHeight = size
+			local hotbarHalfWidth = if layout.Compact then 82 else 118
+			local bottom = layout.SafeBottom + 12
+			-- The hotbar is the fixed centre reference: brake immediately to its
+			-- left, accelerator immediately to its right. This remains symmetrical
+			-- on phones regardless of a notch or Roblox's thumbstick safe region.
+			self.accelerate.Size = UDim2.fromOffset(pedalWidth, pedalHeight)
+			self.brake.Size = UDim2.fromOffset(pedalWidth, pedalHeight)
+			self.accelerate.AnchorPoint = Vector2.new(0, 1)
 			self.brake.AnchorPoint = Vector2.new(1, 1)
-			self.accelerate.Position = UDim2.new(1, -right, 1, -bottom)
-			self.brake.Position = UDim2.new(1, -(right + size + 14), 1, -bottom)
+			self.accelerate.Position = UDim2.new(0.5, hotbarHalfWidth, 1, -bottom)
+			self.brake.Position = UDim2.new(0.5, -hotbarHalfWidth, 1, -bottom)
+			self.exit.Size = UDim2.fromOffset(58, 58)
+			self.exit.AnchorPoint = Vector2.new(0, 1)
+			self.exit.Position = UDim2.new(
+				0.5,
+				hotbarHalfWidth + math.floor((pedalWidth - 58) / 2),
+				1,
+				-(bottom + pedalHeight + 10)
+			)
 		end
+	)
+	table.insert(
+		self.connections,
+		Players.LocalPlayer:GetAttributeChangedSignal("RoleplayOSCuffed"):Connect(function()
+			local layout = self.context.Controllers.UIOrchestrator:GetLayout()
+			self.exit.Visible = layout.InputMode == "Touch"
+				and layout.Vehicle
+				and Players.LocalPlayer:GetAttribute("RoleplayOSCuffed") ~= true
+		end)
 	)
 	table.insert(
 		self.connections,

@@ -10,7 +10,7 @@ The review considered Emergency Response: Liberty County's department XP and ran
 4. **State clarity.** Loading, empty, locked, offline, success and failure states need distinct copy and visual treatment. Buttons must show pending state and prevent repeated submission.
 5. **One design system.** Shared colour, spacing, typography, radius, stroke, motion and focus tokens should replace repeated values as the interface grows.
 6. **Accessible by default.** Native safe insets, preferred text size, reduced motion, non-colour status symbols, gamepad selection and touch targets of at least 44 pixels remain release requirements.
-7. **Public and operational separation.** Civilian progression can encourage broad long-term play. Whitelisted duty and private communities must use their own rank, qualification and governance rules without leaking public XP UI.
+7. **Public and operational separation.** Civilian progression can encourage broad long-term play. Whitelisted duty uses its own rank and qualification rules without leaking public XP UI.
 
 ## Delivery priorities
 

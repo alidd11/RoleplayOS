@@ -2,6 +2,16 @@
 
 local EconomyValidator = {}
 
+function EconomyValidator.account(account: any): (string?, string?)
+	if account == nil or account == "Bank" then
+		return "Bank", nil
+	end
+	if account == "Cash" then
+		return "Cash", nil
+	end
+	return nil, "INVALID_ACCOUNT"
+end
+
 function EconomyValidator.amount(amount: any): (boolean, string?)
 	if type(amount) ~= "number" then
 		return false, "AMOUNT_TYPE"
@@ -32,6 +42,10 @@ function EconomyValidator.transaction(
 	end
 	if seen[transaction.TransactionId] then
 		return false, "DUPLICATE_TRANSACTION"
+	end
+	local _, accountReason = EconomyValidator.account(transaction.Account)
+	if accountReason then
+		return false, accountReason
 	end
 	local valid, reason = EconomyValidator.amount(transaction.Amount)
 	if not valid then

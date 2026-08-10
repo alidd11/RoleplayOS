@@ -8,15 +8,6 @@
     "**/*~"
   ],
   "tree": {
-    "Workspace": {
-      "$ignoreUnknownInstances": true,
-      "$properties": {
-        "StreamingEnabled": true,
-        "StreamingTargetRadius": 1024,
-        "StreamingIntegrityMode": "PauseOutsideLoadedArea",
-        "ModelStreamingBehavior": "Improved"
-      }
-    },
     "$className": "DataModel",
     "$ignoreUnknownInstances": true,
     "ReplicatedStorage": {
@@ -59,6 +50,16 @@
       "RoleplayOSAssets": {
         "$path": "server-assets",
         "$ignoreUnknownInstances": true
+      },
+      "RoleplayOSImportedSources": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "BankRobberySource": {
+          "$path": "../Bank Robbery/Bank_robbery_System_V2_Beta_wl_obs 2.rbxm"
+        },
+        "PoliceEpaulettesSource": {
+          "$path": "../Epaulettes/Oreos Development Police Service Eppaulettes.rbxm"
+        }
       }
     },
     "StarterPlayer": {

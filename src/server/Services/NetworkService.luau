@@ -23,6 +23,36 @@ function NetworkService:Init(context: any)
 	self.context = context
 end
 function NetworkService:Start()
+	local access = self.context.Services:Get("ExperienceAccessService")
+	self.context.Network:SetAuthorizer(function(player)
+		return access:IsVerified(player)
+	end)
+	self.context.Network:RegisterFunction("DropCash", function(payload)
+		return type(payload) == "table" and type(payload.Amount) == "number"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("MoneyDropService"):Drop(player, payload.Amount)
+		local messages = {
+			INVALID_AMOUNT = "Enter a valid cash amount.",
+			WHOLE_AMOUNT_REQUIRED = "Cash can only be dropped in whole pounds.",
+			DROP_TOO_SMALL = "That amount is too small to drop.",
+			DROP_TOO_LARGE = "That amount is above the cash drop limit.",
+			INSUFFICIENT_FUNDS = "You do not have enough cash.",
+			TOO_MANY_ACTIVE_DROPS = "Pick up an existing cash drop before making another.",
+			SERVER_DROP_LIMIT = "There are too many cash drops in the area. Try again shortly.",
+			CHARACTER_UNAVAILABLE = "Your character cannot drop cash right now.",
+			CIVILIAN_REQUIRED = "Finish your service duty before dropping cash.",
+		}
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result
+				then "Cash dropped."
+				else (reason and messages[reason]) or "Cash could not be dropped.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetFrameworkStatus",
 		tablePayload,
@@ -36,7 +66,7 @@ function NetworkService:Start()
 					Version = "0.1-dev",
 					SchemaVersion = self.context.Configuration.Framework.SchemaVersion,
 					Server = self.context.Services
-						:Get("CommunityServerService")
+						:Get("ServerModeService")
 						:GetServerContext(player),
 					Capabilities = {
 						"Characters",
@@ -48,7 +78,6 @@ function NetworkService:Start()
 						"Emergency services",
 						"MDT and dispatch",
 						"Mobile phone",
-						"Private communities",
 					},
 				},
 				RequestId = requestId,
@@ -117,38 +146,6 @@ function NetworkService:Start()
 			Code = "OK",
 			Message = "Connecting…",
 			Data = result,
-			RequestId = requestId,
-		}
-	end)
-	self.context.Network:RegisterFunction("CreatePrivateCommunity", function(payload)
-		return type(payload) == "table" and type(payload.GroupId) == "number"
-	end, function(player, payload, requestId)
-		if game.PrivateServerOwnerId == 0 or player.UserId ~= game.PrivateServerOwnerId then
-			return {
-				Success = false,
-				Code = "PRIVATE_SERVER_OWNER_REQUIRED",
-				Message = "Only the private server owner can create this community.",
-				RequestId = requestId,
-			}
-		end
-		local community, reason =
-			self.context.Services:Get("CommunityService"):Create(player, payload.GroupId)
-		if not community then
-			return {
-				Success = false,
-				Code = reason,
-				Message = reason == "COMMUNITY_GROUP_OWNER_REQUIRED"
-						and "You must own that Roblox group."
-					or reason == "COMMUNITY_GROUP_UNAVAILABLE" and "Roblox could not verify that group. Try again shortly."
-					or "The community could not be created.",
-				RequestId = requestId,
-			}
-		end
-		return {
-			Success = true,
-			Code = "OK",
-			Message = "Community created.",
-			Data = self.context.Services:Get("CommunityService"):PublicSummary(player),
 			RequestId = requestId,
 		}
 	end)
@@ -569,36 +566,6 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("SetCustomRegistration", function(payload)
-		return type(payload) == "table"
-			and type(payload.TerminalId) == "string"
-			and type(payload.VehicleId) == "string"
-			and type(payload.Registration) == "string"
-	end, function(player, payload, requestId)
-		local terminal, terminalReason = self.context.Services
-			:Get("VehicleService")
-			:AuthoriseDealershipTerminal(player, payload.TerminalId)
-		if not terminal then
-			return {
-				Success = false,
-				Code = terminalReason,
-				Message = "Custom registrations can only be changed inside a dealership.",
-				RequestId = requestId,
-			}
-		end
-		local result, reason = self.context.Services
-			:Get("VehicleOwnershipService")
-			:SetCustomRegistration(player, payload.VehicleId, payload.Registration)
-		return {
-			Success = result ~= nil,
-			Code = if result then "OK" else reason,
-			Message = if result
-				then "Registration updated."
-				else "That registration could not be used.",
-			Data = result,
-			RequestId = requestId,
-		}
-	end)
 	self.context.Network:RegisterFunction(
 		"GetOwnedVehicles",
 		tablePayload,
@@ -612,123 +579,87 @@ function NetworkService:Start()
 			}
 		end
 	)
-	self.context.Network:RegisterFunction("RequestVehiclePreview", function(payload)
-		return type(payload) == "table" and type(payload.DefinitionId) == "string"
-	end, function(player, payload, requestId)
-		-- The client asks for a picture of a vehicle it can already see listed;
-		-- the server still decides whether a model exists and what it looks like.
-		local preview, reason =
-			self.context.Services:Get("VehiclePreviewService"):Request(player, payload.DefinitionId)
-		return {
-			Success = preview ~= nil,
-			Code = if preview then "OK" else reason,
-			Message = if preview then "" else "No preview is available for that vehicle.",
-			Data = if preview then { DefinitionId = payload.DefinitionId } else nil,
-			RequestId = requestId,
-		}
-	end)
-	self.context.Network:RegisterFunction("GetVehicleSpawnMenu", function(payload)
-		return type(payload) == "table" and type(payload.TerminalId) == "string"
+	self.context.Network:RegisterFunction("GetVehicleSpawnerMenu", function(payload)
+		return type(payload) == "table" and type(payload.SpawnerId) == "string"
 	end, function(player, payload, requestId)
 		local menu, reason =
-			self.context.Services:Get("VehicleService"):Menu(player, payload.TerminalId)
+			self.context.Services:Get("VehicleSpawnerService"):Menu(player, payload.SpawnerId)
 		return {
 			Success = menu ~= nil,
 			Code = if menu then "OK" else reason,
-			Message = if menu then "" else "This vehicle terminal is unavailable.",
+			Message = if menu
+				then ""
+				else "This vehicle facility is unavailable for your current role.",
 			Data = menu,
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("SpawnOwnedVehicle", function(payload)
+	self.context.Network:RegisterFunction("SpawnVehicle", function(payload)
 		return type(payload) == "table"
-			and type(payload.TerminalId) == "string"
-			and type(payload.VehicleId) == "string"
-	end, function(player, payload, requestId)
-		local spawned, reason = self.context.Services
-			:Get("VehicleService")
-			:SpawnOwned(player, payload.TerminalId, payload.VehicleId)
-		return {
-			Success = spawned ~= nil,
-			Code = if spawned then "OK" else reason,
-			Message = if spawned then "Vehicle ready." else "The vehicle could not be spawned.",
-			Data = spawned,
-			RequestId = requestId,
-		}
-	end)
-	self.context.Network:RegisterFunction("GetDealershipCatalogue", function(payload)
-		return type(payload) == "table" and type(payload.TerminalId) == "string"
-	end, function(player, payload, requestId)
-		local catalogue, reason =
-			self.context.Services:Get("DealershipService"):Catalogue(player, payload.TerminalId)
-		if not catalogue then
-			return {
-				Success = false,
-				Code = reason or "DEALERSHIP_UNAVAILABLE",
-				Message = "This forecourt is not available.",
-				RequestId = requestId,
-			}
-		end
-		return {
-			Success = true,
-			Code = "OK",
-			Message = "",
-			Data = catalogue,
-			RequestId = requestId,
-		}
-	end)
-	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
-		return type(payload) == "table"
-			and type(payload.TerminalId) == "string"
-			and type(payload.CharacterId) == "string"
-			and type(payload.DealershipId) == "string"
+			and type(payload.SpawnerId) == "string"
 			and type(payload.DefinitionId) == "string"
-			and type(payload.Colour) == "string"
+			and (payload.VehicleId == nil or type(payload.VehicleId) == "string")
 	end, function(player, payload, requestId)
-		local vehicle, reason = self.context.Services:Get("DealershipService"):Purchase(
-			player,
-			payload.TerminalId,
-			payload.CharacterId,
-			payload.DealershipId,
-			payload.DefinitionId,
-			payload.Colour
-		)
-		return {
-			Success = vehicle ~= nil,
-			Code = if vehicle then "OK" else reason,
-			Message = if vehicle
-				then "Vehicle purchased."
-				elseif
-					reason == "TERMINAL_TOO_FAR"
-					or reason == "TERMINAL_NOT_FOUND"
-					or reason == "DEALERSHIP_TERMINAL_REQUIRED"
-					or reason == "DEALERSHIP_TERMINAL_MISMATCH"
-				then "Vehicle purchases can only be made inside the selected dealership."
-				elseif reason == "PURCHASE_IN_PROGRESS" then
-					-- Said plainly, because the player reaching this has just been
-					-- told their last attempt timed out and is trying again. Telling
-					-- them it is still going is what stops them buying twice.
-					"Your last purchase is still going through. Give it a moment."
-				else "The purchase could not be completed.",
-			Data = vehicle,
-			RequestId = requestId,
+		local spawned, reason =
+			self.context.Services
+				:Get("VehicleSpawnerService")
+				:Spawn(player, payload.SpawnerId, payload.DefinitionId, payload.VehicleId)
+		local messages = {
+			ACTIVE_VEHICLE_EXISTS = "You already have a vehicle spawned.",
+			ALL_BAYS_OCCUPIED = "Every vehicle bay is currently blocked.",
+			NO_SPAWN_POINTS = "This facility has no configured spawn points.",
+			SPAWN_COOLDOWN = "Please wait before spawning another vehicle.",
+			VEHICLE_TEMPLATE_MISSING = "That vehicle model has not been installed.",
+			VEHICLE_NOT_ALLOWED = "Your current role cannot use that vehicle.",
 		}
-	end)
-	self.context.Network:RegisterFunction("SpawnServiceVehicle", function(payload)
-		return type(payload) == "table"
-			and type(payload.TerminalId) == "string"
-			and type(payload.DefinitionId) == "string"
-	end, function(player, payload, requestId)
-		local spawned, reason = self.context.Services
-			:Get("VehicleService")
-			:SpawnService(player, payload.TerminalId, payload.DefinitionId)
 		return {
 			Success = spawned ~= nil,
 			Code = if spawned then "OK" else reason,
 			Message = if spawned
-				then "Service vehicle ready."
-				else "That service vehicle is unavailable.",
+				then "Vehicle ready."
+				else messages[reason] or "The vehicle could not be spawned.",
 			Data = spawned,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("SetCustomVehicleRegistration", function(payload)
+		return type(payload) == "table"
+			and type(payload.SpawnerId) == "string"
+			and #payload.SpawnerId <= 64
+			and type(payload.VehicleId) == "string"
+			and #payload.VehicleId <= 64
+			and type(payload.Registration) == "string"
+			and #payload.Registration <= 16
+	end, function(player, payload, requestId)
+		local authorised, facilityReason = self.context.Services
+			:Get("VehicleSpawnerService")
+			:AuthoriseCivilianFacility(player, payload.SpawnerId)
+		if not authorised then
+			return {
+				Success = false,
+				Code = facilityReason,
+				Message = "Custom registrations can only be changed at a civilian vehicle facility.",
+				RequestId = requestId,
+			}
+		end
+		local result, reason = self.context.Services
+			:Get("VehicleOwnershipService")
+			:SetCustomRegistration(player, payload.VehicleId, payload.Registration)
+		local messages = {
+			GAMEPASS_REQUIRED = "Custom registration access is required.",
+			INVALID_REGISTRATION_LENGTH = "Enter a registration of the permitted length.",
+			REGISTRATION_NOT_PERMITTED = "That registration is not permitted.",
+			REGISTRATION_ALREADY_USED = "That registration is already registered.",
+			TEXT_FILTER_UNAVAILABLE = "The registration could not be checked. Try again shortly.",
+			VEHICLE_NOT_OWNED = "That vehicle is not in your garage.",
+		}
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result
+				then "Registration updated."
+				else messages[reason] or "The registration could not be updated.",
+			Data = result,
 			RequestId = requestId,
 		}
 	end)
@@ -1127,7 +1058,13 @@ function NetworkService:Start()
 			Code = if record then "OK" else reason,
 			Message = if record
 				then "Custody booking created."
-				else "Booking requires a nearby custody desk and handcuffed detainee.",
+				elseif
+					reason == "BOOKING_DESK_REQUIRED"
+				then "Both the officer and detainee must be at a custody desk."
+				elseif
+					reason == "TARGET_NOT_CUFFED"
+				then "The detainee must be handcuffed before processing."
+				else "The custody booking could not be completed.",
 			Data = record,
 			RequestId = requestId,
 		}
@@ -1135,12 +1072,29 @@ function NetworkService:Start()
 	self.context.Network:RegisterFunction(
 		"GetCustodyPolicy",
 		tablePayload,
-		function(_, _, requestId)
+		function(player, _, requestId)
 			return {
 				Success = true,
 				Code = "OK",
 				Message = "",
-				Data = self.context.Services:Get("CustodyService"):GetPolicy(),
+				Data = self.context.Services:Get("CustodyService"):GetPolicy(player),
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"UseEarlyReleaseCredit",
+		tablePayload,
+		function(player, _, requestId)
+			local used, reason =
+				self.context.Services:Get("CustodyService"):UseEarlyReleaseCredit(player)
+			return {
+				Success = used,
+				Code = if used then "OK" else reason,
+				Message = if used
+					then "Early release approved."
+					else "The release credit could not be used.",
+				Data = self.context.Services:Get("CustodyService"):GetPolicy(player),
 				RequestId = requestId,
 			}
 		end

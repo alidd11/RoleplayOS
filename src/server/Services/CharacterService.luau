@@ -114,11 +114,19 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	return self:Summary(character), nil
 end
 function CharacterService:Summary(character: any): any
+	local appearance = character.Appearance or {}
 	return {
 		CharacterId = character.CharacterId,
 		FullName = character.Identity.FirstName .. " " .. character.Identity.LastName,
 		DateOfBirth = character.Identity.DateOfBirth,
 		LastPlayedAt = character.LastPlayedAt,
+		-- Only the clothing asset identifiers needed by the local ViewportFrame are
+		-- exposed. The remainder of the persistent character record stays server-side.
+		-- Empty values deliberately fall back to the player's current Roblox avatar.
+		PreviewAppearance = {
+			ShirtTemplate = appearance.ShirtTemplate or appearance.Shirt,
+			TrousersTemplate = appearance.TrousersTemplate or appearance.Pants,
+		},
 	}
 end
 function CharacterService:List(player: Player): { any }

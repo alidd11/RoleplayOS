@@ -64,7 +64,7 @@ end
 local Config = {
 	Framework = {
 		Environment = "Development",
-		SchemaVersion = 8,
+		SchemaVersion = 9,
 		Branding = {
 			GameName = "Emergency Response: Portsmouth",
 			ShowRoleplayOSMark = true,
@@ -132,6 +132,47 @@ local Config = {
 	ContentQuality = {
 		RequireCertification = true,
 		CertificationVersion = 1,
+		-- Provenance for reviewed binary assets whose attributes cannot be
+		-- retained reliably through Rojo. Runtime class and script checks still
+		-- apply; entries here certify only the exact configured asset ID.
+		CertifiedAssets = {
+			Handcuffs = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied HandcuffSystem package",
+				RealWorldReference = "UK police rigid handcuffs",
+				ReviewedBy = "RoleplayOS engineering security review",
+			},
+			Taser = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied ACS taser package with RoleplayOS replacement logic",
+				RealWorldReference = "UK police conducted-energy device",
+				ReviewedBy = "RoleplayOS engineering security review",
+				-- Executable descendants remain forbidden unless both their name and
+				-- class match this reviewed manifest. This keeps arbitrary scripts in
+				-- imported tools fatal while allowing the audited replacement logic.
+				AllowedUnsafeDescendants = {
+					RoleplayOSTaserServer = "Script",
+					RoleplayOSTaserClient = "LocalScript",
+					UpdateAmmo = "RemoteEvent",
+					Reload = "RemoteEvent",
+					Laser = "RemoteEvent",
+					Flashlight = "RemoteEvent",
+					FireTaser = "RemoteEvent",
+				},
+			},
+			["Warrant Card"] = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied Police Officer Warrant Card package",
+				RealWorldReference = "UK police warrant card",
+				ReviewedBy = "RoleplayOS engineering security review",
+				AllowedUnsafeDescendants = {
+					RoleplayOSWarrantCardClient = "LocalScript",
+				},
+			},
+		},
 		WorldAssetTag = "RoleplayOSWorldAsset",
 		WorldAssetRootName = "RoleplayOSWorldAssets",
 		QuarantineRootName = "RoleplayOSAssetQuarantine",
@@ -283,67 +324,22 @@ local Config = {
 		MaximumAge = 100,
 		DeletionConfirmationSeconds = 10,
 	},
-	Communities = {
-		Enabled = true,
-		-- The group a player must be in before they can join any private
-		-- community. Private servers are run to their owner's standards and
-		-- whitelisted ones are staffed by people who applied; both sit downstream
-		-- of membership here. Set to nil to let anybody into a private server.
-		RequiredGroupLinkId = "UniversalProjects",
-		AllowPrivateServerCommunities = true,
-		MaximumMembershipsPerPlayer = 20,
-		DefaultTemplateId = "RoleplayCommunity",
-		GroupRoleRanks = {
-			Owner = 255,
-			Administrator = 200,
-			Moderator = 100,
-			Member = 1,
-		},
-		Templates = {
-			RoleplayCommunity = {
-				Id = "RoleplayCommunity",
-				Name = "Roleplay Community",
-				MaximumMembers = 250,
-				DefaultMemberRoleId = "Member",
-				Roles = {
-					Owner = { Id = "Owner", Priority = 100, Permissions = { "*" } },
-					Administrator = {
-						Id = "Administrator",
-						Priority = 80,
-						Permissions = {
-							"Community.Manage",
-							"Members.Manage",
-							"Sessions.Manage",
-							"Moderation.Manage",
-							"Content.Manage",
-						},
-					},
-					Moderator = {
-						Id = "Moderator",
-						Priority = 60,
-						Permissions = { "Members.View", "Sessions.Manage", "Moderation.Manage" },
-					},
-					Member = {
-						Id = "Member",
-						Priority = 10,
-						Permissions = { "Community.Join", "Sessions.Join" },
-					},
-				},
-				DefaultPolicies = {
-					JoinMode = "Approval",
-					AllowPublicCivilian = true,
-					RequireCommunityMembership = false,
-					EconomyPreset = "Standard",
-					RoleplayRules = "Standard",
-				},
-			},
-		},
-	},
 	Economy = {
 		StartingBankBalance = 2500,
 		StartingCashBalance = 100,
 		MaximumTransactionHistory = 200,
 		TransferMaximum = 100000,
+	},
+	MoneyDrops = {
+		Enabled = true,
+		MinimumAmount = 1,
+		MaximumAmount = 1000,
+		MaximumActivePerPlayer = 3,
+		MaximumActiveGlobal = 100,
+		DropAheadStuds = 3,
+		PickupDistance = 10,
+		PickupHoldSeconds = 0.35,
+		LifetimeSeconds = 300,
 	},
 	Integrations = {
 		Discord = {
@@ -473,43 +469,43 @@ local Config = {
 			Id = "PremiumVehicles",
 			GamepassId = 1936590544,
 			Name = "Premium Vehicles",
-			Description = "Unlocks the premium vehicle catalogue.",
+			Description = "Access a curated collection of premium civilian vehicles at supported dealerships.",
 		},
 		ExtraCharacterSlot = {
 			Id = "ExtraCharacterSlot",
 			GamepassId = 1934044063,
 			Name = "Extra Character Slot",
-			Description = "Adds one civilian character slot.",
+			Description = "Create and maintain one additional civilian identity with separate progression and records.",
 		},
 		CustomRegistration = {
 			Id = "CustomRegistration",
 			GamepassId = 1937140343,
 			Name = "Custom Registration Plate",
-			Description = "Lets civilians choose a moderated registration for an owned vehicle.",
+			Description = "Choose a Roblox-filtered custom registration for an eligible owned vehicle at a dealership.",
 		},
 		CivilianKnife = {
 			Id = "CivilianKnife",
 			GamepassId = 1937446295,
 			Name = "Civilian Knife Access",
-			Description = "Unlocks approved civilian knife items.",
+			Description = "Access approved civilian knife equipment where server rules permit it.",
 		},
 		CivilianHandgun = {
 			Id = "CivilianHandgun",
 			GamepassId = 1937822271,
 			Name = "Civilian Handgun Access",
-			Description = "Unlocks approved civilian handgun items.",
+			Description = "Access approved civilian handgun equipment where server rules permit it.",
 		},
 		CivilianShotgun = {
 			Id = "CivilianShotgun",
 			GamepassId = 1934518052,
 			Name = "Civilian Shotgun Access",
-			Description = "Unlocks approved civilian shotgun items.",
+			Description = "Access approved civilian shotgun equipment where server rules permit it.",
 		},
 		CivilianRifle = {
 			Id = "CivilianRifle",
 			GamepassId = 1934955986,
 			Name = "Civilian Rifle Access",
-			Description = "Unlocks approved civilian rifle items.",
+			Description = "Access approved civilian rifle equipment where server rules permit it.",
 		},
 		-- Base Police Officer and Frontline Policing access on the public place.
 		-- PCSO remains the free public policing route.
@@ -517,55 +513,55 @@ local Config = {
 			Id = "PublicPoliceTeam",
 			GamepassId = 1937222319,
 			Name = "Public Police Team",
-			Description = "Unlocks the police team in public servers.",
+			Description = "Report for duty with Frontline Policing in public servers, including its authorised equipment and fleet.",
 		},
 		PublicArmedResponse = {
 			Id = "PublicArmedResponse",
 			GamepassId = 1933270297,
 			Name = "Public Armed Response Division",
-			Description = "Unlocks Armed Response in public servers.",
+			Description = "Join the Armed Response Unit in public servers with division-specific duty access.",
 		},
 		PublicRoadsPolicing = {
 			Id = "PublicRoadsPolicing",
 			GamepassId = 1933156365,
 			Name = "Public Roads Policing Division",
-			Description = "Unlocks Roads Policing in public servers.",
+			Description = "Join Roads Policing in public servers with traffic-enforcement and division fleet access.",
 		},
 		PublicAmbulanceTeam = {
 			Id = "PublicAmbulanceTeam",
 			GamepassId = 1936100607,
 			Name = "Public Ambulance Team",
-			Description = "Unlocks the Ambulance team in public servers.",
+			Description = "Serve with the Ambulance team in public servers and access its authorised vehicles and equipment.",
 		},
 		PublicFireTeam = {
 			Id = "PublicFireTeam",
 			GamepassId = 1936292594,
 			Name = "Public Fire & Rescue Team",
-			Description = "Unlocks Fire and Rescue in public servers.",
+			Description = "Serve with Fire and Rescue in public servers and access its authorised vehicles and equipment.",
 		},
 		PublicControlTeam = {
 			Id = "PublicControlTeam",
 			GamepassId = 1935724637,
 			Name = "Public Control Room Team",
-			Description = "Unlocks Emergency Control in public servers.",
+			Description = "Operate Emergency Control in public servers using dispatch and incident-management tools.",
 		},
 		PublicTransportTeam = {
 			Id = "PublicTransportTeam",
 			GamepassId = 1934302085,
 			Name = "Public Bus Service Team",
-			Description = "Unlocks the Bus Service in public servers.",
+			Description = "Join the public transport service and operate authorised bus routes and vehicles.",
 		},
 		PublicHighwaysTeam = {
 			Id = "PublicHighwaysTeam",
 			GamepassId = 1934122097,
 			Name = "Public Highways Team",
-			Description = "Unlocks Highways in public servers.",
+			Description = "Join the Highways team in public servers with authorised road-response vehicles and tools.",
 		},
 		PublicPrisonTeam = {
 			Id = "PublicPrisonTeam",
 			GamepassId = 1937368306,
 			Name = "Public Prison Service Team",
-			Description = "Unlocks the Prison Service in public servers.",
+			Description = "Join the Prison Service in public servers with authorised custody-site access and equipment.",
 		},
 	},
 	EquipmentPasses = {
@@ -650,6 +646,7 @@ local Config = {
 		MinimumRegistrationLength = 2,
 		MaximumRegistrationLength = 8,
 		PlatePartNames = { "RegistrationPlate", "NumberPlate", "LicencePlate", "LicensePlate" },
+		PlateTextNames = { "PlateText", "RegistrationText", "Registration", "NumberPlateText" },
 	},
 	CCTV = {
 		CameraTag = "RoleplayOSCCTV",
@@ -676,6 +673,37 @@ local Config = {
 		MaximumCriminalRecordHistory = 100,
 		MaximumActiveOffences = 16,
 		MaximumStackedSentenceSeconds = 1800,
+		DisconnectPenaltySeconds = 30,
+		PublicEarlyRelease = {
+			-- Consumable Developer Products. IDs are set after creating them in the
+			-- development experience; credits only exist in Public profile data.
+			Products = {
+				{
+					Id = "Single",
+					ProductId = 0,
+					Credits = 1,
+					PriceRobux = 19,
+					Name = "Early Release · 1 Credit",
+					Description = "One public-server early custody release credit. Your criminal record remains.",
+				},
+				{
+					Id = "Triple",
+					ProductId = 0,
+					Credits = 3,
+					PriceRobux = 49,
+					Name = "Early Release · 3 Credits",
+					Description = "Three persistent public-server early release credits. Your criminal record remains.",
+				},
+				{
+					Id = "TenPack",
+					ProductId = 0,
+					Credits = 10,
+					PriceRobux = 129,
+					Name = "Early Release · 10 Credits",
+					Description = "Ten persistent public-server early release credits. Your criminal record remains.",
+				},
+			},
+		},
 		CuffedWalkSpeed = 8,
 		EscortDistance = 3.25,
 		EscortMaximumForce = 18000,
@@ -1052,7 +1080,7 @@ local Config = {
 			Id = "Control",
 			GroupId = 33809042,
 			MinimumRank = 1,
-			DisplayName = "Universal Projects (temporary Control link)",
+			DisplayName = "Universal Projects Control",
 		},
 		Transport = {
 			Id = "Transport",
@@ -1085,16 +1113,19 @@ local Config = {
 		-- distinction and a reason to buy the police pass.
 		PCSO = {
 			Id = "PCSO",
-			Name = "PCSO",
+			Name = "Police Community Support Officer",
 			TeamName = "Police",
 			DepartmentId = "Police",
-			Access = publicOr({
-				AccessType = "Group",
-				GroupLinkId = "Police",
-				MinimumGroupRank = 1,
-			}),
+			-- PCSO is the free public policing route. It must not appear or be
+			-- assignable in the whitelisted deployment, even to police-group members.
+			Access = {
+				AccessType = "ServerKind",
+				Kind = "Public",
+				DisplayWhenLocked = false,
+			},
 			LoadoutId = "PCSO",
-			UniformId = "PoliceStandard",
+			UniformId = "PoliceCommunitySupportOfficer",
+			AutoEquipUniform = true,
 			-- Stated rather than inherited.
 			--
 			-- This role is free on the public tier and its department is Police,
@@ -1340,12 +1371,74 @@ local Config = {
 		},
 	},
 	Uniforms = {
+		PoliceCommunitySupportOfficer = {
+			Id = "PoliceCommunitySupportOfficer",
+			ShirtTemplate = "2301512590",
+			TrousersTemplate = "700637070",
+			KitAssetPath = { "Uniforms", "Police", "PoliceCommunitySupportOfficer" },
+			RemovePersonalAccessories = true,
+		},
 		PoliceStandard = { Id = "PoliceStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		FireStandard = { Id = "FireStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		TransportStandard = { Id = "TransportStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		HighwaysStandard = { Id = "HighwaysStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		PrisonStandard = { Id = "PrisonStandard", ShirtTemplate = "", TrousersTemplate = "" },
+	},
+	UniformChangingRooms = {
+		FolderName = "RoleplayOSChangingRooms",
+		PromptHoldDuration = 0.35,
+		MaximumInteractionDistance = 12,
+		Defaults = {
+			{
+				ChangingRoomId = "PoliceChangingRoom",
+				DisplayName = "Police uniform",
+				SpawnId = "PoliceLockerRoom",
+				DepartmentId = "Police",
+				UniformId = "PoliceStandard",
+				Offset = { -10, 2, 0 },
+			},
+			{
+				ChangingRoomId = "AmbulanceChangingRoom",
+				DisplayName = "Ambulance uniform",
+				SpawnId = "AmbulanceLockerRoom",
+				DepartmentId = "Ambulance",
+				UniformId = "AmbulanceStandard",
+				Offset = { -10, 2, 0 },
+			},
+			{
+				ChangingRoomId = "FireChangingRoom",
+				DisplayName = "Fire uniform",
+				SpawnId = "FireLockerRoom",
+				DepartmentId = "Fire",
+				UniformId = "FireStandard",
+				Offset = { -10, 2, 0 },
+			},
+			{
+				ChangingRoomId = "TransportChangingRoom",
+				DisplayName = "Transport uniform",
+				SpawnId = "TransportDepot",
+				DepartmentId = "Transport",
+				UniformId = "TransportStandard",
+				Offset = { -10, 2, 0 },
+			},
+			{
+				ChangingRoomId = "HighwaysChangingRoom",
+				DisplayName = "Highways uniform",
+				SpawnId = "HighwaysDepot",
+				DepartmentId = "Highways",
+				UniformId = "HighwaysStandard",
+				Offset = { -10, 2, 0 },
+			},
+			{
+				ChangingRoomId = "PrisonChangingRoom",
+				DisplayName = "Prison uniform",
+				SpawnId = "PrisonStaff",
+				DepartmentId = "Prison",
+				UniformId = "PrisonStandard",
+				Offset = { -10, 2, 0 },
+			},
+		},
 	},
 	Divisions = {
 		Frontline = { Id = "Frontline", DepartmentId = "Police", Name = "Frontline Policing" },
@@ -1354,10 +1447,15 @@ local Config = {
 	},
 	Tools = {
 		Radio = { Id = "Radio", AssetPath = { "Tools", "Shared", "Radio" } },
-		Notebook = { Id = "Notebook", AssetPath = { "Tools", "Shared", "Notebook" } },
+		MDT = { Id = "MDT", AssetPath = { "Tools", "Shared", "MDT" } },
 		Handcuffs = {
 			Id = "Handcuffs",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Handcuffs" },
+			DepartmentId = "Police",
+		},
+		Taser = {
+			Id = "Taser",
+			AssetPath = { "Tools", "Services", "Police", "Shared", "Taser" },
 			DepartmentId = "Police",
 		},
 		MedicalBag = {
@@ -1367,22 +1465,25 @@ local Config = {
 		},
 	},
 	Loadouts = {
-		PoliceResponse = { Id = "PoliceResponse", ToolIds = { "Radio", "Handcuffs" } },
+		PoliceResponse = {
+			Id = "PoliceResponse",
+			ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" },
+		},
 		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
 		-- gated on carrying them, so the distinction enforces itself.
-		PCSO = { Id = "PCSO", ToolIds = { "Radio", "Notebook" } },
+		PCSO = { Id = "PCSO", ToolIds = { "Radio", "MDT" } },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
-			ToolIds = { "Radio", "Notebook", "Handcuffs" },
+			ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" },
 		},
-		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Radio", "Notebook", "Handcuffs" } },
-		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Radio", "Notebook", "Handcuffs" } },
-		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "Radio", "MedicalBag" } },
-		FireStandard = { Id = "FireStandard", ToolIds = { "Radio" } },
-		ControlStandard = { Id = "ControlStandard", ToolIds = { "Radio" } },
+		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" } },
+		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Radio", "MDT", "Handcuffs", "Taser" } },
+		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "Radio", "MDT", "MedicalBag" } },
+		FireStandard = { Id = "FireStandard", ToolIds = { "Radio", "MDT" } },
+		ControlStandard = { Id = "ControlStandard", ToolIds = { "Radio", "MDT" } },
 		TransportStandard = { Id = "TransportStandard", ToolIds = { "Radio" } },
-		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = { "Radio", "Notebook" } },
-		PrisonStandard = { Id = "PrisonStandard", ToolIds = { "Radio", "Notebook" } },
+		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = { "Radio", "MDT" } },
+		PrisonStandard = { Id = "PrisonStandard", ToolIds = { "Radio", "MDT" } },
 	},
 	Jobs = {
 		DeliveryDriver = {
@@ -1508,9 +1609,10 @@ local Config = {
 	Vehicles = {
 		Compact = {
 			Id = "Compact",
-			Name = "Compact",
+			Name = "BMW M140i",
 			Price = 15000,
 			ModelName = "Compact",
+			WorkspaceModelName = "M140i",
 			AssetPath = { "Vehicles", "Civilian", "Starter", "Compact" },
 			Colours = { "Black", "Blue", "White" },
 			Access = { AccessType = "Public" },
@@ -1519,11 +1621,66 @@ local Config = {
 		},
 		PremiumSaloon = {
 			Id = "PremiumSaloon",
-			Name = "Premium saloon",
+			Name = "BMW M5 Touring",
 			Price = 45000,
 			ModelName = "PremiumSaloon",
+			WorkspaceModelName = "M5 Touring",
 			AssetPath = { "Vehicles", "Civilian", "Premium", "PremiumSaloon" },
 			Colours = { "Black", "Silver" },
+			Access = {
+				AccessType = "Gamepass",
+				Id = "PremiumVehicles",
+				GamepassId = 1936590544,
+				DisplayWhenLocked = true,
+			},
+			Category = "Civilian",
+		},
+		M3Touring = {
+			Id = "M3Touring",
+			Name = "BMW M3 Touring",
+			Price = 65000,
+			ModelName = "M3Touring",
+			WorkspaceModelName = "M3 Touring",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "M3Touring" },
+			Colours = { "Black", "Blue", "Grey", "White" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		FordRanger = {
+			Id = "FordRanger",
+			Name = "Ford Ranger",
+			Price = 42000,
+			ModelName = "FordRanger",
+			WorkspaceModelName = "Ford Ranger",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "FordRanger" },
+			Colours = { "Black", "Blue", "Grey", "White" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		Ferrari488 = {
+			Id = "Ferrari488",
+			Name = "Ferrari 488 GT3",
+			Price = 220000,
+			ModelName = "Ferrari488",
+			WorkspaceModelName = "Ferrari 488 GT3 Race Car",
+			AssetPath = { "Vehicles", "Civilian", "Premium", "Ferrari488" },
+			Colours = { "Black", "Red", "White", "Yellow" },
+			Access = {
+				AccessType = "Gamepass",
+				Id = "PremiumVehicles",
+				GamepassId = 1936590544,
+				DisplayWhenLocked = true,
+			},
+			Category = "Civilian",
+		},
+		UrusMansory = {
+			Id = "UrusMansory",
+			Name = "Urus Mansory",
+			Price = 180000,
+			ModelName = "UrusMansory",
+			WorkspaceModelName = "Urusmansory",
+			AssetPath = { "Vehicles", "Civilian", "Premium", "UrusMansory" },
+			Colours = { "Black", "Grey", "White", "Yellow" },
 			Access = {
 				AccessType = "Gamepass",
 				Id = "PremiumVehicles",
@@ -1537,6 +1694,7 @@ local Config = {
 			Name = "Marked response car",
 			Price = 0,
 			ModelName = "PoliceResponse",
+			WorkspaceModelName = "Marked 308",
 			AssetPath = { "Vehicles", "Services", "Police", "Frontline", "PoliceResponse" },
 			Colours = { "Police" },
 			Category = "Service",
@@ -1555,11 +1713,37 @@ local Config = {
 				MinimumGroupRank = 1,
 			}),
 		},
+		FrontlinePatrolEstate = {
+			Id = "FrontlinePatrolEstate",
+			Name = "Frontline patrol estate",
+			Price = 0,
+			ModelName = "FrontlinePatrolEstate",
+			WorkspaceModelName = "Toyota Corolla - Police",
+			AssetPath = {
+				"Vehicles",
+				"Services",
+				"Police",
+				"Frontline",
+				"FrontlinePatrolEstate",
+			},
+			Colours = { "Police" },
+			Category = "Service",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			DivisionId = "Frontline",
+			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
+			Access = publicOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}),
+		},
 		ArmedResponseSUV = {
 			Id = "ArmedResponseSUV",
 			Name = "Armed response SUV",
 			Price = 0,
 			ModelName = "ArmedResponseSUV",
+			WorkspaceModelName = "UNMXC90",
 			AssetPath = { "Vehicles", "Services", "Police", "ArmedResponse", "ArmedResponseSUV" },
 			DivisionId = "ArmedResponse",
 			Colours = { "Police" },
@@ -1585,6 +1769,7 @@ local Config = {
 			Name = "Roads policing estate",
 			Price = 0,
 			ModelName = "RoadsPolicingEstate",
+			WorkspaceModelName = "Toyota Corolla - Police",
 			AssetPath = { "Vehicles", "Services", "Police", "RoadsPolicing", "RoadsPolicingEstate" },
 			DivisionId = "RoadsPolicing",
 			Colours = { "Police" },
@@ -1604,6 +1789,52 @@ local Config = {
 					},
 				},
 			}, 1933156365),
+		},
+		PoliceUnmarkedGolf = {
+			Id = "PoliceUnmarkedGolf",
+			Name = "Unmarked Volkswagen Golf GTI",
+			Price = 0,
+			ModelName = "PoliceUnmarkedGolf",
+			WorkspaceModelName = "Volkswagen Golf 8 GTI (Unmarked)",
+			AssetPath = { "Vehicles", "Services", "Police", "Shared", "PoliceUnmarkedGolf" },
+			Colours = { "Unmarked" },
+			Category = "Service",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			RoleIds = {
+				"PoliceOfficer",
+				"PoliceFrontline",
+				"ArmedResponseOfficer",
+				"RoadsPolicingOfficer",
+			},
+			Access = publicOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}),
+		},
+		PoliceTransportVan = {
+			Id = "PoliceTransportVan",
+			Name = "Police transport van",
+			Price = 0,
+			ModelName = "PoliceTransportVan",
+			WorkspaceModelName = "PTV",
+			AssetPath = { "Vehicles", "Services", "Police", "Shared", "PoliceTransportVan" },
+			Colours = { "Police" },
+			Category = "Service",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			RoleIds = {
+				"PoliceOfficer",
+				"PoliceFrontline",
+				"ArmedResponseOfficer",
+				"RoadsPolicingOfficer",
+			},
+			Access = publicOr({
+				AccessType = "Group",
+				GroupLinkId = "Police",
+				MinimumGroupRank = 1,
+			}),
 		},
 		AmbulanceResponse = {
 			Id = "AmbulanceResponse",
@@ -1871,33 +2102,23 @@ local Config = {
 		-- sweep is a bar of discrete segments.
 		SweepSegments = 22,
 		RpmValueName = "RPM",
+		FuelValueNames = { "Fuel", "FuelLevel", "FuelPercent" },
+		HandbrakeValueNames = { "Handbrake", "ParkingBrake", "PBrake", "ParkBrake" },
 	},
-	VehicleSpawning = {
-		TerminalTag = "RoleplayOSVehicleTerminal",
-		SpawnPointTag = "RoleplayOSVehicleSpawn",
-		MaximumInteractionDistance = 14,
-		MaximumSpawnDistance = 160,
-		SpawnClearance = { 14, 8, 24 },
-		SpawnCooldownSeconds = 8,
-		PromptHoldDuration = 0.35,
-		TrackingIntervalSeconds = 1,
-		-- Preview models held for one player while browsing a depot. Each is a
-		-- copy of a real vehicle, so this bounds what a player accumulates
-		-- scrolling a large fleet.
-		MaximumPreviewsPerPlayer = 6,
-		StudsToMiles = 0.000173984,
-		-- Studs per second to miles per hour, for the speed shown on the dashboard
-		-- and recorded in telemetry. A unit rather than a rule, which is why it
-		-- outlived the speed camera system it used to sit beside.
+	VehicleData = {
+		-- Retained for speed enforcement and the replacement spawner integration;
+		-- RoleplayOS no longer contains a vehicle spawning implementation.
 		StudsPerSecondToMph = 0.626,
-		MaximumTrackedSpeedStudsPerSecond = 350,
-		FuelPercentPerMile = 0.2,
-		IdleFuelPercentPerMinute = 0.04,
-		PersistenceIntervalSeconds = 30,
-		StopVehicleWhenFuelEmpty = true,
 		StarterDefinitionId = "Compact",
 		StarterColour = "Blue",
 		StarterGarageId = "CityGarage",
+	},
+	VehicleSpawners = {
+		FolderName = "RoleplayOSVehicleFacilities",
+		Tag = "RoleplayOSVehicleSpawner",
+		MaximumInteractionDistance = 16,
+		CooldownSeconds = 8,
+		SpawnClearance = Vector3.new(14, 8, 24),
 	},
 	Dealerships = {
 		CityMotors = {
@@ -1905,7 +2126,14 @@ local Config = {
 			Name = "City Motors",
 			-- Named here, and appended to automatically for any civilian model
 			-- whose DealershipId attribute points at this forecourt.
-			VehicleIds = { "Compact", "PremiumSaloon" },
+			VehicleIds = {
+				"Compact",
+				"M3Touring",
+				"FordRanger",
+				"PremiumSaloon",
+				"Ferrari488",
+				"UrusMansory",
+			},
 		},
 	},
 	Properties = {
@@ -2038,6 +2266,18 @@ local Config = {
 			},
 		},
 	},
+	BankRobbery = {
+		Tag = "RoleplayOSBankRobberyTarget",
+		ActivationDistance = 12,
+		CompletionDistance = 20,
+		-- Matches the purchased bank package's own robbery/reset timer so the
+		-- RoleplayOS payout, alarm lifecycle and physical vault reset stay aligned.
+		RobberyDurationSeconds = 200,
+		CooldownSeconds = 400,
+		FailedCooldownSeconds = 30,
+		MinimumReward = 1800,
+		MaximumReward = 4500,
+	},
 	Phone = {
 		Enabled = true,
 		MaximumMessageLength = 240,
@@ -2118,6 +2358,7 @@ local Config = {
 		GlobalCapacity = 30,
 		GlobalRefillPerSecond = 10,
 		Endpoints = {
+			DropCash = { Capacity = 3, RefillPerSecond = 0.2 },
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
@@ -2126,7 +2367,6 @@ local Config = {
 			-- Reads every loaded profile in the server, so it is deliberately
 			-- slower to refill than a lookup a player would repeat.
 			GetShoulderNumberRoster = { Capacity = 3, RefillPerSecond = 0.2 },
-			CreatePrivateCommunity = { Capacity = 1, RefillPerSecond = 0.02 },
 			GetStartMenu = { Capacity = 4, RefillPerSecond = 1 },
 			GetSettings = { Capacity = 4, RefillPerSecond = 1 },
 			GetProgression = { Capacity = 4, RefillPerSecond = 1 },
@@ -2146,19 +2386,15 @@ local Config = {
 			DispatchAssignUnit = { Capacity = 8, RefillPerSecond = 1 },
 			DispatchCloseCall = { Capacity = 4, RefillPerSecond = 0.5 },
 			DispatchSetUnitStatus = { Capacity = 6, RefillPerSecond = 1 },
-			SetCustomRegistration = { Capacity = 2, RefillPerSecond = 0.05 },
 			GetCCTVCameras = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetOwnedVehicles = { Capacity = 4, RefillPerSecond = 0.5 },
-			GetVehicleSpawnMenu = { Capacity = 4, RefillPerSecond = 0.75 },
-			-- Browsing a large depot legitimately requests many previews in
-			-- succession, so this is more generous than a purchase endpoint.
-			RequestVehiclePreview = { Capacity = 12, RefillPerSecond = 4 },
-			SpawnOwnedVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
-			PurchaseVehicle = { Capacity = 2, RefillPerSecond = 0.08 },
-			SpawnServiceVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
+			GetVehicleSpawnerMenu = { Capacity = 4, RefillPerSecond = 0.75 },
+			SpawnVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
+			SetCustomVehicleRegistration = { Capacity = 2, RefillPerSecond = 0.08 },
 			CuffPlayer = { Capacity = 3, RefillPerSecond = 0.3 },
 			CustodyAction = { Capacity = 5, RefillPerSecond = 0.75 },
 			GetCustodyPolicy = { Capacity = 3, RefillPerSecond = 0.2 },
+			UseEarlyReleaseCredit = { Capacity = 2, RefillPerSecond = 0.1 },
 			BookCustody = { Capacity = 2, RefillPerSecond = 0.1 },
 			GetPresentedId = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
@@ -2176,7 +2412,6 @@ local Config = {
 			SetSprintState = { Capacity = 20, RefillPerSecond = 8 },
 			PurchaseFood = { Capacity = 2, RefillPerSecond = 0.25 },
 			PurchaseFromVendor = { Capacity = 3, RefillPerSecond = 0.3 },
-			GetDealershipCatalogue = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetOfficialServers = { Capacity = 4, RefillPerSecond = 0.5 },
 			-- A teleport is one action a player takes deliberately, never repeatedly.
 			JoinOfficialServer = { Capacity = 2, RefillPerSecond = 0.1 },
@@ -2214,6 +2449,7 @@ local editableData = {
 	editable("03_Gamepasses"),
 	editable("04_Uniforms"),
 	editable("05_Balancing"),
+	editable("06_Vehicles"),
 }
 
 local originalGamepassIds = {}

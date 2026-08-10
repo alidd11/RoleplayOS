@@ -57,7 +57,7 @@ function OfficialServerService:_occupantsOf(serverId: string, index: number): nu
 end
 
 -- Stored beside the communities rather than in a store of its own. The key is
--- prefixed so it cannot collide with a community id.
+-- prefixed so it cannot collide with another shared server record.
 function OfficialServerService:_storageKey(serverId: string): string
 	return "officialserver:" .. serverId
 end
@@ -67,7 +67,8 @@ end
 -- Zero, or absent, means this same place. A whitelisted world is usually its own
 -- place so that it is a genuinely separate map from the public one, and any
 -- place in the same universe can be teleported to natively and shares the same
--- data stores, so a player's profile, money and vehicles follow them across.
+-- physical data stores. DataService namespaces whitelisted player data inside
+-- those stores so public progression does not follow the player across.
 --
 -- A place in a different universe would not share those, so the player would
 -- arrive with nothing. This deliberately offers no way to name one.
@@ -79,7 +80,7 @@ end
 -- Whether an entry gathers everybody into named instances it reserves, or simply
 -- hands the player to that place's ordinary matchmaking.
 --
--- Reserving is what keeps one community together in one world. A place of its
+-- Reserving is what keeps one official playerbase together in one world. A place of its
 -- own that is happy to be matchmade normally does not need it, and turning it
 -- off removes the occupancy tracking and the instance ceiling with it.
 function OfficialServerService:_usesReservedServers(entry: any): boolean
@@ -94,14 +95,14 @@ end
 --
 -- A reserved server has a hard player cap and a teleport into a full one simply
 -- fails, so a single instance meant being turned away at exactly the times the
--- community most wanted to play. Instances are tried in order, so everybody
+-- playerbase most wanted to play. Instances are tried in order, so everybody
 -- gathers in the first one and later ones open only under real pressure rather
 -- than scattering people across half empty worlds.
 function OfficialServerService:_pickInstance(serverId: string): (string?, number?, string?)
 	local entry = self.settings.Entries[serverId]
 	local placeId = self:_placeIdFor(entry)
 	local data = self.context.Services:Get("DataService")
-	local stored, storeError = data:GetCommunity(self:_storageKey(serverId))
+	local stored, storeError = data:GetSharedRecord(self:_storageKey(serverId))
 	if storeError then
 		-- "No record" and "could not read" arrive the same way, and treating an
 		-- outage as the former reserves a brand new server that nobody else can
@@ -134,7 +135,7 @@ function OfficialServerService:_pickInstance(serverId: string): (string?, number
 	end
 
 	if #codes >= (self.settings.MaximumInstances or 6) then
-		-- Refused rather than opening yet another. Past this the community is
+		-- Refused rather than opening yet another. Past this the playerbase is
 		-- split too thin for the roleplay any of them came for.
 		return nil, nil, "OFFICIAL_SERVER_FULL"
 	end
@@ -151,7 +152,7 @@ function OfficialServerService:_pickInstance(serverId: string): (string?, number
 	-- Appended under UpdateAsync, so two servers opening an overflow at the same
 	-- moment both keep their instance instead of one silently replacing the
 	-- other and stranding whoever was sent there.
-	local saved = data:UpdateCommunity(self:_storageKey(serverId), function(existing)
+	local saved = data:UpdateSharedRecord(self:_storageKey(serverId), function(existing)
 		local record = if type(existing) == "table" then existing else {}
 		local list = if type(record.Instances) == "table"
 			then record.Instances

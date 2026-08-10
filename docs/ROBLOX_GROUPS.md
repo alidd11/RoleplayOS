@@ -29,4 +29,4 @@ API failures, missing configuration and stale or insufficient ranks deny access 
 
 Before production, set each minimum rank deliberately. Test a non-member, ordinary member, qualifying rank and group owner in a private test server.
 
-Private communities use a separate dynamic group link. The private-server owner enters a group ID during community creation; the server verifies ownership with `GetGroupInfoAsync`, persists the verified name and emblem, and maps live group ranks through `Communities.GroupRoleRanks`. This dynamic ID never grants access to Police, Ambulance, Fire or Control roles unless it is also explicitly configured under `GroupLinks`.
+Only the public and official whitelisted deployments are supported. Whitelisted access is resolved exclusively from the static `GroupLinks` configuration.

@@ -42,6 +42,8 @@ function NeedsController:Init(context: any)
 end
 
 function NeedsController:Start()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local menuOpen = playerGui:GetAttribute("RoleplayOSMenuOpen") == true
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOSNeeds"
 	gui:SetAttribute("RoleplayOSManagedUI", true)
@@ -51,7 +53,9 @@ function NeedsController:Start()
 	-- corners and home indicators rather than being clipped by them.
 	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 10
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	self.gui = gui
+	gui.Enabled = not menuOpen
+	gui.Parent = playerGui
 	local hud = Instance.new("Frame")
 	hud.AnchorPoint = Vector2.new(0.5, 1)
 	hud.Position = UDim2.new(0.5, 0, 1, -64)
@@ -76,7 +80,7 @@ function NeedsController:Start()
 		self.connection = remote.OnClientEvent:Connect(function(state)
 			self.stamina.Fill.Size = UDim2.fromScale(math.clamp(state.Stamina / 100, 0, 1), 1)
 			self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
-			self.blur.Size = math.clamp((20 - state.Hunger) * 0.6, 0, 12)
+			self.blur.Size = if menuOpen then 0 else math.clamp((20 - state.Hunger) * 0.6, 0, 12)
 		end)
 	end
 	-- A purpose-built control rather than the generic touch button, so touch
@@ -110,6 +114,10 @@ function NeedsController:Start()
 	self.sprintPad = sprintPad
 
 	local function setSprinting(sprinting: boolean)
+		if menuOpen then
+			sprintPad.BackgroundColor3 = Color3.fromRGB(22, 30, 44)
+			return
+		end
 		sprintPad.BackgroundColor3 = if sprinting
 			then Color3.fromRGB(46, 104, 168)
 			else Color3.fromRGB(22, 30, 44)
@@ -155,7 +163,7 @@ function NeedsController:Start()
 	end)
 
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
-		self.blur.Enabled = not layout.VR
+		self.blur.Enabled = not layout.VR and not menuOpen
 		self.hudScale.Scale = layout.HudScale
 		self.padScale.Scale = layout.HudScale
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
@@ -167,7 +175,7 @@ function NeedsController:Start()
 			else UDim2.fromOffset(if layout.Compact then 224 else 270, 15)
 		-- Only touch players need an on-screen control, and never while driving,
 		-- where the pad would sit over the vehicle controls.
-		self.sprintPad.Visible = layout.InputMode == "Touch" and not layout.Vehicle
+		self.sprintPad.Visible = not menuOpen and layout.InputMode == "Touch" and not layout.Vehicle
 		self.sprintPad.Size =
 			UDim2.fromOffset(if layout.Compact then 76 else 84, if layout.Compact then 76 else 84)
 		-- The minimap occupies the right edge at mid height, so the pad sits below
@@ -176,6 +184,21 @@ function NeedsController:Start()
 		self.sprintPad.Position =
 			UDim2.new(1, -(layout.RightReserve + 14), 1, -(layout.HotbarBottom + 40))
 	end)
+	self.menuConnection = playerGui
+		:GetAttributeChangedSignal("RoleplayOSMenuOpen")
+		:Connect(function()
+			menuOpen = playerGui:GetAttribute("RoleplayOSMenuOpen") == true
+			gui.Enabled = not menuOpen
+			if menuOpen then
+				self.blur.Size = 0
+				self.blur.Enabled = false
+				self.sprintPad.Visible = false
+			else
+				local layout = self.context.Controllers.UIOrchestrator:GetLayout()
+				self.blur.Enabled = not layout.VR
+				self.sprintPad.Visible = layout.InputMode == "Touch" and not layout.Vehicle
+			end
+		end)
 	ContextActionService:BindAction("RoleplayOSSprint", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin or inputState == Enum.UserInputState.End then
 			setSprinting(inputState == Enum.UserInputState.Begin)
@@ -199,8 +222,15 @@ function NeedsController:Destroy()
 	if self.unbindLayout then
 		self.unbindLayout()
 	end
+	if self.menuConnection then
+		self.menuConnection:Disconnect()
+	end
 	if self.blur then
 		self.blur:Destroy()
+	end
+	if self.gui then
+		self.gui:Destroy()
+		self.gui = nil
 	end
 end
 

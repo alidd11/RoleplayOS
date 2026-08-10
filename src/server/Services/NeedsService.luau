@@ -19,16 +19,23 @@ end
 
 function NeedsService:_state(player: Player): any?
 	local character = self:_character(player)
-	if not character then
-		return nil
+	-- Moment-to-moment movement must still work while a profile is loading or
+	-- before an RP character is selected. Hunger becomes persistent as soon as a
+	-- character exists; until then this is a safe session-only state.
+	local characterId = if character then character.CharacterId else "player:" .. player.UserId
+	if character then
+		character.Needs = character.Needs or { Hunger = 100 }
 	end
-	character.Needs = character.Needs or { Hunger = 100 }
 	local state = self.states[player.UserId]
-	if not state or state.CharacterId ~= character.CharacterId then
+	if not state or state.CharacterId ~= characterId then
 		state = {
-			CharacterId = character.CharacterId,
+			CharacterId = characterId,
 			Stamina = 100,
-			Hunger = math.clamp(tonumber(character.Needs.Hunger) or 100, 0, 100),
+			Hunger = math.clamp(
+				if character then tonumber(character.Needs.Hunger) or 100 else 100,
+				0,
+				100
+			),
 			Sprinting = false,
 			LastSent = 0,
 			LastPersist = os.clock(),

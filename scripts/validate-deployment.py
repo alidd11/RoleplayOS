@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PROJECT = ROOT / "real-baseplate.project.json"
 CONFIG = ROOT / "src/shared/Config/Config.luau"
 EDITABLE = ROOT / "src/shared/Config/EDIT_HERE"
+ASSETS = ROOT / "server-assets"
 
 
 def fail(message: str, errors: list[str]) -> None:
@@ -27,6 +28,28 @@ def warn(message: str) -> None:
 
 def contains_assignment(source: str, key: str, value: str) -> bool:
     return re.search(rf"\b{re.escape(key)}\s*=\s*{re.escape(value)}\b", source) is not None
+
+
+def configured_asset_paths(source: str) -> list[tuple[str, ...]]:
+    paths: list[tuple[str, ...]] = []
+    for match in re.finditer(r"AssetPath\s*=\s*\{([^}]*)\}", source):
+        segments = tuple(re.findall(r'"([^"]+)"', match.group(1)))
+        if segments:
+            paths.append(segments)
+    return paths
+
+
+def asset_exists(path: tuple[str, ...]) -> bool:
+    target = ASSETS.joinpath(*path)
+    return any(
+        candidate.exists()
+        for candidate in (
+            target,
+            target.with_suffix(".rbxm"),
+            target.with_suffix(".rbxmx"),
+            target.with_suffix(".model.json"),
+        )
+    )
 
 
 def main() -> int:
@@ -72,7 +95,6 @@ def main() -> int:
 
     config = CONFIG.read_text(encoding="utf-8")
     deployment = (EDITABLE / "01_Deployment.luau").read_text(encoding="utf-8")
-    groups = (EDITABLE / "02_Groups.luau").read_text(encoding="utf-8")
     uniforms = (EDITABLE / "04_Uniforms.luau").read_text(encoding="utf-8")
     production_issues: list[str] = []
     if not re.search(r'Environment\s*=\s*"Production"', deployment):
@@ -81,12 +103,17 @@ def main() -> int:
         production_issues.append("UseMockDataInStudio is not false")
     if not contains_assignment(deployment, "GrantMockEmergencyAccessInStudio", "false"):
         production_issues.append("GrantMockEmergencyAccessInStudio is not false")
-    if re.search(r"Control\s*=\s*\{[^}]*GroupId\s*=\s*33809042", groups, re.DOTALL):
-        production_issues.append("Control still uses the temporary Universal Projects group link")
     if re.search(r'ShirtTemplate\s*=\s*""', uniforms) or re.search(
         r'TrousersTemplate\s*=\s*""', uniforms
     ):
         production_issues.append("one or more uniform template IDs are empty")
+
+    missing_assets = [path for path in configured_asset_paths(config) if not asset_exists(path)]
+    if missing_assets:
+        summary = ", ".join("/".join(path) for path in missing_assets[:6])
+        if len(missing_assets) > 6:
+            summary += f", and {len(missing_assets) - 6} more"
+        production_issues.append(f"{len(missing_assets)} configured asset templates are missing: {summary}")
 
     for issue in production_issues:
         if args.production:

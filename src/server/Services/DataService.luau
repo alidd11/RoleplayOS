@@ -79,14 +79,14 @@ end
 function DataService:Init(context: any)
 	self.context = context
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
-	self.mockCommunities = {}
+	self.mockSharedRecords = {}
 	self.mockRegistrations = {}
 	self.mockMdtRecords = {}
 	self.mockMdtIndexes = {}
 	self.mockShoulder = {}
 	if not self.mock then
 		self.store = DataStoreService:GetDataStore(STORE_NAME)
-		self.communityStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
+		self.sharedRecordStore = DataStoreService:GetDataStore(COMMUNITY_STORE_NAME)
 		self.registrationStore = DataStoreService:GetDataStore(REGISTRATION_STORE_NAME)
 		self.mdtRecordStore = DataStoreService:GetDataStore(MDT_RECORD_STORE_NAME)
 		self.mdtIndexStore = DataStoreService:GetDataStore(MDT_INDEX_STORE_NAME)
@@ -95,7 +95,64 @@ function DataService:Init(context: any)
 	self.serverId = game.JobId ~= "" and game.JobId or "studio"
 end
 
+-- Public progression deliberately keeps the original bare UserId key so this
+-- release cannot make existing live profiles appear to have been wiped. An
+-- official whitelisted world receives its own namespace, even when it is a
+-- second place inside the same universe (places in one universe share stores).
+-- Teleport data covers reserved same-place servers; PlaceId covers a dedicated
+-- whitelisted place entered directly.
+function DataService:_profileKey(player: Player): string
+	local official = self.context.Configuration.OfficialServers
+	local entries = official and official.Entries or {}
+	local officialServerId: string? = nil
+	local ok, joinData = pcall(player.GetJoinData, player)
+	if ok and type(joinData) == "table" and type(joinData.TeleportData) == "table" then
+		local supplied = joinData.TeleportData.OfficialServerId
+		if type(supplied) == "string" then
+			officialServerId = supplied
+		end
+	end
+	if officialServerId then
+		local entry = entries[officialServerId]
+		if entry and entry.Whitelisted == true then
+			return string.format("wl:%s:%d", officialServerId, player.UserId)
+		end
+	end
+	for entryId, entry in entries do
+		if
+			type(entry) == "table"
+			and entry.Whitelisted == true
+			and tonumber(entry.PlaceId) == game.PlaceId
+		then
+			return string.format("wl:%s:%d", tostring(entryId), player.UserId)
+		end
+	end
+	return tostring(player.UserId)
+end
+
+-- Secondary player-owned stores (MDT records/indexes, custom registrations and
+-- shoulder numbers) must follow the same public/whitelisted boundary as the
+-- profile which owns them. Public keeps its historical unprefixed keys; a
+-- whitelisted server prefixes every key with the official-server identity.
+-- Server-directory data intentionally does not use this scope.
+function DataService:_bindDataScope(profileKey: string)
+	local scope = string.match(profileKey, "^(wl:[^:]+:)") or ""
+	if self.dataScope == nil then
+		self.dataScope = scope
+	elseif self.dataScope ~= scope then
+		self.context.Logger:Error("Mixed persistence scopes detected in one server", {
+			ExistingScope = self.dataScope,
+			RequestedScope = scope,
+		})
+	end
+end
+
+function DataService:_scopedKey(key: string): string
+	return (self.dataScope or "") .. key
+end
+
 function DataService:GetMdtRecord(key: string): (any?, string?)
+	key = self:_scopedKey(key)
 	if not self:_checkKey(key, "MdtRecords") then
 		return nil, "MDT_RECORD_STORE_UNAVAILABLE"
 	end
@@ -109,6 +166,7 @@ function DataService:GetMdtRecord(key: string): (any?, string?)
 end
 
 function DataService:UpdateMdtRecord(key: string, transform: (any?) -> any): (any?, string?)
+	key = self:_scopedKey(key)
 	if not self:_checkKey(key, "MdtRecords") then
 		return nil, "MDT_RECORD_STORE_UNAVAILABLE"
 	end
@@ -128,6 +186,7 @@ function DataService:UpdateMdtRecord(key: string, transform: (any?) -> any): (an
 end
 
 function DataService:GetMdtIndex(key: string): (any?, string?)
+	key = self:_scopedKey(key)
 	if not self:_checkKey(key, "MdtIndexes") then
 		return nil, "MDT_INDEX_STORE_UNAVAILABLE"
 	end
@@ -141,6 +200,7 @@ function DataService:GetMdtIndex(key: string): (any?, string?)
 end
 
 function DataService:UpdateMdtIndex(key: string, transform: (any?) -> any): (any?, string?)
+	key = self:_scopedKey(key)
 	if not self:_checkKey(key, "MdtIndexes") then
 		return nil, "MDT_INDEX_STORE_UNAVAILABLE"
 	end
@@ -171,14 +231,15 @@ function DataService:AllocateShoulderNumber(
 	userId: number,
 	start: number
 ): (number?, string?)
-	local counterKey = "counter:" .. departmentId
+	local counterKey = self:_scopedKey("counter:" .. departmentId)
+	local holderKey = self:_scopedKey(departmentId .. ":" .. tostring(start))
 	local issued: number? = nil
 	if self.mock then
 		local current = self.mockShoulder[counterKey]
 		issued = if type(current) == "number" then current + 1 else start
 		self.mockShoulder[counterKey] = issued
-		self.mockShoulder[departmentId .. ":" .. tostring(issued)] =
-			{ UserId = userId, AssignedAt = os.time() }
+		holderKey = self:_scopedKey(departmentId .. ":" .. tostring(issued))
+		self.mockShoulder[holderKey] = { UserId = userId, AssignedAt = os.time() }
 		return issued, nil
 	end
 	local ok = self:_retry(function()
@@ -190,14 +251,12 @@ function DataService:AllocateShoulderNumber(
 	if not ok or not issued then
 		return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 	end
+	holderKey = self:_scopedKey(departmentId .. ":" .. tostring(issued))
 	-- The holder record is what the staff export reads. Losing it costs the
 	-- reconciliation view, not the allocation, so a failure here is warned about
 	-- rather than surfaced as a refusal to go on duty.
 	local recorded = self:_retry(function()
-		return self.shoulderStore:SetAsync(
-			departmentId .. ":" .. tostring(issued),
-			{ UserId = userId, AssignedAt = os.time() }
-		)
+		return self.shoulderStore:SetAsync(holderKey, { UserId = userId, AssignedAt = os.time() })
 	end)
 	if not recorded then
 		self.context.Logger:Warning("Shoulder number holder record failed", {
@@ -210,11 +269,12 @@ function DataService:AllocateShoulderNumber(
 end
 
 function DataService:GetShoulderNumberHolder(departmentId: string, number: number): (any?, string?)
+	local holderKey = self:_scopedKey(departmentId .. ":" .. tostring(number))
 	if self.mock then
-		return deepCopy(self.mockShoulder[departmentId .. ":" .. tostring(number)]), nil
+		return deepCopy(self.mockShoulder[holderKey]), nil
 	end
 	local ok, result = self:_retry(function()
-		return self.shoulderStore:GetAsync(departmentId .. ":" .. tostring(number))
+		return self.shoulderStore:GetAsync(holderKey)
 	end)
 	return if ok then result else nil, if ok then nil else "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 end
@@ -224,17 +284,18 @@ function DataService:ReserveCustomRegistration(
 	userId: number,
 	vehicleId: string
 ): (boolean, string?)
+	local registrationKey = self:_scopedKey(registration)
 	if self.mock then
-		local existing = self.mockRegistrations[registration]
+		local existing = self.mockRegistrations[registrationKey]
 		if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
 			return false, "REGISTRATION_ALREADY_USED"
 		end
-		self.mockRegistrations[registration] = { UserId = userId, VehicleId = vehicleId }
+		self.mockRegistrations[registrationKey] = { UserId = userId, VehicleId = vehicleId }
 		return true, nil
 	end
 	local reserved = false
 	local ok = self:_retry(function()
-		return self.registrationStore:UpdateAsync(registration, function(existing)
+		return self.registrationStore:UpdateAsync(registrationKey, function(existing)
 			if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
 				return existing
 			end
@@ -253,16 +314,17 @@ function DataService:ReleaseCustomRegistration(
 	userId: number,
 	vehicleId: string
 )
+	local registrationKey = self:_scopedKey(registration)
 	if self.mock then
-		local existing = self.mockRegistrations[registration]
+		local existing = self.mockRegistrations[registrationKey]
 		if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
-			self.mockRegistrations[registration] = nil
+			self.mockRegistrations[registrationKey] = nil
 		end
 		return
 	end
 	task.spawn(function()
 		self:_retry(function()
-			return self.registrationStore:UpdateAsync(registration, function(existing)
+			return self.registrationStore:UpdateAsync(registrationKey, function(existing)
 				if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
 					return nil
 				end
@@ -272,36 +334,36 @@ function DataService:ReleaseCustomRegistration(
 	end)
 end
 
-function DataService:GetCommunity(communityId: string): (any?, string?)
+function DataService:GetSharedRecord(recordId: string): (any?, string?)
 	if self.mock then
-		return self.mockCommunities[communityId], nil
+		return self.mockSharedRecords[recordId], nil
 	end
 	local ok, result = self:_retry(function()
-		return self.communityStore:GetAsync(communityId)
+		return self.sharedRecordStore:GetAsync(recordId)
 	end)
 	if not ok then
-		self.context.Logger:Error("Community load failed", { CommunityId = communityId })
-		return nil, "COMMUNITY_LOAD_FAILED"
+		self.context.Logger:Error("Shared record load failed", { RecordId = recordId })
+		return nil, "SHARED_RECORD_LOAD_FAILED"
 	end
 	return result, nil
 end
 
-function DataService:UpdateCommunity(communityId: string, transform: (any?) -> any): (any?, string?)
+function DataService:UpdateSharedRecord(recordId: string, transform: (any?) -> any): (any?, string?)
 	if self.mock then
-		local updated = transform(self.mockCommunities[communityId])
-		self.mockCommunities[communityId] = updated
+		local updated = transform(self.mockSharedRecords[recordId])
+		self.mockSharedRecords[recordId] = updated
 		return updated, nil
 	end
 	local updated
 	local ok = self:_retry(function()
-		return self.communityStore:UpdateAsync(communityId, function(stored)
+		return self.sharedRecordStore:UpdateAsync(recordId, function(stored)
 			updated = transform(stored)
 			return updated
 		end)
 	end)
 	if not ok then
-		self.context.Logger:Error("Community update failed", { CommunityId = communityId })
-		return nil, "COMMUNITY_UPDATE_FAILED"
+		self.context.Logger:Error("Shared record update failed", { RecordId = recordId })
+		return nil, "SHARED_RECORD_UPDATE_FAILED"
 	end
 	return updated, nil
 end
@@ -442,6 +504,8 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 			return nil, "SESSION_ALREADY_LOADED"
 		end
 	end
+	local profileKey = self:_profileKey(player)
+	self:_bindDataScope(profileKey)
 	if self.mock then
 		local profile = ProfileSchema.default(player.UserId)
 		if self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio then
@@ -502,7 +566,7 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	-- failures, or a player who failed once could never be loaded again.
 	self.loading[player.UserId] = true
 	local ok, problem = self:_retry(function()
-		return self.store:UpdateAsync(tostring(player.UserId), function(stored)
+		return self.store:UpdateAsync(profileKey, function(stored)
 			local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
 			if not profile then
 				-- A profile that cannot be read is set aside and replaced, not
@@ -583,8 +647,14 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 		self.loading[player.UserId] = nil
 		return nil, "PROFILE_LOAD_FAILED: " .. string.sub(tostring(problem), 1, 180)
 	end
-	self.sessions[player.UserId] =
-		{ Profile = loaded, Dirty = false, Saving = false, ActiveCharacterId = nil, Revision = 0 }
+	self.sessions[player.UserId] = {
+		Profile = loaded,
+		Dirty = false,
+		Saving = false,
+		ActiveCharacterId = nil,
+		Revision = 0,
+		DataKey = profileKey,
+	}
 	self.loading[player.UserId] = nil
 	if quarantined ~= nil then
 		self.context.Logger:Error("Profile could not be read and was set aside", {
@@ -593,7 +663,7 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 		})
 		-- Written outside the transform and after the load has succeeded, so a
 		-- failure to keep the backup costs the record rather than the session.
-		local key = "quarantine:" .. tostring(player.UserId) .. ":" .. tostring(os.time())
+		local key = "quarantine:" .. profileKey .. ":" .. tostring(os.time())
 		if self:_checkKey(key, "Profiles") then
 			self:_retry(function()
 				return self.store:SetAsync(key, {
@@ -656,8 +726,9 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 	local revision = session.Revision or 0
 	local snapshot = deepCopy(session.Profile)
 	local now = os.time()
+	local profileKey = session.DataKey or self:_profileKey(player)
 	local ok, problem = self:_retry(function()
-		self.store:UpdateAsync(tostring(player.UserId), function(stored)
+		self.store:UpdateAsync(profileKey, function(stored)
 			local lock = stored and stored.AuditMetadata and stored.AuditMetadata.SessionLock
 			if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > now then
 				error("SESSION_OWNERSHIP_LOST")
@@ -823,6 +894,13 @@ function DataService:Destroy()
 	local pending = 0
 	local unsaved: { string } = {}
 	for _, player in Players:GetPlayers() do
+		-- PlayerRemoving can release the session immediately before BindToClose
+		-- reaches this loop. That profile is already safely finished; trying to
+		-- save it again returns NO_SESSION and previously produced a false data-loss
+		-- alarm on every clean Studio shutdown.
+		if not self.sessions[player.UserId] then
+			continue
+		end
 		pending += 1
 		task.spawn(function()
 			-- Wrapped, because a save that throws used to skip the decrement

@@ -328,7 +328,7 @@ function MinimapController:Start()
 		-- outright. A map you cannot see while driving is the one moment it exists
 		-- for, and a mobile officer was sent to an address they saw once with no
 		-- way to find it.
-		self.shell.Visible = true
+		followDeviceState()
 		self.shell.AnchorPoint = if layout.Vehicle then Vector2.new(0, 0.5) else Vector2.new(1, 0.5)
 		-- Sits above centre on touch, where a sprint pad shares the right edge and
 		-- a centred minimap would land on top of it.

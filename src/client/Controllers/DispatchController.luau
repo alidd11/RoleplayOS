@@ -1,17 +1,10 @@
 --!strict
 
 local Players = game:GetService("Players")
+local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local DispatchController = { connections = {}, selectedCallId = nil }
-local C = {
-	Surface = Color3.fromRGB(10, 15, 24),
-	Raised = Color3.fromRGB(20, 28, 41),
-	Border = Color3.fromRGB(49, 64, 86),
-	Text = Color3.fromRGB(244, 247, 252),
-	Muted = Color3.fromRGB(148, 162, 183),
-	Accent = Color3.fromRGB(64, 145, 255),
-	Immediate = Color3.fromRGB(244, 82, 92),
-}
+local C = TerminalTheme
 
 local function corner(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
@@ -97,7 +90,7 @@ function DispatchController:_mount()
 	shell.BackgroundColor3 = C.Surface
 	shell.BorderSizePixel = 0
 	shell.Parent = dim
-	corner(shell, 14)
+	corner(shell, 22)
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MinSize = Vector2.new(760, 500)
 	constraint.MaxSize = Vector2.new(1180, 720)
@@ -110,14 +103,20 @@ function DispatchController:_mount()
 	stroke.Color = C.Border
 	stroke.Transparency = 0.1
 	stroke.Parent = shell
+	local classification = Instance.new("Frame")
+	classification.Name = "Classification"
+	classification.Size = UDim2.new(1, 0, 0, 4)
+	classification.BackgroundColor3 = C.Classification
+	classification.BorderSizePixel = 0
+	classification.Parent = shell
 
-	local title = label(shell, "EMERGENCY CONTROL", 17, true)
+	local title = label(shell, "FORCE CONTROL  ·  LIVE DISPATCH", 17, true)
 	title.Position = UDim2.fromOffset(20, 13)
 	title.Size = UDim2.new(1, -40, 0, 24)
 	local live = label(shell, "●  LIVE DISPATCH  ·  CONSOLE AUTHENTICATED", 9, true)
 	live.Position = UDim2.fromOffset(20, 38)
 	live.Size = UDim2.new(1, -40, 0, 18)
-	live.TextColor3 = Color3.fromRGB(92, 216, 145)
+	live.TextColor3 = C.Secure
 	local close = button(shell, "CLOSE")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -20, 0, 18)

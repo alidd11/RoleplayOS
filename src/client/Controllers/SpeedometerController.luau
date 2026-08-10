@@ -12,7 +12,7 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- layout binding, and the two disagreed the moment the dial needed a taller
 -- panel: the binding reset it to the old height, so the dial centre sat below
 -- the panel and the hub and the bottom of the needle rendered outside it.
-local CLUSTER_SIZE = Vector2.new(320, 176)
+local CLUSTER_SIZE = Vector2.new(360, 176)
 
 -- A half dial rather than a full round one.
 --
@@ -24,7 +24,7 @@ local CLUSTER_SIZE = Vector2.new(320, 176)
 -- Zero is straight up, so the sweep runs from due left to due right through the
 -- top. Every part of the dial is placed from this centre and radius, so the
 -- ticks, the needle and the hub cannot drift apart when one is adjusted.
-local DIAL_CENTRE = Vector2.new(100, 138)
+local DIAL_CENTRE = Vector2.new(180, 138)
 local DIAL_RADIUS = 74
 local SWEEP_START = -90
 local SWEEP_ARC = 180
@@ -44,12 +44,54 @@ function SpeedometerController:_chassisValues(seat: BasePart): Folder?
 	if not found and seat.Parent then
 		found = seat.Parent:FindFirstChild(name)
 	end
+	if not found then
+		local vehicle = seat:FindFirstAncestorOfClass("Model")
+		found = vehicle and vehicle:FindFirstChild(name, true)
+	end
 	return if found and found:IsA("Folder") then found else nil
 end
 
 local function readValue(folder: Folder?, name: string): any?
 	local item = if folder then folder:FindFirstChild(name) else nil
 	return if item and item:IsA("ValueBase") then (item :: any).Value else nil
+end
+
+local function readFirstValue(folder: Folder?, names: { string }?): any?
+	for _, name in names or {} do
+		local value = readValue(folder, name)
+		if value ~= nil then
+			return value
+		end
+	end
+	return nil
+end
+
+local function ancestorAttribute(instance: Instance, name: string): any?
+	local current: Instance? = instance
+	while current do
+		local value = current:GetAttribute(name)
+		if value ~= nil then
+			return value
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
+local function readsOn(value: any): boolean
+	if type(value) == "boolean" then
+		return value
+	elseif type(value) == "number" then
+		return value ~= 0
+	elseif type(value) == "string" then
+		local normalised = string.lower(value)
+		return normalised ~= ""
+			and normalised ~= "0"
+			and normalised ~= "false"
+			and normalised ~= "off"
+			and normalised ~= "released"
+	end
+	return false
 end
 
 local C = {
@@ -196,8 +238,8 @@ function SpeedometerController:_mount()
 	-- Gear badge, as a cluster shows the selected gear rather than spelling it.
 	local gearBadge = Instance.new("Frame")
 	gearBadge.Name = "Gear"
-	gearBadge.AnchorPoint = Vector2.new(1, 0)
-	gearBadge.Position = UDim2.new(1, -18, 0, 22)
+	gearBadge.AnchorPoint = Vector2.new(0.5, 0)
+	gearBadge.Position = UDim2.fromOffset(42, 24)
 	gearBadge.Size = UDim2.fromOffset(50, 50)
 	gearBadge.BackgroundColor3 = C.Track
 	gearBadge.BackgroundTransparency = 0.25
@@ -212,17 +254,40 @@ function SpeedometerController:_mount()
 
 	local plate = label(frame, Enum.Font.GothamMedium, 10, C.Muted)
 	plate.Name = "Registration"
-	plate.AnchorPoint = Vector2.new(1, 0)
-	plate.Position = UDim2.new(1, -18, 0, 84)
-	plate.Size = UDim2.fromOffset(108, 15)
-	plate.TextXAlignment = Enum.TextXAlignment.Right
+	plate.AnchorPoint = Vector2.new(0.5, 0)
+	plate.Position = UDim2.new(0.5, 0, 0, 5)
+	plate.Size = UDim2.fromOffset(210, 15)
+	plate.TextXAlignment = Enum.TextXAlignment.Center
 	self.plate = plate
+
+	local handbrakeBadge = Instance.new("Frame")
+	handbrakeBadge.Name = "Handbrake"
+	handbrakeBadge.AnchorPoint = Vector2.new(0.5, 0)
+	handbrakeBadge.Position = UDim2.fromOffset(CLUSTER_SIZE.X - 42, 24)
+	handbrakeBadge.Size = UDim2.fromOffset(50, 50)
+	handbrakeBadge.BackgroundColor3 = C.Track
+	handbrakeBadge.BackgroundTransparency = 0.25
+	handbrakeBadge.BorderSizePixel = 0
+	handbrakeBadge.Parent = frame
+	Instance.new("UICorner", handbrakeBadge).CornerRadius = UDim.new(1, 0)
+	local handbrake = label(handbrakeBadge, Enum.Font.GothamBold, 21, C.Muted)
+	handbrake.Text = "P"
+	handbrake.Size = UDim2.fromScale(1, 1)
+	handbrake.TextXAlignment = Enum.TextXAlignment.Center
+	local handbrakeStroke = Instance.new("UIStroke")
+	handbrakeStroke.Color = C.Muted
+	handbrakeStroke.Thickness = 2
+	handbrakeStroke.Transparency = 0.25
+	handbrakeStroke.Parent = handbrakeBadge
+	self.handbrakeBadge = handbrakeBadge
+	self.handbrake = handbrake
+	self.handbrakeStroke = handbrakeStroke
 
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
-	fuelTrack.AnchorPoint = Vector2.new(1, 0)
-	fuelTrack.Position = UDim2.new(1, -18, 0, 128)
-	fuelTrack.Size = UDim2.fromOffset(108, 9)
+	fuelTrack.AnchorPoint = Vector2.new(0.5, 0)
+	fuelTrack.Position = UDim2.new(0.5, 0, 0, 160)
+	fuelTrack.Size = UDim2.fromOffset(170, 9)
 	fuelTrack.BackgroundColor3 = C.Track
 	fuelTrack.BorderSizePixel = 0
 	fuelTrack.Parent = frame
@@ -237,10 +302,10 @@ function SpeedometerController:_mount()
 	self.fuelFill = fuelFill
 	local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
 	fuelMark.Text = "FUEL"
-	fuelMark.AnchorPoint = Vector2.new(1, 0)
-	fuelMark.Position = UDim2.new(1, -18, 0, 108)
-	fuelMark.Size = UDim2.fromOffset(108, 13)
-	fuelMark.TextXAlignment = Enum.TextXAlignment.Right
+	fuelMark.AnchorPoint = Vector2.new(0.5, 0)
+	fuelMark.Position = UDim2.new(0.5, 0, 0, 144)
+	fuelMark.Size = UDim2.fromOffset(170, 13)
+	fuelMark.TextXAlignment = Enum.TextXAlignment.Center
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
 	self.gui, self.frame = gui, frame
@@ -307,12 +372,24 @@ end
 function SpeedometerController:Start()
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Speedometer", function(layout)
-		self.frameScale.Scale = layout.HudScale
+		local compactTouch = layout.InputMode == "Touch" and layout.Compact
+		self.frameScale.Scale = if compactTouch
+			then math.min(layout.HudScale, 0.62)
+			else layout.HudScale
 		self.frame.AnchorPoint = Vector2.new(0.5, 1)
 		-- Clear of Roblox's toolbar rather than pinned to the bottom edge, which
 		-- put the readout underneath the equipped tools. The needs bars move to
 		-- the left while driving, so the bottom centre is free for this.
-		self.frame.Position = UDim2.new(0.5, 0, 1, -(layout.HotbarBottom + 14))
+		-- UIScale changes the rendered footprint around the frame's authored
+		-- origin. On compact touch screens compensate vertically so the visual
+		-- bottom, rather than the unscaled 176px box, sits directly above the
+		-- hotbar. X remains an exact 0.5 screen anchor.
+		self.frame.Position = UDim2.new(
+			0.5,
+			0,
+			1,
+			-(if compactTouch then layout.SafeBottom + 86 else layout.HotbarBottom + 14)
+		)
 		-- One authored size, scaled by the interface factor, rather than a second
 		-- set of measurements for compact screens that has to be kept in step.
 		self.frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
@@ -392,23 +469,60 @@ function SpeedometerController:Start()
 					else mph / math.max(self.settings.TopSpeedMph, 1)
 			)
 
-			-- A vehicle that reports no fuel level hides the gauge rather than
-			-- drawing it empty. An empty bar labelled FUEL says the tank is dry,
-			-- which is a different claim from "this car has no fuel system" and
-			-- the one thing a driver would act on.
-			local fuel = seat:GetAttribute("RoleplayOSFuel")
+			-- RoleplayOS fuel is authoritative. Existing authoring vehicles can
+			-- still expose a chassis value for display; if neither exists the gauge
+			-- remains visible as unknown rather than silently disappearing.
+			local fuel = ancestorAttribute(seat, "RoleplayOSFuel")
+			if type(fuel) ~= "number" then
+				for _, name in self.settings.FuelValueNames or {} do
+					fuel = ancestorAttribute(seat, name)
+					if type(fuel) == "number" then
+						break
+					end
+				end
+			end
+			if type(fuel) ~= "number" then
+				fuel = readFirstValue(values, self.settings.FuelValueNames)
+			end
 			local metered = type(fuel) == "number"
-			self.fuelTrack.Visible = metered
-			self.fuelMark.Visible = metered
+			self.fuelTrack.Visible = true
+			self.fuelMark.Visible = true
 			if metered then
 				local level = fuel :: number
+				if level >= 0 and level <= 1 then
+					level *= 100
+				end
 				self:_setText(self.fuelMark, string.format("FUEL %d%%", math.floor(level + 0.5)))
 				self.fuelFill.Size = UDim2.fromScale(math.clamp(level / 100, 0, 1), 1)
 				self.fuelFill.BackgroundColor3 = if level <= 10
 					then C.Danger
 					elseif level <= 25 then C.Warn
 					else C.Fuel
+			else
+				self:_setText(self.fuelMark, "FUEL --")
+				self.fuelFill.Size = UDim2.fromScale(0, 1)
+				self.fuelFill.BackgroundColor3 = C.Muted
 			end
+
+			local handbrakeState = ancestorAttribute(seat, "RoleplayOSHandbrake")
+			if handbrakeState == nil then
+				for _, name in self.settings.HandbrakeValueNames or {} do
+					handbrakeState = ancestorAttribute(seat, name)
+					if handbrakeState ~= nil then
+						break
+					end
+				end
+			end
+			if handbrakeState == nil then
+				handbrakeState = readFirstValue(values, self.settings.HandbrakeValueNames)
+			end
+			local handbrakeOn = readsOn(handbrakeState)
+			local handbrakeColour = if handbrakeOn then C.Danger else C.Muted
+			self.handbrake.TextColor3 = handbrakeColour
+			self.handbrakeStroke.Color = handbrakeColour
+			self.handbrakeBadge.BackgroundColor3 = if handbrakeOn
+				then Color3.fromRGB(73, 20, 25)
+				else C.Track
 		end)
 	)
 end

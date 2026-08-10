@@ -52,10 +52,6 @@ local expectedFunctions = {
 	"GetDispatchSnapshot",
 	"DispatchCreateCall",
 	"DispatchAssignUnit",
-	"GetVehicleSpawnMenu",
-	"SpawnOwnedVehicle",
-	"SpawnServiceVehicle",
-	"PurchaseVehicle",
 	"CuffPlayer",
 	"CustodyAction",
 	"GetCustodyPolicy",
@@ -173,6 +169,20 @@ end
 
 local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 check(assets ~= nil, "content.root", "ServerStorage.RoleplayOSAssets exists")
+local importedSources = ServerStorage:FindFirstChild("RoleplayOSImportedSources")
+check(importedSources ~= nil, "imports.root", "ServerStorage.RoleplayOSImportedSources exists")
+if importedSources then
+	check(
+		importedSources:FindFirstChild("BankRobberySource") ~= nil,
+		"imports.bank-source",
+		"purchased bank robbery source is mapped into inert server storage"
+	)
+	check(
+		importedSources:FindFirstChild("PoliceEpaulettesSource") ~= nil,
+		"imports.epaulette-source",
+		"purchased police epaulettes source is mapped into inert server storage"
+	)
+end
 for _, path in
 	{
 		{ "Vehicles", "Civilian", "Starter" },
@@ -191,6 +201,22 @@ do
 end
 
 if assets then
+	local warrantCard = assets:FindFirstChild("Tools")
+		and assets.Tools:FindFirstChild("Services")
+		and assets.Tools.Services:FindFirstChild("Police")
+		and assets.Tools.Services.Police:FindFirstChild("Shared")
+		and (
+			assets.Tools.Services.Police.Shared:FindFirstChild("Warrant Card")
+			or assets.Tools.Services.Police.Shared:FindFirstChild("WarrantCard")
+		)
+	check(
+		warrantCard ~= nil
+			and warrantCard:IsA("Tool")
+			and warrantCard:FindFirstChild("Handle") ~= nil,
+		"content.warrant-card",
+		"police warrant-card tool and handle are available to IdentificationService"
+	)
+
 	local unsafe = {}
 	for _, descendant in assets:GetDescendants() do
 		if

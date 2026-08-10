@@ -35,15 +35,16 @@ local controllers = {
 	ANPRAlertController = require(script.Controllers.ANPRAlertController),
 	NeedsController = require(script.Controllers.NeedsController),
 	VehicleUIController = require(script.Controllers.VehicleUIController),
+	VehicleSpawnerController = require(script.Controllers.VehicleSpawnerController),
 	DrivingControlsController = require(script.Controllers.DrivingControlsController),
 	EmergencyLightsController = require(script.Controllers.EmergencyLightsController),
-	DealershipController = require(script.Controllers.DealershipController),
 	SpeedometerController = require(script.Controllers.SpeedometerController),
 	PublicSafetyController = require(script.Controllers.PublicSafetyController),
+	TaserPoseController = require(script.Controllers.TaserPoseController),
 	CustodyController = require(script.Controllers.CustodyController),
-	CommunityController = require(script.Controllers.CommunityController),
 	DutyController = require(script.Controllers.DutyController),
 	StartMenuController = require(script.Controllers.StartMenuController),
+	StartMenuAccessibilityController = require(script.Controllers.StartMenuAccessibilityController),
 }
 for _, name in
 	{ "AccessPrompts", "Jobs", "Vehicles", "Properties", "Furniture", "EmergencyServices" }
@@ -51,6 +52,7 @@ do
 	controllers[name .. "Controller"] = FeatureController.new(name)
 end
 local context = { Controllers = controllers, Events = events }
+local initialised = {}
 
 -- One ordered list drives both lifecycle phases. Keeping two copies in sync by
 -- hand risks a controller being initialised but never started, or vice versa.
@@ -76,13 +78,13 @@ local ORDER = {
 	"ANPRAlertController",
 	"NeedsController",
 	"VehicleUIController",
+	"VehicleSpawnerController",
 	"DrivingControlsController",
 	"EmergencyLightsController",
-	"DealershipController",
 	"SpeedometerController",
 	"PublicSafetyController",
+	"TaserPoseController",
 	"CustodyController",
-	"CommunityController",
 	"DutyController",
 	"AccessPromptsController",
 	"JobsController",
@@ -91,6 +93,7 @@ local ORDER = {
 	"FurnitureController",
 	"EmergencyServicesController",
 	"StartMenuController",
+	"StartMenuAccessibilityController",
 }
 
 -- Init must stay serial and in order: controllers read each other's stored
@@ -111,6 +114,8 @@ for _, name in ORDER do
 				tostring(problem)
 			)
 		)
+	else
+		initialised[name] = true
 	end
 end
 
@@ -118,6 +123,9 @@ end
 -- the server has not registered yet. Each one is isolated: a controller that
 -- hangs or errors must not prevent the rest of the interface from starting.
 for _, name in ORDER do
+	if not initialised[name] then
+		continue
+	end
 	task.spawn(function()
 		local ok, problem = pcall(function()
 			controllers[name]:Start()

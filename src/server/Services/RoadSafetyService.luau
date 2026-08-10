@@ -156,6 +156,8 @@ function RoadSafetyService:_watchSensor(camera: Model, sensor: BasePart)
 		return
 	end
 	self.sensors[sensor] = camera:GetFullName()
+	sensor.CanCollide = false
+	sensor.CanTouch = true
 	table.insert(
 		self.connections,
 		sensor.Touched:Connect(function(hit)
@@ -171,12 +173,11 @@ function RoadSafetyService:_seatFromHit(hit: BasePart): VehicleSeat?
 	if hit:IsA("VehicleSeat") then
 		return hit
 	end
-	local assembly = hit.AssemblyRootPart
 	local current: Instance? = hit
 	while current and current ~= Workspace do
 		if current:IsA("Model") then
 			local seat = current:FindFirstChildWhichIsA("VehicleSeat", true)
-			if seat and (not assembly or seat.AssemblyRootPart == assembly) then
+			if seat then
 				return seat
 			end
 		end
@@ -263,16 +264,17 @@ function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePa
 		return
 	end
 
-	-- AssemblyLinearVelocity rather than the deprecated Velocity, converted with
-	-- the same factor the rest of the framework uses for a speedometer.
-	local mph = hit.AssemblyLinearVelocity.Magnitude
-		* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+	-- Prefer the server's validated vehicle telemetry. Imported chassis often
+	-- split wheels and bodywork into separate assemblies, so the first touched
+	-- part can report a very different velocity from the actual vehicle.
+	local registration, vehicle = self:_registrationOf(seat)
+	local mph = seat.AssemblyLinearVelocity.Magnitude
+		* self.context.Configuration.VehicleData.StudsPerSecondToMph
 	if mph < limit + settings.ToleranceMph then
 		return
 	end
 	perSensor[seat] = now + settings.SensorCooldownSeconds
 
-	local registration, vehicle = self:_registrationOf(seat)
 	local issued = self:IssueFine({
 		Registration = registration,
 		Mph = mph,
@@ -315,11 +317,8 @@ function RoadSafetyService:_taggedFixed(sensor: BasePart, hit: BasePart)
 	if (perSensor[vehicle] or 0) > now then
 		return
 	end
-	local telemetry = self.context.Services:Get("VehicleService"):GetTelemetry(vehicle)
-	local mph = if telemetry
-		then telemetry.SpeedMph
-		else seat.AssemblyLinearVelocity.Magnitude
-			* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+	local mph = seat.AssemblyLinearVelocity.Magnitude
+		* self.context.Configuration.VehicleData.StudsPerSecondToMph
 	local issued = self:IssueFine({
 		Registration = vehicle:GetAttribute("RoleplayOSRegistration"),
 		Mph = mph,
@@ -363,7 +362,7 @@ function RoadSafetyService:_taggedAverage(sensor: BasePart, hit: BasePart, isEnt
 	end
 	local mph = (sensor.Position - entry.Position).Magnitude
 		/ elapsed
-		* self.context.Configuration.VehicleSpawning.StudsPerSecondToMph
+		* self.context.Configuration.VehicleData.StudsPerSecondToMph
 	self:IssueFine({
 		Registration = registration,
 		Mph = mph,

@@ -41,7 +41,7 @@ function AccessService:Evaluate(player: Player, rule: any, extra: any?): any
 		Blacklisted = profile.AuditMetadata.Blacklisted,
 		BlacklistReason = profile.AuditMetadata.BlacklistReason,
 		Groups = {},
-		ServerKind = self.context.Services:Get("CommunityServerService"):Kind(),
+		ServerKind = self.context.Services:Get("ServerModeService"):Kind(),
 	}
 	local requiredGroups = {}
 	collectGroupLinks(rule, requiredGroups)

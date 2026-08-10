@@ -46,12 +46,20 @@ function WorldBudgetService:_apply(instance: Instance, counts: Counts)
 		-- own distance based detail: full detail close up, cheaper further out.
 		-- This is the single largest saving available on imported vehicles,
 		-- which are exported as Precise almost without exception.
-		if
-			settings.MeshLevelOfDetail
-			and instance.RenderFidelity == Enum.RenderFidelity.Precise
-		then
-			instance.RenderFidelity = Enum.RenderFidelity.Automatic
-			counts.Meshes += 1
+		if settings.MeshLevelOfDetail then
+			-- RenderFidelity is visible to ordinary scripts but Roblox currently
+			-- restricts writes to plugin-capability threads. A spawn endpoint must
+			-- never fail because a cosmetic optimisation is unavailable.
+			local ok, changed = pcall(function()
+				if instance.RenderFidelity ~= Enum.RenderFidelity.Precise then
+					return false
+				end
+				instance.RenderFidelity = Enum.RenderFidelity.Automatic
+				return true
+			end)
+			if ok and changed then
+				counts.Meshes += 1
+			end
 		end
 		return
 	end
@@ -60,12 +68,22 @@ function WorldBudgetService:_apply(instance: Instance, counts: Counts)
 		-- Distant models are drawn as one low detail mesh instead of as all of
 		-- their parts. Only meaningful with streaming on, which is why it is set
 		-- here and not left to the map.
-		if
-			settings.ModelLevelOfDetail
-			and instance.LevelOfDetail == Enum.ModelLevelOfDetail.Disabled
-		then
-			instance.LevelOfDetail = Enum.ModelLevelOfDetail.StreamingMesh
-			counts.Models += 1
+		-- Roblox currently exposes Model.LevelOfDetail to Studio plugins but can
+		-- reject the same read from a server Script with "lacking capability
+		-- Plugin". Imported A-Chassis models hit that path while being spawned.
+		-- Keep the optimisation best-effort so an engine capability change can
+		-- never abort the gameplay endpoint that created the model.
+		if settings.ModelLevelOfDetail then
+			local ok, changed = pcall(function()
+				if instance.LevelOfDetail ~= Enum.ModelLevelOfDetail.Disabled then
+					return false
+				end
+				instance.LevelOfDetail = Enum.ModelLevelOfDetail.StreamingMesh
+				return true
+			end)
+			if ok and changed then
+				counts.Models += 1
+			end
 		end
 		return
 	end

@@ -27,7 +27,7 @@ function DiscordFineService:Init(context: any)
 end
 
 function DiscordFineService:_isWhitelistedPoliceOfficer(officer: any): boolean
-	if self.context.Services:Get("CommunityServerService"):Kind() ~= "Whitelisted" then
+	if self.context.Services:Get("ServerModeService"):Kind() ~= "Whitelisted" then
 		return false
 	end
 	if typeof(officer) ~= "Instance" or not officer:IsA("Player") then

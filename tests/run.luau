@@ -14,8 +14,6 @@ local Placement = require(Shared.FurniturePlacementValidator)
 local Serialisation = require(Shared.Serialisation)
 local ProfileSchema = require(Shared.ProfileSchema)
 local Response = require(Shared.Response)
-local CommunityPolicy = require(Shared.CommunityPolicy)
-local CommunityGroupPolicy = require(Shared.CommunityGroupPolicy)
 local SpawnPolicy = require(Shared.SpawnPolicy)
 local SettingsValidator = require(Shared.SettingsValidator)
 local LevelProgression = require(Shared.LevelProgression)
@@ -23,7 +21,30 @@ local ProgressionVisibility = require(Shared.ProgressionVisibility)
 local DispatchPolicy = require(Shared.DispatchPolicy)
 local PhoneValidator = require(Shared.PhoneValidator)
 local PayloadInspector = require(Shared.PayloadInspector)
+local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
+
+H.test("cash drops require bounded whole pound amounts", function()
+	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
+	H.expect(MoneyDropPolicy.validateAmount(1000, 1, 1000), "maximum cash drop refused")
+	local fractional, fractionalReason = MoneyDropPolicy.validateAmount(1.5, 1, 1000)
+	H.expect(
+		not fractional and fractionalReason == "WHOLE_AMOUNT_REQUIRED",
+		"fractional drop accepted"
+	)
+	local excessive, excessiveReason = MoneyDropPolicy.validateAmount(1001, 1, 1000)
+	H.expect(not excessive and excessiveReason == "DROP_TOO_LARGE", "oversized drop accepted")
+	local nonFinite = MoneyDropPolicy.validateAmount(0 / 0, 1, 1000)
+	H.expect(not nonFinite, "non-finite drop accepted")
+end)
+
+H.test("cash drops have per-player and server population limits", function()
+	H.expect(Config.MoneyDrops.MaximumActivePerPlayer > 0, "per-player drop limit missing")
+	H.expect(
+		Config.MoneyDrops.MaximumActiveGlobal >= Config.MoneyDrops.MaximumActivePerPlayer,
+		"global drop limit is smaller than the per-player limit"
+	)
+end)
 
 H.test("public access is granted", function()
 	H.expect(Access.evaluate({ AccessType = "Public" }, {}).Allowed, "public denied")
@@ -176,6 +197,30 @@ H.test("economy prevents duplicates and overdrafts", function()
 		"duplicate accepted"
 	)
 end)
+H.test("economy defaults to bank and accepts only named accounts", function()
+	H.expect(
+		select(1, Economy.account(nil)) == "Bank",
+		"legacy transaction did not default to bank"
+	)
+	H.expect(select(1, Economy.account("Bank")) == "Bank", "bank account rejected")
+	H.expect(select(1, Economy.account("Cash")) == "Cash", "cash account rejected")
+	H.expect(select(2, Economy.account("Wallet")) == "INVALID_ACCOUNT", "unknown account accepted")
+	local valid, reason = Economy.transaction({
+		TransactionId = "cash-tx",
+		Amount = 1,
+		Direction = "Credit",
+		Account = "Cash",
+	}, {}, 0)
+	H.expect(valid and reason == nil, "cash transaction rejected")
+end)
+H.test("profile migration reconciles carried cash", function()
+	local profile = ProfileSchema.migrate({
+		SchemaVersion = 9,
+		Characters = { old = { Economy = { Balance = 10, Transactions = {} } } },
+	}, 10)
+	H.expect(profile.SchemaVersion == 11, "profile schema did not advance")
+	H.expect(profile.Characters.old.Economy.Cash == 0, "missing carried cash was not reconciled")
+end)
 H.test("character identity validates age and names", function()
 	local valid = Characters.identity(
 		{ FirstName = "Alice", LastName = "Jones", DateOfBirth = "1990-02-10" },
@@ -188,6 +233,46 @@ end)
 H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
+end)
+H.test("bank robbery economy is bounded and mode agnostic", function()
+	local robbery = Config.BankRobbery
+	H.expect(type(robbery.Tag) == "string" and robbery.Tag ~= "", "bank robbery tag missing")
+	H.expect(robbery.MinimumReward > 0, "bank robbery minimum reward invalid")
+	H.expect(robbery.MaximumReward >= robbery.MinimumReward, "bank robbery reward range invalid")
+	H.expect(robbery.RobberyDurationSeconds > 0, "bank robbery duration invalid")
+	H.expect(robbery.ServerKinds == nil, "bank robbery was restricted to one server mode")
+end)
+H.test("civilian dealerships cannot expose service vehicles", function()
+	for dealershipId, dealership in Config.Dealerships do
+		local seen = {}
+		for _, vehicleId in dealership.VehicleIds do
+			local vehicle = Config.Vehicles[vehicleId]
+			H.expect(vehicle ~= nil, "unknown dealership vehicle " .. vehicleId)
+			H.expect(
+				vehicle.Category == "Civilian",
+				"service vehicle leaked into dealership " .. dealershipId
+			)
+			H.expect(not seen[vehicleId], "duplicate dealership vehicle " .. vehicleId)
+			seen[vehicleId] = true
+		end
+	end
+end)
+H.test("service vehicles have coherent department and division routing", function()
+	for vehicleId, vehicle in Config.Vehicles do
+		if vehicle.Category == "Service" then
+			H.expect(
+				Config.Departments[vehicle.DepartmentId] ~= nil,
+				"service vehicle has no department " .. vehicleId
+			)
+			if vehicle.DivisionId then
+				local division = Config.Divisions[vehicle.DivisionId]
+				H.expect(
+					division and division.DepartmentId == vehicle.DepartmentId,
+					"vehicle division routes to another department " .. vehicleId
+				)
+			end
+		end
+	end
 end)
 H.test("Universal Projects production group links are configured", function()
 	H.expect(
@@ -287,61 +372,13 @@ H.test("progression HUD is restricted to public non-whitelisted teams", function
 		"whitelisted team received the public HUD"
 	)
 	H.expect(
-		not ProgressionVisibility.isPublicHudAllowed("Private", { AutoAssignable = true }),
-		"private community received the public HUD"
-	)
-	H.expect(
 		ProgressionVisibility.isPublicHudAllowed("Whitelisted", { AutoAssignable = true }),
-		"group whitelisted server was treated as a private community"
+		"whitelisted server did not apply the expected public-team rule"
 	)
 	H.expect(
 		not ProgressionVisibility.isPublicHudAllowed("Whitelisted", { AutoAssignable = false }),
 		"whitelisted team received the public HUD on a group whitelisted server"
 	)
-end)
-H.test("community permissions honour active role", function()
-	local template = Config.Communities.Templates.RoleplayCommunity
-	H.expect(
-		CommunityPolicy.hasPermission(template, { RoleId = "Owner", Status = "Active" }, "Anything"),
-		"owner wildcard failed"
-	)
-	H.expect(
-		not CommunityPolicy.hasPermission(
-			template,
-			{ RoleId = "Member", Status = "Suspended" },
-			"Sessions.Join"
-		),
-		"suspended member permitted"
-	)
-end)
-H.test("community hierarchy prevents peer management", function()
-	local template = Config.Communities.Templates.RoleplayCommunity
-	H.expect(
-		CommunityPolicy.canManage(
-			template,
-			{ RoleId = "Administrator", Status = "Active" },
-			{ RoleId = "Member", Status = "Active" }
-		),
-		"administrator cannot manage member"
-	)
-	H.expect(
-		not CommunityPolicy.canManage(
-			template,
-			{ RoleId = "Administrator", Status = "Active" },
-			{ RoleId = "Administrator", Status = "Active" }
-		),
-		"peer management allowed"
-	)
-end)
-H.test("community group ranks map to the highest permitted role", function()
-	local ranks = Config.Communities.GroupRoleRanks
-	H.expect(CommunityGroupPolicy.resolveRole(0, ranks) == nil, "non-member received a role")
-	H.expect(CommunityGroupPolicy.resolveRole(1, ranks) == "Member", "member rank mapped badly")
-	H.expect(
-		CommunityGroupPolicy.resolveRole(150, ranks) == "Moderator",
-		"moderator rank mapped badly"
-	)
-	H.expect(CommunityGroupPolicy.resolveRole(255, ranks) == "Owner", "owner rank mapped badly")
 end)
 H.test("spawn policy binds role to exact station point", function()
 	local allowed = SpawnPolicy.validate(

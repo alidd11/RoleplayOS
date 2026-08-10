@@ -4,6 +4,10 @@ local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
 
 local ContentValidationService = {
+	-- Unsafe imported content is a server-wide trust failure, not an optional
+	-- feature failure. Missing templates remain warnings in development, while
+	-- an executable or malformed required asset prevents the server starting.
+	Critical = true,
 	report = { Ready = {}, Missing = {}, Invalid = {}, Discovered = {}, WorldReady = {} },
 	assetIdentities = {},
 	replacements = {},
@@ -30,10 +34,15 @@ local function resolve(root: Instance, path: { string }): Instance?
 	return current
 end
 
-local function unsafeDescendant(root: Instance): Instance?
+local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 	for _, descendant in root:GetDescendants() do
 		if forbiddenClasses[descendant.ClassName] or descendant:IsA("LuaSourceContainer") then
-			return descendant
+			-- A certified repository asset may carry narrowly reviewed framework
+			-- logic. Both identity and class must match; similarly named arbitrary
+			-- scripts or remotes remain unsafe and reject production startup.
+			if type(allowed) ~= "table" or allowed[descendant.Name] ~= descendant.ClassName then
+				return descendant
+			end
 		end
 	end
 	return nil
@@ -43,25 +52,45 @@ local function validCertificationText(value: any): boolean
 	return type(value) == "string" and #value >= 3 and #value <= 240
 end
 
-local function qualityIssue(root: Instance, expectedClass: string, configuration: any): string?
+local function qualityIssue(
+	root: Instance,
+	expectedClass: string,
+	configuration: any,
+	configuredAssetId: string?
+): string?
 	local quality = configuration.ContentQuality
 	if not quality then
 		return "CONTENT_QUALITY_CONFIG_REQUIRED"
 	end
 	if quality.RequireCertification then
-		if root:GetAttribute("RoleplayOSAssetCertified") ~= true then
+		local manifest = if configuredAssetId and quality.CertifiedAssets
+			then quality.CertifiedAssets[configuredAssetId]
+			else nil
+		local certified = root:GetAttribute("RoleplayOSAssetCertified")
+		local reviewVersion = root:GetAttribute("RoleplayOSReviewVersion")
+		local source = root:GetAttribute("RoleplayOSAssetSource")
+		local realWorldReference = root:GetAttribute("RoleplayOSRealWorldReference")
+		local reviewedBy = root:GetAttribute("RoleplayOSReviewedBy")
+		if manifest then
+			certified = manifest.Certified
+			reviewVersion = manifest.ReviewVersion
+			source = manifest.Source
+			realWorldReference = manifest.RealWorldReference
+			reviewedBy = manifest.ReviewedBy
+		end
+		if certified ~= true then
 			return "CERTIFICATION_REQUIRED"
 		end
-		if root:GetAttribute("RoleplayOSReviewVersion") ~= quality.CertificationVersion then
+		if reviewVersion ~= quality.CertificationVersion then
 			return "CERTIFICATION_VERSION_INVALID"
 		end
-		if not validCertificationText(root:GetAttribute("RoleplayOSAssetSource")) then
+		if not validCertificationText(source) then
 			return "ASSET_SOURCE_REQUIRED"
 		end
-		if not validCertificationText(root:GetAttribute("RoleplayOSRealWorldReference")) then
+		if not validCertificationText(realWorldReference) then
 			return "REAL_WORLD_REFERENCE_REQUIRED"
 		end
-		if not validCertificationText(root:GetAttribute("RoleplayOSReviewedBy")) then
+		if not validCertificationText(reviewedBy) then
 			return "REVIEWER_REQUIRED"
 		end
 	end
@@ -186,7 +215,7 @@ local function worldQualityIssue(root: Instance, configuration: any): string?
 	if root:GetAttribute("RoleplayOSAssetKind") == nil then
 		return "WORLD_ASSET_KIND_REQUIRED"
 	end
-	local certification = qualityIssue(root, "WorldAsset", configuration)
+	local certification = qualityIssue(root, "WorldAsset", configuration, nil)
 	if certification then
 		return certification
 	end
@@ -464,7 +493,12 @@ function ContentValidationService:_check(
 	end
 	local template = resolve(assets, path)
 	if not template then
-		table.insert(self.report.Missing, kind .. ":" .. id .. ":" .. table.concat(path, "/"))
+		local issue = kind .. ":" .. id .. ":" .. table.concat(path, "/")
+		if self.context.Configuration.Framework.Environment == "Production" then
+			table.insert(self.report.Invalid, issue .. ":REQUIRED_TEMPLATE_MISSING")
+		else
+			table.insert(self.report.Missing, issue)
+		end
 		return
 	end
 	if not template:IsA(expectedClass) then
@@ -476,7 +510,9 @@ function ContentValidationService:_check(
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":CONFIG_ID_MISMATCH")
 		return
 	end
-	local unsafe = unsafeDescendant(template)
+	local manifest = self.context.Configuration.ContentQuality.CertifiedAssets[id]
+	local unsafe =
+		unsafeDescendant(template, if manifest then manifest.AllowedUnsafeDescendants else nil)
 	if unsafe then
 		table.insert(
 			self.report.Invalid,
@@ -484,7 +520,7 @@ function ContentValidationService:_check(
 		)
 		return
 	end
-	local qualityProblem = qualityIssue(template, expectedClass, self.context.Configuration)
+	local qualityProblem = qualityIssue(template, expectedClass, self.context.Configuration, id)
 	if qualityProblem then
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":" .. qualityProblem)
 		return
@@ -523,7 +559,11 @@ function ContentValidationService:Start()
 	end
 	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 	if not assets then
-		self.context.Logger:Warning("RoleplayOS content root is missing", {})
+		if self.context.Configuration.Framework.Environment == "Production" then
+			table.insert(self.report.Invalid, "ContentRoot:RoleplayOSAssets:REQUIRED")
+		else
+			self.context.Logger:Warning("RoleplayOS content root is missing", {})
+		end
 	else
 		self:_discover(assets)
 		for id, definition in self.context.Configuration.Vehicles do
@@ -560,7 +600,14 @@ function ContentValidationService:Start()
 	for _, issue in self.report.Missing do
 		self.context.Logger:Warning("Missing RoleplayOS content", { Issue = issue })
 	end
-	if #self.report.Invalid > 0 then
+	-- The development baseplate is where unsafe imports are deliberately opened,
+	-- audited and replaced. Keep them unavailable and visible in its report, but
+	-- do not empty the test server before developers can inspect the problem.
+	-- Production remains fail-closed: no live server starts with rejected content.
+	if
+		#self.report.Invalid > 0
+		and self.context.Configuration.Framework.Environment == "Production"
+	then
 		error("RoleplayOS content audit rejected unsafe or invalid required content")
 	end
 end

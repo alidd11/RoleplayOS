@@ -37,6 +37,12 @@ function StartMenuService:Build(player: Player): (any?, string?)
 	end
 	local roles = {}
 	for _, role in self.context.Configuration.Roles do
+		-- PoliceOfficer is retained in configuration as a compatibility alias for
+		-- older duty records. Frontline Policing is the single player-facing base
+		-- police role, so sending both would render a duplicate choice.
+		if role.Id == "PoliceOfficer" then
+			continue
+		end
 		local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
 		if access.Allowed then
 			self:_ensureDutyProfile(player, session, role.DepartmentId)
@@ -45,6 +51,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Id = role.Id,
 			Name = role.Name,
 			DepartmentId = role.DepartmentId,
+			UniformId = role.UniformId,
 			Visible = role.Access.DisplayWhenLocked ~= false or access.Allowed,
 			Locked = not access.Allowed,
 			LockType = role.Access.AccessType,
@@ -59,6 +66,18 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Spawns = self.context.Services
 				:Get("StationService")
 				:GetAvailableSpawns(role.Id, role.DepartmentId),
+			PreviewUniform = if role.UniformId
+				then (function()
+					local uniform = self.context.Configuration.Uniforms[role.UniformId]
+					if not uniform then
+						return nil
+					end
+					return {
+						ShirtTemplate = uniform.ShirtTemplate,
+						TrousersTemplate = uniform.TrousersTemplate,
+					}
+				end)()
+				else nil,
 		})
 	end
 	local dutyProfiles = {}
@@ -71,7 +90,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		})
 	end
 	local slotCount = self.context.Services:Get("CharacterService"):SlotAllowance(session)
-	local server = self.context.Services:Get("CommunityServerService"):GetServerContext(player)
+	local server = self.context.Services:Get("ServerModeService"):GetServerContext(player)
 	local gamepasses = {}
 	for definitionId, definition in self.context.Configuration.Gamepasses do
 		local gamepassId = definition.GamepassId
@@ -82,6 +101,10 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			GamepassId = if configured then gamepassId else nil,
 			Name = definition.Name,
 			Description = definition.Description,
+			-- Artwork is presentation data only. The entitlement still uses the
+			-- server-owned GamepassId and is rechecked before access is granted.
+			ImageAssetId = definition.ImageAssetId or definition.IconAssetId,
+			PriceInRobux = definition.PriceInRobux,
 			Configured = configured,
 			Owned = configured and session.Profile.GamepassCache[tostring(gamepassId)] == true,
 			AvailableInServer = not publicTeam or server.Kind == "Public",
@@ -90,6 +113,23 @@ function StartMenuService:Build(player: Player): (any?, string?)
 				elseif string.find(definitionId, "Civilian", 1, true) then "Civilian equipment"
 				else "Upgrades",
 		})
+	end
+	if server.Kind == "Public" then
+		for _, definition in self.context.Configuration.Custody.PublicEarlyRelease.Products do
+			local configured = type(definition.ProductId) == "number" and definition.ProductId > 0
+			table.insert(gamepasses, {
+				Id = "EarlyRelease_" .. definition.Id,
+				ProductId = if configured then definition.ProductId else nil,
+				PurchaseType = "DeveloperProduct",
+				Name = definition.Name,
+				Description = definition.Description,
+				PriceInRobux = definition.PriceRobux,
+				Configured = configured,
+				Owned = false,
+				AvailableInServer = true,
+				Category = "Custody credits",
+			})
+		end
 	end
 	table.sort(gamepasses, function(a, b)
 		if a.Category == b.Category then

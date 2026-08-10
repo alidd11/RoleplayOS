@@ -103,17 +103,12 @@ end
 -- Driving it, not owning it and not sitting in it: a passenger reaching for the
 -- lights is the same problem as a civilian who found the switch.
 function EmergencyLightsService:_drivenVehicle(player: Player): Instance?
-	local active = self.context.Services:Get("VehicleService").activeByUserId[player.UserId]
-	if not active or not active.Model or not active.Model.Parent then
+	local humanoid = player.Character and player.Character:FindFirstChildWhichIsA("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	if not seat or not seat:IsA("VehicleSeat") then
 		return nil
 	end
-	local seat = active.Seat
-	if not seat or seat.Occupant == nil then
-		return nil
-	end
-	-- The occupant is a Humanoid; its parent is the character sitting there.
-	local character = seat.Occupant.Parent
-	return if character ~= nil and character == player.Character then active.Model else nil
+	return seat:FindFirstAncestorOfClass("Model")
 end
 
 -- Applies a request, or says why not.

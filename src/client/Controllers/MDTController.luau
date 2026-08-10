@@ -9,17 +9,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local TacticalMap = require(script.Parent.Parent.UI.TacticalMap)
+local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
-local C = {
-	Surface = Color3.fromRGB(6, 16, 28),
-	Raised = Color3.fromRGB(14, 32, 50),
-	Border = Color3.fromRGB(48, 91, 121),
-	Text = Color3.fromRGB(244, 247, 252),
-	Muted = Color3.fromRGB(151, 163, 184),
-	Accent = Color3.fromRGB(27, 137, 191),
-}
+local C = TerminalTheme
 
 local function corner(parent: Instance, radius: number)
 	local item = Instance.new("UICorner")
@@ -165,7 +159,7 @@ function MDTController:_mount()
 	corner(homeIndicator, 3)
 	local classification = Instance.new("Frame")
 	classification.Size = UDim2.new(1, 0, 0, 4)
-	classification.BackgroundColor3 = Color3.fromRGB(241, 176, 47)
+	classification.BackgroundColor3 = C.Classification
 	classification.BorderSizePixel = 0
 	classification.Parent = shell
 
@@ -181,7 +175,7 @@ function MDTController:_mount()
 	secure.Position = UDim2.new(1, -104, 0, 42)
 	secure.Size = UDim2.fromOffset(150, 16)
 	secure.TextXAlignment = Enum.TextXAlignment.Right
-	secure.TextColor3 = Color3.fromRGB(89, 215, 144)
+	secure.TextColor3 = C.Secure
 	self.secureLabel = secure
 	local close = button(shell, "CLOSE")
 	close.AnchorPoint = Vector2.new(1, 0)
@@ -382,22 +376,28 @@ function MDTController:_mount()
 	self.warrantExpiry = expiryInput
 
 	local function setOpen(open: boolean)
-		if not self.allowed then
+		if open and not self.allowed then
 			return
 		end
-		chassis.Visible = open
+		local actuallyOpen = open and self.allowed == true
+		chassis.Visible = actuallyOpen
 		-- The ambient heads-up display stands down while a full device is on
 		-- screen rather than showing through it.
 		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		if playerGui then
-			playerGui:SetAttribute("RoleplayOSDeviceOpen", open)
+			playerGui:SetAttribute("RoleplayOSMDTOpen", actuallyOpen)
+			playerGui:SetAttribute(
+				"RoleplayOSDeviceOpen",
+				actuallyOpen or playerGui:GetAttribute("RoleplayOSPhoneOpen") == true
+			)
 		end
-		if open then
+		if actuallyOpen then
 			-- Map geometry is static, so rebuild on open rather than per refresh.
 			self.map:Rebuild()
 			self:RefreshMap()
 		end
 	end
+	self.setOpen = setOpen
 	launcher.Activated:Connect(function()
 		setOpen(not chassis.Visible)
 	end)
@@ -708,9 +708,11 @@ function MDTController:RefreshAccess()
 			.. tostring(response.Data.DepartmentId or "AUTHORISED"):upper()
 	end
 	self.gui.Enabled = self.allowed
-	self.launcher.Visible = self.allowed
+	-- Access is surfaced through the toolbar tool (and M), not a second floating
+	-- HUD button competing with the minimap and mobile vehicle controls.
+	self.launcher.Visible = false
 	if not self.allowed then
-		self.shell.Visible = false
+		self.setOpen(false)
 	end
 	if self.warrantAction then
 		self.warrantAction.Visible = self.selectedRecord ~= nil and self.canWriteWarrants
@@ -752,7 +754,7 @@ function MDTController:Start()
 				GuiService.SelectedObject = self.warrantAction
 				return Enum.ContextActionResult.Sink
 			elseif self.shell.Visible then
-				self.shell.Visible = false
+				self.setOpen(false)
 				GuiService.SelectedObject = self.launcher
 				return Enum.ContextActionResult.Sink
 			end
@@ -765,7 +767,7 @@ function MDTController:Start()
 		then
 			return Enum.ContextActionResult.Pass
 		end
-		self.shell.Visible = not self.shell.Visible
+		self.setOpen(not self.shell.Visible)
 		if self.shell.Visible and UserInputService.GamepadEnabled then
 			GuiService.SelectedObject = self.close
 		elseif
@@ -789,6 +791,37 @@ function MDTController:Start()
 	table.insert(
 		self.connections,
 		UserInputService.LastInputTypeChanged:Connect(updateShortcutLabel)
+	)
+	local watchedTools = {}
+	local function watchTool(tool: Instance)
+		if not tool:IsA("Tool") or tool.Name ~= "MDT" or watchedTools[tool] then
+			return
+		end
+		watchedTools[tool] = true
+		local function open()
+			if self.allowed then
+				self.setOpen(true)
+			end
+		end
+		table.insert(self.connections, tool.Equipped:Connect(open))
+		table.insert(self.connections, tool.Activated:Connect(open))
+		table.insert(
+			self.connections,
+			tool.Unequipped:Connect(function()
+				self.setOpen(false)
+			end)
+		)
+	end
+	local backpack = Players.LocalPlayer:WaitForChild("Backpack")
+	for _, item in backpack:GetChildren() do
+		watchTool(item)
+	end
+	table.insert(self.connections, backpack.ChildAdded:Connect(watchTool))
+	table.insert(
+		self.connections,
+		Players.LocalPlayer.CharacterAdded:Connect(function(character)
+			table.insert(self.connections, character.ChildAdded:Connect(watchTool))
+		end)
 	)
 	table.insert(
 		self.connections,
@@ -844,7 +877,7 @@ function MDTController:Start()
 		if layout.Vehicle ~= self.inVehicle then
 			self.inVehicle = layout.Vehicle
 			if layout.Vehicle then
-				self.shell.Visible = false
+				self.setOpen(false)
 			end
 		end
 	end)

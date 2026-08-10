@@ -2,7 +2,7 @@
 
 local Players = game:GetService("Players")
 
-local ExperienceAccessService = { Critical = true, connections = {} }
+local ExperienceAccessService = { Critical = true, connections = {}, verified = {} }
 
 function ExperienceAccessService:Init(context: any)
 	self.context = context
@@ -42,7 +42,7 @@ function ExperienceAccessService:_check(player: Player)
 	if not player:IsDescendantOf(Players) then
 		return
 	end
-	local linkId = self.context.Services:Get("CommunityServerService"):RequiredGroupLinkId()
+	local linkId = self.context.Services:Get("ServerModeService"):RequiredGroupLinkId()
 	if not linkId then
 		-- No gate resolved. On the public place that is the correct answer and
 		-- the whole reason it is the public place.
@@ -63,6 +63,8 @@ function ExperienceAccessService:_check(player: Player)
 				UserId = player.UserId,
 			})
 			player:Kick("This world could not confirm its access settings. Please rejoin shortly.")
+		else
+			self.verified[player.UserId] = true
 		end
 		return
 	end
@@ -87,6 +89,7 @@ function ExperienceAccessService:_check(player: Player)
 		membership.IsMember == true
 		and (membership.HighestRank or 0) >= (membership.MinimumRank or 1)
 	then
+		self.verified[player.UserId] = true
 		self.context.Logger:Info("Experience group access granted", {
 			UserId = player.UserId,
 			GroupId = membership.GroupId,
@@ -106,16 +109,28 @@ function ExperienceAccessService:_check(player: Player)
 	)
 end
 
+function ExperienceAccessService:IsVerified(player: Player): boolean
+	return player:IsDescendantOf(Players) and self.verified[player.UserId] == true
+end
+
 function ExperienceAccessService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
+			self.verified[player.UserId] = nil
 			task.spawn(function()
 				self:_check(player)
 			end)
 		end)
 	)
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			self.verified[player.UserId] = nil
+		end)
+	)
 	for _, player in Players:GetPlayers() do
+		self.verified[player.UserId] = nil
 		task.spawn(function()
 			self:_check(player)
 		end)
@@ -127,6 +142,7 @@ function ExperienceAccessService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	table.clear(self.verified)
 end
 
 return ExperienceAccessService

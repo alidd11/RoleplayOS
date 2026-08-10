@@ -123,6 +123,13 @@ end
 
 function PublicSafetyController:_showCard(card: any)
 	local police = card.CredentialType == "Police"
+	if police then
+		-- The warrant-card Tool has its own fitted SurfaceGui and is visible in
+		-- the officer's hand. The generic licence overlay does not share its
+		-- proportions, so displaying both caused text to overflow the asset.
+		self.card.Visible = false
+		return
+	end
 	self.card.BackgroundColor3 = if police
 		then Color3.fromRGB(234, 237, 242)
 		else Color3.fromRGB(225, 217, 195)
@@ -193,27 +200,24 @@ function PublicSafetyController:_watchTool(tool: Tool)
 	)
 end
 
-function PublicSafetyController:_scan(container: Instance)
+function PublicSafetyController:_scan(container: Instance, slot: string)
 	for _, child in container:GetChildren() do
 		if child:IsA("Tool") then
 			self:_watchTool(child)
 		end
 	end
-	-- One scan connection at a time. A fresh one was added on every respawn and
-	-- never released, so a long session left dozens of dead listeners behind on
-	-- containers that no longer existed.
-	for _, connection in self.scanConnections do
-		connection:Disconnect()
+	-- Backpack and Character must be watched simultaneously. Replacing the
+	-- global listener here used to make credentials issued after duty started
+	-- visible but inert because scanning Character disconnected Backpack.
+	local existing = self.scanConnections[slot]
+	if existing then
+		existing:Disconnect()
 	end
-	table.clear(self.scanConnections)
-	table.insert(
-		self.scanConnections,
-		container.ChildAdded:Connect(function(child)
-			if child:IsA("Tool") then
-				self:_watchTool(child)
-			end
-		end)
-	)
+	self.scanConnections[slot] = container.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			self:_watchTool(child)
+		end
+	end)
 end
 
 function PublicSafetyController:_mount()
@@ -490,14 +494,14 @@ function PublicSafetyController:Start()
 		"Closes the restraint and custody action panel"
 	)
 	local player = Players.LocalPlayer
-	self:_scan(player:WaitForChild("Backpack"))
+	self:_scan(player:WaitForChild("Backpack"), "Backpack")
 	if player.Character then
-		self:_scan(player.Character)
+		self:_scan(player.Character, "Character")
 	end
 	table.insert(
 		self.connections,
 		player.CharacterAdded:Connect(function(character)
-			self:_scan(character)
+			self:_scan(character, "Character")
 		end)
 	)
 end
@@ -507,6 +511,10 @@ function PublicSafetyController:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for _, connection in self.scanConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.scanConnections)
 	if self.unbindLayout then
 		self.unbindLayout()
 	end

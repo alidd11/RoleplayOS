@@ -1,12 +1,14 @@
 --!strict
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
 
 local CustodyController = {
 	connections = {},
 	targetUserId = nil,
 	selectedCodes = {},
 	policy = {},
+	policyMetadata = {},
 }
 
 local function corner(parent: Instance, radius: number)
@@ -104,12 +106,25 @@ function CustodyController:_updateSentenceHud()
 	if active then
 		self.sentenceTime.Text = formatTime(remaining)
 	end
+	local credits = math.max(0, math.floor(tonumber(self.policyMetadata.EarlyReleaseCredits) or 0))
+	local products = self.policyMetadata.EarlyReleaseProducts or {}
+	local single = products[1]
+	self.earlyRelease.Visible = active and self.policyMetadata.ServerKind == "Public"
+	self.earlyRelease.Text = if credits > 0
+		then string.format("USE CREDIT · %d", credits)
+		else string.format(
+			"EARLY RELEASE · %d R$",
+			tonumber(single and single.PriceRobux) or 19
+		)
 end
 
 function CustodyController:_refreshAccess(duty: any?)
 	local activeDuty = duty or self.context.Controllers.DutyController.active
 	local authorised = activeDuty ~= nil and activeDuty.DepartmentId == "Police"
-	self.launcher.Visible = authorised
+	-- Booking is deliberately contextual. The permanent HUD launcher competed
+	-- with vehicle and mobile controls; restraint actions are opened from the
+	-- selected detainee flow in PublicSafetyController instead.
+	self.launcher.Visible = false
 	if not authorised then
 		self.panel.Visible = false
 		self.targetUserId = nil
@@ -241,7 +256,7 @@ function CustodyController:_mount()
 
 	local sentenceHud = Instance.new("Frame")
 	sentenceHud.AnchorPoint = Vector2.new(0.5, 0)
-	sentenceHud.Size = UDim2.fromOffset(230, 48)
+	sentenceHud.Size = UDim2.fromOffset(340, 48)
 	sentenceHud.BackgroundColor3 = Color3.fromRGB(11, 19, 30)
 	sentenceHud.BackgroundTransparency = 0.08
 	sentenceHud.BorderSizePixel = 0
@@ -250,7 +265,7 @@ function CustodyController:_mount()
 	corner(sentenceHud, 12)
 	local sentenceLabel = Instance.new("TextLabel")
 	sentenceLabel.Position = UDim2.fromOffset(14, 7)
-	sentenceLabel.Size = UDim2.new(1, -82, 0, 14)
+	sentenceLabel.Size = UDim2.fromOffset(140, 14)
 	sentenceLabel.BackgroundTransparency = 1
 	sentenceLabel.Font = Enum.Font.GothamBold
 	sentenceLabel.Text = "IN CUSTODY"
@@ -260,14 +275,14 @@ function CustodyController:_mount()
 	sentenceLabel.Parent = sentenceHud
 	local sentenceSub = sentenceLabel:Clone()
 	sentenceSub.Position = UDim2.fromOffset(14, 23)
-	sentenceSub.Size = UDim2.new(1, -82, 0, 16)
+	sentenceSub.Size = UDim2.fromOffset(140, 16)
 	sentenceSub.Font = Enum.Font.Gotham
 	sentenceSub.Text = "REMAINING SIMULATION TIME"
 	sentenceSub.TextColor3 = Color3.fromRGB(224, 232, 241)
 	sentenceSub.TextSize = 9
 	sentenceSub.Parent = sentenceHud
 	local sentenceTime = sentenceLabel:Clone()
-	sentenceTime.Position = UDim2.new(1, -72, 0, 0)
+	sentenceTime.Position = UDim2.fromOffset(154, 0)
 	sentenceTime.Size = UDim2.fromOffset(60, 48)
 	sentenceTime.Text = "00:00"
 	sentenceTime.TextColor3 = Color3.fromRGB(99, 190, 255)
@@ -276,6 +291,40 @@ function CustodyController:_mount()
 	sentenceTime.Parent = sentenceHud
 	self.sentenceHud = sentenceHud
 	self.sentenceTime = sentenceTime
+	local earlyRelease = button(sentenceHud, "EARLY RELEASE · 19 R$")
+	earlyRelease.Position = UDim2.new(1, -104, 0, 6)
+	earlyRelease.Size = UDim2.fromOffset(96, 36)
+	earlyRelease.BackgroundColor3 = Color3.fromRGB(35, 101, 181)
+	earlyRelease.TextSize = 9
+	earlyRelease.Visible = false
+	self.earlyRelease = earlyRelease
+	table.insert(
+		self.connections,
+		earlyRelease.Activated:Connect(function()
+			local credits =
+				math.max(0, math.floor(tonumber(self.policyMetadata.EarlyReleaseCredits) or 0))
+			if credits > 0 then
+				local response =
+					self.context.Controllers.NetworkController:Request("UseEarlyReleaseCredit", {})
+				if response.Data then
+					self.policyMetadata = response.Data
+				end
+				self.context.Controllers.NotificationController:Show(response.Message, "Custody")
+				self:_updateSentenceHud()
+				return
+			end
+			local product = (self.policyMetadata.EarlyReleaseProducts or {})[1]
+			local productId = tonumber(product and product.ProductId) or 0
+			if productId > 0 then
+				MarketplaceService:PromptProductPurchase(Players.LocalPlayer, productId)
+			else
+				self.context.Controllers.NotificationController:Show(
+					"Early release purchases are not configured yet.",
+					"Custody"
+				)
+			end
+		end)
+	)
 
 	table.insert(
 		self.connections,
@@ -326,8 +375,10 @@ function CustodyController:Start()
 			self.context.Controllers.NetworkController:Request("GetCustodyPolicy", {})
 		if policyResponse.Success and policyResponse.Data then
 			self.policy = policyResponse.Data.Offences or {}
+			self.policyMetadata = policyResponse.Data
 		end
 		self:_refreshPolicy()
+		self:_updateSentenceHud()
 	end)
 
 	local player = Players.LocalPlayer
@@ -361,6 +412,13 @@ function CustodyController:Start()
 						"An officer has recorded a search under " .. tostring(payload.Power) .. ".",
 						"Search"
 					)
+				elseif payload.Kind == "EarlyRelease" then
+					self.policyMetadata.EarlyReleaseCredits = payload.Credits or 0
+					self.context.Controllers.NotificationController:Show(
+						"You have been released. Your criminal record remains unchanged.",
+						"Custody"
+					)
+					self:_updateSentenceHud()
 				end
 			end)
 		)

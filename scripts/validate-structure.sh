@@ -16,4 +16,9 @@ for path in "${required[@]}"; do
 done
 
 python3 scripts/validate-network-limits.py
+python3 scripts/validate-deployment.py
+grep -q "Critical = true" src/server/Services/ContentValidationService.luau || {
+  echo "ContentValidationService must remain critical; unsafe imported assets cannot be ignored." >&2
+  exit 1
+}
 echo "Repository structure is valid."

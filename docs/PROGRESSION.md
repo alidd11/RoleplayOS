@@ -8,4 +8,4 @@ Completed validated shift tasks award the configured job XP. The employment reco
 
 Physical job adapters must issue server-side task proofs through `ShiftService`. Clients must never provide XP amounts, levels, reward reasons or completion authority.
 
-The compact public progression HUD appears only when the server is public, the character is active and the Roblox team is configured as auto-assignable. Its expandable catalogue lists every public role and public job. Whitelisted teams and private-community servers fail the visibility policy on the server and receive no HUD data.
+The compact public progression HUD appears only when the server is public, the character is active and the Roblox team is configured as auto-assignable. Its expandable catalogue lists every public role and public job. Whitelisted teams fail the visibility policy on the server and receive no HUD data.

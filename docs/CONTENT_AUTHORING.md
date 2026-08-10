@@ -42,7 +42,7 @@ For a newly discovered vehicle, the `Price` attribute is its authoritative serve
 | `GamepassId` | Number | No | Requires this gamepass before purchase/spawn. |
 | `RoleplayOSAssetId` | String | No | Stable ID when it must differ from the model name. |
 
-The player never sends a price. The purchase request contains the stable vehicle ID; `DealershipService` resolves the price on the server, debits the selected character, creates the persistent ownership record, and issues an automatic refund if record creation fails.
+The built-in dealership and vehicle spawner have been removed. A replacement must resolve configured prices on the server and call the existing economy and vehicle-ownership services; clients must never supply authoritative prices.
 
 Example standard vehicle:
 
