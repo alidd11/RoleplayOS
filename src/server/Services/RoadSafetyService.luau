@@ -20,6 +20,8 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
+local RolePermissions =
+	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
 
 -- The name a camera system looks for. A BindableFunction rather than a module,
 -- so a script that knows nothing about RoleplayOS and cannot require anything
@@ -646,10 +648,15 @@ function RoadSafetyService:IsExempt(player: Player, vehicle: Instance?): boolean
 	if settings.ExemptRequiresDuty ~= true then
 		return true
 	end
-	-- On duty with an emergency service. Without this, anybody who got hold of a
-	-- marked car and found the light switch would be exempt.
+	-- Mirror EmergencyLightsService's authorisation exactly. A duty record alone
+	-- is not enough: civilian jobs, support roles, and roles such as PCSO may be
+	-- on duty while still not being authorised to run an emergency response.
 	local duty = self.context.Services:Get("DutyService"):Get(player)
-	return duty ~= nil and type(duty.DepartmentId) == "string"
+	local lighting = self.context.Configuration.EmergencyLighting
+	return duty ~= nil
+		and type(duty.DepartmentId) == "string"
+		and lighting.Departments[duty.DepartmentId] ~= nil
+		and RolePermissions.has(self.context.Configuration, duty, "EmergencyLights")
 end
 
 -- The penalty for how far over the limit somebody was.

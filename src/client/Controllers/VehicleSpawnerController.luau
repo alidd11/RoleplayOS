@@ -67,6 +67,7 @@ function VehicleSpawnerController:_customPlate(
 	input.TextColor3 = Color3.fromRGB(12, 15, 18)
 	input.PlaceholderColor3 = Color3.fromRGB(82, 73, 43)
 	input.TextSize = 22
+	input.TextYAlignment = Enum.TextYAlignment.Center
 	input.ZIndex = 21
 	input.Parent = dialog
 	local inputCorner = Instance.new("UICorner")

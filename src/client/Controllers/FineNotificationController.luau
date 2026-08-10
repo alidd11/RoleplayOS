@@ -57,6 +57,7 @@ function FineNotificationController:_mount()
 	title.TextSize = 13
 	title.TextTransparency = 1
 	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.TextYAlignment = Enum.TextYAlignment.Center
 	title.Parent = banner
 	self.title = title
 

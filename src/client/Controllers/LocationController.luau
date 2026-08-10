@@ -58,6 +58,7 @@ function LocationController:_mount()
 	street.TextSize = 19
 	street.TextStrokeTransparency = 0.65
 	street.TextTruncate = Enum.TextTruncate.AtEnd
+	street.TextYAlignment = Enum.TextYAlignment.Center
 	street.Size = UDim2.new(1, 0, 0, 24)
 	street.Parent = holder
 	self.streetLabel = street
@@ -71,6 +72,7 @@ function LocationController:_mount()
 	district.TextSize = 12
 	district.TextStrokeTransparency = 0.8
 	district.TextTruncate = Enum.TextTruncate.AtEnd
+	district.TextYAlignment = Enum.TextYAlignment.Center
 	district.Position = UDim2.fromOffset(0, 24)
 	district.Size = UDim2.new(1, 0, 0, 16)
 	district.Parent = holder

@@ -32,6 +32,7 @@ local function makeLabel(parent: Instance, text: string, size: number): TextLabe
 	item.TextColor3 = C.Text
 	item.TextSize = size
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end

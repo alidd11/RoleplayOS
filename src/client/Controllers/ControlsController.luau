@@ -129,6 +129,7 @@ local function textLabel(parent: Instance, text: string, size: number): TextLabe
 	label.TextSize = size
 	label.TextWrapped = true
 	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
 	label.Parent = parent
 	return label
 end

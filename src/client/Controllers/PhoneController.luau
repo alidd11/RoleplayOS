@@ -37,6 +37,7 @@ local function label(parent: Instance, value: string, size: number, bold: boolea
 	item.TextSize = size
 	item.TextWrapped = true
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end
@@ -69,7 +70,7 @@ local function input(parent: Instance, placeholder: string, multiline: boolean?)
 	item.TextSize = 12
 	item.TextWrapped = multiline == true
 	item.TextXAlignment = Enum.TextXAlignment.Left
-	item.TextYAlignment = Enum.TextYAlignment.Top
+	item.TextYAlignment = if multiline then Enum.TextYAlignment.Top else Enum.TextYAlignment.Center
 	item.Parent = parent
 	corner(item, 10)
 	local pad = Instance.new("UIPadding")

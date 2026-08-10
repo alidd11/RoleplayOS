@@ -75,6 +75,8 @@ function CCTVController:_mount()
 	name.TextColor3 = Color3.fromRGB(240, 245, 252)
 	name.TextSize = 12
 	name.TextWrapped = true
+	name.TextXAlignment = Enum.TextXAlignment.Center
+	name.TextYAlignment = Enum.TextYAlignment.Center
 	name.Parent = bar
 	self.cameraName = name
 	table.insert(

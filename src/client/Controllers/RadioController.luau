@@ -32,6 +32,7 @@ local function text(parent: Instance, value: string, size: number, bold: boolean
 	item.TextSize = size
 	item.TextWrapped = true
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end

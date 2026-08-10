@@ -98,6 +98,7 @@ local function text(parent: Instance, value: string, size: number, bold: boolean
 	item.TextColor3 = C.Text
 	item.TextSize = size
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end
@@ -314,6 +315,7 @@ function MDTController:_mount()
 	input.TextColor3 = C.Text
 	input.TextSize = 13
 	input.TextXAlignment = Enum.TextXAlignment.Left
+	input.TextYAlignment = Enum.TextYAlignment.Center
 	input.Position = UDim2.fromOffset(22, 119)
 	input.Size = UDim2.new(0.62, -34, 0, 42)
 	input.Parent = shell
@@ -453,6 +455,7 @@ function MDTController:_mount()
 	expiryInput.Text = ""
 	expiryInput.TextColor3 = C.Text
 	expiryInput.TextSize = 11
+	expiryInput.TextYAlignment = Enum.TextYAlignment.Center
 	expiryInput.ZIndex = 21
 	expiryInput.Parent = warrantModal
 	corner(expiryInput, 8)

@@ -32,6 +32,8 @@ local function bar(parent: Instance, name: string, colour: Color3, x: number): F
 	label.Text = name
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextSize = 9
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
 	label.ZIndex = 2
 	label.Parent = container
 	return container

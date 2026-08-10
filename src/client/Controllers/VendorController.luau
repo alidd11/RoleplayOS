@@ -35,6 +35,7 @@ local function label(parent: Instance, text: string, size: number, colour: Color
 	item.TextColor3 = colour
 	item.TextSize = size
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end

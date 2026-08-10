@@ -116,6 +116,7 @@ local function label(parent: Instance, font: Enum.Font, size: number, colour: Co
 	-- a readout has to survive both a bright sky and a dark road.
 	item.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	item.TextStrokeTransparency = 0.45
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end

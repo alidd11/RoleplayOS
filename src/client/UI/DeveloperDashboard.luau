@@ -305,6 +305,7 @@ local function input(parent: Instance, placeholder: string): TextBox
 	item.TextColor3 = COLOURS.Text
 	item.TextSize = 15
 	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Size = UDim2.new(1, 0, 0, 46)
 	item.Parent = parent
 	corner(item, 9)

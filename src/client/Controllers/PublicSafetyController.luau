@@ -36,6 +36,7 @@ local function label(
 	item.TextSize = textSize
 	item.TextXAlignment = Enum.TextXAlignment.Left
 	item.TextTruncate = Enum.TextTruncate.AtEnd
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
 end
