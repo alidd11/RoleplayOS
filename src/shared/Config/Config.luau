@@ -1284,6 +1284,7 @@ local Config = {
 			Id = "CityCentre",
 			Name = "City Centre",
 			DepartmentIds = {
+				"Civilian",
 				"Police",
 				"Ambulance",
 				"Fire",
@@ -1311,7 +1312,9 @@ local Config = {
 			StationId = "CityCentre",
 			TeamName = "Civilian",
 			RoleIds = { "Civilian" },
-			DepartmentIds = {},
+			-- Civilian is a role department for spawn validation even though it
+			-- has no restricted emergency-service department membership.
+			DepartmentIds = { "Civilian" },
 		},
 		PoliceLockerRoom = {
 			Id = "PoliceLockerRoom",
