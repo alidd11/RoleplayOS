@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local SoundService = game:GetService("SoundService")
 local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local RadioController = { connections = {} }
@@ -70,7 +71,7 @@ function RadioController:_setExpanded(expanded: boolean)
 		self.close.Text = if expanded then "×" else "+"
 	end
 	if self.body then
-		self.body.Size = if expanded then UDim2.fromOffset(364, 360) else UDim2.fromOffset(248, 58)
+		self.body.Size = if expanded then UDim2.fromOffset(304, 286) else UDim2.fromOffset(220, 48)
 	end
 end
 
@@ -147,28 +148,35 @@ function RadioController:_render()
 		end
 	end
 	local previous = button(channelBar, "‹")
-	previous.Size = UDim2.fromOffset(30, 34)
+	previous.Size = UDim2.fromOffset(26, 30)
 	previous.Activated:Connect(function()
 		chooseChannel(-1)
 	end)
-	local channelTitle = button(channelBar, tostring(snapshot.CurrentChannelId))
-	channelTitle.Position = UDim2.fromOffset(36, 0)
-	channelTitle.Size = UDim2.new(1, -170, 0, 34)
+	local channelName = tostring(snapshot.CurrentChannelId)
+	for _, channel in snapshot.Channels do
+		if channel.Id == snapshot.CurrentChannelId then
+			channelName = tostring(channel.Name)
+			break
+		end
+	end
+	local channelTitle = button(channelBar, channelName)
+	channelTitle.Position = UDim2.fromOffset(31, 0)
+	channelTitle.Size = UDim2.new(1, -146, 0, 30)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
 	nextChannel.AnchorPoint = Vector2.new(1, 0)
-	nextChannel.Position = UDim2.new(1, -132, 0, 0)
-	nextChannel.Size = UDim2.fromOffset(30, 34)
+	nextChannel.Position = UDim2.new(1, -113, 0, 0)
+	nextChannel.Size = UDim2.fromOffset(26, 30)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local mute = button(channelBar, "MIC")
 	mute.AnchorPoint = Vector2.new(1, 0)
-	mute.Position = UDim2.new(1, -66, 0, 0)
-	mute.Size = UDim2.fromOffset(60, 34)
+	mute.Position = UDim2.new(1, -58, 0, 0)
+	mute.Size = UDim2.fromOffset(52, 30)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
@@ -177,22 +185,26 @@ function RadioController:_render()
 	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
 	panic.AnchorPoint = Vector2.new(1, 0)
-	panic.Position = UDim2.new(1, 0, 0, 0)
-	panic.Size = UDim2.fromOffset(60, 34)
+	panic.Position = UDim2.fromScale(1, 0)
+	panic.Size = UDim2.fromOffset(54, 30)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
+		if response.Success and self.panicSound then
+			self.panicSound:Play()
+		end
 		self.context.Controllers.NotificationController:Show(response.Message, "RADIO PANIC")
 	end)
 	local log = Instance.new("ScrollingFrame")
 	log.Name = "MessageLog"
 	log.BackgroundColor3 = C.Panel
+	log.BackgroundTransparency = 0.14
 	log.BorderSizePixel = 0
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	log.ScrollBarThickness = 3
-	log.Position = UDim2.fromOffset(0, 44)
-	log.Size = UDim2.new(1, 0, 1, -98)
+	log.Position = UDim2.fromOffset(0, 38)
+	log.Size = UDim2.new(1, 0, 1, -82)
 	log.Parent = self.content
 	corner(log, 10)
 	local logLayout = Instance.new("UIListLayout")
@@ -208,7 +220,7 @@ function RadioController:_render()
 	for _, entry in snapshot.Messages do
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1
-		row.Size = UDim2.new(1, 0, 0, 38)
+		row.Size = UDim2.new(1, 0, 0, 34)
 		row.Parent = log
 		local line = text(row, string.format("%s  %s", entry.Callsign, entry.Message), 11)
 		line.Size = UDim2.new(1, 0, 1, -7)
@@ -231,15 +243,15 @@ function RadioController:_render()
 	input.Text = ""
 	input.TextColor3 = C.Text
 	input.TextSize = 12
-	input.Position = UDim2.new(0, 0, 1, -42)
-	input.Size = UDim2.new(1, -74, 0, 42)
+	input.Position = UDim2.new(0, 0, 1, -34)
+	input.Size = UDim2.new(1, -62, 0, 34)
 	input.Parent = self.content
 	corner(input, 10)
 	local transmit = button(self.content, "SEND")
 	transmit.Name = "Transmit"
 	transmit.BackgroundColor3 = C.Green
-	transmit.Position = UDim2.new(1, -66, 1, -42)
-	transmit.Size = UDim2.fromOffset(66, 42)
+	transmit.Position = UDim2.new(1, -56, 1, -34)
+	transmit.Size = UDim2.fromOffset(56, 34)
 	transmit.Activated:Connect(function()
 		if input.Text == "" then
 			return
@@ -275,6 +287,12 @@ function RadioController:Start()
 	gui.ClipToDeviceSafeArea = true
 	gui.DisplayOrder = 38
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local panicSound = Instance.new("Sound")
+	panicSound.Name = "PanicConfirmation"
+	panicSound.SoundId = "rbxassetid://18714605481"
+	panicSound.Volume = 0.35
+	panicSound.Parent = SoundService
+	self.panicSound = panicSound
 	local body = Instance.new("Frame")
 	body.AnchorPoint = Vector2.new(1, 0)
 	-- Zenith's intended placement is a compact right-side panel beneath Roblox's
@@ -282,8 +300,9 @@ function RadioController:Start()
 	-- from the platform chrome; the additional offset leaves visual breathing
 	-- room below the Roblox top bar.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(364, 360)
+	body.Size = UDim2.fromOffset(304, 286)
 	body.BackgroundColor3 = C.Body
+	body.BackgroundTransparency = 0.18
 	body.BorderSizePixel = 0
 	body.Visible = false
 	body.Parent = gui
@@ -294,23 +313,23 @@ function RadioController:Start()
 	stroke.Transparency = 0.1
 	stroke.Parent = body
 	self.body = body
-	local header = text(body, "RADIO", 18, true)
-	header.Position = UDim2.fromOffset(18, 12)
+	local header = text(body, "RADIO", 16, true)
+	header.Position = UDim2.fromOffset(14, 10)
 	header.Size = UDim2.fromOffset(150, 26)
 	local callsign = text(body, "Operational channel", 10)
-	callsign.Position = UDim2.fromOffset(18, 37)
+	callsign.Position = UDim2.fromOffset(14, 33)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
 	callsign.TextColor3 = C.Muted
 	local close = button(body, "×")
-	close.Position = UDim2.new(1, -45, 0, 12)
-	close.Size = UDim2.fromOffset(30, 28)
+	close.Position = UDim2.new(1, -40, 0, 10)
+	close.Size = UDim2.fromOffset(26, 24)
 	close.Activated:Connect(function()
 		self:_setExpanded(not self.expanded)
 	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
-	content.Position = UDim2.fromOffset(18, 88)
-	content.Size = UDim2.new(1, -36, 1, -82)
+	content.Position = UDim2.fromOffset(14, 76)
+	content.Size = UDim2.new(1, -28, 1, -88)
 	content.Parent = body
 	self.content = content
 	content.Visible = false
@@ -328,8 +347,8 @@ function RadioController:Start()
 	callsignInput.TextColor3 = C.Text
 	callsignInput.TextSize = 11
 	callsignInput.Text = ""
-	callsignInput.Position = UDim2.fromOffset(18, 58)
-	callsignInput.Size = UDim2.fromOffset(120, 24)
+	callsignInput.Position = UDim2.fromOffset(14, 54)
+	callsignInput.Size = UDim2.fromOffset(112, 22)
 	callsignInput.Visible = false
 	callsignInput.Parent = body
 	corner(callsignInput, 6)
@@ -354,18 +373,18 @@ function RadioController:Start()
 		callsignInput.Visible = self.expanded
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(10, layout.NativeTop + 10)
+			body.Position = UDim2.fromOffset(10, layout.NativeTop + 4)
 			body.Size = if self.expanded
-				then UDim2.fromOffset(364, 360)
-				else UDim2.fromOffset(248, 58)
+				then UDim2.fromOffset(304, 286)
+				else UDim2.fromOffset(220, 48)
 			self.bodyScale.Scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(248, 58), 20)
+				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(220, 48), 20)
 		else
 			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(18, layout.NativeTop + 18)
+			body.Position = UDim2.fromOffset(12, layout.NativeTop + 8)
 			body.Size = if self.expanded
-				then UDim2.fromOffset(364, 360)
-				else UDim2.fromOffset(248, 58)
+				then UDim2.fromOffset(304, 286)
+				else UDim2.fromOffset(220, 48)
 			self.bodyScale.Scale = math.clamp(
 				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,
@@ -409,6 +428,9 @@ function RadioController:Destroy()
 	end
 	if self.body and self.body.Parent then
 		self.body.Parent:Destroy()
+	end
+	if self.panicSound then
+		self.panicSound:Destroy()
 	end
 	if self.unbindLayout then
 		self.unbindLayout()

@@ -891,6 +891,14 @@ function App.mount(context: any): ScreenGui
 					spawnId = role.Spawns[1].SpawnId
 				end
 			end
+			-- EnterCivilian requires the server session's ActiveCharacterId to
+			-- match the card being used. Selecting here also makes switching
+			-- between civilian identities deterministic instead of relying on a
+			-- previous session selection.
+			local selected = context.Controllers.CharacterController:Select(characterId)
+			if not selected.Success then
+				return
+			end
 			local response = context.Controllers.DutyController:EnterCivilian(characterId, spawnId)
 			if response.Success then
 				dismissToWorld()
