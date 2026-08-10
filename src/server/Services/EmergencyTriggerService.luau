@@ -31,6 +31,21 @@ function EmergencyTriggerService:_departments(instance: Instance, incident: any)
 	return if #result > 0 then result else table.clone(incident.Departments)
 end
 
+-- Sends a newly created call to every on-duty member of the requested services.
+-- Control-created calls use the same path as 999 and panic alerts, so units do
+-- not need to be sitting inside an MDT before they hear about a new incident.
+function EmergencyTriggerService:Broadcast(call: any)
+	if type(call) ~= "table" or type(call.DepartmentIds) ~= "table" then
+		return
+	end
+	for _, target in Players:GetPlayers() do
+		local duty = self.context.Services:Get("DutyService"):Get(target)
+		if duty and table.find(call.DepartmentIds, duty.DepartmentId) then
+			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
+		end
+	end
+end
+
 function EmergencyTriggerService:_near(player: Player, instance: Instance, maximum: number): boolean
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local position = if instance:IsA("BasePart")
@@ -87,12 +102,7 @@ function EmergencyTriggerService:Trigger(instance: Instance, player: Player?): (
 	if not call then
 		return nil, reason
 	end
-	for _, target in Players:GetPlayers() do
-		local duty = self.context.Services:Get("DutyService"):Get(target)
-		if duty and table.find(departments, duty.DepartmentId) then
-			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
-		end
-	end
+	self:Broadcast(call)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = if player then player.UserId else 0,
 		Action = "Emergency.Trigger",
@@ -131,12 +141,7 @@ function EmergencyTriggerService:Panic(player: Player): (any?, string?)
 	if not call then
 		return nil, reason
 	end
-	for _, target in Players:GetPlayers() do
-		local targetDuty = self.context.Services:Get("DutyService"):Get(target)
-		if targetDuty then
-			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
-		end
-	end
+	self:Broadcast(call)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		Action = "Emergency.RadioPanic",

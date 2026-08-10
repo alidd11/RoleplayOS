@@ -600,6 +600,22 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("MDTAddIncidentNote", function(payload)
+		return type(payload) == "table"
+			and type(payload.CallId) == "string"
+			and type(payload.Note) == "string"
+	end, function(player, payload, requestId)
+		local call, reason = self.context.Services
+			:Get("CallService")
+			:AddOperationalNote(player, payload.CallId, payload.Note)
+		return {
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call then "Operational note added." else "The note could not be added.",
+			Data = call,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetOwnedVehicles",
 		tablePayload,

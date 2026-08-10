@@ -393,6 +393,36 @@ function MDTController:_mount()
 	revokeAction.BackgroundColor3 = Color3.fromRGB(148, 55, 65)
 	revokeAction.Visible = false
 	self.revokeAction = revokeAction
+	local noteInput = Instance.new("TextBox")
+	noteInput.Name = "OperationalNoteInput"
+	noteInput.Position = UDim2.new(0, 16, 1, -64)
+	noteInput.Size = UDim2.new(1, -112, 0, 40)
+	noteInput.BackgroundColor3 = C.Surface
+	noteInput.BorderSizePixel = 0
+	noteInput.ClearTextOnFocus = false
+	noteInput.Font = Enum.Font.Gotham
+	noteInput.PlaceholderText = "Add operational note…"
+	noteInput.PlaceholderColor3 = C.Muted
+	noteInput.TextColor3 = C.Text
+	noteInput.TextSize = 11
+	noteInput.TextXAlignment = Enum.TextXAlignment.Left
+	noteInput.TextYAlignment = Enum.TextYAlignment.Center
+	noteInput.Visible = false
+	noteInput.Parent = detail
+	corner(noteInput, 8)
+	local notePadding = Instance.new("UIPadding")
+	notePadding.PaddingLeft = UDim.new(0, 10)
+	notePadding.PaddingRight = UDim.new(0, 10)
+	notePadding.Parent = noteInput
+	local addNote = button(detail, "ADD NOTE")
+	addNote.AnchorPoint = Vector2.new(1, 0)
+	addNote.Position = UDim2.new(1, -16, 1, -64)
+	addNote.Size = UDim2.fromOffset(82, 40)
+	addNote.BackgroundColor3 = C.Accent
+	addNote.TextSize = 9
+	addNote.Visible = false
+	self.noteInput = noteInput
+	self.addNote = addNote
 
 	local warrantModal = Instance.new("Frame")
 	warrantModal.Name = "WarrantModal"
@@ -510,6 +540,9 @@ function MDTController:_mount()
 	end)
 	revokeAction.Activated:Connect(function()
 		self:_revokeWarrant()
+	end)
+	addNote.Activated:Connect(function()
+		self:_addOperationalNote()
 	end)
 	cancelWarrant.Activated:Connect(function()
 		warrantModal.Visible = false

@@ -220,8 +220,11 @@ function DispatchController:_mount()
 	composerTitle.Position = UDim2.fromOffset(22, 18)
 	composerTitle.Size = UDim2.new(1, -44, 0, 28)
 	composerTitle.ZIndex = 22
-	local composerCopy =
-		label(composer, "Record verified information, select recipients, then deploy units.", 10)
+	local composerCopy = label(
+		composer,
+		"Record verified information, alert active units, then deploy resources.",
+		10
+	)
 	composerCopy.Position = UDim2.fromOffset(22, 47)
 	composerCopy.Size = UDim2.new(1, -44, 0, 20)
 	composerCopy.TextColor3 = C.Muted

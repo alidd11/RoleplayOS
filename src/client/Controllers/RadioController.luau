@@ -231,7 +231,7 @@ function RadioController:_render()
 		end
 	end
 	local previous = button(channelBar, "‹")
-	previous.Size = UDim2.fromOffset(26, 30)
+	previous.Size = UDim2.fromOffset(24, 30)
 	previous.Activated:Connect(function()
 		chooseChannel(-1)
 	end)
@@ -243,21 +243,21 @@ function RadioController:_render()
 		end
 	end
 	local channelTitle = button(channelBar, channelName)
-	channelTitle.Position = UDim2.fromOffset(31, 0)
-	channelTitle.Size = UDim2.fromOffset(120, 30)
+	channelTitle.Position = UDim2.fromOffset(30, 0)
+	channelTitle.Size = UDim2.fromOffset(112, 30)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
-	nextChannel.Position = UDim2.fromOffset(155, 0)
+	nextChannel.Position = UDim2.fromOffset(148, 0)
 	nextChannel.Size = UDim2.fromOffset(24, 30)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local mute = button(channelBar, "MIC")
-	mute.Position = UDim2.fromOffset(183, 0)
-	mute.Size = UDim2.fromOffset(54, 30)
+	mute.Position = UDim2.fromOffset(178, 0)
+	mute.Size = UDim2.fromOffset(48, 30)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
@@ -265,8 +265,8 @@ function RadioController:_render()
 	end)
 	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
-	panic.Position = UDim2.fromOffset(243, 0)
-	panic.Size = UDim2.fromOffset(65, 30)
+	panic.Position = UDim2.fromOffset(232, 0)
+	panic.Size = UDim2.fromOffset(58, 30)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
@@ -297,6 +297,13 @@ function RadioController:_render()
 	pad.PaddingRight = UDim.new(0, 10)
 	pad.PaddingBottom = UDim.new(0, 10)
 	pad.Parent = log
+	if #snapshot.Messages == 0 then
+		local empty = text(log, "No traffic on this channel", 11)
+		empty.LayoutOrder = 1
+		empty.Size = UDim2.new(1, 0, 0, 32)
+		empty.TextColor3 = C.Muted
+		empty.TextXAlignment = Enum.TextXAlignment.Center
+	end
 	for _, entry in snapshot.Messages do
 		local row = Instance.new("Frame")
 		row.BackgroundTransparency = 1
@@ -386,6 +393,7 @@ function RadioController:Start()
 	body.BackgroundColor3 = C.Body
 	body.BackgroundTransparency = 0.12
 	body.BorderSizePixel = 0
+	body.ClipsDescendants = true
 	body.Visible = false
 	body.Parent = gui
 	corner(body, 8)
@@ -438,7 +446,10 @@ function RadioController:Start()
 	self.bodyScale.Parent = body
 	self.resize = function(layout)
 		self.lastLayout = layout
-		local footprint = if self.expanded then Vector2.new(350, 400) else Vector2.new(235, 58)
+		local footprint = if self.expanded then Vector2.new(330, 360) else Vector2.new(235, 58)
+		content.Visible = self.expanded and self.open
+		content.Position = UDim2.fromOffset(14, if self.expanded then 76 else 0)
+		content.Size = UDim2.new(1, -28, 1, if self.expanded then -88 else 0)
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)

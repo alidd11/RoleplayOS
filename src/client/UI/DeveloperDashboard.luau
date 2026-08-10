@@ -779,15 +779,23 @@ function App.mount(context: any): ScreenGui
 		padding.Parent = modal
 		local layout = Instance.new("UIListLayout")
 		layout.Padding = UDim.new(0, 10)
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
 		layout.Parent = modal
 		local title = text(modal, "Start " .. role.Name, 23, COLOURS.Text, true)
+		title.LayoutOrder = 1
 		title.Size = UDim2.new(1, 0, 0, 34)
 		local copy =
 			text(modal, "Choose exactly where you want to report for duty.", 13, COLOURS.Muted)
+		copy.LayoutOrder = 2
 		copy.Size = UDim2.new(1, 0, 0, 30)
-		for _, spawnOption in role.Spawns or {} do
+		local spawnOptions = role.Spawns or {}
+		local modalHeight = math.min(520, math.max(390, 250 + #spawnOptions * 58))
+		modal.Size =
+			UDim2.fromOffset(math.min(480, safe.X - 32), math.min(modalHeight, safe.Y - 32))
+		for index, spawnOption in spawnOptions do
 			local displayName = string.gsub(spawnOption.SpawnId, "(%l)(%u)", "%1 %2")
 			local choice = button(modal, spawnOption.StationName .. "  ·  " .. displayName, false)
+			choice.LayoutOrder = 10 + index
 			choice.Size = UDim2.new(1, 0, 0, 48)
 			choice.Activated:Connect(function()
 				choice.Text = "Starting duty…"
@@ -806,6 +814,7 @@ function App.mount(context: any): ScreenGui
 			end)
 		end
 		local cancel = button(modal, "Cancel", false)
+		cancel.LayoutOrder = 100
 		cancel.Size = UDim2.new(1, 0, 0, 44)
 		cancel.Activated:Connect(function()
 			shade:Destroy()
@@ -1268,9 +1277,9 @@ function App.mount(context: any): ScreenGui
 			return
 		end
 		local columns = portraitCardColumns()
-		local grid = tileGrid(scroll, #jobs, 132, columns)
+		local grid = tileGrid(scroll, #jobs, 156, columns)
 		for _, job in jobs do
-			local item = card(grid, 132)
+			local item = card(grid, 156)
 			local rail = Instance.new("Frame")
 			rail.BackgroundColor3 = COLOURS.Accent
 			rail.BorderSizePixel = 0
@@ -1295,6 +1304,12 @@ function App.mount(context: any): ScreenGui
 			local jobStatus = text(item, "Job system not installed", 11, COLOURS.Muted)
 			jobStatus.Position = UDim2.fromOffset(16, 82)
 			jobStatus.Size = UDim2.new(1, -32, 0, 22)
+			local comingSoon = button(item, "COMING SOON", false)
+			comingSoon.Position = UDim2.new(1, -126, 1, -44)
+			comingSoon.Size = UDim2.fromOffset(110, 30)
+			comingSoon.TextSize = 10
+			comingSoon.TextColor3 = COLOURS.Muted
+			comingSoon.Selectable = false
 		end
 	end
 

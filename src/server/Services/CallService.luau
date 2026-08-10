@@ -1,5 +1,6 @@
 --!strict
 local HttpService = game:GetService("HttpService")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local CallService = { calls = {}, revision = 0 }
 function CallService:Init(context: any)
 	self.context = context
@@ -50,6 +51,7 @@ function CallService:Create(data: any): (any?, string?)
 		CallerName = tostring(data.CallerName or "Unknown caller"),
 		CallerNumber = tostring(data.CallerNumber or ""),
 		Notes = tostring(data.Notes or ""),
+		OperationalNotes = {},
 		CreatedByUserId = tonumber(data.CreatedByUserId) or 0,
 		UnitIds = {},
 		Status = "Open",
@@ -61,6 +63,54 @@ function CallService:Create(data: any): (any?, string?)
 	self.calls[call.CallId] = call
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallCreated", call.CallId, self.revision)
+	return call, nil
+end
+
+function CallService:AddOperationalNote(
+	player: Player,
+	callId: string,
+	rawNote: string
+): (any?, string?)
+	local call = self.calls[callId]
+	local duty = self.context.Services:Get("DutyService"):Get(player)
+	if not call or call.Status == "Resolved" then
+		return nil, "CALL_NOT_FOUND"
+	end
+	if
+		not duty
+		or not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentRead")
+	then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	if duty.DepartmentId ~= "Control" and not table.find(call.DepartmentIds, duty.DepartmentId) then
+		return nil, "CALL_NOT_RELEVANT"
+	end
+	local note = string.sub(string.match(rawNote, "^%s*(.-)%s*$") or "", 1, 300)
+	if #note < 3 then
+		return nil, "INVALID_NOTE"
+	end
+	local filtered, reason = TextFilter.forBroadcast(note, player.UserId)
+	if not filtered then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
+	end
+	call.OperationalNotes = if type(call.OperationalNotes) == "table"
+		then call.OperationalNotes
+		else {}
+	table.insert(call.OperationalNotes, {
+		Text = filtered,
+		Author = duty.Callsign or player.DisplayName,
+		DepartmentId = duty.DepartmentId,
+		CreatedAt = os.time(),
+	})
+	call.Revision += 1
+	self.revision += 1
+	self.context.Services:Get("DispatchService"):Publish("CallNoteAdded", callId, self.revision)
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = "Dispatch.CallNoteAdded",
+		Target = callId,
+		Metadata = { DepartmentId = duty.DepartmentId },
+	})
 	return call, nil
 end
 -- Moves the call a unit is assigned to on scene when that unit arrives.

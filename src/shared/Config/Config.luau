@@ -2411,6 +2411,7 @@ local Config = {
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
 			MDTRevokeWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
 			MDTGetIncidents = { Capacity = 4, RefillPerSecond = 0.25 },
+			MDTAddIncidentNote = { Capacity = 8, RefillPerSecond = 1 },
 			GetMDTAccess = { Capacity = 4, RefillPerSecond = 1 },
 			GetDispatchSnapshot = { Capacity = 6, RefillPerSecond = 1 },
 			DispatchCreateCall = { Capacity = 4, RefillPerSecond = 0.5 },

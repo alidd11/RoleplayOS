@@ -132,6 +132,7 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		CallerName = call.CallerName,
 		CallerNumber = call.CallerNumber,
 		Notes = call.Notes,
+		OperationalNotes = table.clone(call.OperationalNotes or {}),
 		DepartmentIds = table.clone(call.DepartmentIds),
 		UnitIds = table.clone(call.UnitIds),
 		PersonIds = {},

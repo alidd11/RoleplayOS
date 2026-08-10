@@ -144,6 +144,13 @@ function DispatchService:_fireAuthorised(payload: any, callId: string?)
 			self.changedEvent:FireClient(player, payload)
 		end
 	end
+	-- A Control-created call is also a live operational alert. The dispatch
+	-- board is useful for supervisors, but responding units need the same prompt
+	-- a civilian 999 call or radio panic produces even when their MDT is closed.
+	local createdCall = callId and self.context.Services:Get("CallService").calls[callId] or nil
+	if payload.Kind == "CallCreated" and createdCall and createdCall.Source == "Dispatch" then
+		self.context.Services:Get("EmergencyTriggerService"):Broadcast(createdCall)
+	end
 end
 
 function DispatchService:Publish(kind: string, id: string, revision: number)
