@@ -233,32 +233,35 @@ function RadioController:_render()
 	end
 	local channelTitle = button(channelBar, channelName)
 	channelTitle.Position = UDim2.fromOffset(31, 0)
-	channelTitle.Size = UDim2.new(1, -146, 0, 30)
+	channelTitle.Size = UDim2.new(1, -62, 0, 30)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
 	nextChannel.AnchorPoint = Vector2.new(1, 0)
-	nextChannel.Position = UDim2.new(1, -113, 0, 0)
+	nextChannel.Position = UDim2.fromScale(1, 0)
 	nextChannel.Size = UDim2.fromOffset(26, 30)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
-	local mute = button(channelBar, "MIC")
-	mute.AnchorPoint = Vector2.new(1, 0)
-	mute.Position = UDim2.new(1, -58, 0, 0)
-	mute.Size = UDim2.fromOffset(52, 30)
+	local actionBar = Instance.new("Frame")
+	actionBar.Name = "RadioActions"
+	actionBar.BackgroundTransparency = 1
+	actionBar.Position = UDim2.fromOffset(0, 38)
+	actionBar.Size = UDim2.new(1, 0, 0, 32)
+	actionBar.Parent = self.content
+	local mute = button(actionBar, "MIC")
+	mute.Size = UDim2.fromOffset(72, 30)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
 		mute.BackgroundColor3 = if self.muted then C.Card else C.Accent
 	end)
-	local panic = button(channelBar, "PANIC")
+	local panic = button(actionBar, "PANIC")
 	panic.Name = "Panic"
-	panic.AnchorPoint = Vector2.new(1, 0)
-	panic.Position = UDim2.fromScale(1, 0)
-	panic.Size = UDim2.fromOffset(54, 28)
+	panic.Position = UDim2.fromOffset(80, 0)
+	panic.Size = UDim2.fromOffset(78, 30)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
@@ -275,8 +278,8 @@ function RadioController:_render()
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	log.ScrollBarThickness = 3
-	log.Position = UDim2.fromOffset(0, 38)
-	log.Size = UDim2.new(1, 0, 1, -82)
+	log.Position = UDim2.fromOffset(0, 78)
+	log.Size = UDim2.new(1, 0, 1, -122)
 	log.Parent = self.content
 	corner(log, 10)
 	local logLayout = Instance.new("UIListLayout")
@@ -420,7 +423,7 @@ function RadioController:Start()
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
 			body.Size = UDim2.fromOffset(350, 400)
 			self.bodyScale.Scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(220, 48), 20)
+				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(350, 400), 20)
 		else
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)

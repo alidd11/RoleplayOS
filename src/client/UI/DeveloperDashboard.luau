@@ -815,6 +815,7 @@ function App.mount(context: any): ScreenGui
 	local renderPlay: () -> ()
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
+	local renderJobs: () -> ()
 	local renderStore: () -> ()
 	local renderTutorials: () -> ()
 	local renderSettings: () -> ()
@@ -1040,7 +1041,7 @@ function App.mount(context: any): ScreenGui
 	renderCareers = function()
 		renderGeneration += 1
 		clear(scroll)
-		pageTitle.Text = "Choose your role"
+		pageTitle.Text = "Emergency services"
 		pageDescription.Text = "Join a department, report for duty and start your next shift."
 
 		local roles = menuData and menuData.Roles or {}
@@ -1237,6 +1238,62 @@ function App.mount(context: any): ScreenGui
 					showDutySelection(role, dutyProfile)
 				end)
 			end
+		end
+	end
+
+	renderJobs = function()
+		renderGeneration += 1
+		clear(scroll)
+		pageTitle.Text = "Civilian jobs"
+		pageDescription.Text =
+			"Choose civilian employment systems when they are installed in this experience."
+		sectionHeading(
+			"Employment catalogue",
+			"These are safe framework slots for future job systems; no job is granted from this menu alone."
+		)
+		local jobs = {}
+		for _, job in menuData and menuData.Jobs or {} do
+			table.insert(jobs, job)
+		end
+		table.sort(jobs, function(a, b)
+			return tostring(a.Name) < tostring(b.Name)
+		end)
+		if #jobs == 0 then
+			local empty = card(scroll, 112)
+			local copy =
+				text(empty, "No civilian job systems are installed yet.", 14, COLOURS.Muted)
+			copy.Position = UDim2.fromOffset(20, 20)
+			copy.Size = UDim2.new(1, -40, 0, 28)
+			return
+		end
+		local columns = portraitCardColumns()
+		local grid = tileGrid(scroll, #jobs, 132, columns)
+		for _, job in jobs do
+			local item = card(grid, 132)
+			local rail = Instance.new("Frame")
+			rail.BackgroundColor3 = COLOURS.Accent
+			rail.BorderSizePixel = 0
+			rail.Size = UDim2.new(1, 0, 0, 3)
+			rail.Parent = item
+			local title = text(item, tostring(job.Name), 16, COLOURS.Text, true)
+			title.Position = UDim2.fromOffset(16, 18)
+			title.Size = UDim2.new(1, -32, 0, 24)
+			local access = tostring(job.Class) == "Public" and "PUBLIC EMPLOYMENT"
+				or "APPLICATION ROLE"
+			local detail = text(
+				item,
+				access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
+				11,
+				true
+			)
+			detail.Position = UDim2.fromOffset(16, 51)
+			detail.Size = UDim2.new(1, -32, 0, 20)
+			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
+				then COLOURS.Success
+				else COLOURS.Warning
+			local jobStatus = text(item, "Job system not installed", 11, COLOURS.Muted)
+			jobStatus.Position = UDim2.fromOffset(16, 82)
+			jobStatus.Size = UDim2.new(1, -32, 0, 22)
 		end
 	end
 
@@ -1924,7 +1981,8 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local playNav = addNav("Players", renderPlay)
-	addNav("Teams", renderCareers)
+	addNav("Services", renderCareers)
+	addNav("Civilian jobs", renderJobs)
 	addNav("Store", renderStore)
 	addNav("Servers", renderCommunity)
 	addNav("Help", renderTutorials)

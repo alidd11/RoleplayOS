@@ -25,6 +25,65 @@ local MAP_REFRESH_INTERVAL = 2
 local INCIDENT_REFRESH_INTERVAL = 6
 local C = TerminalTheme
 
+local DEPARTMENT_UI = {
+	Police = {
+		Title = "FORCE CONTROL  ·  OPERATIONAL MDT",
+		Subtitle = "POLICE CONTROL / INTELLIGENCE & DISPATCH  ·  RESTRICTED",
+		Accent = Color3.fromRGB(72, 132, 224),
+		Tiles = {
+			{ "Incidents", "Review live calls, attending units and scene updates.", "Incident" },
+			{ "People", "Search person records, warnings and warrants.", "Person" },
+			{ "Vehicles", "Look up registrations, keepers and vehicle markers.", "Vehicle" },
+			{ "Units & map", "See active units, incidents and locations.", "Map" },
+		},
+	},
+	Ambulance = {
+		Title = "AMBULANCE EOC  ·  OPERATIONAL CAD",
+		Subtitle = "EMERGENCY OPERATIONS CENTRE / RESPONSE & HANDOVER  ·  RESTRICTED",
+		Accent = Color3.fromRGB(74, 198, 139),
+		Tiles = {
+			{
+				"Emergency calls",
+				"Review triaged incidents and allocate response crews.",
+				"Incident",
+			},
+			{
+				"Patient records",
+				"Search person details and relevant safety information.",
+				"Person",
+			},
+			{ "Response vehicles", "Check vehicle details and operational markers.", "Vehicle" },
+			{ "Crews & map", "Track response locations and multi-agency incidents.", "Map" },
+		},
+	},
+	Fire = {
+		Title = "FIRE CONTROL  ·  MOBILISING CAD",
+		Subtitle = "FIRE CONTROL / APPLIANCE & INCIDENT MANAGEMENT  ·  RESTRICTED",
+		Accent = Color3.fromRGB(235, 104, 76),
+		Tiles = {
+			{ "Mobilisations", "Review incidents and appliance attendance status.", "Incident" },
+			{ "Risk information", "Search people and operational safety information.", "Person" },
+			{ "Appliances", "Check vehicle details and response resources.", "Vehicle" },
+			{ "Incident map", "Share locations and multi-agency situational awareness.", "Map" },
+		},
+	},
+	Control = {
+		Title = "JOINT CONTROL  ·  INCIDENT BOARD",
+		Subtitle = "MULTI-AGENCY CONTROL / DISPATCH & INFORMATION SHARING  ·  RESTRICTED",
+		Accent = Color3.fromRGB(50, 190, 188),
+		Tiles = {
+			{ "Live incidents", "Create, assign and monitor active emergency calls.", "Incident" },
+			{ "People records", "Search operational information shared with control.", "Person" },
+			{ "Vehicles", "Check registrations, keepers and markers.", "Vehicle" },
+			{ "Multi-agency map", "Coordinate units, incidents and partner activity.", "Map" },
+		},
+	},
+}
+
+local function departmentUI(departmentId: string?): any
+	return DEPARTMENT_UI[departmentId or ""] or DEPARTMENT_UI.Control
+end
+
 local function corner(parent: Instance, radius: number)
 	local item = Instance.new("UICorner")
 	item.CornerRadius = UDim.new(0, radius)
@@ -747,8 +806,35 @@ function MDTController:_renderUnitStatusChoices(statuses: { string })
 		control:Destroy()
 	end
 	table.clear(self.unitStatusButtons)
+	local labelsByDepartment = {
+		Police = {
+			Available = "AVAILABLE",
+			Assigned = "EN ROUTE",
+			OnScene = "ON SCENE",
+			Unavailable = "UNAVAILABLE",
+		},
+		Ambulance = {
+			Available = "AVAILABLE",
+			Assigned = "MOBILISED",
+			OnScene = "ON SCENE",
+			Unavailable = "AT HANDOVER",
+		},
+		Fire = {
+			Available = "AVAILABLE",
+			Assigned = "MOBILISED",
+			OnScene = "AT INCIDENT",
+			Unavailable = "UNAVAILABLE",
+		},
+		Control = {
+			Available = "AVAILABLE",
+			Assigned = "ALLOCATING",
+			OnScene = "MONITORING",
+			Unavailable = "UNAVAILABLE",
+		},
+	}
+	local labels = labelsByDepartment[self.departmentId or ""] or labelsByDepartment.Control
 	for index, status in statuses do
-		local label = string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
+		local label = labels[status] or string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
 		local control = button(self.statusStrip, label)
 		control.LayoutOrder = index
 		control.Size = UDim2.fromOffset(112, 30)
@@ -790,6 +876,18 @@ end
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
+	self.departmentId = if self.allowed then response.Data.DepartmentId else nil
+	local service = departmentUI(self.departmentId)
+	if self.serviceTitle then
+		self.serviceTitle.Text = service.Title
+		self.serviceSubtitle.Text = service.Subtitle
+	end
+	if self.classification then
+		self.classification.BackgroundColor3 = if self.allowed
+			then service.Accent
+			else C.Classification
+	end
+	self:_buildHome()
 	self:_renderUnitStatusChoices(if self.allowed then response.Data.UnitStatuses or {} else {})
 	self.canWriteWarrants = self.allowed
 		and table.find(response.Data.Permissions or {}, "WarrantWrite") ~= nil
