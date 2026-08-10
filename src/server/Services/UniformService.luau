@@ -205,8 +205,20 @@ function UniformService:_applyKit(character: Model, definition: any): (boolean, 
 					targetPart.Size.Z * 1.16
 				)
 			else
-				clone.Size =
-					Vector3.new(clone.Size.X * 1.05, clone.Size.Y * 1.05, clone.Size.Z * 1.14)
+				-- Fit the supplied vest to the actual R15 torso instead of using a
+				-- fixed depth multiplier. This keeps the kit correct if Roblox's
+				-- standard avatar dimensions change and avoids the vest floating
+				-- several centimetres off the player's chest.
+				local fitScale = Vector3.new(
+					targetPart.Size.X / referencePart.Size.X,
+					targetPart.Size.Y / referencePart.Size.Y,
+					targetPart.Size.Z / referencePart.Size.Z
+				) * 1.02
+				clone.Size = Vector3.new(
+					clone.Size.X * fitScale.X,
+					clone.Size.Y * fitScale.Y,
+					clone.Size.Z * fitScale.Z
+				)
 			end
 			clone.CFrame *= CFrame.new(0, 0, -0.09)
 		end

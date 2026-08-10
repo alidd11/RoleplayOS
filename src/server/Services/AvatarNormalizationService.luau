@@ -6,12 +6,11 @@ local AvatarNormalizationService = { connections = {} }
 
 local STANDARD_SCALES = {
 	BodyHeightScale = 1,
-	-- Service kits are authored around a consistent, natural block-body profile.
-	-- Roblox's value of 1 is noticeably broader than that reference mannequin,
-	-- which is why the same vest fitted the room display but floated or clipped on
-	-- a player. These values are intentionally shared by every role and server.
-	BodyWidthScale = 0.85,
-	BodyDepthScale = 0.85,
+	-- Service kits are authored against Roblox's standard Classic/block R15
+	-- mannequin. Keep the default width and depth so uniforms do not have to be
+	-- scaled around a narrow, non-standard player silhouette.
+	BodyWidthScale = 1,
+	BodyDepthScale = 1,
 	HeadScale = 1,
 	BodyTypeScale = 0,
 	BodyProportionScale = 0,
