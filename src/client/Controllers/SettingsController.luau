@@ -49,9 +49,18 @@ function SettingsController:_applyContrast()
 		effect.Name = "RoleplayOSHighContrast"
 		effect.Parent = Lighting
 	end
-	(effect :: ColorCorrectionEffect).Contrast = self.settings.HighContrast and 0.2 or 0
-	(effect :: ColorCorrectionEffect).Saturation = self.settings.HighContrast and -0.05 or 0
-	(effect :: ColorCorrectionEffect).Enabled = self.settings.HighContrast
+	-- Bound to a local rather than casting three times in a row.
+	--
+	-- A statement beginning with an open bracket can be read as a call on the
+	-- previous line, so the formatter guards it with a semicolon. Which formatter
+	-- version decides that has changed: the one pinned for the build adds the
+	-- semicolons and the newer one does not, so the file could not satisfy both
+	-- and the build failed on formatting alone. With no leading bracket there is
+	-- nothing to disambiguate and every version agrees.
+	local correction = effect :: ColorCorrectionEffect
+	correction.Contrast = self.settings.HighContrast and 0.2 or 0
+	correction.Saturation = self.settings.HighContrast and -0.05 or 0
+	correction.Enabled = self.settings.HighContrast
 end
 
 local function isDecorative(item: Instance): boolean
