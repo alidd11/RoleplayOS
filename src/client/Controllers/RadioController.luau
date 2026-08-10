@@ -55,7 +55,7 @@ function RadioController:Init(context: any)
 	self.open = false
 	self.snapshot = nil
 	self.vehicleMode = false
-	self.expanded = true
+	self.expanded = false
 	self.muted = false
 end
 
@@ -184,6 +184,16 @@ function RadioController:_render()
 		self.callsign.Text = if snapshot
 			then "UNIT " .. tostring(snapshot.Callsign or "UNASSIGNED")
 			else "Operational channel"
+	end
+	if self.toggle then
+		self.toggle.Text = if self.expanded then "−" else "+"
+	end
+	if self.editCallsign then
+		self.editCallsign.Visible = self.expanded
+	end
+	self.content.Visible = self.expanded
+	if not self.expanded then
+		return
 	end
 	if not snapshot then
 		text(self.content, "Radio unavailable", 16, true).Size = UDim2.new(1, 0, 0, 28)
@@ -371,7 +381,7 @@ function RadioController:Start()
 	-- matching the native chat/control cluster rather than the bottom hotbar.
 	-- CoreUISafeInsets protects it from platform chrome and device cutouts.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(350, 400)
+	body.Size = UDim2.fromOffset(235, 58)
 	body.BackgroundColor3 = C.Body
 	body.BackgroundTransparency = 0.12
 	body.BorderSizePixel = 0
@@ -396,8 +406,21 @@ function RadioController:Start()
 	editCallsign.Position = UDim2.new(1, -14, 0, 12)
 	editCallsign.Size = UDim2.fromOffset(48, 24)
 	editCallsign.TextSize = 10
+	editCallsign.Visible = false
 	editCallsign.Activated:Connect(function()
 		self:_showCallsignModal()
+	end)
+	local toggle = button(body, "+")
+	toggle.AnchorPoint = Vector2.new(1, 0)
+	toggle.Position = UDim2.new(1, -10, 0, 12)
+	toggle.Size = UDim2.fromOffset(26, 26)
+	toggle.TextSize = 16
+	toggle.Activated:Connect(function()
+		self.expanded = not self.expanded
+		if self.lastLayout then
+			self:resize(self.lastLayout)
+		end
+		self:_render()
 	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
@@ -408,26 +431,34 @@ function RadioController:Start()
 	content.Visible = true
 	self.header = header
 	self.callsign = callsign
+	self.editCallsign = editCallsign
+	self.toggle = toggle
 	self.bodyScale = Instance.new("UIScale")
 	self.bodyScale.Parent = body
-	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", function(layout)
+	self.resize = function(layout)
+		self.lastLayout = layout
+		local footprint = if self.expanded then Vector2.new(350, 400) else Vector2.new(235, 58)
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
-			body.Size = UDim2.fromOffset(350, 400)
+			body.Size = UDim2.fromOffset(footprint.X, footprint.Y)
 			self.bodyScale.Scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(350, 400), 20)
+				self.context.Controllers.UIOrchestrator:FitScale(layout, footprint, 20)
 		else
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
-			body.Size = UDim2.fromOffset(350, 400)
+			body.Size = UDim2.fromOffset(footprint.X, footprint.Y)
 			self.bodyScale.Scale = math.clamp(
-				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
+				math.min(
+					layout.SafeViewport.X / (if self.expanded then 1200 else 1000),
+					layout.SafeViewport.Y / 760
+				),
 				0.82,
 				1
 			)
 		end
-	end)
+	end
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Radio", self.resize)
 	table.insert(
 		self.connections,
 		self.context.Events.DutyChanged.Event:Connect(function(duty)
