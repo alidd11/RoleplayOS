@@ -1,9 +1,15 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Coalescer = require(ReplicatedStorage.RoleplayOS.Shared.Coalescer)
 local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local DispatchController = { connections = {}, selectedCallId = nil }
+
+-- GetDispatchSnapshot refills at one per second and the MDT map draws from the
+-- same endpoint on the same client, so each panel takes at most half of it.
+local BOARD_REFRESH_INTERVAL = 2
 local C = TerminalTheme
 
 local function corner(parent: Instance, radius: number)
@@ -509,6 +515,12 @@ function DispatchController:Start()
 		watchCharacter(Players.LocalPlayer.Character)
 	end
 	table.insert(self.connections, Players.LocalPlayer.CharacterAdded:Connect(watchCharacter))
+	-- Only the automatic refresh is coalesced. Opening the board and being
+	-- granted console access still redraw immediately, because those are the
+	-- player asking rather than the server telling.
+	self.refresh = Coalescer.new(BOARD_REFRESH_INTERVAL, function()
+		self:Refresh()
+	end)
 	local network = self.context.Controllers.NetworkController
 	local changed = network:ResolveEvent("DispatchChanged")
 	if changed then
@@ -517,7 +529,7 @@ function DispatchController:Start()
 			changed.OnClientEvent:Connect(function(update)
 				self.context.Events.DispatchChanged:Fire(update)
 				if self.gui.Enabled then
-					self:Refresh()
+					self.refresh:Request()
 				end
 			end)
 		)
@@ -537,6 +549,9 @@ function DispatchController:Start()
 end
 
 function DispatchController:Destroy()
+	if self.refresh then
+		self.refresh:Cancel()
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

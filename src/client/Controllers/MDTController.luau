@@ -7,12 +7,22 @@ local UserInputService = game:GetService("UserInputService")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Coalescer = require(ReplicatedStorage.RoleplayOS.Shared.Coalescer)
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local TacticalMap = require(script.Parent.Parent.UI.TacticalMap)
 local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
+
+-- The map shares GetDispatchSnapshot with the dispatch board on this same
+-- client, so it takes half of that endpoint's one-per-second refill.
+local MAP_REFRESH_INTERVAL = 2
+-- The incident list is the tight one. MDTGetIncidents refills at a quarter per
+-- second, so four dispatch changes in a row would empty it for sixteen seconds
+-- and refuse the officer's own searches for the rest of them. This leaves most
+-- of the bucket to the officer and still keeps the list current.
+local INCIDENT_REFRESH_INTERVAL = 6
 local C = TerminalTheme
 
 local function corner(parent: Instance, radius: number)
@@ -823,6 +833,15 @@ function MDTController:Start()
 			table.insert(self.connections, character.ChildAdded:Connect(watchTool))
 		end)
 	)
+	-- Only the refreshes the server triggers are coalesced. An officer typing a
+	-- search or switching tabs still goes straight out, because that is the
+	-- player asking rather than dispatch telling.
+	self.incidentRefresh = Coalescer.new(INCIDENT_REFRESH_INTERVAL, function()
+		self:_performSearch()
+	end)
+	self.mapRefresh = Coalescer.new(MAP_REFRESH_INTERVAL, function()
+		self:RefreshMap()
+	end)
 	table.insert(
 		self.connections,
 		self.context.Events.DutyChanged.Event:Connect(function()
@@ -842,7 +861,7 @@ function MDTController:Start()
 				)
 			end
 			if self.recordType == "Incident" and self.shell.Visible then
-				self:_performSearch()
+				self.incidentRefresh:Request()
 			end
 		end)
 	)
@@ -887,7 +906,7 @@ function MDTController:Start()
 		self.connections,
 		self.context.Events.DispatchChanged.Event:Connect(function()
 			if self.shell.Visible then
-				self:RefreshMap()
+				self.mapRefresh:Request()
 			end
 		end)
 	)
@@ -903,6 +922,12 @@ end
 
 function MDTController:Destroy()
 	ContextActionService:UnbindAction(MDT_ACTION)
+	if self.incidentRefresh then
+		self.incidentRefresh:Cancel()
+	end
+	if self.mapRefresh then
+		self.mapRefresh:Cancel()
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

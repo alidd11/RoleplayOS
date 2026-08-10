@@ -22,6 +22,7 @@ local DispatchPolicy = require(Shared.DispatchPolicy)
 local PhoneValidator = require(Shared.PhoneValidator)
 local PayloadInspector = require(Shared.PayloadInspector)
 local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
+local Coalescer = require(Shared.Coalescer)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("cash drops require bounded whole pound amounts", function()
@@ -432,5 +433,35 @@ H.test("phone validation normalises UK mobile numbers and bounds messages", func
 		"generated number invalid"
 	)
 end)
+H.test("a burst of refresh requests collapses into one trailing run", function()
+	local runs = 0
+	local coalescer = Coalescer.new(0.1, function()
+		runs += 1
+	end)
+	-- The first is answered at once, so a panel never sits stale waiting out an
+	-- interval before it draws anything.
+	coalescer:Request()
+	H.expect(runs == 1, "the first request did not run immediately")
+	-- A burst during the interval is the case this exists for: four dispatch
+	-- changes inside a second must cost one refresh, not four.
+	coalescer:Request()
+	coalescer:Request()
+	coalescer:Request()
+	H.expect(runs == 1, "a request inside the interval ran immediately")
+	task.wait(0.25)
+	H.expect(runs == 2, string.format("expected one trailing run, saw %d in total", runs))
+	-- The last change of a burst must not be dropped. Leading-edge-only throttling
+	-- would leave the panel showing state that is no longer true.
+	coalescer:Request()
+	H.expect(runs == 3, "a request after the interval had elapsed did not run")
+
+	-- Cancelled means cancelled: a trailing run must not fire against interface
+	-- that has already been torn down.
+	coalescer:Request()
+	coalescer:Cancel()
+	task.wait(0.25)
+	H.expect(runs == 3, "a cancelled coalescer still fired its trailing run")
+end)
+
 H.finish()
 return true
