@@ -55,10 +55,10 @@
         "$className": "Folder",
         "$ignoreUnknownInstances": true,
         "BankRobberySource": {
-          "$path": "../Bank Robbery/Bank_robbery_System_V2_Beta_wl_obs 2.rbxm"
+          "$path": "server-assets/ImportedSources/BankRobberySource.rbxm"
         },
         "PoliceEpaulettesSource": {
-          "$path": "../Epaulettes/Oreos Development Police Service Eppaulettes.rbxm"
+          "$path": "server-assets/ImportedSources/PoliceEpaulettesSource.rbxm"
         }
       }
     },
