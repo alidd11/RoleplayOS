@@ -30,11 +30,11 @@ def contains_assignment(source: str, key: str, value: str) -> bool:
     return re.search(rf"\b{re.escape(key)}\s*=\s*{re.escape(value)}\b", source) is not None
 
 
-def configured_asset_paths(source: str) -> list[tuple[str, ...]]:
+def configured_asset_paths(source: str, vehicles_disabled: bool) -> list[tuple[str, ...]]:
     paths: list[tuple[str, ...]] = []
     for match in re.finditer(r"AssetPath\s*=\s*\{([^}]*)\}", source):
         segments = tuple(re.findall(r'"([^"]+)"', match.group(1)))
-        if segments:
+        if segments and not (vehicles_disabled and segments[0] == "Vehicles"):
             paths.append(segments)
     return paths
 
@@ -96,6 +96,11 @@ def main() -> int:
     config = CONFIG.read_text(encoding="utf-8")
     deployment = (EDITABLE / "01_Deployment.luau").read_text(encoding="utf-8")
     uniforms = (EDITABLE / "04_Uniforms.luau").read_text(encoding="utf-8")
+    vehicles = (EDITABLE / "06_Vehicles.luau").read_text(encoding="utf-8")
+    vehicles_disabled = bool(
+        re.search(r"Vehicles\s*=\s*\{\s*\}", vehicles, re.DOTALL)
+        and re.search(r"Dealerships\s*=\s*\{\s*\}", vehicles, re.DOTALL)
+    )
     production_issues: list[str] = []
     if not re.search(r'Environment\s*=\s*"Production"', deployment):
         production_issues.append('Framework.Environment is not "Production"')
@@ -108,7 +113,9 @@ def main() -> int:
     ):
         production_issues.append("one or more uniform template IDs are empty")
 
-    missing_assets = [path for path in configured_asset_paths(config) if not asset_exists(path)]
+    missing_assets = [
+        path for path in configured_asset_paths(config, vehicles_disabled) if not asset_exists(path)
+    ]
     if missing_assets:
         summary = ", ".join("/".join(path) for path in missing_assets[:6])
         if len(missing_assets) > 6:

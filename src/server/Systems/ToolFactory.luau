@@ -146,6 +146,36 @@ function ToolFactory.mdt(): Tool
 	return tool
 end
 
+function ToolFactory.radio(): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = "Radio"
+	tool.ToolTip = "Operational radio · press R to open"
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	tool.Grip = CFrame.new(0, -0.08, -0.68) * CFrame.Angles(math.rad(84), 0, 0)
+	local handle = part(
+		tool,
+		"Handle",
+		Vector3.new(0.42, 0.92, 0.18),
+		Color3.fromRGB(27, 32, 39),
+		Enum.Material.SmoothPlastic
+	)
+	local face = part(
+		tool,
+		"Display",
+		Vector3.new(0.3, 0.28, 0.025),
+		Color3.fromRGB(62, 151, 105),
+		Enum.Material.Glass
+	)
+	attach(handle, face, CFrame.new(0, 0.2, -0.102))
+	local aerial =
+		part(tool, "Aerial", Vector3.new(0.08, 0.5, 0.08), DARK_METAL, Enum.Material.Metal)
+	attach(handle, aerial, CFrame.new(0, 0.7, 0))
+	tool:SetAttribute("RoleplayOSInterfaceTool", "Radio")
+	tool:SetAttribute("RoleplayOSBuiltInFallback", true)
+	return tool
+end
+
 local function credentialBase(name: string, tooltip: string, width: number): (Tool, Part, Frame)
 	local tool = Instance.new("Tool")
 	tool.Name = name

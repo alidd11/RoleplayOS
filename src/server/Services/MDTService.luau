@@ -56,6 +56,13 @@ function MDTService:AccessSummary(player: Player): any
 		return { Allowed = false, Permissions = {} }
 	end
 	local unit = self.context.Services:Get("UnitService").units[tostring(player.UserId)]
+	local unitStatuses = {}
+	for _, status in self.context.Configuration.Dispatch.UnitStatuses do
+		-- Assigned is dispatch's decision, not a state an officer may declare.
+		if status ~= "Assigned" then
+			table.insert(unitStatuses, status)
+		end
+	end
 	return {
 		Allowed = true,
 		DepartmentId = duty.DepartmentId,
@@ -72,7 +79,7 @@ function MDTService:AccessSummary(player: Player): any
 		-- The statuses an officer may put themselves into. Assigned is absent by
 		-- design: being sent to a call is dispatch's decision, not a state a unit
 		-- may declare for itself.
-		UnitStatuses = { "Available", "OnScene", "Unavailable" },
+		UnitStatuses = unitStatuses,
 	}
 end
 function MDTService:Destroy() end

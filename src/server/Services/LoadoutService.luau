@@ -129,6 +129,8 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		end
 		if toolId == "MDT" and not template then
 			issue(ToolFactory.mdt(), backpack, loadoutId, toolId)
+		elseif toolId == "Radio" and not template then
+			issue(ToolFactory.radio(), backpack, loadoutId, toolId)
 		elseif toolId == "Handcuffs" and self.importedHandcuffs then
 			local clone = importedHandcuffTool(self.importedHandcuffs)
 			clone.Name = "Handcuffs"

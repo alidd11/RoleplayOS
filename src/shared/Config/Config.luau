@@ -2359,6 +2359,9 @@ local Config = {
 		GlobalRefillPerSecond = 10,
 		Endpoints = {
 			DropCash = { Capacity = 3, RefillPerSecond = 0.2 },
+			GetRadioSnapshot = { Capacity = 5, RefillPerSecond = 1 },
+			RadioSetChannel = { Capacity = 8, RefillPerSecond = 2 },
+			RadioTransmit = { Capacity = 6, RefillPerSecond = 1 },
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
@@ -2432,6 +2435,13 @@ local Config = {
 -- simply never appeared, and the reason was three levels down a stack trace.
 local editableFolder = script.Parent and script.Parent:FindFirstChild("EDIT_HERE")
 	or script:FindFirstChild("EDIT_HERE")
+
+-- The vehicle catalogue is intentionally empty until reviewed assets are
+-- supplied. Keeping deleted vehicles in the base defaults makes the release
+-- validator report templates that no longer exist and leaves stale dealership
+-- entries available to runtime code.
+Config.Vehicles = {}
+Config.Dealerships = {}
 
 local function editable(name: string): any
 	local module = editableFolder and editableFolder:FindFirstChild(name)

@@ -48,8 +48,13 @@
     "ServerStorage": {
       "$ignoreUnknownInstances": true,
       "RoleplayOSAssets": {
-        "$path": "server-assets",
-        "$ignoreUnknownInstances": true
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "AuthoringTemplates": { "$path": "server-assets/AuthoringTemplates" },
+        "PropertyInteriors": { "$path": "server-assets/PropertyInteriors" },
+        "Tools": { "$path": "server-assets/Tools" },
+        "Uniforms": { "$path": "server-assets/Uniforms" },
+        "Vehicles": { "$path": "server-assets/Vehicles" }
       },
       "RoleplayOSImportedSources": {
         "$className": "Folder",
@@ -59,6 +64,9 @@
         },
         "PoliceEpaulettesSource": {
           "$path": "server-assets/ImportedSources/PoliceEpaulettesSource.rbxm"
+        },
+        "ZenithRadioSystemSource": {
+          "$path": "server-assets/ImportedSources/ZenithRadioSystem.rbxm"
         }
       }
     },

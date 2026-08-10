@@ -227,20 +227,6 @@ function MDTController:_mount()
 	statusRow.Parent = statusStrip
 
 	self.unitStatusButtons = {}
-	local statusChoices = {
-		{ Id = "Available", Label = "AVAILABLE" },
-		{ Id = "OnScene", Label = "ON SCENE" },
-		{ Id = "Unavailable", Label = "UNAVAILABLE" },
-	}
-	for index, choice in statusChoices do
-		local control = button(statusStrip, choice.Label)
-		control.LayoutOrder = index
-		control.Size = UDim2.fromOffset(112, 30)
-		control.Activated:Connect(function()
-			self:SetUnitStatus(choice.Id)
-		end)
-		self.unitStatusButtons[choice.Id] = control
-	end
 
 	-- The home screen the terminal opens on, and the only way into a page. Each
 	-- card says what its page is for, so an officer who has just picked the
@@ -756,6 +742,24 @@ function MDTController:_performSearch()
 end
 
 -- Paints the strip from a status the server has confirmed.
+function MDTController:_renderUnitStatusChoices(statuses: { string })
+	for _, control in self.unitStatusButtons do
+		control:Destroy()
+	end
+	table.clear(self.unitStatusButtons)
+	for index, status in statuses do
+		local label = string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
+		local control = button(self.statusStrip, label)
+		control.LayoutOrder = index
+		control.Size = UDim2.fromOffset(112, 30)
+		control.Activated:Connect(function()
+			self:SetUnitStatus(status)
+		end)
+		self.unitStatusButtons[status] = control
+	end
+	self:_renderUnitStatus(self.unitStatus)
+end
+
 function MDTController:_renderUnitStatus(status: string?)
 	self.unitStatus = status
 	self.statusStrip.Visible = status ~= nil
@@ -786,6 +790,7 @@ end
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
+	self:_renderUnitStatusChoices(if self.allowed then response.Data.UnitStatuses or {} else {})
 	self.canWriteWarrants = self.allowed
 		and table.find(response.Data.Permissions or {}, "WarrantWrite") ~= nil
 	if self.allowed then
