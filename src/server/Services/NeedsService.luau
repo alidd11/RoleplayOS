@@ -408,9 +408,24 @@ function NeedsService:Start()
 			end
 		end
 	end)
+	-- Per-player handlers are held against the player rather than pushed onto the
+	-- service-wide list, which is only emptied when the server shuts down. Every
+	-- join added an entry there that nothing ever removed, so a busy server spent
+	-- an evening accumulating one dead closure per join and walked the lot at
+	-- shutdown. Disconnecting on the way out also means a player who rejoins the
+	-- same server cannot end up with two handlers running for one spawn.
+	self.playerConnections = {}
+	local function forget(player: Player)
+		local connection = self.playerConnections[player.UserId]
+		if connection then
+			connection:Disconnect()
+			self.playerConnections[player.UserId] = nil
+		end
+	end
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
+			forget(player)
 			self.states[player.UserId] = nil
 			self.failureLog[player.UserId] = nil
 		end)
@@ -419,24 +434,22 @@ function NeedsService:Start()
 	-- empties the backpack and the check above decides whether anything is
 	-- actually owed.
 	local function watch(player: Player)
-		table.insert(
-			self.connections,
-			player.CharacterAdded:Connect(function()
-				task.defer(function()
-					-- Guarded, because a deferred throw goes nowhere. This is how
-					-- the starter meal failed silently for a character whose
-					-- inventory container predated the field: no item, no error,
-					-- and nothing to suggest the feature existed at all.
-					local ok, problem = pcall(self.EnsureStarterFood, self, player)
-					if not ok then
-						self.context.Logger:Warning("Starter food could not be granted", {
-							UserId = player.UserId,
-							Error = tostring(problem),
-						})
-					end
-				end)
+		forget(player)
+		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
+			task.defer(function()
+				-- Guarded, because a deferred throw goes nowhere. This is how
+				-- the starter meal failed silently for a character whose
+				-- inventory container predated the field: no item, no error,
+				-- and nothing to suggest the feature existed at all.
+				local ok, problem = pcall(self.EnsureStarterFood, self, player)
+				if not ok then
+					self.context.Logger:Warning("Starter food could not be granted", {
+						UserId = player.UserId,
+						Error = tostring(problem),
+					})
+				end
 			end)
-		)
+		end)
 		if player.Character then
 			task.defer(function()
 				local ok, problem = pcall(self.EnsureStarterFood, self, player)
@@ -461,6 +474,10 @@ function NeedsService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, connection in self.playerConnections or {} do
+		connection:Disconnect()
+	end
+	table.clear(self.playerConnections or {})
 	table.clear(self.states)
 end
 

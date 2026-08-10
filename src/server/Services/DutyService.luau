@@ -9,55 +9,64 @@ end
 
 function DutyService:Start()
 	self.connections = self.connections or {}
+	-- Per-player handlers are held against the player rather than pushed onto the
+	-- service-wide list, which is only emptied when the server shuts down. Every
+	-- join added an entry there that nothing ever removed, so a busy server spent
+	-- an evening accumulating one dead closure per join and walked the lot at
+	-- shutdown. Disconnecting on the way out also means a player who rejoins the
+	-- same server cannot end up with two handlers running for one spawn.
+	self.playerConnections = {}
+	local function forget(player: Player)
+		local connection = self.playerConnections[player.UserId]
+		if connection then
+			connection:Disconnect()
+			self.playerConnections[player.UserId] = nil
+		end
+	end
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
+			forget(player)
 			self:End(player)
 		end)
 	)
 	local function watch(player: Player)
-		table.insert(
-			self.connections,
-			player.CharacterAdded:Connect(function()
-				task.delay(1, function()
-					-- Gamepass equipment is issued whether or not the player is on
-					-- duty, since a civilian off duty is exactly who bought it.
-					self.context.Services:Get("LoadoutService"):ApplyEquipmentPasses(player)
-					local duty = self:Get(player)
-					if not duty then
-						return
+		forget(player)
+		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
+			task.delay(1, function()
+				-- Gamepass equipment is issued whether or not the player is on
+				-- duty, since a civilian off duty is exactly who bought it.
+				self.context.Services:Get("LoadoutService"):ApplyEquipmentPasses(player)
+				local duty = self:Get(player)
+				if not duty then
+					return
+				end
+				local role = self.context.Configuration.Roles[duty.RoleId]
+				if role and role.LoadoutId then
+					self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
+				end
+				if role and role.AutoEquipUniform == true and role.UniformId then
+					local applied, reason =
+						self.context.Services:Get("UniformService"):Apply(player, role.UniformId)
+					if not applied then
+						self.context.Logger:Warning("Automatic duty uniform could not be applied", {
+							UserId = player.UserId,
+							RoleId = duty.RoleId,
+							UniformId = role.UniformId,
+							Reason = reason,
+						})
 					end
-					local role = self.context.Configuration.Roles[duty.RoleId]
-					if role and role.LoadoutId then
-						self.context.Services:Get("LoadoutService"):Apply(player, role.LoadoutId)
-					end
-					if role and role.AutoEquipUniform == true and role.UniformId then
-						local applied, reason = self.context.Services
-							:Get("UniformService")
-							:Apply(player, role.UniformId)
-						if not applied then
-							self.context.Logger:Warning(
-								"Automatic duty uniform could not be applied",
-								{
-									UserId = player.UserId,
-									RoleId = duty.RoleId,
-									UniformId = role.UniformId,
-									Reason = reason,
-								}
-							)
-						end
-					end
-					if duty.DepartmentId == "Police" then
-						local session = self.context.Services:Get("DataService"):GetSession(player)
-						local profile = session and session.Profile.DutyProfiles[duty.DutyProfileId]
-						self.context.Services
-							:Get("ImportedSystemAdapterService")
-							:ApplyEpaulettes(player, profile)
-					end
-					self.context.Services:Get("IdentificationService"):Refresh(player)
-				end)
+				end
+				if duty.DepartmentId == "Police" then
+					local session = self.context.Services:Get("DataService"):GetSession(player)
+					local profile = session and session.Profile.DutyProfiles[duty.DutyProfileId]
+					self.context.Services
+						:Get("ImportedSystemAdapterService")
+						:ApplyEpaulettes(player, profile)
+				end
+				self.context.Services:Get("IdentificationService"):Refresh(player)
 			end)
-		)
+		end)
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
 	for _, player in Players:GetPlayers() do
@@ -253,6 +262,10 @@ function DutyService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections or {})
+	for _, connection in self.playerConnections or {} do
+		connection:Disconnect()
+	end
+	table.clear(self.playerConnections or {})
 	table.clear(self.active)
 end
 

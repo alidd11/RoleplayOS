@@ -421,28 +421,34 @@ function PhoneService:Start()
 			end
 		end)
 	end
-	for _, player in Players:GetPlayers() do
-		table.insert(
-			self.connections,
-			player.CharacterAdded:Connect(function()
-				onCharacterAdded(player)
-			end)
-		)
+	-- Per-player handlers are held against the player rather than pushed onto the
+	-- service-wide list, which is only emptied when the server shuts down. Every
+	-- join added an entry there that nothing ever removed, so a busy server spent
+	-- an evening accumulating one dead closure per join and walked the lot at
+	-- shutdown. Disconnecting on the way out also means a player who rejoins the
+	-- same server cannot end up with two handlers running for one spawn.
+	self.playerConnections = {}
+	local function forget(player: Player)
+		local connection = self.playerConnections[player.UserId]
+		if connection then
+			connection:Disconnect()
+			self.playerConnections[player.UserId] = nil
+		end
 	end
-	table.insert(
-		self.connections,
-		Players.PlayerAdded:Connect(function(player)
-			table.insert(
-				self.connections,
-				player.CharacterAdded:Connect(function()
-					onCharacterAdded(player)
-				end)
-			)
+	local function watch(player: Player)
+		forget(player)
+		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
+			onCharacterAdded(player)
 		end)
-	)
+	end
+	for _, player in Players:GetPlayers() do
+		watch(player)
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
+			forget(player)
 			local callId = self.userCalls[player.UserId]
 			if callId then
 				self:EndCall(player, callId)
@@ -456,6 +462,10 @@ function PhoneService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, connection in self.playerConnections or {} do
+		connection:Disconnect()
+	end
+	table.clear(self.playerConnections or {})
 	table.clear(self.calls)
 	table.clear(self.userCalls)
 end
