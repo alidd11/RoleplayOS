@@ -82,6 +82,10 @@ function DispatchController:_mount()
 	gui.DisplayOrder = 12
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
+	local playerGui = gui.Parent
+	if playerGui then
+		playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
+	end
 
 	local dim = Instance.new("Frame")
 	dim.Size = UDim2.fromScale(1, 1)
@@ -130,6 +134,9 @@ function DispatchController:_mount()
 	close.Size = UDim2.fromOffset(70, 30)
 	close.Activated:Connect(function()
 		gui.Enabled = false
+		if playerGui then
+			playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
+		end
 	end)
 	local cctv = button(shell, "VIEW CCTV")
 	cctv.AnchorPoint = Vector2.new(1, 0)
@@ -484,6 +491,7 @@ function DispatchController:Refresh()
 end
 
 function DispatchController:Start()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Dispatch", function(layout)
 		-- The console has a minimum size, so it is scaled against the usable area
@@ -503,6 +511,7 @@ function DispatchController:Start()
 			humanoid.Seated:Connect(function(active)
 				if not active then
 					self.gui.Enabled = false
+					playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
 				end
 			end)
 		)
@@ -511,6 +520,7 @@ function DispatchController:Start()
 			humanoid:GetPropertyChangedSignal("SeatPart"):Connect(function()
 				if humanoid.SeatPart == nil then
 					self.gui.Enabled = false
+					playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
 				end
 			end)
 		)
@@ -544,6 +554,7 @@ function DispatchController:Start()
 			self.connections,
 			consoleAccess.OnClientEvent:Connect(function(data)
 				self.gui.Enabled = data.Allowed == true
+				playerGui:SetAttribute("RoleplayOSDispatchOpen", self.gui.Enabled)
 				if self.gui.Enabled then
 					self:Refresh()
 				end

@@ -72,7 +72,11 @@ local DEPARTMENT_UI = {
 		Subtitle = "MULTI-AGENCY CONTROL / DISPATCH & INFORMATION SHARING  ·  RESTRICTED",
 		Accent = Color3.fromRGB(50, 190, 188),
 		Tiles = {
-			{ "Live incidents", "Create, assign and monitor active emergency calls.", "Incident" },
+			{
+				"CAD incidents",
+				"Create, assign and monitor live calls, then review resolved case records.",
+				"Incident",
+			},
 			{ "People records", "Search operational information shared with control.", "Person" },
 			{ "Vehicles", "Check registrations, keepers and markers.", "Vehicle" },
 			{ "Multi-agency map", "Coordinate units, incidents and partner activity.", "Map" },

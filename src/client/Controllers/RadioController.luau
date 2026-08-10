@@ -152,6 +152,7 @@ function RadioController:_setOpen(open: boolean)
 		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		self.body.Visible = open
 			and not (playerGui and playerGui:GetAttribute("RoleplayOSMDTOpen") == true)
+			and not (playerGui and playerGui:GetAttribute("RoleplayOSDispatchOpen") == true)
 	end
 	local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if gui then
