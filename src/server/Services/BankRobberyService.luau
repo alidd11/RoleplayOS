@@ -48,10 +48,10 @@ function BankRobberyService:_activeCharacter(player: Player): (string?, any?)
 	return characterId, character
 end
 
-function BankRobberyService:_alarm(target: Instance, player: Player): boolean
+function BankRobberyService:_alarm(target: Instance, player: Player): (boolean, BasePart?)
 	local position = positionOf(target)
 	if not position then
-		return false
+		return false, nil
 	end
 	local alarm = Instance.new("Part")
 	alarm.Name = "Bank robbery alarm"
@@ -64,6 +64,13 @@ function BankRobberyService:_alarm(target: Instance, player: Player): boolean
 	alarm.Transparency = 1
 	alarm:SetAttribute("IncidentType", "BankRobbery")
 	alarm:SetAttribute("Location", tostring(target:GetAttribute("Location") or target.Name))
+	local sound = Instance.new("Sound")
+	sound.Name = "RoleplayOSBankAlarm"
+	sound.SoundId = self.context.Configuration.BankRobbery.AlarmSoundId
+	sound.Volume = self.context.Configuration.BankRobbery.AlarmVolume
+	sound.Looped = true
+	sound.RollOffMaxDistance = self.context.Configuration.BankRobbery.AlarmMaxDistance
+	sound.Parent = alarm
 	alarm.Parent = workspace
 	CollectionService:AddTag(alarm, self.context.Configuration.EmergencyTriggers.Tag)
 	local call, reason = self.context.Services:Get("EmergencyTriggerService"):Trigger(alarm, nil)
@@ -73,8 +80,22 @@ function BankRobberyService:_alarm(target: Instance, player: Player): boolean
 			Reason = reason,
 		})
 	end
-	alarm:Destroy()
-	return call ~= nil
+	if not call then
+		alarm:Destroy()
+		return false, nil
+	end
+	sound:Play()
+	return true, alarm
+end
+
+function BankRobberyService:_clearAlarm(state: any)
+	local alarm = state and state.Alarm
+	if alarm and alarm.Parent then
+		alarm:Destroy()
+	end
+	if state then
+		state.Alarm = nil
+	end
 end
 
 function BankRobberyService:_finish(target: Instance, player: Player, robberyId: string)
@@ -101,6 +122,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 			Metadata = { Location = target.Name },
 		})
 		state.Active = false
+		self:_clearAlarm(state)
 		self.activePlayers[player.UserId] = nil
 		state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
 		task.delay(config.FailedCooldownSeconds, function()
@@ -145,6 +167,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 		})
 	end
 	state.Active = false
+	self:_clearAlarm(state)
 	self.activePlayers[player.UserId] = nil
 	state.CooldownUntil = os.clock() + config.CooldownSeconds
 	task.delay(config.CooldownSeconds, function()
@@ -177,12 +200,14 @@ function BankRobberyService:Begin(target: Instance, player: Player): (boolean, s
 		return false, "TOO_FAR"
 	end
 	local robberyId = HttpService:GenerateGUID(false)
-	if not self:_alarm(target, player) then
+	local alarmRaised, alarm = self:_alarm(target, player)
+	if not alarmRaised then
 		return false, "ROBBERY_ALARM_FAILED"
 	end
 	state.Active = true
 	state.RobberyId = robberyId
 	state.PlayerUserId = player.UserId
+	state.Alarm = alarm
 	self.activePlayers[player.UserId] = robberyId
 	state.Prompt.Enabled = false
 	self.context.Services:Get("AuditService"):Record({
@@ -239,6 +264,7 @@ function BankRobberyService:Start()
 			if state and state.PlayerUserId then
 				self.activePlayers[state.PlayerUserId] = nil
 			end
+			self:_clearAlarm(state)
 			local connection = self.promptConnections[target]
 			if connection then
 				connection:Disconnect()
@@ -262,6 +288,9 @@ function BankRobberyService:Destroy()
 	end
 	for _, connection in self.promptConnections do
 		connection:Disconnect()
+	end
+	for _, state in self.states do
+		self:_clearAlarm(state)
 	end
 	table.clear(self.connections)
 	table.clear(self.promptConnections)

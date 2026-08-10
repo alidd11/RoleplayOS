@@ -2291,6 +2291,11 @@ local Config = {
 		Tag = "RoleplayOSBankRobberyTarget",
 		ActivationDistance = 12,
 		CompletionDistance = 20,
+		-- Free Creator Store emergency alarm; replace with a Universal Projects
+		-- audio asset later if the group wants a branded bank tone.
+		AlarmSoundId = "rbxassetid://4530741431",
+		AlarmVolume = 0.45,
+		AlarmMaxDistance = 150,
 		-- Matches the purchased bank package's own robbery/reset timer so the
 		-- RoleplayOS payout, alarm lifecycle and physical vault reset stay aligned.
 		RobberyDurationSeconds = 200,
