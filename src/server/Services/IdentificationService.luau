@@ -210,6 +210,21 @@ function IdentificationService:Refresh(player: Player)
 	return false, "WARRANT_CARD_TEMPLATE_UNAVAILABLE"
 end
 
+-- Reasons that mean "not yet" rather than "no".
+--
+-- A player joins with a default Roblox character and no team, and picks their
+-- character from the menu in their own time -- which might be ten seconds or two
+-- minutes. The retry below gives up after about three, so the first attempt of
+-- every session failed and logged a warning naming a player who then got their
+-- credential perfectly well the moment they chose a team.
+--
+-- Nothing is lost by staying quiet: Start watches CharacterAdded and the Team
+-- property, so the attempt that matters is the one those fire, not this one.
+local NOT_READY_YET = {
+	CHARACTER_OR_TEAM_UNAVAILABLE = true,
+	BACKPACK_UNAVAILABLE = true,
+}
+
 function IdentificationService:RefreshWithRetry(player: Player)
 	for attempt = 1, 4 do
 		if not player.Parent then
@@ -221,7 +236,9 @@ function IdentificationService:RefreshWithRetry(player: Player)
 		end
 		if attempt < 4 then
 			task.wait(0.5 * attempt)
-		else
+		elseif not NOT_READY_YET[reason] then
+			-- A real failure, such as a missing warrant card template, which no
+			-- amount of waiting fixes and somebody does need to see.
 			self.context.Logger:Warning("Credential could not be issued", {
 				UserId = player.UserId,
 				Reason = reason,

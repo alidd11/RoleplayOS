@@ -41,9 +41,69 @@ local function vehicleRoot(instance)
 	return nil
 end
 
+-- Never quarantined, whatever else matches below.
+--
+-- The rider pose belongs to the vehicle we import: how somebody sits on a bike
+-- is part of the bike, and a kit that ships its own animation should keep it.
+-- Nothing in RoleplayOS touches character animation, so if this pass takes the
+-- vehicle's animation content there is nothing left to put a rider on the seat
+-- and they stand bolt upright over it.
+--
+-- Chassis words are here for the same reason in the other direction: removing
+-- the tuner, the motors or the collision handling stops the thing being
+-- drivable at all. This list only ever protects, so a word that matches too
+-- much costs one uncleaned script rather than a broken vehicle.
+local PROTECTED_WORDS = {
+	"anim",
+	"pose",
+	"rider",
+	"seat",
+	"tuner",
+	"initialize",
+	"chassis",
+	"motor",
+	"anticollide",
+	"drive",
+}
+
+-- Judged on the instance itself, not on where it happens to live.
+--
+-- Walking up the ancestors instead would protect everything inside the Tuner
+-- folder, which is exactly where a kit keeps its plugins -- including the broken
+-- ones this pass exists to remove.
+local function holdsAnimation(instance)
+	if instance:IsA("Animation") or instance:IsA("AnimationController") then
+		return true
+	end
+	for _, descendant in instance:GetDescendants() do
+		if descendant:IsA("Animation") or descendant:IsA("AnimationController") then
+			return true
+		end
+	end
+	return false
+end
+
+local function isProtected(instance)
+	-- Anything holding animation content stays, whatever it is called. This is
+	-- the guarantee that the rider pose survives the clean-up.
+	if holdsAnimation(instance) then
+		return true
+	end
+	local name = string.lower(instance.Name)
+	for _, word in PROTECTED_WORDS do
+		if string.find(name, word, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
 local function shouldQuarantine(instance)
 	local vehicle = vehicleRoot(instance)
 	if not vehicle then
+		return false
+	end
+	if isProtected(instance) then
 		return false
 	end
 	if instance:IsA("Sound") and INVALID_SOUND_IDS[assetId(instance.SoundId)] then
