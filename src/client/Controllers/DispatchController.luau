@@ -263,6 +263,15 @@ function DispatchController:_mount()
 	composer.ZIndex = 21
 	composer.Parent = shade
 	corner(composer, 16)
+	-- The composer hangs off the full-screen shade rather than off the board, so
+	-- the board's own UIScale never reached it and it drew at its authored 560 by
+	-- 560. On a landscape phone that is taller than the screen: centred, its
+	-- CANCEL and CREATE buttons sat about 120 pixels below the bottom edge and
+	-- were clipped away entirely, while the shade swallowed every press behind
+	-- it. Control could open a call and then neither send it nor escape.
+	self.composerScale = Instance.new("UIScale")
+	self.composerScale.Parent = composer
+	self.composerDesign = Vector2.new(560, 560)
 	local composerStroke = Instance.new("UIStroke")
 	composerStroke.Color = C.Border
 	composerStroke.Parent = composer
@@ -582,6 +591,11 @@ function DispatchController:Start()
 		-- ignored the top bar and device cutouts and clipped the console edges.
 		self.scale.Scale =
 			self.context.Controllers.UIOrchestrator:FitScale(layout, Vector2.new(760, 500), 24)
+		-- Fitted separately, because it is not a child of the console.
+		if self.composerScale then
+			self.composerScale.Scale =
+				self.context.Controllers.UIOrchestrator:FitScale(layout, self.composerDesign, 24)
+		end
 	end)
 	local function watchCharacter(character: Model)
 		for _, connection in self.characterConnections do

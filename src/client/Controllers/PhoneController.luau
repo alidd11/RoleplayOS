@@ -237,29 +237,35 @@ function PhoneController:_mount()
 	dock.Parent = screen
 	corner(dock, 22)
 	self.dock = dock
-	for index, app in
+	-- Taxi appeared twice here, and the dock divided the row by a hard-coded four
+	-- however many apps it held. With five entries the fifth sat at 1.125 of the
+	-- dock's width and the sixth at 1.375, both beyond the right edge of a screen
+	-- that clips its descendants. Taxi is not on the home grid either, so the only
+	-- way to reach it was for the server to push a taxi event: the app existed and
+	-- could not be opened.
+	local apps = {
+		{ Page = "Call", Glyph = "☎", Name = "Phone", Colour = Color3.fromRGB(52, 199, 89) },
 		{
-			{ Page = "Call", Glyph = "☎", Name = "Phone", Colour = Color3.fromRGB(52, 199, 89) },
-			{
-				Page = "Messages",
-				Glyph = "✉",
-				Name = "Messages",
-				Colour = Color3.fromRGB(48, 176, 199),
-			},
-			{
-				Page = "Contacts",
-				Glyph = "●",
-				Name = "Contacts",
-				Colour = Color3.fromRGB(120, 132, 158),
-			},
-			{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
-			{ Page = "Taxi", Glyph = "🚕", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
-			{ Page = "Taxi", Glyph = "T", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
-		}
-	do
+			Page = "Messages",
+			Glyph = "✉",
+			Name = "Messages",
+			Colour = Color3.fromRGB(48, 176, 199),
+		},
+		{
+			Page = "Contacts",
+			Glyph = "●",
+			Name = "Contacts",
+			Colour = Color3.fromRGB(120, 132, 158),
+		},
+		{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
+		{ Page = "Taxi", Glyph = "🚕", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
+	}
+	for index, app in apps do
 		local tile = self:_appIcon(dock, app)
 		tile.AnchorPoint = Vector2.new(0.5, 0.5)
-		tile.Position = UDim2.fromScale((index - 0.5) / 4, 0.5)
+		-- Divided by what the row actually holds, so adding a sixth app spaces the
+		-- row rather than posting it off the side of the phone.
+		tile.Position = UDim2.fromScale((index - 0.5) / #apps, 0.5)
 	end
 
 	-- Home indicator. Tapping it returns to the home screen, which is the
