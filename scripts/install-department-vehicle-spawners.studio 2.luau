@@ -22,20 +22,85 @@ for _, instance in Workspace:GetDescendants() do
 end
 
 local definitions = {
-	{ "Civilian", "CityDealership", "Civilian vehicles", "CityCivilian", nil, nil, Vector3.new(18, 0, 0) },
-	{ "Police", "PoliceFrontline", "Frontline fleet", "PoliceVehicleBay", "Police", "Frontline", Vector3.new(18, 0, -24) },
-	{ "Police", "PoliceArmedResponse", "Armed response fleet", "PoliceVehicleBay", "Police", "ArmedResponse", Vector3.new(18, 0, 0) },
-	{ "Police", "PoliceRoadsPolicing", "Roads policing fleet", "PoliceVehicleBay", "Police", "RoadsPolicing", Vector3.new(18, 0, 24) },
-	{ "Ambulance", "AmbulanceFleet", "Ambulance fleet", "AmbulanceLockerRoom", "Ambulance", nil, Vector3.new(18, 0, 0) },
+	{
+		"Civilian",
+		"CityDealership",
+		"Civilian vehicles",
+		"CityCivilian",
+		nil,
+		nil,
+		Vector3.new(18, 0, 0),
+	},
+	{
+		"Police",
+		"PoliceFrontline",
+		"Frontline fleet",
+		"PoliceVehicleBay",
+		"Police",
+		"Frontline",
+		Vector3.new(18, 0, -24),
+	},
+	{
+		"Police",
+		"PoliceArmedResponse",
+		"Armed response fleet",
+		"PoliceVehicleBay",
+		"Police",
+		"ArmedResponse",
+		Vector3.new(18, 0, 0),
+	},
+	{
+		"Police",
+		"PoliceRoadsPolicing",
+		"Roads policing fleet",
+		"PoliceVehicleBay",
+		"Police",
+		"RoadsPolicing",
+		Vector3.new(18, 0, 24),
+	},
+	{
+		"Ambulance",
+		"AmbulanceFleet",
+		"Ambulance fleet",
+		"AmbulanceLockerRoom",
+		"Ambulance",
+		nil,
+		Vector3.new(18, 0, 0),
+	},
 	{ "Fire", "FireFleet", "Fire fleet", "FireLockerRoom", "Fire", nil, Vector3.new(18, 0, 0) },
-	{ "Transport", "TransportFleet", "Transport fleet", "TransportDepot", "Transport", nil, Vector3.new(18, 0, 0) },
-	{ "Highways", "HighwaysFleet", "Highways fleet", "HighwaysDepot", "Highways", nil, Vector3.new(18, 0, 0) },
-	{ "Prison", "PrisonFleet", "Prison fleet", "PrisonStaff", "Prison", nil, Vector3.new(18, 0, 0) },
+	{
+		"Transport",
+		"TransportFleet",
+		"Transport fleet",
+		"TransportDepot",
+		"Transport",
+		nil,
+		Vector3.new(18, 0, 0),
+	},
+	{
+		"Highways",
+		"HighwaysFleet",
+		"Highways fleet",
+		"HighwaysDepot",
+		"Highways",
+		nil,
+		Vector3.new(18, 0, 0),
+	},
+	{
+		"Prison",
+		"PrisonFleet",
+		"Prison fleet",
+		"PrisonStaff",
+		"Prison",
+		nil,
+		Vector3.new(18, 0, 0),
+	},
 }
 
 local created = 0
 for _, definition in definitions do
-	local departmentName, spawnerId, displayName, anchorId, departmentId, divisionId, offset = table.unpack(definition)
+	local departmentName, spawnerId, displayName, anchorId, departmentId, divisionId, offset =
+		table.unpack(definition)
 	local department = root:FindFirstChild(departmentName)
 	if not department then
 		department = Instance.new("Folder")

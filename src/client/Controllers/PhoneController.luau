@@ -225,24 +225,19 @@ function PhoneController:_mount()
 	end
 	self.show = show
 
-	-- Dock: four pinned apps on a translucent rounded slab, sitting above the
-	-- home indicator rather than filling the bottom edge.
+	-- Dock: four emergency/communication apps on the first row, with the taxi
+	-- service deliberately placed beneath 999 so it cannot be mistaken for an
+	-- emergency control on small screens.
 	local dock = Instance.new("Frame")
 	dock.AnchorPoint = Vector2.new(0.5, 1)
 	dock.Position = UDim2.new(0.5, 0, 1, -26)
-	dock.Size = UDim2.new(1, -28, 0, 74)
+	dock.Size = UDim2.new(1, -28, 0, 136)
 	dock.BackgroundColor3 = Color3.fromRGB(38, 46, 62)
 	dock.BackgroundTransparency = 0.32
 	dock.BorderSizePixel = 0
 	dock.Parent = screen
 	corner(dock, 22)
 	self.dock = dock
-	-- Taxi appeared twice here, and the dock divided the row by a hard-coded four
-	-- however many apps it held. With five entries the fifth sat at 1.125 of the
-	-- dock's width and the sixth at 1.375, both beyond the right edge of a screen
-	-- that clips its descendants. Taxi is not on the home grid either, so the only
-	-- way to reach it was for the server to push a taxi event: the app existed and
-	-- could not be opened.
 	local apps = {
 		{ Page = "Call", Glyph = "☎", Name = "Phone", Colour = Color3.fromRGB(52, 199, 89) },
 		{
@@ -263,9 +258,9 @@ function PhoneController:_mount()
 	for index, app in apps do
 		local tile = self:_appIcon(dock, app)
 		tile.AnchorPoint = Vector2.new(0.5, 0.5)
-		-- Divided by what the row actually holds, so adding a sixth app spaces the
-		-- row rather than posting it off the side of the phone.
-		tile.Position = UDim2.fromScale((index - 0.5) / #apps, 0.5)
+		local row = if index <= 4 then 1 else 2
+		local column = if index <= 4 then index else index - 4
+		tile.Position = UDim2.fromScale((column - 0.5) / 4, if row == 1 then 0.31 else 0.72)
 	end
 
 	-- Home indicator. Tapping it returns to the home screen, which is the

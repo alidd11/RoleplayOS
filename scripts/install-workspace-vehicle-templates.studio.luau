@@ -36,7 +36,10 @@ for definitionId, definition in config.Vehicles do
 		-- but remove those two competing writers before the template is stored.
 		if definitionId == "CorollaTaxi" then
 			for _, descendant in template:GetDescendants() do
-				if descendant.Name == "policecarcolor" or descendant.Name == "LicensePlateGenerator" then
+				if
+					descendant.Name == "policecarcolor"
+					or descendant.Name == "LicensePlateGenerator"
+				then
 					descendant:Destroy()
 				end
 			end
@@ -45,7 +48,11 @@ for definitionId, definition in config.Vehicles do
 				if plate then
 					plate:SetAttribute("RoleplayOSPlate", true)
 					for _, child in plate:GetDescendants() do
-						if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+						if
+							child:IsA("TextLabel")
+							or child:IsA("TextButton")
+							or child:IsA("TextBox")
+						then
 							child:SetAttribute("RoleplayOSPlateText", true)
 						end
 					end

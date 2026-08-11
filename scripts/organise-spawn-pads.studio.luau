@@ -24,7 +24,8 @@ local definitions = {
 	PrisonStaff = { Department = "Prison", Name = "PrisonStaff" },
 }
 
-local departments = { "Civilian", "Police", "Ambulance", "Fire", "Control", "Transport", "Highways", "Prison" }
+local departments =
+	{ "Civilian", "Police", "Ambulance", "Fire", "Control", "Transport", "Highways", "Prison" }
 local folders = {}
 for _, departmentName in departments do
 	local folder = root:FindFirstChild(departmentName)
@@ -76,6 +77,15 @@ for spawnId in definitions do
 	end
 end
 
-print("ROLEPLAYOS_SPAWNS_ORGANISED", "moved=" .. moved, "missing=" .. #missing, "duplicates=" .. #duplicates)
-if #missing > 0 then warn("Missing configured spawn IDs", table.concat(missing, ", ")) end
-if #duplicates > 0 then warn("Duplicate configured spawn pads", table.concat(duplicates, ", ")) end
+print(
+	"ROLEPLAYOS_SPAWNS_ORGANISED",
+	"moved=" .. moved,
+	"missing=" .. #missing,
+	"duplicates=" .. #duplicates
+)
+if #missing > 0 then
+	warn("Missing configured spawn IDs", table.concat(missing, ", "))
+end
+if #duplicates > 0 then
+	warn("Duplicate configured spawn pads", table.concat(duplicates, ", "))
+end
