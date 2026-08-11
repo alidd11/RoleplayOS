@@ -506,11 +506,19 @@ function NetworkService:Start()
 			else 1
 		local data, searchReason
 		if payload.Type == "Person" then
-			local includeWarrants =
-				self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
-			data, searchReason = self.context.Services
-				:Get("PersonRecordService")
-				:Search(query, page, includeWarrants)
+			local duty = self.context.Services:Get("MDTService"):GetDuty(player)
+			local accessProfile = "Emergency"
+			if
+				duty
+				and duty.DepartmentId == "Police"
+				and self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
+			then
+				accessProfile = "Police"
+			elseif duty and duty.DepartmentId == "Highways" then
+				accessProfile = "Highways"
+			end
+			data, searchReason =
+				self.context.Services:Get("PersonRecordService"):Search(query, page, accessProfile)
 		else
 			data, searchReason = self.context.Services:Get("VehicleRecordService"):Search(
 				query,

@@ -7,11 +7,9 @@ function PersonRecordService:Start() end
 function PersonRecordService:Search(
 	query: string,
 	page: number,
-	includeWarrants: boolean
+	accessProfile: string
 ): (any?, string?)
-	return self.context.Services
-		:Get("RecordIndexService")
-		:SearchPeople(query, page, includeWarrants)
+	return self.context.Services:Get("RecordIndexService"):SearchPeople(query, page, accessProfile)
 end
 function PersonRecordService:Destroy() end
 return PersonRecordService

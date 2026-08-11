@@ -42,18 +42,21 @@ local function activeWarrants(record: any): { any }
 	return active
 end
 
-local function personView(record: any, includeWarrants: boolean): any
-	local warrants = if includeWarrants then activeWarrants(record) else {}
+local function personView(record: any, accessProfile: string): any
+	local police = accessProfile == "Police"
+	local highways = police or accessProfile == "Highways"
+	local warrants = if police then activeWarrants(record) else {}
 	return {
 		CharacterId = record.CharacterId,
 		FullName = record.FullName,
 		DateOfBirth = record.DateOfBirth,
-		Licences = record.Licences,
-		DrivingRecord = record.DrivingRecord,
-		CustodyRecord = record.CustodyRecord,
-		CriminalRecord = record.CriminalRecord,
-		Warrants = if includeWarrants then warrants else nil,
-		Flags = if includeWarrants and #warrants > 0 then { "WANTED" } else {},
+		Licences = if highways then record.Licences else nil,
+		DrivingRecord = if highways then record.DrivingRecord else nil,
+		CustodyRecord = if police then record.CustodyRecord else nil,
+		CriminalRecord = if police then record.CriminalRecord else nil,
+		Warrants = if police then warrants else nil,
+		Flags = if police and #warrants > 0 then { "WANTED" } else {},
+		AccessProfile = accessProfile,
 		UpdatedAt = record.UpdatedAt,
 	}
 end
@@ -401,7 +404,7 @@ end
 function RecordIndexService:SearchPeople(
 	query: string,
 	page: number,
-	includeWarrants: boolean?
+	accessProfile: string
 ): (any?, string?)
 	local search = normalise(query)
 	local key = indexKey("Person", search)
@@ -433,7 +436,7 @@ function RecordIndexService:SearchPeople(
 			return nil, recordReason
 		end
 		if record then
-			table.insert(items, personView(record, includeWarrants == true))
+			table.insert(items, personView(record, accessProfile))
 		end
 	end
 	return { Items = items, Page = page, Total = #matches }, nil

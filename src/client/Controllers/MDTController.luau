@@ -722,7 +722,25 @@ function MDTController:_renderResults(items: { any })
 				or record.Registration
 				or record.Title
 				or "Unknown record"
-			if record.FullName then
+			if record.FullName and record.AccessProfile == "Emergency" then
+				self.detailMeta.Text = string.format(
+					"DATE OF BIRTH\n%s\n\nACCESS PROFILE\nEmergency service identity view\n\nPolice, custody and driving-enforcement records are restricted.",
+					tostring(record.DateOfBirth or "Not recorded")
+				)
+			elseif record.FullName and record.AccessProfile == "Highways" then
+				local licences = {}
+				for licenceId, value in record.Licences or {} do
+					if value then
+						table.insert(licences, tostring(licenceId))
+					end
+				end
+				self.detailMeta.Text = string.format(
+					"DATE OF BIRTH\n%s\n\nLICENCES\n%s\n\nDRIVING POINTS\n%d\n\nACCESS PROFILE\nRoad-safety view",
+					tostring(record.DateOfBirth or "Not recorded"),
+					if #licences > 0 then table.concat(licences, ", ") else "None recorded",
+					record.DrivingRecord and record.DrivingRecord.Points or 0
+				)
+			elseif record.FullName then
 				local licences = {}
 				for licenceId, value in record.Licences or {} do
 					if value then
