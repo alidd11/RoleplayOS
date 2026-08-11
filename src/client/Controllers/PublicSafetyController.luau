@@ -375,6 +375,15 @@ function PublicSafetyController:_mount()
 	local rear = actionButton(actions, "CUFFS TO REAR")
 	local release = actionButton(actions, "REMOVE CUFFS")
 	release.BackgroundColor3 = Color3.fromRGB(112, 43, 48)
+	-- The end of the arrest, and until now it had no button anywhere.
+	--
+	-- The booking panel lives in CustodyController and its only opener was a HUD
+	-- launcher that is forced invisible, so an officer could caution, search,
+	-- cuff and escort somebody and then simply had nothing to press. It belongs
+	-- on this grid, with the detainee already selected, rather than behind a
+	-- separate control the officer would have to find and re-target.
+	local book = actionButton(actions, "BOOK INTO CUSTODY")
+	book.BackgroundColor3 = Color3.fromRGB(37, 78, 122)
 	local notice = actionTarget:Clone()
 	notice.Position = UDim2.fromOffset(18, 378)
 	notice.Size = UDim2.new(1, -36, 0, 36)
@@ -400,6 +409,16 @@ function PublicSafetyController:_mount()
 		self.connections,
 		caution.Activated:Connect(function()
 			self:_custodyAction("Caution")
+		end)
+	)
+	table.insert(
+		self.connections,
+		book.Activated:Connect(function()
+			-- Carried across so the booking panel opens on the person the officer
+			-- already has selected, rather than asking them to pick again.
+			local target = self.actionTargetUserId
+			self:_setActionsOpen(false)
+			self.context.Controllers.CustodyController:Open(target)
 		end)
 	)
 	table.insert(

@@ -60,6 +60,30 @@ function CustodyController:_refreshPlayers()
 	end
 end
 
+-- Opens the booking panel, optionally on a detainee already chosen elsewhere.
+--
+-- The panel had exactly one way in: a HUD launcher that is set invisible when
+-- it is built and set invisible again on every access refresh, so it could
+-- never be pressed. Everything behind it -- the offence list, the sentence
+-- calculation, the BookCustody request -- was reachable only from that button,
+-- which meant an officer could cuff, search and escort somebody and then had no
+-- way to book them. The comment on the launcher says booking moved into the
+-- detainee flow in PublicSafetyController; this is the half that was missing.
+function CustodyController:Open(targetUserId: number?)
+	if not self.panel then
+		return
+	end
+	local duty = self.context.Controllers.DutyController.active
+	if duty == nil or duty.DepartmentId ~= "Police" then
+		return
+	end
+	if targetUserId then
+		self.targetUserId = targetUserId
+	end
+	self.panel.Visible = true
+	self:_refreshPlayers()
+end
+
 function CustodyController:_selectedCodeList(): { string }
 	local result = {}
 	for code, selected in self.selectedCodes do
