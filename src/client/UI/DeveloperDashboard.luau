@@ -953,7 +953,10 @@ function App.mount(context: any): ScreenGui
 			create.Activated:Connect(showModal)
 		else
 			local columns = portraitCardColumns()
-			local tileHeight = if landscape then 258 else 284
+			-- Shorter in landscape, where the whole list is only about 174 pixels tall.
+			-- A 258 card there was taller than the area it scrolled inside, so exactly
+			-- one card was ever visible and its lower half never was.
+			local tileHeight = if landscape then 248 else 284
 			local canCreate = menuData.EmptySlots > 0
 			local characterGrid = tileGrid(
 				scroll,
@@ -979,16 +982,19 @@ function App.mount(context: any): ScreenGui
 					end
 				)
 				preview.Position = UDim2.fromOffset(12, 14)
-				preview.Size = UDim2.new(1, -24, 0, if landscape then 112 else 132)
+				preview.Size = UDim2.new(1, -24, 0, if landscape then 92 else 132)
 				local name = text(item, character.FullName, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(16, if landscape then 134 else 156)
+				name.Position = UDim2.fromOffset(16, if landscape then 110 else 156)
 				name.Size = UDim2.new(1, -32, 0, 27)
 				local dob = text(item, "Born " .. character.DateOfBirth, 12, COLOURS.Muted)
-				dob.Position = UDim2.fromOffset(16, if landscape then 160 else 182)
+				dob.Position = UDim2.fromOffset(16, if landscape then 136 else 182)
 				dob.Size = UDim2.new(1, -32, 0, 22)
 				local identity = text(item, "CIVILIAN CHARACTER", 11, COLOURS.Accent, true)
 				identity.Position = UDim2.fromOffset(16, if landscape then 183 else 205)
 				identity.Size = UDim2.new(1, -32, 0, 18)
+				-- A fixed label saying what the card obviously is, dropped where the
+				-- room it wants is the room the buttons need.
+				identity.Visible = not landscape
 				local choose = button(item, if selected then "Enter city" else "Choose", selected)
 				choose.AnchorPoint = Vector2.new(0, 1)
 				choose.Position = UDim2.new(0, 16, 1, -14)
@@ -1002,6 +1008,9 @@ function App.mount(context: any): ScreenGui
 					choose.Size = UDim2.new(1, -32, 0, 36)
 					local saveOutfit = button(item, "Save current outfit", false)
 					saveOutfit.AnchorPoint = Vector2.new(0, 1)
+					-- Sat at the same height as the date of birth and the identity line and
+					-- drew straight over them, slicing "Born" in half. It is stacked above
+					-- the choose button now, in space the text no longer claims.
 					saveOutfit.Position = UDim2.new(0, 16, 1, -56)
 					saveOutfit.Size = UDim2.new(1, -32, 0, 30)
 					saveOutfit.TextSize = 11

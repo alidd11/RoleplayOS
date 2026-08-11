@@ -124,7 +124,7 @@ function OfficialServerService:_pickInstance(serverId: string): (string?, number
 		end
 	end
 
-	local capacity = self.settings.MaximumPlayersPerInstance or 30
+	local capacity = self.settings.MaximumPlayersPerInstance or 50
 	for index, code in codes do
 		if type(code) == "string" and code ~= "" then
 			if self:_occupantsOf(serverId, index) < capacity then

@@ -274,7 +274,11 @@ local Config = {
 		-- Occupancy is published to a memory store by each instance and read by
 		-- whoever is about to send somebody, because a server cannot see how full
 		-- another one is any other way.
-		MaximumPlayersPerInstance = 30,
+		-- Keep the official reserved-server target below the place's Roblox
+		-- MaxPlayers setting. The current development place is configured for 60;
+		-- 50 leaves headroom for teleport arrival races and gives one instance
+		-- enough population for a healthy public roleplay session.
+		MaximumPlayersPerInstance = 50,
 		-- A ceiling on how far the community can be split. Past this, joins are
 		-- refused rather than scattering everybody across instances too thin to
 		-- roleplay in.

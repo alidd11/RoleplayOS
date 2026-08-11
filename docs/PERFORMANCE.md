@@ -74,6 +74,14 @@ what it changed rather than what it looked at.
 
 ## 3. What the server and the network cost
 
+The current official-server routing target is 50 players per instance. The
+place itself must be configured with a Roblox `MaxPlayers` value greater than
+50; the audited Studio place is set to 60. If the place setting is lowered,
+reserved-server routing must be lowered with it. This is a routing ceiling,
+not a guarantee that a large map or imported vehicle pack will perform well:
+the release acceptance pass must still measure heartbeat, physics FPS, memory,
+replication and join latency with a representative populated place.
+
 Profiles load once and save only when dirty, on a timed batch, leave or
 shutdown. Static configuration is frozen and cached. The join catalogue sends
 summaries rather than full profiles or full vehicle, property and furniture
