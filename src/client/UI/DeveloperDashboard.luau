@@ -1408,7 +1408,11 @@ function App.mount(context: any): ScreenGui
 		categoryBar.Size = UDim2.new(1, 0, 0, 58)
 		categoryBar.AutomaticCanvasSize = Enum.AutomaticSize.X
 		categoryBar.CanvasSize = UDim2.new()
-		categoryBar.ScrollBarThickness = 0
+		-- The row does scroll, and with no scrollbar there was nothing to say so.
+		-- The last category simply appeared sliced off at the panel edge, which
+		-- reads as a broken layout rather than as more to reach.
+		categoryBar.ScrollBarThickness = 3
+		categoryBar.ScrollBarImageTransparency = 0.4
 		categoryBar.ScrollingDirection = Enum.ScrollingDirection.X
 		categoryBar.Parent = scroll
 		local categoryOrderIndex = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
