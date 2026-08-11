@@ -983,10 +983,15 @@ function App.mount(context: any): ScreenGui
 			create.Activated:Connect(showModal)
 		else
 			local columns = portraitCardColumns()
-			-- Shorter in landscape, where the whole list is only about 174 pixels tall.
-			-- A 258 card there was taller than the area it scrolled inside, so exactly
-			-- one card was ever visible and its lower half never was.
-			local tileHeight = if landscape then 248 else 284
+			-- Landscape turns the card on its side rather than shrinking it.
+			--
+			-- Stacking a portrait above its text needs height, and height is the one
+			-- thing a phone held sideways has none of: the list is about 174 pixels
+			-- tall, so a 258 card was taller than the area it scrolled inside and its
+			-- lower half was never on screen. Width is the plentiful axis, so the
+			-- portrait moves beside the text instead of above it and the whole card
+			-- fits, with the next one showing beneath to say the list continues.
+			local tileHeight = if landscape then 150 else 284
 			local canCreate = menuData.EmptySlots > 0
 			local characterGrid = tileGrid(
 				scroll,
@@ -1011,38 +1016,43 @@ function App.mount(context: any): ScreenGui
 						return item.Parent == characterGrid
 					end
 				)
-				preview.Position = UDim2.fromOffset(12, 14)
-				preview.Size = UDim2.new(1, -24, 0, if landscape then 92 else 132)
+				-- Beside the text in landscape, above it in portrait.
+				local textLeft = if landscape then 124 else 16
+				local textInset = if landscape then -140 else -32
+				preview.Position = UDim2.fromOffset(12, 12)
+				preview.Size = if landscape
+					then UDim2.fromOffset(100, 126)
+					else UDim2.new(1, -24, 0, 132)
 				local name = text(item, character.FullName, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(16, if landscape then 110 else 156)
-				name.Size = UDim2.new(1, -32, 0, 27)
+				name.Position = UDim2.fromOffset(textLeft, if landscape then 14 else 156)
+				name.Size = UDim2.new(1, textInset, 0, 27)
 				local dob = text(item, "Born " .. character.DateOfBirth, 12, COLOURS.Muted)
-				dob.Position = UDim2.fromOffset(16, if landscape then 136 else 182)
-				dob.Size = UDim2.new(1, -32, 0, 22)
+				dob.Position = UDim2.fromOffset(textLeft, if landscape then 40 else 182)
+				dob.Size = UDim2.new(1, textInset, 0, 22)
 				local identity = text(item, "CIVILIAN CHARACTER", 11, COLOURS.Accent, true)
-				identity.Position = UDim2.fromOffset(16, if landscape then 183 else 205)
-				identity.Size = UDim2.new(1, -32, 0, 18)
-				-- A fixed label saying what the card obviously is, dropped where the
-				-- room it wants is the room the buttons need.
+				identity.Position = UDim2.fromOffset(textLeft, if landscape then 62 else 205)
+				identity.Size = UDim2.new(1, textInset, 0, 18)
+				-- A fixed label restating what the card plainly is. It goes first when
+				-- the buttons need the room, which in landscape they do.
 				identity.Visible = not landscape
 				local choose = button(item, if selected then "Enter city" else "Choose", selected)
 				choose.AnchorPoint = Vector2.new(0, 1)
-				choose.Position = UDim2.new(0, 16, 1, -14)
-				choose.Size = UDim2.new(1, -32, 0, 42)
+				choose.Position = UDim2.new(0, textLeft, 1, -12)
+				choose.Size = UDim2.new(1, textInset, 0, if landscape then 34 else 42)
 				if
 					selected
 					and Players.LocalPlayer.Team
 					and Players.LocalPlayer.Team.Name == "Civilian"
 				then
-					choose.Position = UDim2.new(0, 16, 1, -14)
-					choose.Size = UDim2.new(1, -32, 0, 36)
+					choose.Position = UDim2.new(0, textLeft, 1, -12)
+					choose.Size = UDim2.new(1, textInset, 0, if landscape then 30 else 36)
 					local saveOutfit = button(item, "Save current outfit", false)
 					saveOutfit.AnchorPoint = Vector2.new(0, 1)
-					-- Sat at the same height as the date of birth and the identity line and
-					-- drew straight over them, slicing "Born" in half. It is stacked above
+					-- Sat at the same height as the date of birth and the identity line
+					-- and drew straight over them, slicing "Born" in half. It stacks above
 					-- the choose button now, in space the text no longer claims.
-					saveOutfit.Position = UDim2.new(0, 16, 1, -56)
-					saveOutfit.Size = UDim2.new(1, -32, 0, 30)
+					saveOutfit.Position = UDim2.new(0, textLeft, 1, if landscape then -46 else -56)
+					saveOutfit.Size = UDim2.new(1, textInset, 0, if landscape then 28 else 30)
 					saveOutfit.TextSize = 11
 					saveOutfit.Activated:Connect(function()
 						saveOutfit.Text = "Saving…"
@@ -1130,7 +1140,9 @@ function App.mount(context: any): ScreenGui
 			string.format("%d roles available in this server.", visibleCount)
 		)
 		local columns = portraitCardColumns()
-		local tileHeight = if landscape then 262 else 286
+		-- Turned on its side in landscape, like the character cards, so a whole
+		-- card fits the roughly 174 pixels the list actually has.
+		local tileHeight = if landscape then 150 else 286
 		local roleGrid = tileGrid(scroll, visibleCount, tileHeight, columns)
 		if visibleCount == 0 then
 			local empty = card(roleGrid, tileHeight)
@@ -1171,8 +1183,13 @@ function App.mount(context: any): ScreenGui
 					-- rather than as a preview that failed to load.
 					string.upper(string.sub(role.Name, 1, 2))
 				)
-				preview.Position = UDim2.fromOffset(12, 14)
-				preview.Size = UDim2.new(1, -24, 0, if landscape then 102 else 118)
+				-- Beside the text in landscape, above it in portrait.
+				local textLeft = if landscape then 124 else 16
+				local textInset = if landscape then -140 else -32
+				preview.Position = UDim2.fromOffset(12, 12)
+				preview.Size = if landscape
+					then UDim2.fromOffset(100, 126)
+					else UDim2.new(1, -24, 0, 118)
 				if role.Locked then
 					preview.ImageTransparency = 0.28
 				end
@@ -1180,7 +1197,7 @@ function App.mount(context: any): ScreenGui
 				departmentBadge.BackgroundColor3 = presentation.Colour
 				departmentBadge.BackgroundTransparency = 0.82
 				departmentBadge.BorderSizePixel = 0
-				departmentBadge.Position = UDim2.fromOffset(16, if landscape then 127 else 143)
+				departmentBadge.Position = UDim2.fromOffset(textLeft, if landscape then 12 else 143)
 				departmentBadge.Size = UDim2.fromOffset(34, 34)
 				departmentBadge.Parent = item
 				corner(departmentBadge, 8)
@@ -1190,8 +1207,8 @@ function App.mount(context: any): ScreenGui
 				badgeText.Size = UDim2.fromScale(1, 1)
 				badgeText.TextXAlignment = Enum.TextXAlignment.Center
 				local category = text(item, presentation.Label, 10, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(58, if landscape then 126 else 142)
-				category.Size = UDim2.new(1, -144, 0, 16)
+				category.Position = UDim2.fromOffset(textLeft + 42, if landscape then 11 else 142)
+				category.Size = UDim2.new(1, textInset - 112, 0, 16)
 				local access = text(
 					item,
 					if role.Locked then "LOCKED" else "AVAILABLE",
@@ -1200,12 +1217,15 @@ function App.mount(context: any): ScreenGui
 					true
 				)
 				access.AnchorPoint = Vector2.new(1, 0)
-				access.Position = UDim2.new(1, -16, 0, if landscape then 126 else 142)
+				access.Position = UDim2.new(1, -16, 0, if landscape then 11 else 142)
 				access.Size = UDim2.fromOffset(70, 16)
 				access.TextXAlignment = Enum.TextXAlignment.Right
 				local name = text(item, role.Name, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(58, if landscape then 142 else 158)
-				name.Size = UDim2.new(1, -74, 0, 28)
+				name.Position = UDim2.fromOffset(
+					if landscape then textLeft else 58,
+					if landscape then 44 else 158
+				)
+				name.Size = UDim2.new(1, if landscape then textInset else -74, 0, 28)
 				name.TextWrapped = true
 				name.TextTruncate = Enum.TextTruncate.None
 				-- What this row can tell the player that the others cannot.
@@ -1231,8 +1251,8 @@ function App.mount(context: any): ScreenGui
 					end
 				end
 				local detail = text(item, detailText, 12, COLOURS.Muted)
-				detail.Position = UDim2.fromOffset(16, if landscape then 169 else 185)
-				detail.Size = UDim2.new(1, -32, 0, 30)
+				detail.Position = UDim2.fromOffset(textLeft, if landscape then 70 else 185)
+				detail.Size = UDim2.new(1, textInset, 0, 30)
 				detail.TextWrapped = true
 				detail.TextYAlignment = Enum.TextYAlignment.Top
 				detail.TextTruncate = Enum.TextTruncate.None
@@ -1246,8 +1266,8 @@ function App.mount(context: any): ScreenGui
 				end
 				local action = button(item, actionLabel, false)
 				action.AnchorPoint = Vector2.new(0, 1)
-				action.Position = UDim2.new(0, 16, 1, -14)
-				action.Size = UDim2.new(1, -32, 0, 42)
+				action.Position = UDim2.new(0, textLeft, 1, -12)
+				action.Size = UDim2.new(1, textInset, 0, if landscape then 34 else 42)
 				if not role.Locked then
 					action.BackgroundColor3 = presentation.Colour:Lerp(COLOURS.Surface, 0.78)
 					action.TextColor3 = presentation.Colour:Lerp(Color3.new(1, 1, 1), 0.28)
