@@ -189,7 +189,11 @@ function IncidentService:Close(player: Player, incidentId: string): (any?, strin
 	return self:_persist(updated)
 end
 
-function IncidentService:Recent(player: Player, page: number): (any?, string?)
+function IncidentService:Recent(
+	player: Player,
+	page: number,
+	resolvedOnly: boolean?
+): (any?, string?)
 	local duty = self.context.Services:Get("MDTService"):GetDuty(player)
 	if not duty then
 		return nil, "MDT_NOT_AUTHORISED"
@@ -202,26 +206,34 @@ function IncidentService:Recent(player: Player, page: number): (any?, string?)
 	-- Open dispatch calls are operational MDT records immediately. They remain
 	-- server-local and are replaced by the persisted incident created when the
 	-- dispatcher resolves the call.
-	for _, call in self.context.Services:Get("CallService"):Snapshot() do
-		if duty.DepartmentId == "Control" or table.find(call.DepartmentIds, duty.DepartmentId) then
-			table.insert(entries, {
-				IncidentId = "CALL-" .. call.CallId,
-				CallId = call.CallId,
-				Title = call.Summary,
-				Status = "Live call · " .. call.Status,
-				IncidentType = call.IncidentType,
-				Location = call.Location,
-				Priority = call.Priority,
-				DepartmentIds = table.clone(call.DepartmentIds),
-				CreatedAt = call.CreatedAt,
-				Revision = call.Revision,
-				LiveDispatchCall = true,
-			})
+	if not resolvedOnly then
+		for _, call in self.context.Services:Get("CallService"):Snapshot() do
+			if
+				duty.DepartmentId == "Control" or table.find(call.DepartmentIds, duty.DepartmentId)
+			then
+				table.insert(entries, {
+					IncidentId = "CALL-" .. call.CallId,
+					CallId = call.CallId,
+					Title = call.Summary,
+					Status = "Live call · " .. call.Status,
+					IncidentType = call.IncidentType,
+					Location = call.Location,
+					Priority = call.Priority,
+					DepartmentIds = table.clone(call.DepartmentIds),
+					CreatedAt = call.CreatedAt,
+					Revision = call.Revision,
+					LiveDispatchCall = true,
+				})
+			end
 		end
 	end
 	for _, entry in if index and type(index.Entries) == "table" then index.Entries else {} do
 		local departments = if type(entry.DepartmentIds) == "table" then entry.DepartmentIds else {}
-		if duty.DepartmentId == "Control" or table.find(departments, duty.DepartmentId) then
+		local isResolved = entry.Status == "Closed"
+		if
+			isResolved == (resolvedOnly == true)
+			and (duty.DepartmentId == "Control" or table.find(departments, duty.DepartmentId))
+		then
 			table.insert(entries, entry)
 		end
 	end

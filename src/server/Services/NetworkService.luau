@@ -574,7 +574,9 @@ function NetworkService:Start()
 		}
 	end)
 	self.context.Network:RegisterFunction("MDTGetIncidents", function(payload)
-		return type(payload) == "table" and (payload.Page == nil or type(payload.Page) == "number")
+		return type(payload) == "table"
+			and (payload.Page == nil or type(payload.Page) == "number")
+			and (payload.ResolvedOnly == nil or type(payload.ResolvedOnly) == "boolean")
 	end, function(player, payload, requestId)
 		local mdt = self.context.Services:Get("MDTService")
 		if
@@ -591,7 +593,9 @@ function NetworkService:Start()
 		local page = if type(payload.Page) == "number"
 			then math.clamp(math.floor(payload.Page), 1, 1000)
 			else 1
-		local incidents, reason = self.context.Services:Get("IncidentService"):Recent(player, page)
+		local incidents, reason = self.context.Services
+			:Get("IncidentService")
+			:Recent(player, page, payload.ResolvedOnly == true)
 		return {
 			Success = incidents ~= nil,
 			Code = if incidents then "OK" else reason,

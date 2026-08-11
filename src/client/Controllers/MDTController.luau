@@ -73,9 +73,14 @@ local DEPARTMENT_UI = {
 		Accent = Color3.fromRGB(50, 190, 188),
 		Tiles = {
 			{
-				"CAD incidents",
-				"Create, assign and monitor live calls, then review resolved case records.",
+				"Live incidents",
+				"Create, assign and monitor active emergency calls.",
 				"Incident",
+			},
+			{
+				"Resolved CAD archive",
+				"Review closed calls and retained incident records.",
+				"Resolved",
 			},
 			{ "People records", "Search operational information shared with control.", "Person" },
 			{ "Vehicles", "Check registrations, keepers and markers.", "Vehicle" },
@@ -828,12 +833,16 @@ function MDTController:_performSearch()
 		self.recordType ~= "Person"
 		and self.recordType ~= "Vehicle"
 		and self.recordType ~= "Incident"
+		and self.recordType ~= "Resolved"
 	then
 		return
 	end
 	self.status.Text = "Searching secure records…"
-	local response = if self.recordType == "Incident"
-		then self.context.Controllers.NetworkController:Request("MDTGetIncidents", { Page = 1 })
+	local response = if self.recordType == "Incident" or self.recordType == "Resolved"
+		then self.context.Controllers.NetworkController:Request("MDTGetIncidents", {
+			Page = 1,
+			ResolvedOnly = self.recordType == "Resolved",
+		})
 		else self:Search(self.recordType, self.input.Text, 1)
 	if response.Success then
 		local items = response.Data.Items or {}
