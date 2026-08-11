@@ -145,6 +145,9 @@ function VendorController:_row(item: any, order: number)
 	name.Font = Enum.Font.GothamBold
 	name.Position = UDim2.fromOffset(14, 9)
 	name.Size = UDim2.new(1, -150, 0, 18)
+	-- The 150 reserved on the right is the BUY button. Item names come from
+	-- configuration and a long one ran straight under it.
+	name.TextTruncate = Enum.TextTruncate.AtEnd
 
 	local detail = if item.Owned == true
 		then "Included with your pass"

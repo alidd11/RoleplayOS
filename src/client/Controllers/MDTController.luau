@@ -338,7 +338,13 @@ function MDTController:_mount()
 	input.TextXAlignment = Enum.TextXAlignment.Left
 	input.TextYAlignment = Enum.TextYAlignment.Center
 	input.Position = UDim2.fromOffset(22, 119)
-	input.Size = UDim2.new(0.62, -34, 0, 42)
+	-- Shortened to stop the SEARCH button standing on it.
+	--
+	-- The box ran to 0.62 of the width less 12, and the button is anchored to
+	-- its right edge at less 22 and is 86 wide, so all 86 of it sat inside the
+	-- box. Every device, not a phone problem: the officer was typing underneath
+	-- a button. The box now stops four pixels short of where the button begins.
+	input.Size = UDim2.new(0.62, -134, 0, 42)
 	input.Parent = shell
 	corner(input, 9)
 	local padding = Instance.new("UIPadding")
@@ -705,6 +711,9 @@ function MDTController:_renderResults(items: { any })
 		)
 		primary.Position = UDim2.fromOffset(14, 10)
 		primary.Size = UDim2.new(1, -28, 0, 20)
+		-- Names come from player records and have no length limit, so a long one
+		-- ran on under the VIEW control at the end of its own row.
+		primary.TextTruncate = Enum.TextTruncate.AtEnd
 		local secondary = text(
 			row,
 			record.DateOfBirth and ("Date of birth  ·  " .. record.DateOfBirth)
@@ -714,6 +723,7 @@ function MDTController:_renderResults(items: { any })
 		)
 		secondary.Position = UDim2.fromOffset(14, 33)
 		secondary.Size = UDim2.new(1, -28, 0, 18)
+		secondary.TextTruncate = Enum.TextTruncate.AtEnd
 		secondary.TextColor3 = C.Muted
 		local open = text(row, "VIEW  ›", 9, true)
 		open.AnchorPoint = Vector2.new(1, 0.5)

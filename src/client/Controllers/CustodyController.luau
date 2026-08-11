@@ -49,6 +49,10 @@ function CustodyController:_refreshPlayers()
 		if player ~= Players.LocalPlayer then
 			local row = button(self.playerList, player.DisplayName .. "  ·  " .. player.Name)
 			row.Size = UDim2.new(1, 0, 0, 34)
+			-- Two player-chosen names joined together, on a narrow panel. This is
+			-- the button's own text, so without truncation it overflowed the button
+			-- rather than being clipped by it.
+			row.TextTruncate = Enum.TextTruncate.AtEnd
 			table.insert(
 				self.connections,
 				row.Activated:Connect(function()

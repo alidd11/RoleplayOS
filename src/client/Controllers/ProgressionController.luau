@@ -162,6 +162,8 @@ function ProgressionController:_renderRoles(roles: { any })
 		local name = label(item, role.Name, 12, true)
 		name.Position = UDim2.fromOffset(12, 7)
 		name.Size = UDim2.new(1, -100, 0, 20)
+		-- The 100 reserved on the right is the level badge.
+		name.TextTruncate = Enum.TextTruncate.AtEnd
 		local level = label(item, "LV " .. tostring(role.Progression.Level), 10, true)
 		level.AnchorPoint = Vector2.new(1, 0)
 		level.Position = UDim2.new(1, -12, 0, 8)

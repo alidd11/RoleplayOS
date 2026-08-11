@@ -477,6 +477,10 @@ function DispatchController:_renderCalls(calls: { any })
 		local summary = label(row, tostring(call.Summary), 12, true)
 		summary.Position = UDim2.fromOffset(12, 28)
 		summary.Size = UDim2.new(1, -24, 0, 18)
+		-- Typed by whoever raised the call, so its length is whatever they felt
+		-- like. Without this it spilled out of the queue column and over the unit
+		-- board beside it, the row having nothing to clip it.
+		summary.TextTruncate = Enum.TextTruncate.AtEnd
 		local meta = label(
 			row,
 			string.format("%s  ·  %s", tostring(call.IncidentType), tostring(call.Location)),
