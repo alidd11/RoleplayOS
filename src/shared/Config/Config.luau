@@ -40,27 +40,6 @@ local function publicPassOr(existingRule: any, gamepassId: number): any
 	}
 end
 
--- A role that is open to everybody on the public place and held by the group
--- everywhere else.
-local function publicOr(existingRule: any): any
-	return {
-		AccessType = "Combined",
-		Match = "Any",
-		DisplayWhenLocked = true,
-		Rules = {
-			{ AccessType = "ServerKind", Kind = "Public" },
-			{
-				AccessType = "Combined",
-				Match = "All",
-				Rules = {
-					{ AccessType = "ServerKind", Kinds = ELSEWHERE },
-					existingRule,
-				},
-			},
-		},
-	}
-end
-
 local Config = {
 	Framework = {
 		Environment = "Development",
@@ -1645,88 +1624,6 @@ local Config = {
 		},
 	},
 	Vehicles = {
-		Compact = {
-			Id = "Compact",
-			Name = "BMW M140i",
-			Price = 15000,
-			ModelName = "Compact",
-			WorkspaceModelName = "M140i",
-			AssetPath = { "Vehicles", "Civilian", "Starter", "Compact" },
-			Colours = { "Black", "Blue", "White" },
-			Access = { AccessType = "Public" },
-			Category = "Civilian",
-			Starter = true,
-		},
-		PremiumSaloon = {
-			Id = "PremiumSaloon",
-			Name = "BMW M5 Touring",
-			Price = 45000,
-			ModelName = "PremiumSaloon",
-			WorkspaceModelName = "M5 Touring",
-			AssetPath = { "Vehicles", "Civilian", "Premium", "PremiumSaloon" },
-			Colours = { "Black", "Silver" },
-			Access = {
-				AccessType = "Gamepass",
-				Id = "PremiumVehicles",
-				GamepassId = 1936590544,
-				DisplayWhenLocked = true,
-			},
-			Category = "Civilian",
-		},
-		M3Touring = {
-			Id = "M3Touring",
-			Name = "BMW M3 Touring",
-			Price = 65000,
-			ModelName = "M3Touring",
-			WorkspaceModelName = "M3 Touring",
-			AssetPath = { "Vehicles", "Civilian", "Standard", "M3Touring" },
-			Colours = { "Black", "Blue", "Grey", "White" },
-			Access = { AccessType = "Public" },
-			Category = "Civilian",
-		},
-		FordRanger = {
-			Id = "FordRanger",
-			Name = "Ford Ranger",
-			Price = 42000,
-			ModelName = "FordRanger",
-			WorkspaceModelName = "Ford Ranger",
-			AssetPath = { "Vehicles", "Civilian", "Standard", "FordRanger" },
-			Colours = { "Black", "Blue", "Grey", "White" },
-			Access = { AccessType = "Public" },
-			Category = "Civilian",
-		},
-		Ferrari488 = {
-			Id = "Ferrari488",
-			Name = "Ferrari 488 GT3",
-			Price = 220000,
-			ModelName = "Ferrari488",
-			WorkspaceModelName = "Ferrari 488 GT3 Race Car",
-			AssetPath = { "Vehicles", "Civilian", "Premium", "Ferrari488" },
-			Colours = { "Black", "Red", "White", "Yellow" },
-			Access = {
-				AccessType = "Gamepass",
-				Id = "PremiumVehicles",
-				GamepassId = 1936590544,
-				DisplayWhenLocked = true,
-			},
-			Category = "Civilian",
-		},
-		UrusMansory = {
-			Id = "UrusMansory",
-			Name = "Urus Mansory",
-			Price = 180000,
-			ModelName = "UrusMansory",
-			WorkspaceModelName = "Urusmansory",
-			AssetPath = { "Vehicles", "Civilian", "Premium", "UrusMansory" },
-			Colours = { "Black", "Grey", "White", "Yellow" },
-			Access = {
-				AccessType = "Gamepass",
-				Id = "PremiumVehicles",
-				GamepassId = 1936590544,
-				DisplayWhenLocked = true,
-			},
-			Category = "Civilian",
-		},
 		CorollaTaxi = {
 			Id = "CorollaTaxi",
 			Name = "Toyota Corolla Taxi",
@@ -1739,233 +1636,6 @@ local Config = {
 			Category = "Civilian",
 			JobId = "TaxiDriver",
 			Fleet = true,
-		},
-		PoliceResponse = {
-			Id = "PoliceResponse",
-			Name = "Marked response car",
-			Price = 0,
-			ModelName = "PoliceResponse",
-			WorkspaceModelName = "Marked 308",
-			AssetPath = { "Vehicles", "Services", "Police", "Frontline", "PoliceResponse" },
-			Colours = { "Police" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			DivisionId = "Frontline",
-			RoleIds = {
-				"PoliceOfficer",
-				"PoliceFrontline",
-				"ArmedResponseOfficer",
-				"RoadsPolicingOfficer",
-			},
-			Access = publicOr({
-				AccessType = "Group",
-				GroupLinkId = "Police",
-				MinimumGroupRank = 1,
-			}),
-		},
-		FrontlinePatrolEstate = {
-			Id = "FrontlinePatrolEstate",
-			Name = "Frontline patrol estate",
-			Price = 0,
-			ModelName = "FrontlinePatrolEstate",
-			WorkspaceModelName = "Toyota Corolla - Police",
-			AssetPath = {
-				"Vehicles",
-				"Services",
-				"Police",
-				"Frontline",
-				"FrontlinePatrolEstate",
-			},
-			Colours = { "Police" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			DivisionId = "Frontline",
-			RoleIds = { "PoliceOfficer", "PoliceFrontline" },
-			Access = publicOr({
-				AccessType = "Group",
-				GroupLinkId = "Police",
-				MinimumGroupRank = 1,
-			}),
-		},
-		ArmedResponseSUV = {
-			Id = "ArmedResponseSUV",
-			Name = "Armed response SUV",
-			Price = 0,
-			ModelName = "ArmedResponseSUV",
-			WorkspaceModelName = "UNMXC90",
-			AssetPath = { "Vehicles", "Services", "Police", "ArmedResponse", "ArmedResponseSUV" },
-			DivisionId = "ArmedResponse",
-			Colours = { "Police" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			RoleIds = { "ArmedResponseOfficer" },
-			Access = publicPassOr({
-				AccessType = "Combined",
-				Match = "All",
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-					{
-						AccessType = "Group",
-						GroupLinkId = "ArmedResponse",
-						MinimumGroupRank = 1,
-					},
-				},
-			}, 1933270297),
-		},
-		RoadsPolicingEstate = {
-			Id = "RoadsPolicingEstate",
-			Name = "Roads policing estate",
-			Price = 0,
-			ModelName = "RoadsPolicingEstate",
-			WorkspaceModelName = "Toyota Corolla - Police",
-			AssetPath = { "Vehicles", "Services", "Police", "RoadsPolicing", "RoadsPolicingEstate" },
-			DivisionId = "RoadsPolicing",
-			Colours = { "Police" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			RoleIds = { "RoadsPolicingOfficer" },
-			Access = publicPassOr({
-				AccessType = "Combined",
-				Match = "All",
-				Rules = {
-					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
-					{
-						AccessType = "Group",
-						GroupLinkId = "RoadsPolicing",
-						MinimumGroupRank = 1,
-					},
-				},
-			}, 1933156365),
-		},
-		PoliceUnmarkedGolf = {
-			Id = "PoliceUnmarkedGolf",
-			Name = "Unmarked Volkswagen Golf GTI",
-			Price = 0,
-			ModelName = "PoliceUnmarkedGolf",
-			WorkspaceModelName = "Volkswagen Golf 8 GTI (Unmarked)",
-			AssetPath = { "Vehicles", "Services", "Police", "Shared", "PoliceUnmarkedGolf" },
-			Colours = { "Unmarked" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			RoleIds = {
-				"PoliceOfficer",
-				"PoliceFrontline",
-				"ArmedResponseOfficer",
-				"RoadsPolicingOfficer",
-			},
-			Access = publicOr({
-				AccessType = "Group",
-				GroupLinkId = "Police",
-				MinimumGroupRank = 1,
-			}),
-		},
-		PoliceTransportVan = {
-			Id = "PoliceTransportVan",
-			Name = "Police transport van",
-			Price = 0,
-			ModelName = "PoliceTransportVan",
-			WorkspaceModelName = "PTV",
-			AssetPath = { "Vehicles", "Services", "Police", "Shared", "PoliceTransportVan" },
-			Colours = { "Police" },
-			Category = "Service",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			RoleIds = {
-				"PoliceOfficer",
-				"PoliceFrontline",
-				"ArmedResponseOfficer",
-				"RoadsPolicingOfficer",
-			},
-			Access = publicOr({
-				AccessType = "Group",
-				GroupLinkId = "Police",
-				MinimumGroupRank = 1,
-			}),
-		},
-		AmbulanceResponse = {
-			Id = "AmbulanceResponse",
-			Name = "Ambulance response car",
-			Price = 0,
-			ModelName = "AmbulanceResponse",
-			AssetPath = { "Vehicles", "Services", "Ambulance", "AmbulanceResponse" },
-			Colours = { "Ambulance" },
-			Category = "Service",
-			TeamName = "Ambulance",
-			DepartmentId = "Ambulance",
-			RoleIds = { "Paramedic" },
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Ambulance", MinimumGroupRank = 1 },
-				1936100607
-			),
-		},
-		FireEngine = {
-			Id = "FireEngine",
-			Name = "Fire engine",
-			Price = 0,
-			ModelName = "FireEngine",
-			AssetPath = { "Vehicles", "Services", "Fire", "FireEngine" },
-			Colours = { "Fire" },
-			Category = "Service",
-			TeamName = "Fire",
-			DepartmentId = "Fire",
-			RoleIds = { "Firefighter" },
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Fire", MinimumGroupRank = 1 },
-				1936292594
-			),
-		},
-		ServiceBus = {
-			Id = "ServiceBus",
-			Name = "Service bus",
-			Price = 0,
-			ModelName = "ServiceBus",
-			AssetPath = { "Vehicles", "Services", "Transport", "ServiceBus" },
-			Colours = { "Operator" },
-			Category = "Service",
-			TeamName = "Transport",
-			DepartmentId = "Transport",
-			RoleIds = { "TransportOperator" },
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Transport", MinimumGroupRank = 1 },
-				1934302085
-			),
-		},
-		HighwaysPatrol = {
-			Id = "HighwaysPatrol",
-			Name = "Highways patrol vehicle",
-			Price = 0,
-			ModelName = "HighwaysPatrol",
-			AssetPath = { "Vehicles", "Services", "Highways", "HighwaysPatrol" },
-			Colours = { "Highways" },
-			Category = "Service",
-			TeamName = "Highways",
-			DepartmentId = "Highways",
-			RoleIds = { "HighwayPatrolOfficer" },
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Highways", MinimumGroupRank = 1 },
-				1934122097
-			),
-		},
-		PrisonTransport = {
-			Id = "PrisonTransport",
-			Name = "Prison transport van",
-			Price = 0,
-			ModelName = "PrisonTransport",
-			AssetPath = { "Vehicles", "Services", "Prison", "PrisonTransport" },
-			Colours = { "Prison" },
-			Category = "Service",
-			TeamName = "Prison",
-			DepartmentId = "Prison",
-			RoleIds = { "PrisonOfficer" },
-			Access = publicPassOr(
-				{ AccessType = "Group", GroupLinkId = "Prison", MinimumGroupRank = 1 },
-				1937368306
-			),
 		},
 	},
 	Spawning = {
@@ -2160,7 +1830,11 @@ local Config = {
 		-- Retained for speed enforcement and the replacement spawner integration;
 		-- RoleplayOS no longer contains a vehicle spawning implementation.
 		StudsPerSecondToMph = 0.626,
-		StarterDefinitionId = "Compact",
+		-- Was "Compact", a car that is no longer in the project. Left empty
+		-- rather than pointed at a bike: this is meant to be a free first car
+		-- and nothing in the catalogue is that today. Name a definition here
+		-- when the replacement fleet arrives.
+		StarterDefinitionId = "",
 		StarterColour = "Blue",
 		StarterGarageId = "CityGarage",
 	},
@@ -2177,14 +1851,10 @@ local Config = {
 			Name = "City Motors",
 			-- Named here, and appended to automatically for any civilian model
 			-- whose DealershipId attribute points at this forecourt.
-			VehicleIds = {
-				"Compact",
-				"M3Touring",
-				"FordRanger",
-				"PremiumSaloon",
-				"Ferrari488",
-				"UrusMansory",
-			},
+			-- Every car named here was removed from the project deliberately, so
+			-- the forecourt was advertising a fleet that no longer exists. The
+			-- live list is in EDIT_HERE/06_Vehicles.luau, which merges over this.
+			VehicleIds = {},
 		},
 	},
 	Properties = {
