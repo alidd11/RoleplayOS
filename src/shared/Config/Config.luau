@@ -1463,7 +1463,6 @@ local Config = {
 		RoadsPolicing = { Id = "RoadsPolicing", DepartmentId = "Police", Name = "Roads Policing" },
 	},
 	Tools = {
-		MDT = { Id = "MDT", AssetPath = { "Tools", "Shared", "MDT" } },
 		Handcuffs = {
 			Id = "Handcuffs",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Handcuffs" },
@@ -1488,23 +1487,23 @@ local Config = {
 	Loadouts = {
 		PoliceResponse = {
 			Id = "PoliceResponse",
-			ToolIds = { "MDT", "Handcuffs", "Taser" },
+			ToolIds = { "Handcuffs", "Taser" },
 		},
 		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
 		-- gated on carrying them, so the distinction enforces itself.
-		PCSO = { Id = "PCSO", ToolIds = { "MDT" } },
+		PCSO = { Id = "PCSO", ToolIds = {} },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
-			ToolIds = { "MDT", "Handcuffs", "Taser" },
+			ToolIds = { "Handcuffs", "Taser" },
 		},
-		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "MDT", "Handcuffs", "Taser" } },
-		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "MDT", "Handcuffs", "Taser" } },
-		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "MDT", "MedicalBag" } },
-		FireStandard = { Id = "FireStandard", ToolIds = { "MDT" } },
-		ControlStandard = { Id = "ControlStandard", ToolIds = { "MDT" } },
+		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Handcuffs", "Taser" } },
+		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Handcuffs", "Taser" } },
+		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "MedicalBag" } },
+		FireStandard = { Id = "FireStandard", ToolIds = {} },
+		ControlStandard = { Id = "ControlStandard", ToolIds = {} },
 		TransportStandard = { Id = "TransportStandard", ToolIds = {} },
-		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = { "MDT" } },
-		PrisonStandard = { Id = "PrisonStandard", ToolIds = { "MDT" } },
+		HighwaysStandard = { Id = "HighwaysStandard", ToolIds = {} },
+		PrisonStandard = { Id = "PrisonStandard", ToolIds = {} },
 	},
 	Jobs = {
 		DeliveryDriver = {
