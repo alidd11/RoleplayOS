@@ -22,6 +22,8 @@ local TextFilter = {}
 -- creating a character timed out rather than failing.
 local TIMEOUT_SECONDS = 4
 local POLL_SECONDS = 0.05
+local MAX_CONCURRENT_FILTERS = 16
+local activeFilters = 0
 
 local function run(
 	text: string,
@@ -35,6 +37,10 @@ local function run(
 	if RunService:IsStudio() then
 		return text, nil
 	end
+	if activeFilters >= MAX_CONCURRENT_FILTERS then
+		return nil, "TEXT_FILTER_BUSY"
+	end
+	activeFilters += 1
 	local finished = false
 	local filtered: string? = nil
 	task.spawn(function()
@@ -45,12 +51,13 @@ local function run(
 			return TextService:FilterStringAsync(text, userId)
 		end)
 		if ok and result then
-			local extracted = extract(result)
-			if type(extracted) == "string" and #extracted > 0 then
+			local extractedOk, extracted = pcall(extract, result)
+			if extractedOk and type(extracted) == "string" and #extracted > 0 then
 				filtered = extracted
 			end
 		end
 		finished = true
+		activeFilters = math.max(0, activeFilters - 1)
 	end)
 	local deadline = os.clock() + TIMEOUT_SECONDS
 	while not finished and os.clock() < deadline do

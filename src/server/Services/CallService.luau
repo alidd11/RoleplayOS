@@ -5,7 +5,17 @@ local CallService = { calls = {}, revision = 0 }
 function CallService:Init(context: any)
 	self.context = context
 end
-function CallService:Start() end
+function CallService:Start()
+	self.running = true
+	task.spawn(function()
+		while self.running do
+			task.wait(60)
+			if self.running then
+				self:Snapshot()
+			end
+		end
+	end)
+end
 function CallService:Create(data: any): (any?, string?)
 	local incidentType = if table.find(
 			self.context.Configuration.Dispatch.IncidentTypes,
@@ -102,6 +112,10 @@ function CallService:AddOperationalNote(
 		DepartmentId = duty.DepartmentId,
 		CreatedAt = os.time(),
 	})
+	local maximumNotes = self.context.Configuration.Dispatch.MaximumOperationalNotes or 50
+	while #call.OperationalNotes > maximumNotes do
+		table.remove(call.OperationalNotes, 1)
+	end
 	call.Revision += 1
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallNoteAdded", callId, self.revision)
@@ -243,6 +257,7 @@ function CallService:Snapshot(): { any }
 	return result
 end
 function CallService:Destroy()
+	self.running = false
 	table.clear(self.calls)
 	self.revision = 0
 end

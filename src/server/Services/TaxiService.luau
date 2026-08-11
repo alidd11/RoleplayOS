@@ -145,6 +145,31 @@ function TaxiService:GetDriverRequest(player: Player): any?
 	return nil
 end
 
+function TaxiService:_activeTaxi(player: Player): Model?
+	local vehicleService = self.context.Services:Get("VehicleSpawnerService")
+	local vehicle = vehicleService and vehicleService.active[player.UserId]
+	if not vehicle or not vehicle:IsA("Model") or not vehicle.Parent then
+		return nil
+	end
+	if vehicle:GetAttribute("RoleplayOSDefinitionId") ~= "CorollaTaxi" then
+		return nil
+	end
+	return vehicle
+end
+
+function TaxiService:_isSeatedInTaxi(player: Player, vehicle: Model): boolean
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+	for _, seat in vehicle:GetDescendants() do
+		if (seat:IsA("Seat") or seat:IsA("VehicleSeat")) and seat.Occupant == humanoid then
+			return true
+		end
+	end
+	return false
+end
+
 function TaxiService:_fare(band: any): (number?, string?)
 	if type(band) ~= "string" then
 		return nil, "INVALID_FARE_BAND"
@@ -248,12 +273,17 @@ function TaxiService:Accept(player: Player, requestId: any): (any?, string?)
 	if not driverCharacter then
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
 	end
+	local vehicle = self:_activeTaxi(player)
+	if not vehicle then
+		return nil, "TAXI_VEHICLE_REQUIRED"
+	end
 	request.State = "Accepted"
 	request.DriverUserId = player.UserId
 	request.DriverCharacterId = driverCharacter.CharacterId
 	request.DriverName = driverCharacter.Identity.FirstName
 		.. " "
 		.. driverCharacter.Identity.LastName
+	request.AcceptedPosition = vehicle:GetPivot().Position
 	self.byDriver[player.UserId] = requestId
 	local passenger = Players:GetPlayerByUserId(request.PassengerUserId)
 	if passenger then
@@ -291,6 +321,19 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 		or driverCharacterId ~= request.DriverCharacterId
 	then
 		return nil, "CHARACTER_CHANGED"
+	end
+	local vehicle = self:_activeTaxi(player)
+	if
+		not vehicle
+		or not self:_isSeatedInTaxi(player, vehicle)
+		or not self:_isSeatedInTaxi(passenger, vehicle)
+	then
+		return nil, "TAXI_OCCUPANTS_REQUIRED"
+	end
+	local journeyDistance = (vehicle:GetPivot().Position - request.PickupPosition).Magnitude
+	local minimumDistance = tonumber(self.settings.MinimumJourneyStuds) or 60
+	if journeyDistance < minimumDistance then
+		return nil, "TAXI_JOURNEY_NOT_COMPLETED"
 	end
 	if passengerCharacter.Economy.Balance < request.Fare then
 		return nil, "INSUFFICIENT_FUNDS"
@@ -386,6 +429,20 @@ function TaxiService:Cancel(player: Player, requestId: any): (boolean, string?)
 end
 
 function TaxiService:Start()
+	self.running = true
+	task.spawn(function()
+		while self.running do
+			task.wait(60)
+			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
+			for requestId, request in self.requests do
+				local terminal = request.State == "Completed" or request.State == "Cancelled"
+				local timestamp = tonumber(request.CompletedAt or request.CreatedAt) or os.time()
+				if terminal and timestamp < cutoff then
+					self.requests[requestId] = nil
+				end
+			end
+		end
+	end)
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -398,6 +455,7 @@ function TaxiService:Start()
 end
 
 function TaxiService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

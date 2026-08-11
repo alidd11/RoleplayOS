@@ -32,6 +32,7 @@ function NetworkServer.new(config: any, logger: any)
 		limiters = {},
 		counts = {},
 		active = {},
+		activeTotal = 0,
 		authorizer = nil,
 		globalLimiter = RateLimiter.new(
 			config.GlobalCapacity or 30,
@@ -193,7 +194,17 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
+		if self.activeTotal >= (self.config.MaximumConcurrentRequestsPerServer or 64) then
+			self:_count("SERVER_BUSY")
+			return {
+				Success = false,
+				Code = "SERVER_BUSY",
+				Message = "The server is busy. Please try again shortly.",
+				RequestId = requestId,
+			}
+		end
 		inFlight[requestId] = now
+		self.activeTotal += 1
 
 		-- The handler runs alongside a deadline rather than being waited on.
 		--
@@ -215,6 +226,7 @@ function NetworkServer:RegisterFunction(
 			local handlerOk, handlerResult = pcall(handler, player, payload, requestId)
 			ok, result = handlerOk, handlerResult
 			finished = true
+			self.activeTotal = math.max(0, self.activeTotal - 1)
 		end)
 		local handlerDeadline = os.clock() + (self.config.HandlerTimeoutSeconds or 8)
 		while not finished and os.clock() < handlerDeadline do
@@ -287,6 +299,7 @@ function NetworkServer:Destroy()
 		self.globalLimiter:Remove(tostring(player.UserId))
 	end
 	table.clear(self.active)
+	self.activeTotal = 0
 end
 
 function NetworkServer:RegisterEvent(name: string): RemoteEvent

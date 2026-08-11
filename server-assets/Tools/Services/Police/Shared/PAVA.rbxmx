@@ -1,0 +1,51 @@
+<roblox version="4" xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd">
+  <Item class="Tool" referent="RBX_PAVA">
+    <Properties>
+      <string name="Name">PAVA</string>
+      <bool name="CanBeDropped">false</bool>
+      <bool name="RequiresHandle">true</bool>
+    </Properties>
+    <Item class="Part" referent="RBX_PAVA_Handle">
+      <Properties>
+        <string name="Name">Handle</string>
+        <bool name="Anchored">false</bool>
+        <bool name="CanCollide">false</bool>
+        <bool name="CanQuery">false</bool>
+        <bool name="CanTouch">false</bool>
+        <bool name="Massless">true</bool>
+        <float name="Transparency">1</float>
+        <Vector3 name="Size"><X>0.2</X><Y>0.2</Y><Z>0.2</Z></Vector3>
+      </Properties>
+    </Item>
+    <Item class="Part" referent="RBX_PAVA_Spray">
+      <Properties>
+        <string name="Name">Spray</string>
+        <bool name="Anchored">false</bool>
+        <bool name="CanCollide">false</bool>
+        <bool name="CanQuery">false</bool>
+        <bool name="CanTouch">false</bool>
+        <bool name="Massless">true</bool>
+        <Color3uint8 name="Color3">4281545523</Color3uint8>
+        <Vector3 name="Size"><X>0.3</X><Y>0.3</Y><Z>0.8</Z></Vector3>
+      </Properties>
+      <Item class="ParticleEmitter" referent="RBX_PAVA_Emitter">
+        <Properties>
+          <string name="Name">SprayEmitter</string>
+          <bool name="Enabled">false</bool>
+          <float name="Lifetime">0.25</float>
+          <float name="Rate">35</float>
+          <float name="Speed">18</float>
+        </Properties>
+      </Item>
+    </Item>
+    <Item class="Animation" referent="RBX_PAVA_Equip">
+      <Properties><string name="Name">PAVA Equipping</string></Properties>
+    </Item>
+    <Item class="Animation" referent="RBX_PAVA_Equipped">
+      <Properties><string name="Name">PAVA Equipped</string></Properties>
+    </Item>
+    <Item class="Animation" referent="RBX_PAVA_Eyes">
+      <Properties><string name="Name">Itchy Eyes</string></Properties>
+    </Item>
+  </Item>
+</roblox>

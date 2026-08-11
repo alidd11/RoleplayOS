@@ -255,6 +255,27 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("PAVASpray", function(payload)
+		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+	end, function(player, payload, requestId)
+		local sprayed, reason =
+			self.context.Services:Get("PAVAService"):Spray(player, payload.TargetUserId)
+		local messages = {
+			POLICE_DUTY_REQUIRED = "PAVA is restricted to police officers on duty.",
+			PAVA_NOT_EQUIPPED = "Equip your issued PAVA before using it.",
+			PAVA_COOLDOWN = "PAVA is cooling down.",
+			PAVA_TARGET_INVALID = "That target cannot be sprayed.",
+			PAVA_TARGET_OUT_OF_RANGE = "The target is out of range.",
+		}
+		return {
+			Success = sprayed,
+			Code = if sprayed then "OK" else reason,
+			Message = if sprayed
+				then "PAVA deployed."
+				else (messages[reason] or "PAVA could not be deployed."),
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("EnterCivilian", function(payload)
 		return type(payload) == "table"
 			and type(payload.CharacterId) == "string"

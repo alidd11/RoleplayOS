@@ -1493,21 +1493,26 @@ local Config = {
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Warrant Card" },
 			DepartmentId = "Police",
 		},
+		PAVA = {
+			Id = "PAVA",
+			AssetPath = { "Tools", "Services", "Police", "Shared", "PAVA" },
+			DepartmentId = "Police",
+		},
 	},
 	Loadouts = {
 		PoliceResponse = {
 			Id = "PoliceResponse",
-			ToolIds = { "Handcuffs", "Taser" },
+			ToolIds = { "Handcuffs", "Taser", "PAVA" },
 		},
 		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
 		-- gated on carrying them, so the distinction enforces itself.
 		PCSO = { Id = "PCSO", ToolIds = {} },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
-			ToolIds = { "Handcuffs", "Taser" },
+			ToolIds = { "Handcuffs", "Taser", "PAVA" },
 		},
-		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Handcuffs", "Taser" } },
-		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Handcuffs", "Taser" } },
+		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Handcuffs", "Taser", "PAVA" } },
+		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Handcuffs", "Taser", "PAVA" } },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "MedicalBag" } },
 		FireStandard = { Id = "FireStandard", ToolIds = {} },
 		ControlStandard = { Id = "ControlStandard", ToolIds = {} },
@@ -2277,6 +2282,7 @@ local Config = {
 		},
 		CallStatuses = { "Open", "Assigned", "OnScene" },
 		ActiveStateTtlSeconds = 300,
+		MaximumOperationalNotes = 50,
 	},
 	EmergencyTriggers = {
 		Tag = "RoleplayOSEmergencyTrigger",
@@ -2333,6 +2339,8 @@ local Config = {
 		EmergencyNumber = "999",
 	},
 	Taxi = {
+		RequestRetentionSeconds = 900,
+		MinimumJourneyStuds = 60,
 		Bands = {
 			Local = { Id = "Local", Name = "Local trip", Fare = 8 },
 			City = { Id = "City", Name = "City trip", Fare = 14 },
@@ -2399,6 +2407,7 @@ local Config = {
 		MaximumNodes = 256,
 		MaximumStringBytes = 2048,
 		MaximumConcurrentRequests = 4,
+		MaximumConcurrentRequestsPerServer = 64,
 		-- How long a handler is given before the server answers without it.
 		--
 		-- Every endpoint here should reply in well under a second; anything
@@ -2419,6 +2428,7 @@ local Config = {
 			RadioTransmit = { Capacity = 6, RefillPerSecond = 1 },
 			RadioSetCallsign = { Capacity = 3, RefillPerSecond = 0.2 },
 			RadioPanic = { Capacity = 2, RefillPerSecond = 0.05 },
+			PAVASpray = { Capacity = 8, RefillPerSecond = 2 },
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
