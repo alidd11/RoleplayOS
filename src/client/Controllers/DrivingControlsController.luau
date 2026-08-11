@@ -23,7 +23,12 @@ local RunService = game:GetService("RunService")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
-local DrivingControlsController = { connections = {}, throttle = 0 }
+local DrivingControlsController = {
+	connections = {},
+	throttle = 0,
+	-- Weak keyed, so a destroyed vehicle does not keep its seat alive here.
+	valuesBySeat = setmetatable({}, { __mode = "k" }),
+}
 
 local function pedal(parent: Instance, name: string, glyph: string, colour: Color3): TextButton
 	local item = Instance.new("TextButton")
@@ -159,10 +164,57 @@ function DrivingControlsController:_seat(): VehicleSeat?
 	return if seat and seat:IsA("VehicleSeat") and seat.Occupant == humanoid then seat else nil
 end
 
+-- Finds the chassis input values, wherever in the vehicle they are kept.
+--
+-- This looked in exactly two places: on the seat, and on the seat's immediate
+-- parent. That is enough only when the seat is a direct child of the vehicle,
+-- which is true of the bike and not of the cars -- their seat hangs off a Body
+-- folder, so the parent searched was Body and the values one level above it were
+-- never found. The pedals then wrote a throttle nobody read, and a phone player
+-- could sit in a car and go nowhere while the same pedals worked on a bike.
+--
+-- Resolved from the whole vehicle now: walk up to the model the seat belongs to
+-- and search it, so the layout of the fork stops mattering. Cached per seat
+-- because this runs on every frame the pedal is held and a recursive search of a
+-- two-hundred-part car is not something to repeat sixty times a second.
+function DrivingControlsController:_values(seat: VehicleSeat): Instance?
+	local cached = self.valuesBySeat[seat]
+	if cached ~= nil then
+		if cached == false then
+			return nil
+		end
+		if (cached :: Instance).Parent then
+			return cached :: Instance
+		end
+	end
+	local name = self.chassis.ValuesFolderName
+	local found: Instance? = seat:FindFirstChild(name)
+	if not found then
+		-- The outermost model the seat sits inside, which is the vehicle.
+		local root: Instance = seat
+		while root.Parent and root.Parent ~= workspace do
+			root = root.Parent
+		end
+		if root ~= seat then
+			found = root:FindFirstChild(name, true)
+		end
+	end
+	self.valuesBySeat[seat] = found or false
+	return found
+end
+
 -- Both input contracts are satisfied rather than betting on one. A chassis
 -- either reads the seat's throttle or keeps its own input values; writing both
 -- costs nothing and removes the need to know which fork this is. A chassis that
 -- writes its own values every frame simply overwrites ours, which is harmless.
+-- Writes one value if the chassis keeps one by that name.
+local function write(values: Instance, name: string, value: number)
+	local target = values:FindFirstChild(name)
+	if target and target:IsA("ValueBase") then
+		(target :: any).Value = value
+	end
+end
+
 function DrivingControlsController:_apply(seat: VehicleSeat, throttle: number)
 	-- A dry tank is nought throttle whatever the pedal says. The server has
 	-- already cut the engine and zeroed the seat, and this closes the last route
@@ -173,15 +225,19 @@ function DrivingControlsController:_apply(seat: VehicleSeat, throttle: number)
 		throttle = 0
 	end
 	seat.ThrottleFloat = throttle
-	local values = seat:FindFirstChild(self.chassis.ValuesFolderName)
-		or (seat.Parent and seat.Parent:FindFirstChild(self.chassis.ValuesFolderName))
+	local values = self:_values(seat)
 	if not values then
 		return
 	end
-	local target = values:FindFirstChild(self.chassis.ThrottleValueName)
-	if target and target:IsA("ValueBase") then
-		(target :: any).Value = throttle
-	end
+	write(values, self.chassis.ThrottleValueName, throttle)
+	-- Steering is mirrored from the seat rather than from a control of ours,
+	-- because we do not draw one: turning comes from Roblox's own thumbstick on a
+	-- phone, from A and D on a keyboard, and from a stick on a gamepad, and all
+	-- three land on VehicleSeat.Steer. A chassis that keeps its own steering value
+	-- never saw any of them, so a car could be given throttle from our pedals and
+	-- still not turn. Names default here rather than in the configuration so this
+	-- works on a fork nobody has written an entry for yet.
+	write(values, self.chassis.SteerValueName or "Steer", seat.Steer)
 end
 
 -- A pedal held with no change in speed means the chassis takes its input
@@ -264,23 +320,33 @@ function DrivingControlsController:Start()
 	table.insert(
 		self.connections,
 		RunService.RenderStepped:Connect(function(delta)
-			-- Cheapest possible exit first. This runs every frame for every
-			-- player, including everyone on a keyboard who will never press a
-			-- pedal, so it must not search the character before it knows there is
-			-- anything to do.
-			if self.throttle == 0 then
-				self.heldFor = 0
-				return
-			end
+			-- Runs whenever seated, not only while one of our pedals is down.
+			--
+			-- It used to give up immediately unless our own touch pedal was held,
+			-- which meant the bridge into the chassis existed for that pedal and
+			-- for nothing else. Every other way of driving -- the keyboard, a
+			-- gamepad, Roblox's own touch thumbstick -- sets the seat's throttle
+			-- and steering and was never carried across, so a chassis keeping its
+			-- input in its own values folder ignored all of them.
+			--
+			-- Whoever is not seated still pays only a seat lookup per frame, and a
+			-- driver pays two value writes on top, which is nothing next to what
+			-- the chassis itself does each step.
 			local seat = self:_seat()
 			if not seat then
-				-- The player left the seat while holding a pedal.
 				self.throttle = 0
 				self.heldFor = 0
 				return
 			end
-			self:_apply(seat, self.throttle)
-			self:_watchForNoResponse(seat, delta)
+			-- Our pedal wins while it is held; otherwise take whatever the device
+			-- the player is actually using has put on the seat.
+			local throttle = if self.throttle ~= 0 then self.throttle else seat.Throttle
+			self:_apply(seat, throttle)
+			if throttle == 0 then
+				self.heldFor = 0
+			else
+				self:_watchForNoResponse(seat, delta)
+			end
 		end)
 	)
 end
