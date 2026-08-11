@@ -278,7 +278,15 @@ function RadioController:_render()
 		end
 	end
 	local previous = button(channelBar, "‹")
-	previous.Size = UDim2.fromOffset(22, 30)
+	-- The row is laid out from both edges with the channel name taking what is
+	-- left, rather than from a run of fixed offsets adding up to 268 pixels.
+	-- The compact panel gives this row 240, so the last control in that run --
+	-- PANIC -- was hanging 28 pixels outside it and being clipped. Of all the
+	-- buttons to lose off the edge of a phone, the emergency one is the worst.
+	--
+	-- Full height rather than 30 in a 34 row, and the steppers widened from 22:
+	-- these are pressed with a thumb, and 22 is half of what that needs.
+	previous.Size = UDim2.new(0, 34, 1, 0)
 	previous.Activated:Connect(function()
 		chooseChannel(-1)
 	end)
@@ -290,21 +298,23 @@ function RadioController:_render()
 		end
 	end
 	local channelTitle = button(channelBar, channelName)
-	channelTitle.Position = UDim2.fromOffset(28, 0)
-	channelTitle.Size = UDim2.fromOffset(100, 30)
+	channelTitle.Position = UDim2.fromOffset(38, 0)
+	channelTitle.Size = UDim2.new(1, -188, 1, 0)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
-	nextChannel.Position = UDim2.fromOffset(134, 0)
-	nextChannel.Size = UDim2.fromOffset(22, 30)
+	nextChannel.AnchorPoint = Vector2.new(1, 0)
+	nextChannel.Position = UDim2.new(1, -112, 0, 0)
+	nextChannel.Size = UDim2.new(0, 34, 1, 0)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local mute = button(channelBar, "MIC")
-	mute.Position = UDim2.fromOffset(162, 0)
-	mute.Size = UDim2.fromOffset(44, 30)
+	mute.AnchorPoint = Vector2.new(1, 0)
+	mute.Position = UDim2.new(1, -62, 0, 0)
+	mute.Size = UDim2.new(0, 46, 1, 0)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
@@ -312,8 +322,9 @@ function RadioController:_render()
 	end)
 	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
-	panic.Position = UDim2.fromOffset(214, 0)
-	panic.Size = UDim2.fromOffset(54, 30)
+	panic.AnchorPoint = Vector2.new(1, 0)
+	panic.Position = UDim2.fromScale(1, 0)
+	panic.Size = UDim2.new(0, 58, 1, 0)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
