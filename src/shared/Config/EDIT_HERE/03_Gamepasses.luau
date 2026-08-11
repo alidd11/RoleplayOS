@@ -25,5 +25,21 @@ return {
 		PublicHighwaysTeam = { GamepassId = 1934122097, PriceInRobux = 79 },
 		PublicPrisonTeam = { GamepassId = 1937368306, PriceInRobux = 79 },
 		GangSystemAccess = { GamepassId = 1941013627, PriceInRobux = 499 },
+		-- The Sur-Ron pass. Defined in full here rather than only overridden,
+		-- because Config.luau has no entry to override -- the merge adds a key it
+		-- does not already hold, so a new pass can live entirely in this file.
+		--
+		-- GamepassId is zero until the pass exists. Zero disables purchasing and
+		-- entitlement without breaking the menu, exactly as the note at the top of
+		-- this file describes, so the bike will show on the forecourt as locked
+		-- and simply cannot be bought yet. Create the pass in Creator Hub at 89
+		-- Robux and put its ID here; nothing else needs changing.
+		SurronBike = {
+			Id = "SurronBike",
+			GamepassId = 0,
+			PriceInRobux = 89,
+			Name = "Sur-Ron Light Bee",
+			Description = "Own and spawn the Sur-Ron Light Bee electric bike from any civilian dealership.",
+		},
 	},
 }

@@ -17,6 +17,7 @@ local VehicleSpawnerService = {
 	-- person who has ever played on it.
 	deathConnections = {},
 	spawnConnections = {},
+	seatConnections = {},
 }
 
 local function rootPosition(player: Player): Vector3?
@@ -54,6 +55,62 @@ local function ejectOccupants(vehicle: Instance)
 			end
 		end
 	end
+end
+
+-- Cuts anything the vehicle tied the rider to when they get off it.
+--
+-- Bike kits pose their rider by welding limbs to the machine, which is how the
+-- riding position survives with no animation playing, and several of them never
+-- undo it. The rider then walks away still joined to a bike that is no longer
+-- moving with them: accessories hang off the head, limbs trail behind, and the
+-- character reads as having come apart. Nothing is wrong with the avatar itself
+-- -- it looks correct until the moment it is first mounted -- so the damage is
+-- entirely in joints somebody else's script left behind.
+--
+-- Only joints with one end in the rider and the other in the vehicle are cut.
+-- That is exactly the set the vehicle added and nothing else: the rig's own
+-- joints have both ends in the character, and a held tool's weld does too, since
+-- an equipped tool is parented into the character. Both sides are searched
+-- because a kit may parent its welds to either.
+local function detachRider(character: Model, vehicle: Instance): number
+	local function inside(part: Instance?, root: Instance): boolean
+		return part ~= nil and (part == root or part:IsDescendantOf(root))
+	end
+	local removed = 0
+	for _, container in { character, vehicle } do
+		for _, descendant in container:GetDescendants() do
+			if
+				not (
+					descendant:IsA("Weld")
+					or descendant:IsA("WeldConstraint")
+					or descendant:IsA("Motor6D")
+				)
+			then
+				continue
+			end
+			local joint = descendant :: any
+			local first, second = joint.Part0, joint.Part1
+			local firstInRider = inside(first, character)
+			local secondInRider = inside(second, character)
+			if
+				(firstInRider and inside(second, vehicle))
+				or (secondInRider and inside(first, vehicle))
+			then
+				descendant:Destroy()
+				removed += 1
+			end
+		end
+	end
+	return removed
+end
+
+-- The vehicle a seat belongs to: the outermost model it sits inside.
+local function vehicleOf(seat: BasePart): Instance
+	local root: Instance = seat
+	while root.Parent and root.Parent ~= Workspace do
+		root = root.Parent
+	end
+	return root
 end
 
 local function seatPlayer(player: Player, seat: VehicleSeat)
@@ -443,6 +500,51 @@ function VehicleSpawnerService:Spawn(
 		nil
 end
 
+-- Watches one player's seat, and cleans up after whatever they were riding.
+function VehicleSpawnerService:_watchSeat(player: Player)
+	local previous = self.seatConnections[player.UserId]
+	if previous then
+		previous:Disconnect()
+		self.seatConnections[player.UserId] = nil
+	end
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	local lastVehicle: Instance? = nil
+	self.seatConnections[player.UserId] = humanoid
+		:GetPropertyChangedSignal("SeatPart")
+		:Connect(function()
+			local seat = humanoid.SeatPart
+			if seat then
+				lastVehicle = vehicleOf(seat)
+				return
+			end
+			-- Just got off. Deferred by a frame so Roblox has finished removing
+			-- its own seat weld before we look at what is left.
+			local vehicle = lastVehicle
+			lastVehicle = nil
+			if not vehicle or not vehicle.Parent then
+				return
+			end
+			task.defer(function()
+				local body = player.Character
+				if not body or not vehicle.Parent then
+					return
+				end
+				local removed = detachRider(body, vehicle)
+				if removed > 0 then
+					self.context.Logger:Info("Rider detached from a vehicle that kept hold", {
+						UserId = player.UserId,
+						Vehicle = vehicle.Name,
+						JointsRemoved = removed,
+					})
+				end
+			end)
+		end)
+end
+
 function VehicleSpawnerService:Start()
 	table.insert(
 		self.connections,
@@ -450,7 +552,7 @@ function VehicleSpawnerService:Start()
 			self:Remove(player.UserId)
 			self.cooldowns[player.UserId] = nil
 			self.spawning[player.UserId] = nil
-			for _, held in { self.deathConnections, self.spawnConnections } do
+			for _, held in { self.deathConnections, self.spawnConnections, self.seatConnections } do
 				local connection = held[player.UserId]
 				if connection then
 					connection:Disconnect()
@@ -492,12 +594,16 @@ function VehicleSpawnerService:Start()
 		end
 		self.spawnConnections[player.UserId] = player.CharacterAdded:Connect(function(character)
 			watchDeath(player, character)
+			-- Re-armed per character: the humanoid is a new instance after every
+			-- respawn, so a watcher bound to the old one is watching nothing.
+			self:_watchSeat(player)
 		end)
 		local character = player.Character
 		if character then
 			task.defer(function()
 				if player.Parent and player.Character == character then
 					watchDeath(player, character)
+					self:_watchSeat(player)
 				end
 			end)
 		end
