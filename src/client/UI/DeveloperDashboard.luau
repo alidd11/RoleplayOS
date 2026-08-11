@@ -15,6 +15,9 @@ local NATIVE_BAND_HEIGHT = 36
 local NATIVE_CONTROL_SIZE = 32
 -- Gap Roblox leaves between adjacent top-bar clusters.
 local NATIVE_CONTROL_GAP = 8
+-- Beyond this the page stops growing and centres instead. A line of text
+-- stretched the full width of a large monitor is harder to read, not easier.
+local MAXIMUM_CONTENT_WIDTH = 1680
 -- How many top-bar heights Roblox's own control cluster spans: the logo, then
 -- the pill holding the menu, chat and microphone buttons. Used only as a floor
 -- when Roblox reports no inset of its own, so our controls are never drawn
@@ -2252,15 +2255,36 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = false
-			local contentWidth = math.min(1680, math.max(280, layout.SafeViewport.X - 48))
-			local contentLeft = safeLeft + math.max(20, (layout.SafeViewport.X - contentWidth) / 2)
-			header.Position = UDim2.fromOffset(contentLeft, 6)
-			header.Size = UDim2.fromOffset(contentWidth, 28)
+			-- Width taken from the parent rather than computed from SafeViewport.
+			--
+			-- The list is a child of a frame that already spans the screen, so a
+			-- scale width with pixel margins is exactly the usable area by
+			-- construction. Deriving an absolute width from SafeViewport instead
+			-- meant the answer was only as good as that measurement, and when the
+			-- two disagreed the list came up short and left a band of empty screen
+			-- down the right of every page while the navigation above it ran the
+			-- full width. Nothing here depends on that number any more.
+			local marginLeft = safeLeft + 24
+			local marginRight = safeRight + 24
+			local available = layout.Viewport.X - marginLeft - marginRight
 			pageTitle.Visible = false
 			pageDescription.Visible = false
 			status.Position = UDim2.fromScale(1, 0)
-			scroll.Position = UDim2.fromOffset(contentLeft, 38)
-			scroll.Size = UDim2.new(0, contentWidth, 1, -(46 + layout.SafeBottom))
+			if available > MAXIMUM_CONTENT_WIDTH then
+				-- On a display wide enough for it, a centred column reads better than
+				-- one line of text stretched across a metre of monitor.
+				local centred = math.floor((layout.Viewport.X - MAXIMUM_CONTENT_WIDTH) / 2)
+				header.Position = UDim2.fromOffset(centred, 6)
+				header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 28)
+				scroll.Position = UDim2.fromOffset(centred, 38)
+				scroll.Size = UDim2.new(0, MAXIMUM_CONTENT_WIDTH, 1, -(46 + layout.SafeBottom))
+			else
+				header.Position = UDim2.fromOffset(marginLeft, 6)
+				header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 28)
+				scroll.Position = UDim2.fromOffset(marginLeft, 38)
+				scroll.Size =
+					UDim2.new(1, -(marginLeft + marginRight), 1, -(46 + layout.SafeBottom))
+			end
 		else
 			-- The sidebar hugs the left edge, so it absorbs the left reserve and
 			-- the content pane starts after it. Only the sidebar needs to know.
