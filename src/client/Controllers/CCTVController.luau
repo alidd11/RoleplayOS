@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local VRService = game:GetService("VRService")
@@ -136,6 +137,16 @@ function CCTVController:Open()
 	self.cameras = response.Data
 	self.index = 1
 	self.viewing = true
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui:SetAttribute("RoleplayOSCCTVOpen", true)
+		playerGui:SetAttribute("RoleplayOSMDTOpen", false)
+		playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
+		playerGui:SetAttribute("RoleplayOSDeviceOpen", true)
+	end
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
+	end)
 	self.gui.Enabled = true
 	self:_apply()
 	GuiService.SelectedObject = self.exitButton
@@ -144,6 +155,18 @@ end
 function CCTVController:Exit()
 	self.viewing = false
 	self.gui.Enabled = false
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		playerGui:SetAttribute("RoleplayOSCCTVOpen", false)
+		playerGui:SetAttribute(
+			"RoleplayOSDeviceOpen",
+			playerGui:GetAttribute("RoleplayOSMDTOpen") == true
+				or playerGui:GetAttribute("RoleplayOSPhoneOpen") == true
+		)
+	end
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
+	end)
 	if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.gui) then
 		GuiService.SelectedObject = nil
 	end

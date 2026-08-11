@@ -568,6 +568,14 @@ end
 function DispatchController:Start()
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self:_mount()
+	table.insert(
+		self.connections,
+		playerGui:GetAttributeChangedSignal("RoleplayOSCCTVOpen"):Connect(function()
+			if playerGui:GetAttribute("RoleplayOSCCTVOpen") == true then
+				self.gui.Enabled = false
+			end
+		end)
+	)
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Dispatch", function(layout)
 		-- The console has a minimum size, so it is scaled against the usable area
 		-- on every device class rather than only when compact; the raw viewport

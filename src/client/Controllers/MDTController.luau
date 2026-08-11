@@ -988,6 +988,15 @@ end
 
 function MDTController:Start()
 	self:_mount()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	table.insert(
+		self.connections,
+		playerGui:GetAttributeChangedSignal("RoleplayOSCCTVOpen"):Connect(function()
+			if playerGui:GetAttribute("RoleplayOSCCTVOpen") == true and self.shell.Visible then
+				self.setOpen(false)
+			end
+		end)
+	)
 	local function updateShortcutLabel(lastInputType: Enum.UserInputType)
 		if tostring(lastInputType):find("Gamepad") then
 			local key = UserInputService:GetStringForKeyCode(Enum.KeyCode.ButtonSelect)

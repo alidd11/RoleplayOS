@@ -485,6 +485,12 @@ function RadioController:Start()
 			self:_setOpen(self.open)
 		end)
 	)
+	table.insert(
+		self.connections,
+		playerGui:GetAttributeChangedSignal("RoleplayOSCCTVOpen"):Connect(function()
+			self:_setOpen(self.open)
+		end)
+	)
 	local initial = self.context.Controllers.NetworkController:Request("GetRadioSnapshot", {})
 	if initial.Success then
 		self.snapshot = initial.Data
