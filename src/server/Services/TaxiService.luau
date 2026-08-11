@@ -67,11 +67,57 @@ function TaxiService:_statusFor(player: Player): any?
 		Dropoff = request.Dropoff,
 		Fare = request.Fare,
 		Band = request.Band,
+		PickupPosition = request.PickupPosition,
 		PassengerName = request.PassengerName,
 		DriverName = request.DriverName,
 		IsDriver = request.DriverUserId == player.UserId,
 		CreatedAt = request.CreatedAt,
 	}
+end
+
+function TaxiService:StartShift(player: Player): (any?, string?)
+	local character, characterId = self:_character(player)
+	if not character then
+		return nil, characterId
+	end
+	if self:_isDriver(player) then
+		return self:_statusFor(player) or { State = "OnDuty" }, nil
+	end
+	local employment =
+		self.context.Services:Get("EmploymentService"):Hire(player, characterId, "TaxiDriver")
+	if not employment then
+		return nil, "TAXI_JOB_UNAVAILABLE"
+	end
+	local taxiTeam = self.context.Services:Get("TeamService"):Get("Taxi")
+	if not taxiTeam then
+		return nil, "TAXI_TEAM_UNAVAILABLE"
+	end
+	player.Team = taxiTeam
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return { State = "OnDuty", EmploymentId = employment.EmploymentId }, nil
+end
+
+function TaxiService:EndShift(player: Player): (boolean, string?)
+	if self.byDriver[player.UserId] then
+		return false, "TAXI_REQUEST_ACTIVE"
+	end
+	local character = self:_character(player)
+	if not character then
+		return false, "ACTIVE_CHARACTER_REQUIRED"
+	end
+	for index = #character.Employment, 1, -1 do
+		local employment = character.Employment[index]
+		if employment.JobId == "TaxiDriver" and not employment.EndedAt then
+			employment.EndedAt = os.time()
+			break
+		end
+	end
+	local civilian = self.context.Services:Get("TeamService"):Get("Civilian")
+	if civilian then
+		player.Team = civilian
+	end
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return true, nil
 end
 
 function TaxiService:GetStatus(player: Player): any?
@@ -126,6 +172,10 @@ function TaxiService:Request(
 	if not character then
 		return nil, characterId
 	end
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not root or not root:IsA("BasePart") then
+		return nil, "CHARACTER_NOT_READY"
+	end
 	if type(rawPickup) ~= "string" or #rawPickup < 2 or #rawPickup > 80 then
 		return nil, "INVALID_PICKUP"
 	end
@@ -159,6 +209,7 @@ function TaxiService:Request(
 		Dropoff = dropoff,
 		Band = rawBand,
 		Fare = fare,
+		PickupPosition = root.Position,
 		State = "Waiting",
 		CreatedAt = os.time(),
 	}

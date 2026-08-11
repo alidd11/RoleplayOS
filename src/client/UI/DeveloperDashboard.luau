@@ -1301,15 +1301,39 @@ function App.mount(context: any): ScreenGui
 			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
 				then COLOURS.Success
 				else COLOURS.Warning
-			local jobStatus = text(item, "Job system not installed", 11, COLOURS.Muted)
+			local isTaxi = tostring(job.Id) == "TaxiDriver"
+			local jobStatus = text(
+				item,
+				if isTaxi
+					then "Live service · accept bookings through your phone"
+					else "Job system not installed",
+				11,
+				if isTaxi then COLOURS.Success else COLOURS.Muted
+			)
 			jobStatus.Position = UDim2.fromOffset(16, 82)
 			jobStatus.Size = UDim2.new(1, -32, 0, 22)
-			local comingSoon = button(item, "COMING SOON", false)
-			comingSoon.Position = UDim2.new(1, -126, 1, -44)
-			comingSoon.Size = UDim2.fromOffset(110, 30)
-			comingSoon.TextSize = 10
-			comingSoon.TextColor3 = COLOURS.Muted
-			comingSoon.Selectable = false
+			local action = button(item, if isTaxi then "JOIN TAXI" else "COMING SOON", false)
+			action.Position = UDim2.new(1, -126, 1, -44)
+			action.Size = UDim2.fromOffset(110, 30)
+			action.TextSize = 10
+			action.TextColor3 = if isTaxi then COLOURS.Text else COLOURS.Muted
+			action.Selectable = isTaxi
+			if isTaxi then
+				action.BackgroundColor3 = COLOURS.Success
+				action.Activated:Connect(function()
+					action.Active = false
+					action.Text = "STARTING…"
+					local response =
+						context.Controllers.NetworkController:Request("TaxiStartShift", {})
+					context.Controllers.NotificationController:Show(response.Message, "Taxi")
+					if response.Success then
+						dismissToWorld()
+					else
+						action.Active = true
+						action.Text = "JOIN TAXI"
+					end
+				end)
+			end
 		end
 	end
 

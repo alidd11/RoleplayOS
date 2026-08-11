@@ -2469,6 +2469,8 @@ local Config = {
 			TaxiAccept = { Capacity = 4, RefillPerSecond = 0.5 },
 			TaxiComplete = { Capacity = 3, RefillPerSecond = 0.2 },
 			TaxiCancel = { Capacity = 3, RefillPerSecond = 0.2 },
+			TaxiStartShift = { Capacity = 2, RefillPerSecond = 0.1 },
+			TaxiEndShift = { Capacity = 2, RefillPerSecond = 0.1 },
 			-- Every sprint is two calls, one on press and one on release, and
 			-- players tap this far more often than any other control.
 			SetSprintState = { Capacity = 20, RefillPerSecond = 8 },

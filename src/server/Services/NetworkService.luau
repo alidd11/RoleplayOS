@@ -1131,6 +1131,37 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction(
+		"TaxiStartShift",
+		tablePayload,
+		function(player, _, requestId)
+			local shift, reason = self.context.Services:Get("TaxiService"):StartShift(player)
+			return {
+				Success = shift ~= nil,
+				Code = if shift then "OK" else reason,
+				Message = if shift
+					then "You are now available for taxi bookings."
+					else "The taxi shift could not be started.",
+				Data = shift,
+				RequestId = requestId,
+			}
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"TaxiEndShift",
+		tablePayload,
+		function(player, _, requestId)
+			local ended, reason = self.context.Services:Get("TaxiService"):EndShift(player)
+			return {
+				Success = ended,
+				Code = if ended then "OK" else reason,
+				Message = if ended
+					then "You are no longer available for taxi bookings."
+					else "Finish or cancel your active taxi ride first.",
+				RequestId = requestId,
+			}
+		end
+	)
 	self.context.Network:RegisterFunction("PurchaseFromVendor", function(payload)
 		return type(payload) == "table"
 			and type(payload.VendorId) == "string"

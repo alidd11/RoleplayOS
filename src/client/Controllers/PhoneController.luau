@@ -253,6 +253,7 @@ function PhoneController:_mount()
 				Colour = Color3.fromRGB(120, 132, 158),
 			},
 			{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
+			{ Page = "Taxi", Glyph = "🚕", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
 			{ Page = "Taxi", Glyph = "T", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
 		}
 	do
@@ -885,6 +886,16 @@ function PhoneController:Refresh()
 	local response = self.context.Controllers.NetworkController:Request("GetPhone", {})
 	if response.Success then
 		self.phoneData = response.Data
+		local navigation = self.context.Controllers.MinimapController
+		local taxi = response.Data.Taxi
+		local driverRequest = response.Data.TaxiDriverRequest
+		if taxi and taxi.IsDriver == true and taxi.PickupPosition then
+			navigation:SetWaypoint(taxi.PickupPosition, "PICKUP")
+		elseif driverRequest and driverRequest.PickupPosition then
+			navigation:SetWaypoint(driverRequest.PickupPosition, "PICKUP")
+		else
+			navigation:ClearWaypoint()
+		end
 		self.number.Text = response.Data.Number
 		self.activeCall = response.Data.ActiveCall
 		if self.activeCall then

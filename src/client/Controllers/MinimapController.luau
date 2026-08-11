@@ -188,6 +188,21 @@ function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: n
 	return true
 end
 
+function MinimapController:SetWaypoint(position: any, caption: string?)
+	if typeof(position) ~= "Vector3" then
+		self.waypoint = nil
+		self.drawnAt = nil
+		return
+	end
+	self.waypoint = { Position = position, Caption = caption or "WAYPOINT" }
+	self.drawnAt = nil
+end
+
+function MinimapController:ClearWaypoint()
+	self.waypoint = nil
+	self.drawnAt = nil
+end
+
 -- Collects the tagged geometry once. This is the only pass that is proportional
 -- to the size of the map, so it is deliberately separated from drawing and run
 -- rarely: on a region-sized world it walks tens of thousands of parts.
@@ -237,6 +252,32 @@ function MinimapController:_redraw(centre: Vector3)
 		end
 		if item.Parent and self:_drawPoint(item, centre, radius) then
 			points += 1
+		end
+	end
+	if self.waypoint then
+		local point = MapProjection.window(self.waypoint.Position, centre, radius)
+		if point then
+			local marker = Instance.new("TextLabel")
+			marker.Name = "NavigationWaypoint"
+			marker.AnchorPoint = Vector2.new(0.5, 0.5)
+			marker.Position = UDim2.fromScale(point.X, point.Y)
+			marker.Size = UDim2.fromOffset(24, 24)
+			marker.BackgroundColor3 = Color3.fromRGB(246, 190, 47)
+			marker.BorderSizePixel = 0
+			marker.Font = Enum.Font.GothamBold
+			marker.Text = "●"
+			marker.TextColor3 = Color3.fromRGB(20, 24, 30)
+			marker.TextSize = 15
+			marker.ZIndex = 8
+			marker.Parent = self.viewport
+			corner(marker, 12)
+			local distance = math.floor((self.waypoint.Position - centre).Magnitude)
+			local caption =
+				makeLabel(marker, string.format("%s  %dm", self.waypoint.Caption, distance), 8)
+			caption.Position = UDim2.fromOffset(17, 2)
+			caption.Size = UDim2.fromOffset(110, 18)
+			caption.TextColor3 = C.Text
+			caption.ZIndex = 8
 		end
 	end
 	self.drawnAt = centre

@@ -56,6 +56,30 @@ local function ejectOccupants(vehicle: Instance)
 	end
 end
 
+local function seatPlayer(player: Player, seat: VehicleSeat)
+	task.spawn(function()
+		for _ = 1, 12 do
+			if not seat.Parent or seat.Occupant then
+				return
+			end
+			local character = player.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if humanoid and root and root:IsA("BasePart") then
+				root.CFrame = seat.CFrame * CFrame.new(0, 2.5, 0)
+				task.wait()
+				if seat.Parent and not seat.Occupant and humanoid.Parent then
+					seat:Sit(humanoid)
+				end
+				if seat.Occupant == humanoid then
+					return
+				end
+			end
+			task.wait(0.25)
+		end
+	end)
+end
+
 -- Removes the player's vehicle, whatever the reason.
 function VehicleSpawnerService:Remove(userId: number)
 	local vehicle = self.active[userId]
@@ -387,6 +411,9 @@ function VehicleSpawnerService:Spawn(
 	end
 	self:_place(vehicle, bay)
 	vehicle.Parent = Workspace
+	if vehicleSeat then
+		seatPlayer(player, vehicleSeat)
+	end
 	-- ELS is deliberately framework-owned, but adoption was never called by the
 	-- only service that creates framework vehicles. The server therefore had no
 	-- tag/state to expose and every emergency-light controller correctly reported
