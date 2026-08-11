@@ -479,6 +479,16 @@ function RadioController:Start()
 		self.connections,
 		self.context.Events.DutyChanged.Event:Connect(function(duty)
 			self:_setOpen(duty ~= nil)
+			if duty ~= nil then
+				-- Duty and the server radio snapshot can arrive on adjacent frames.
+				-- Retry after the duty state has settled so the panel cannot remain
+				-- stuck in its empty/off-duty state.
+				task.delay(0.35, function()
+					if self.open then
+						self:refresh()
+					end
+				end)
+			end
 		end)
 	)
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
