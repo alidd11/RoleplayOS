@@ -229,7 +229,18 @@ function RadioController:_render()
 				return tostring(snapshot.CurrentChannelId)
 			end)()
 			else "OFF DUTY"
-		self.header.Text = "RADIO  ·  " .. channelName
+		-- On a narrow panel the channel and the callsign share the title line.
+		--
+		-- They had a line each, and with the title, the callsign, the collapse
+		-- chevron and EDIT that came to 76 pixels of header on a 236-pixel panel:
+		-- a third of it spent before any radio traffic, leaving the message log
+		-- 66 pixels, which is one message. The word "RADIO" goes too; the panel is
+		-- plainly a radio and the channel name is the thing worth reading.
+		local compact = self.lastLayout ~= nil and self.lastLayout.Compact
+		local unit = if snapshot then tostring(snapshot.Callsign or "UNASSIGNED") else nil
+		self.header.Text = if compact and unit
+			then string.upper(channelName) .. "  ·  " .. unit
+			else "RADIO  ·  " .. channelName
 		self.callsign.Text = if snapshot
 			then "UNIT " .. tostring(snapshot.Callsign or "UNASSIGNED")
 			else "Operational channel"
@@ -300,7 +311,14 @@ function RadioController:_render()
 	local channelTitle = button(channelBar, channelName)
 	channelTitle.Position = UDim2.fromOffset(38, 0)
 	channelTitle.Size = UDim2.new(1, -188, 1, 0)
-	channelTitle.BackgroundColor3 = C.Green
+	-- Neutral, so green means "transmitting" and nothing else.
+	--
+	-- The channel pill, the send button, the microphone and the panic button
+	-- were four saturated colours in one small panel, with green doing two
+	-- unrelated jobs. Red is now the only alarm colour in the row, which is
+	-- the point of an alarm colour.
+	channelTitle.BackgroundColor3 = C.Card
+	channelTitle.TextColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
@@ -466,7 +484,8 @@ function RadioController:Start()
 	self.body = body
 	local header = text(body, "RADIO", 16, true)
 	header.Position = UDim2.fromOffset(14, 10)
-	header.Size = UDim2.fromOffset(150, 26)
+	header.Size = UDim2.new(1, -100, 0, 26)
+	header.TextTruncate = Enum.TextTruncate.AtEnd
 	local callsign = text(body, "Operational channel", 10)
 	callsign.Position = UDim2.fromOffset(14, 33)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
@@ -525,13 +544,16 @@ function RadioController:Start()
 		end
 		-- Smaller where there is less room, rather than the same panel everywhere
 		-- shrunk until its text is unreadable.
-		local footprint = if layout.Compact then Vector2.new(268, 236) else Vector2.new(300, 320)
+		local footprint = if layout.Compact then Vector2.new(268, 264) else Vector2.new(300, 320)
+		-- One header line on a phone instead of two. Desktop keeps both and its
+		-- 76-pixel band, where there is room for the callsign to have its own row.
+		local headerBand = if layout.Compact then 44 else 76
 		local collapsedHeight = 46
 		local expanded = not self.collapsed
 		content.Visible = self.open and expanded
-		content.Position = UDim2.fromOffset(14, 76)
-		content.Size = UDim2.new(1, -28, 1, -88)
-		self.callsign.Visible = expanded
+		content.Position = UDim2.fromOffset(14, headerBand)
+		content.Size = UDim2.new(1, -28, 1, -(headerBand + 12))
+		self.callsign.Visible = expanded and not layout.Compact
 		self.editCallsign.Visible = expanded and self.callsignEditable == true
 		body.AnchorPoint = Vector2.new(0, 0)
 		-- No inset is added here. This ScreenGui is mounted with CoreUISafeInsets,
