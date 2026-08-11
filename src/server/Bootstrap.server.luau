@@ -92,6 +92,7 @@ local serviceOrder = {
 	"BankRobberyService",
 	"PhoneVoiceService",
 	"PhoneService",
+	"TaxiService",
 	"NeedsService",
 	"StartMenuService",
 	"NetworkService",

@@ -23,6 +23,7 @@ end
 
 local definitions = {
 	{ "Civilian", "CityDealership", "Civilian vehicles", "CityCivilian", nil, nil, Vector3.new(18, 0, 0) },
+	{ "Civilian", "TaxiFleet", "Taxi fleet", "CityCivilian", nil, nil, Vector3.new(46, 0, 0) },
 	{ "Police", "PoliceFrontline", "Frontline fleet", "PoliceVehicleBay", "Police", "Frontline", Vector3.new(18, 0, -24) },
 	{ "Police", "PoliceArmedResponse", "Armed response fleet", "PoliceVehicleBay", "Police", "ArmedResponse", Vector3.new(18, 0, 0) },
 	{ "Police", "PoliceRoadsPolicing", "Roads policing fleet", "PoliceVehicleBay", "Police", "RoadsPolicing", Vector3.new(18, 0, 24) },

@@ -135,7 +135,10 @@ function VehicleSpawnerService:_definitionAllowed(
 			or definition.DivisionId == divisionId
 	end
 	if definition.Category ~= "Civilian" then
-		return false
+		return definition.Fleet == true
+	end
+	if definition.Fleet == true and definition.JobId == "TaxiDriver" then
+		return self.context.Services:Get("TaxiService"):IsDriver(player)
 	end
 	for _, vehicle in self.context.Services:Get("VehicleOwnershipService"):List(player) do
 		if vehicle.DefinitionId == definition.Id then
@@ -334,7 +337,7 @@ function VehicleSpawnerService:Spawn(
 	local ownership = self.context.Services:Get("VehicleOwnershipService")
 	local registration: string? = nil
 	self.spawning[player.UserId] = true
-	if definition.Category == "Service" then
+	if definition.Category == "Service" or definition.Fleet == true then
 		local issuedRegistration, registrationReason = ownership:GetOrCreateTeamRegistration(
 			player,
 			tostring(spawner:GetAttribute("DepartmentId") or "Service"),

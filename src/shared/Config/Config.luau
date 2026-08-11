@@ -1043,6 +1043,12 @@ local Config = {
 			BrickColor = "New Yeller",
 			AutoAssignable = false,
 		},
+		Taxi = {
+			Id = "Taxi",
+			Name = "Taxi",
+			BrickColor = "Bright yellow",
+			AutoAssignable = false,
+		},
 		Highways = {
 			Id = "Highways",
 			Name = "Highway Patrol",
@@ -1709,6 +1715,19 @@ local Config = {
 			},
 			Category = "Civilian",
 		},
+		CorollaTaxi = {
+			Id = "CorollaTaxi",
+			Name = "Toyota Corolla Taxi",
+			Price = 0,
+			ModelName = "CorollaTaxi",
+			WorkspaceModelName = "CorollaTaxi",
+			AssetPath = { "Vehicles", "Civilian", "Taxi", "CorollaTaxi" },
+			Colours = { "White", "Black", "Yellow" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+			JobId = "TaxiDriver",
+			Fleet = true,
+		},
 		PoliceResponse = {
 			Id = "PoliceResponse",
 			Name = "Marked response car",
@@ -2309,6 +2328,13 @@ local Config = {
 		MaximumMessages = 200,
 		EmergencyNumber = "999",
 	},
+	Taxi = {
+		Bands = {
+			Local = { Id = "Local", Name = "Local trip", Fare = 8 },
+			City = { Id = "City", Name = "City trip", Fare = 14 },
+			Long = { Id = "Long", Name = "Long trip", Fare = 22 },
+		},
+	},
 	Needs = {
 		WalkSpeed = 16,
 		-- The sprint used to run from eighteen to twenty four, and it was the
@@ -2439,6 +2465,10 @@ local Config = {
 			PhoneEndCall = { Capacity = 4, RefillPerSecond = 1 },
 			PhoneEmergency = { Capacity = 2, RefillPerSecond = 0.1 },
 			PhoneToggleFlashlight = { Capacity = 4, RefillPerSecond = 2 },
+			TaxiRequest = { Capacity = 2, RefillPerSecond = 0.1 },
+			TaxiAccept = { Capacity = 4, RefillPerSecond = 0.5 },
+			TaxiComplete = { Capacity = 3, RefillPerSecond = 0.2 },
+			TaxiCancel = { Capacity = 3, RefillPerSecond = 0.2 },
 			-- Every sprint is two calls, one on press and one on release, and
 			-- players tap this far more often than any other control.
 			SetSprintState = { Capacity = 20, RefillPerSecond = 8 },

@@ -31,6 +31,27 @@ for definitionId, definition in config.Vehicles do
 		end
 		local template = source:Clone()
 		template.Name = finalName
+		-- The taxi package includes a colour mutator and its own plate writers.
+		-- RoleplayOS owns both concerns, so leave the chassis/audio scripts intact
+		-- but remove those two competing writers before the template is stored.
+		if definitionId == "CorollaTaxi" then
+			for _, descendant in template:GetDescendants() do
+				if descendant.Name == "policecarcolor" or descendant.Name == "LicensePlateGenerator" then
+					descendant:Destroy()
+				end
+			end
+			for _, plateName in { "front", "rear" } do
+				local plate = template:FindFirstChild(plateName, true)
+				if plate then
+					plate:SetAttribute("RoleplayOSPlate", true)
+					for _, child in plate:GetDescendants() do
+						if child:IsA("TextLabel") or child:IsA("TextButton") or child:IsA("TextBox") then
+							child:SetAttribute("RoleplayOSPlateText", true)
+						end
+					end
+				end
+			end
+		end
 		template:SetAttribute("RoleplayOSVehicleTemplate", true)
 		template:SetAttribute("RoleplayOSDefinitionId", definitionId)
 		template.Parent = parent

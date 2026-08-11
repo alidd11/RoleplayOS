@@ -128,6 +128,13 @@ function PhoneService:_append(player: Player, character: any, message: any)
 	self.context.Services:Get("DataService"):MarkDirty(player)
 end
 
+-- Server-originated phone notifications use the same persisted inbox as texts,
+-- so a taxi request remains visible when the player opens the handset later.
+function PhoneService:AppendSystemMessage(player: Player, character: any, message: any)
+	self:_append(player, character, message)
+	self.event:FireClient(player, { Kind = message.Kind or "System", Message = message })
+end
+
 function PhoneService:Snapshot(player: Player): (any?, string?)
 	local character = self:_character(player)
 	if not character then
@@ -182,6 +189,8 @@ function PhoneService:Snapshot(player: Player): (any?, string?)
 		EmergencyNumber = self.context.Configuration.Phone.EmergencyNumber,
 		ActiveCall = self.userCalls[player.UserId] and self.calls[self.userCalls[player.UserId]]
 			or nil,
+		Taxi = self.context.Services:Get("TaxiService"):GetStatus(player),
+		TaxiDriverRequest = self.context.Services:Get("TaxiService"):GetDriverRequest(player),
 	},
 		nil
 end

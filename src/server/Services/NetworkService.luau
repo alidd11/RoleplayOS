@@ -1061,6 +1061,76 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("TaxiRequest", function(payload)
+		return type(payload) == "table"
+			and type(payload.Pickup) == "string"
+			and type(payload.Dropoff) == "string"
+			and type(payload.Band) == "string"
+	end, function(player, payload, requestId)
+		local taxi, reason = self.context.Services
+			:Get("TaxiService")
+			:Request(player, payload.Pickup, payload.Dropoff, payload.Band)
+		local messages = {
+			CIVILIAN_REQUIRED = "Taxi bookings are available to civilian characters.",
+			INSUFFICIENT_FUNDS = "You do not have enough money in your bank account for that fare.",
+			TAXI_REQUEST_ALREADY_ACTIVE = "You already have an active taxi booking.",
+		}
+		return {
+			Success = taxi ~= nil,
+			Code = if taxi then "OK" else reason,
+			Message = if taxi
+				then "Taxi requested. Drivers have been notified."
+				else messages[reason] or "The taxi request could not be sent.",
+			Data = taxi,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("TaxiAccept", function(payload)
+		return type(payload) == "table" and type(payload.RequestId) == "string"
+	end, function(player, payload, requestId)
+		local taxi, reason =
+			self.context.Services:Get("TaxiService"):Accept(player, payload.RequestId)
+		return {
+			Success = taxi ~= nil,
+			Code = if taxi then "OK" else reason,
+			Message = if taxi
+				then "Taxi booking accepted."
+				else "That taxi booking is no longer available.",
+			Data = taxi,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("TaxiComplete", function(payload)
+		return type(payload) == "table" and type(payload.RequestId) == "string"
+	end, function(player, payload, requestId)
+		local taxi, reason =
+			self.context.Services:Get("TaxiService"):Complete(player, payload.RequestId)
+		local messages =
+			{ INSUFFICIENT_FUNDS = "The passenger no longer has enough money for this fare." }
+		return {
+			Success = taxi ~= nil,
+			Code = if taxi then "OK" else reason,
+			Message = if taxi
+				then "Fare paid and driver credited."
+				else messages[reason] or "The taxi could not be completed.",
+			Data = taxi,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("TaxiCancel", function(payload)
+		return type(payload) == "table" and type(payload.RequestId) == "string"
+	end, function(player, payload, requestId)
+		local cancelled, reason =
+			self.context.Services:Get("TaxiService"):Cancel(player, payload.RequestId)
+		return {
+			Success = cancelled,
+			Code = if cancelled then "OK" else reason,
+			Message = if cancelled
+				then "Taxi booking cancelled."
+				else "The taxi booking could not be cancelled.",
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("PurchaseFromVendor", function(payload)
 		return type(payload) == "table"
 			and type(payload.VendorId) == "string"
