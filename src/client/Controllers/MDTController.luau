@@ -14,6 +14,9 @@ local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
+-- Tall enough to hit with a thumb. FitScale never scales a panel up, so this
+-- is a ceiling as well as the authored size.
+local UNIT_STATUS_ROW_HEIGHT = 44
 
 -- The map shares GetDispatchSnapshot with the dispatch board on this same
 -- client, so it takes half of that endpoint's one-per-second refill.
@@ -259,7 +262,16 @@ function MDTController:_mount()
 	local close = button(shell, "CLOSE")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -16, 0, 15)
-	close.Size = UDim2.fromOffset(72, 30)
+	-- Interactive controls are 44 tall from here down.
+	--
+	-- FitScale is clamped to a maximum of one, so a control authored below 44
+	-- is below 44 on every device there is -- it can only ever be scaled down
+	-- from what is written here. These were 30 and 34, which is under the size
+	-- a fingertip reliably hits, and this terminal is used one-handed in a car.
+	--
+	-- The room was already there: this row ends at 114 and the search box below
+	-- it starts at 119.
+	close.Size = UDim2.fromOffset(76, 44)
 	self.close = close
 
 	-- No tab rail: pages are chosen from the home screen, and a single HOME
@@ -268,7 +280,7 @@ function MDTController:_mount()
 	-- screen already offers.
 	local homeTab = button(shell, "\u{2302}  HOME")
 	homeTab.Position = UDim2.fromOffset(22, 70)
-	homeTab.Size = UDim2.fromOffset(104, 34)
+	homeTab.Size = UDim2.fromOffset(104, 44)
 	self.homeTab = homeTab
 
 	-- The officer's own status, on every page.
@@ -284,7 +296,7 @@ function MDTController:_mount()
 	statusStrip.Name = "UnitStatus"
 	statusStrip.BackgroundTransparency = 1
 	statusStrip.Position = UDim2.fromOffset(134, 70)
-	statusStrip.Size = UDim2.new(1, -156, 0, 34)
+	statusStrip.Size = UDim2.new(1, -156, 0, UNIT_STATUS_ROW_HEIGHT)
 	statusStrip.Visible = false
 	statusStrip.Parent = shell
 	self.statusStrip = statusStrip
@@ -584,7 +596,10 @@ function MDTController:_renderTabs()
 	if self.statusStrip then
 		local afterHome = self.homeTab.Visible
 		self.statusStrip.Position = UDim2.fromOffset(if afterHome then 134 else 22, 70)
-		self.statusStrip.Size = UDim2.new(1, if afterHome then -156 else -44, 0, 34)
+		-- Same height as where the strip is built. Written in two places, so it
+		-- is written once and read twice rather than being kept in step by hand.
+		self.statusStrip.Size =
+			UDim2.new(1, if afterHome then -156 else -44, 0, UNIT_STATUS_ROW_HEIGHT)
 	end
 	-- Home and the map each replace the records surface rather than sharing it,
 	-- so the search controls cannot be used against a page that has no search.
@@ -908,7 +923,7 @@ function MDTController:_renderUnitStatusChoices(statuses: { string })
 		local label = labels[status] or string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
 		local control = button(self.statusStrip, label)
 		control.LayoutOrder = index
-		control.Size = UDim2.fromOffset(112, 30)
+		control.Size = UDim2.fromOffset(112, UNIT_STATUS_ROW_HEIGHT)
 		control.Activated:Connect(function()
 			self:SetUnitStatus(status)
 		end)
