@@ -8,10 +8,24 @@ The registry scans the Workspace once during service startup. There is no frame 
 
 Development pad attributes:
 
-- `Civilian` with `SpawnId = "CityCivilian"`
-- `Police` with `SpawnId = "PoliceLockerRoom"`
-- `Police` with `SpawnId = "PoliceVehicleBay"`
-- `Ambulance` with `SpawnId = "AmbulanceLockerRoom"`
-- `Fire` with `SpawnId = "FireLockerRoom"`
+Keep the native pads under `Workspace.RoleplayOSMapSpawns`, grouped by the
+department folder that owns the destination. The organiser script
+(`scripts/organise-spawn-pads.studio.luau`) creates this layout and only moves
+configured player pads; it does not touch vehicle `SpawnPoints` or map assets.
+
+- `Civilian/CityCivilian` with `SpawnId = "CityCivilian"`
+- `Police/PoliceLockerRoom` with `SpawnId = "PoliceLockerRoom"`
+- `Police/PoliceVehicleBay` with `SpawnId = "PoliceVehicleBay"`
+- `Ambulance/AmbulanceLockerRoom` with `SpawnId = "AmbulanceLockerRoom"`
+- `Fire/FireLockerRoom` with `SpawnId = "FireLockerRoom"`
+- `Control/ControlRoom` with `SpawnId = "ControlRoom"`
+- `Transport/TransportDepot` with `SpawnId = "TransportDepot"`
+- `Highways/HighwaysDepot` with `SpawnId = "HighwaysDepot"`
+- `Prison/PrisonStaff` with `SpawnId = "PrisonStaff"`
+
+Every pad must carry the `RoleplayOSSpawnPad` tag, have
+`AllowTeamChangeOnTouch = false`, and remain `Neutral = false`. The
+`SpawnId` is the authoritative identity; the display name may be rewritten to
+the configured Team name when the server starts.
 
 Changing a `SpawnId` requires the matching configuration change and a Rojo build. Never accept a world position, team, station or spawn identifier chosen without server validation.
