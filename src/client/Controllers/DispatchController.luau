@@ -121,10 +121,11 @@ function DispatchController:_mount()
 	classification.BorderSizePixel = 0
 	classification.Parent = shell
 
-	local title = label(shell, "FORCE CONTROL  ·  LIVE DISPATCH", 17, true)
+	local title = label(shell, "JOINT CONTROL  ·  CAD OPERATIONS", 17, true)
 	title.Position = UDim2.fromOffset(20, 13)
 	title.Size = UDim2.new(1, -40, 0, 24)
-	local live = label(shell, "●  LIVE DISPATCH  ·  CONSOLE AUTHENTICATED", 9, true)
+	local live =
+		label(shell, "●  LIVE  ·  MULTI-AGENCY DISPATCH  ·  CONSOLE AUTHENTICATED", 9, true)
 	live.Position = UDim2.fromOffset(20, 38)
 	live.Size = UDim2.new(1, -40, 0, 18)
 	live.TextColor3 = C.Secure
@@ -147,14 +148,56 @@ function DispatchController:_mount()
 		self.context.Controllers.CCTVController:Open()
 	end)
 
-	local callsTitle = label(shell, "ACTIVE CALLS", 10, true)
-	callsTitle.Position = UDim2.fromOffset(20, 72)
+	local metrics = Instance.new("Frame")
+	metrics.Name = "OperationalSummary"
+	metrics.BackgroundTransparency = 1
+	metrics.Position = UDim2.fromOffset(20, 68)
+	metrics.Size = UDim2.new(1, -40, 0, 48)
+	metrics.Parent = shell
+	local metricLayout = Instance.new("UIListLayout")
+	metricLayout.FillDirection = Enum.FillDirection.Horizontal
+	metricLayout.Padding = UDim.new(0, 8)
+	metricLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	metricLayout.Parent = metrics
+	self.statLabels = {}
+	local metricDefinitions = {
+		{ "ACTIVE CALLS", C.Accent },
+		{ "IMMEDIATE", C.Immediate },
+		{ "ON SCENE", C.Secure },
+		{ "UNITS ONLINE", C.Classification },
+	}
+	for index, definition in metricDefinitions do
+		local metric = Instance.new("Frame")
+		metric.BackgroundColor3 = C.Raised
+		metric.BorderSizePixel = 0
+		metric.Size = UDim2.new(0.25, -6, 1, 0)
+		metric.LayoutOrder = index
+		metric.Parent = metrics
+		corner(metric, 9)
+		local accent = Instance.new("Frame")
+		accent.BackgroundColor3 = definition[2]
+		accent.BorderSizePixel = 0
+		accent.Size = UDim2.fromOffset(3, 26)
+		accent.Position = UDim2.fromOffset(10, 11)
+		accent.Parent = metric
+		local metricTitle = label(metric, definition[1], 8, true)
+		metricTitle.Position = UDim2.fromOffset(20, 7)
+		metricTitle.Size = UDim2.new(1, -28, 0, 14)
+		metricTitle.TextColor3 = C.Muted
+		local metricValue = label(metric, "0", 17, true)
+		metricValue.Position = UDim2.fromOffset(20, 20)
+		metricValue.Size = UDim2.new(1, -28, 0, 22)
+		self.statLabels[index] = metricValue
+	end
+
+	local callsTitle = label(shell, "LIVE INCIDENT QUEUE", 10, true)
+	callsTitle.Position = UDim2.fromOffset(20, 128)
 	callsTitle.Size = UDim2.new(0.58, -30, 0, 18)
 	local calls = Instance.new("ScrollingFrame")
 	calls.BackgroundTransparency = 1
 	calls.BorderSizePixel = 0
-	calls.Position = UDim2.fromOffset(20, 96)
-	calls.Size = UDim2.new(0.58, -30, 1, -176)
+	calls.Position = UDim2.fromOffset(20, 152)
+	calls.Size = UDim2.new(0.58, -30, 1, -232)
 	calls.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	calls.CanvasSize = UDim2.new()
 	calls.ScrollBarThickness = 3
@@ -164,14 +207,14 @@ function DispatchController:_mount()
 	callsLayout.Parent = calls
 	self.calls = calls
 
-	local unitsTitle = label(shell, "AVAILABLE UNITS", 10, true)
-	unitsTitle.Position = UDim2.new(0.58, 0, 0, 72)
+	local unitsTitle = label(shell, "MULTI-AGENCY UNIT BOARD", 10, true)
+	unitsTitle.Position = UDim2.new(0.58, 0, 0, 128)
 	unitsTitle.Size = UDim2.new(0.42, -20, 0, 18)
 	local units = Instance.new("ScrollingFrame")
 	units.BackgroundTransparency = 1
 	units.BorderSizePixel = 0
-	units.Position = UDim2.new(0.58, 0, 0, 96)
-	units.Size = UDim2.new(0.42, -20, 1, -170)
+	units.Position = UDim2.new(0.58, 0, 0, 152)
+	units.Size = UDim2.new(0.42, -20, 1, -226)
 	units.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	units.CanvasSize = UDim2.new()
 	units.ScrollBarThickness = 3
@@ -399,6 +442,13 @@ end
 function DispatchController:_renderCalls(calls: { any })
 	self:_clear(self.calls)
 	self.callsTitle.Text = string.format("ACTIVE CALLS  ·  %d", #calls)
+	if #calls == 0 then
+		local empty = label(self.calls, "No active incidents in the queue", 11, true)
+		empty.Size = UDim2.new(1, -5, 0, 44)
+		empty.TextColor3 = C.Muted
+		empty.TextXAlignment = Enum.TextXAlignment.Center
+		return
+	end
 	for _, call in calls do
 		local row = button(self.calls, "")
 		row.Size = UDim2.new(1, -5, 0, 94)
@@ -451,6 +501,13 @@ end
 function DispatchController:_renderUnits(units: { any })
 	self:_clear(self.units)
 	self.unitsTitle.Text = string.format("OPERATIONAL UNITS  ·  %d", #units)
+	if #units == 0 then
+		local empty = label(self.units, "No units currently online", 11, true)
+		empty.Size = UDim2.new(1, -5, 0, 44)
+		empty.TextColor3 = C.Muted
+		empty.TextXAlignment = Enum.TextXAlignment.Center
+		return
+	end
 	for _, unit in units do
 		local row = button(self.units, "")
 		row.Size = UDim2.new(1, -5, 0, 58)
@@ -485,8 +542,26 @@ end
 function DispatchController:Refresh()
 	local response = self.context.Controllers.NetworkController:Request("GetDispatchSnapshot", {})
 	if response.Success then
-		self:_renderCalls(response.Data.Calls)
-		self:_renderUnits(response.Data.Units)
+		local calls = response.Data.Calls or {}
+		local units = response.Data.Units or {}
+		local immediate = 0
+		local onScene = 0
+		for _, call in calls do
+			if call.Priority == "Immediate" then
+				immediate += 1
+			end
+			if call.Status == "OnScene" then
+				onScene += 1
+			end
+		end
+		if self.statLabels then
+			self.statLabels[1].Text = tostring(#calls)
+			self.statLabels[2].Text = tostring(immediate)
+			self.statLabels[3].Text = tostring(onScene)
+			self.statLabels[4].Text = tostring(#units)
+		end
+		self:_renderCalls(calls)
+		self:_renderUnits(units)
 	end
 end
 
