@@ -995,9 +995,11 @@ function MDTController:RefreshAccess()
 	-- the strip away rather than leaving a stale status on screen.
 	self:_renderUnitStatus(if self.allowed then response.Data.UnitStatus else nil)
 	self.gui.Enabled = self.allowed
-	-- Access is surfaced through the toolbar tool (and M), not a second floating
-	-- HUD button competing with the minimap and mobile vehicle controls.
-	self.launcher.Visible = false
+	-- The MDT is a persistent UX surface, not an equipment item. Emergency
+	-- departments do not need an authored Tool in their loadout just to access
+	-- their authorised terminal; the compact launcher remains available beside
+	-- the other service controls and the M shortcut still works.
+	self.launcher.Visible = self.allowed
 	if not self.allowed then
 		self.setOpen(false)
 	end
