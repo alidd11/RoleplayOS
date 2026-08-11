@@ -1148,7 +1148,10 @@ local Config = {
 			Access = {
 				AccessType = "ServerKind",
 				Kind = "Public",
-				DisplayWhenLocked = false,
+				-- The menu explicitly hides this role outside Public servers. Keeping
+				-- the card visible here prevents a stale/undetected server-kind value
+				-- from making the free public route disappear entirely.
+				DisplayWhenLocked = true,
 			},
 			LoadoutId = "PCSO",
 			UniformId = "PoliceCommunitySupportOfficer",

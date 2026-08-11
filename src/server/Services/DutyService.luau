@@ -229,7 +229,16 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	end
 	self.active[player.UserId].Callsign = callsign
 	task.spawn(function()
-		self.context.Services:Get("IdentificationService"):RefreshWithRetry(player)
+		local identification = self.context.Services:Get("IdentificationService")
+		identification:RefreshWithRetry(player)
+		-- Team assignment, character spawning and StarterGear replication can settle
+		-- in different frames. A second refresh closes that race without issuing a
+		-- a duplicate: IdentificationService removes stale credentials first.
+		task.delay(1, function()
+			if player.Parent and self:Get(player) then
+				identification:RefreshWithRetry(player)
+			end
+		end)
 	end)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,

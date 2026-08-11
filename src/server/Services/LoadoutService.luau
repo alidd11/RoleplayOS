@@ -80,6 +80,55 @@ local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: 
 	tool.Parent = backpack
 end
 
+local function prepareVisibleTool(tool: Tool, toolId: string)
+	if toolId ~= "Handcuffs" and toolId ~= "PAVA" then
+		return
+	end
+	local handle = tool:FindFirstChild("Handle")
+	if not handle or not handle:IsA("BasePart") then
+		handle = tool:FindFirstChildWhichIsA("BasePart", true)
+	end
+	if not handle then
+		local created = Instance.new("Part")
+		created.Name = "Handle"
+		created.Size = Vector3.new(0.2, 0.2, 0.2)
+		created.Transparency = 1
+		created.Parent = tool
+		handle = created
+	end
+	handle.Name = "Handle"
+	handle.Anchored = false
+	handle.CanCollide = false
+	handle.CanTouch = false
+	handle.CanQuery = false
+	handle.Massless = true
+	tool.RequiresHandle = true
+	tool.CanBeDropped = false
+	tool.Grip = if toolId == "PAVA"
+		then CFrame.new(0, -0.08, -0.72) * CFrame.Angles(math.rad(82), math.rad(4), math.rad(90))
+		else CFrame.new(0, -0.08, -0.72) * CFrame.Angles(
+			math.rad(82),
+			math.rad(4),
+			math.rad(90)
+		)
+	for _, descendant in tool:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = false
+			descendant.CanCollide = false
+			descendant.CanTouch = false
+			descendant.CanQuery = false
+			descendant.Massless = true
+			if descendant ~= handle and not descendant:FindFirstChild("RoleplayOSHeldToolWeld") then
+				local weld = Instance.new("WeldConstraint")
+				weld.Name = "RoleplayOSHeldToolWeld"
+				weld.Part0 = handle
+				weld.Part1 = descendant
+				weld.Parent = descendant
+			end
+		end
+	end
+end
+
 -- Loadouts overlap: several police loadouts issue handcuffs, and applying one
 -- again on respawn would issue a second set. An officer should carry one of
 -- each, so a tool already held is not issued again. The equipped tool lives on
@@ -147,7 +196,7 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		elseif toolId == "Handcuffs" and self.importedHandcuffs then
 			local clone = importedHandcuffTool(self.importedHandcuffs)
 			clone.Name = "Handcuffs"
-			clone.CanBeDropped = false
+			prepareVisibleTool(clone, toolId)
 			issue(clone, backpack, loadoutId, toolId)
 		elseif toolId == "Handcuffs" and not template then
 			issue(ToolFactory.handcuffs(), backpack, loadoutId, toolId)
@@ -159,6 +208,7 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 				removeImportedAnimations(clone)
 			end
 			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name
+			prepareVisibleTool(clone, toolId)
 			clone.CanBeDropped = false
 			issue(clone, backpack, loadoutId, toolId)
 		else

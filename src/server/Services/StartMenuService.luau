@@ -52,7 +52,9 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			Name = role.Name,
 			DepartmentId = role.DepartmentId,
 			UniformId = role.UniformId,
-			Visible = role.Access.DisplayWhenLocked ~= false or access.Allowed,
+			Visible = if role.Id == "PCSO"
+				then self.context.Services:Get("ServerModeService"):Kind() == "Public"
+				else role.Access.DisplayWhenLocked ~= false or access.Allowed,
 			Locked = not access.Allowed,
 			LockType = role.Access.AccessType,
 			LockMessage = access.Message,
