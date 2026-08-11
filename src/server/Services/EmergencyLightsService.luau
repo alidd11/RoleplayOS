@@ -1,6 +1,7 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
+local Workspace = game:GetService("Workspace")
 local RolePermissions =
 	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
 local VehicleLights = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.VehicleLights)
@@ -240,7 +241,84 @@ function EmergencyLightsService:GetState(player: Player): any
 	}
 end
 
-function EmergencyLightsService:Start() end
+-- Adopts the vehicles that were parked in the world rather than spawned.
+--
+-- Adopt was called from exactly one place: the spawner, at the moment it
+-- creates a vehicle. A car placed in the map by hand therefore never went
+-- through it, was never tagged, and every client asking about its lights got
+-- VEHICLE_HAS_NO_RECOGNISED_LIGHTS -- so the lighting panel never appeared, for
+-- a vehicle that may well have had a full lightbar on it.
+--
+-- The department is what decides the colours, and a parked model carries no
+-- spawn definition to read it from. Two ways to say it, in order: an attribute
+-- on the model itself, which needs no code and no catalogue entry, or a
+-- catalogue entry matched on the model's name.
+--
+-- Anything that resolves to neither is listed by name in the log rather than
+-- passed over in silence, because "which of the things in my map did this not
+-- recognise" is the question somebody is going to have, and the answer is
+-- cheap to give.
+function EmergencyLightsService:Start()
+	local settings = self:_settings()
+	if not settings.Enabled then
+		return
+	end
+	task.spawn(function()
+		local byModelName: { [string]: any } = {}
+		for _, definition in self.context.Configuration.Vehicles do
+			local name = definition.WorkspaceModelName or definition.ModelName or definition.Id
+			if type(name) == "string" then
+				byModelName[name] = definition
+			end
+		end
+		local adopted, unknown, unlit = 0, {}, {}
+		for _, child in Workspace:GetChildren() do
+			if not child:IsA("Model") or not child:FindFirstChildWhichIsA("VehicleSeat", true) then
+				continue
+			end
+			if CollectionService:HasTag(child, settings.Tag) then
+				continue
+			end
+			local attribute = child:GetAttribute("RoleplayOSDepartmentId")
+				or child:GetAttribute("DepartmentId")
+			local definition = byModelName[child.Name]
+			local departmentId = if type(attribute) == "string"
+				then attribute
+				else (definition and definition.DepartmentId)
+			-- A department nobody has given colours to is the same outcome as no
+			-- department at all, and the same remedy, so they are reported
+			-- together rather than as a mystery about the model's lamps.
+			if type(departmentId) ~= "string" or not settings.Departments[departmentId] then
+				table.insert(unknown, child.Name)
+				continue
+			end
+			self:Adopt(child, departmentId)
+			if CollectionService:HasTag(child, settings.Tag) then
+				adopted += 1
+			else
+				-- A department was found and the lights still were not. Separated
+				-- from the case above because the remedy is completely different:
+				-- this one is about what the model is built from, not about what
+				-- the framework was told.
+				table.insert(unlit, child.Name)
+			end
+		end
+		self.context.Logger:Info("Parked emergency vehicles adopted", { Adopted = adopted })
+		if #unknown > 0 then
+			self.context.Logger:Warning("Parked vehicles with no department to light them", {
+				Models = unknown,
+				Remedy = "Set a RoleplayOSDepartmentId attribute naming a department that has "
+					.. "colours configured, or add the model to Vehicles",
+			})
+		end
+		if #unlit > 0 then
+			self.context.Logger:Warning("Parked vehicles whose lights were not recognised", {
+				Models = unlit,
+				Remedy = "Lamps need a Light child, Neon material or a saturated colour",
+			})
+		end
+	end)
+end
 
 function EmergencyLightsService:Destroy()
 	for _, connection in self.connections do
