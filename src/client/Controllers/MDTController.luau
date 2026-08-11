@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -126,6 +127,22 @@ local function button(parent: Instance, value: string): TextButton
 	item.TextSize = 11
 	item.Parent = parent
 	corner(item, 8)
+	local scale = Instance.new("UIScale")
+	scale.Parent = item
+	item.MouseButton1Down:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 0.97,
+			})
+			:Play()
+	end)
+	item.MouseButton1Up:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 1,
+			})
+			:Play()
+	end)
 	return item
 end
 

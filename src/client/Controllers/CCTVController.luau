@@ -5,6 +5,7 @@ local StarterGui = game:GetService("StarterGui")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local VRService = game:GetService("VRService")
+local TweenService = game:GetService("TweenService")
 
 local EXIT_ACTION = "RoleplayOSExitCCTV"
 local NAVIGATE_ACTION = "RoleplayOSNavigateCCTV"
@@ -35,6 +36,18 @@ local function button(parent: Instance, text: string): TextButton
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = item
+	local scale = Instance.new("UIScale")
+	scale.Parent = item
+	item.MouseButton1Down:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Scale = 0.97,
+		}):Play()
+	end)
+	item.MouseButton1Up:Connect(function()
+		TweenService:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+			Scale = 1,
+		}):Play()
+	end)
 	return item
 end
 

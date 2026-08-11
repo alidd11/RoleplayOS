@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
 local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local RadioController = { connections = {} }
@@ -48,6 +49,22 @@ local function button(parent: Instance, value: string): TextButton
 	item.TextSize = 11
 	item.Parent = parent
 	corner(item, 9)
+	local scale = Instance.new("UIScale")
+	scale.Parent = item
+	item.MouseButton1Down:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 0.97,
+			})
+			:Play()
+	end)
+	item.MouseButton1Up:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 1,
+			})
+			:Play()
+	end)
 	return item
 end
 

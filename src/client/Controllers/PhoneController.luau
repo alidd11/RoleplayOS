@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local PhoneController = { connections = {}, activeCall = nil }
 local PHONE_ACTION = "RoleplayOSTogglePhone"
@@ -53,6 +54,22 @@ local function button(parent: Instance, value: string, colour: Color3?): TextBut
 	item.TextSize = 11
 	item.Parent = parent
 	corner(item, 10)
+	local scale = Instance.new("UIScale")
+	scale.Parent = item
+	item.MouseButton1Down:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 0.97,
+			})
+			:Play()
+	end)
+	item.MouseButton1Up:Connect(function()
+		TweenService
+			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 1,
+			})
+			:Play()
+	end)
 	return item
 end
 
@@ -471,7 +488,7 @@ function PhoneController:_appIcon(parent: Instance, app: any): Frame
 	tile.Parent = parent
 
 	local glyph = Instance.new("TextButton")
-	glyph.AutoButtonColor = true
+	glyph.AutoButtonColor = false
 	glyph.BackgroundColor3 = app.Colour
 	glyph.BorderSizePixel = 0
 	glyph.Font = Enum.Font.GothamBold
@@ -483,6 +500,30 @@ function PhoneController:_appIcon(parent: Instance, app: any): Frame
 	glyph.Parent = tile
 	-- Roblox has no squircle, so a generous radius is the closest match.
 	corner(glyph, 14)
+	local glyphScale = Instance.new("UIScale")
+	glyphScale.Parent = glyph
+	glyph.MouseButton1Down:Connect(function()
+		TweenService
+			:Create(
+				glyphScale,
+				TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{
+					Scale = 0.96,
+				}
+			)
+			:Play()
+	end)
+	glyph.MouseButton1Up:Connect(function()
+		TweenService
+			:Create(
+				glyphScale,
+				TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{
+					Scale = 1,
+				}
+			)
+			:Play()
+	end)
 	glyph.Activated:Connect(function()
 		-- An app either opens a page or performs an action in place, as the
 		-- torch does; it never does both.
