@@ -15,6 +15,11 @@ local NATIVE_BAND_HEIGHT = 36
 local NATIVE_CONTROL_SIZE = 32
 -- Gap Roblox leaves between adjacent top-bar clusters.
 local NATIVE_CONTROL_GAP = 8
+-- How many top-bar heights Roblox's own control cluster spans: the logo, then
+-- the pill holding the menu, chat and microphone buttons. Used only as a floor
+-- when Roblox reports no inset of its own, so our controls are never drawn
+-- underneath its own.
+local NATIVE_CLUSTER_BANDS = 5.2
 
 local App = {}
 local COLOURS = {
@@ -867,7 +872,24 @@ function App.mount(context: any): ScreenGui
 		end)
 	end
 
+	-- A heading that is the first thing on a page is not rendered at all.
+	--
+	-- The navigation bar already names the page, and it names it in the one place
+	-- the player just pressed, highlighted. Repeating "Departments" under a lit
+	-- "Services" tab told nobody anything they did not know two seconds ago, and
+	-- the title with its subtitle cost 42 pixels of a landscape phone's roughly
+	-- 260 pixels of visible list: a sixth of the page, spent on a label.
+	--
+	-- Later headings are kept, because those genuinely separate one block from
+	-- the next rather than restating where the player is.
+	--
+	-- Detected from the layout counter, which clear() resets to zero for each
+	-- page, so this stays correct as pages are added or reordered rather than
+	-- depending on a list of which headings happen to be first today.
 	local function sectionHeading(titleValue: string, subtitle: string)
+		if (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) == 0 then
+			return
+		end
 		local compact = shortLandscape()
 		local wrapper = Instance.new("Frame")
 		wrapper.BackgroundTransparency = 1
@@ -2070,22 +2092,44 @@ function App.mount(context: any): ScreenGui
 		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
 		menuToggle.Size = UDim2.fromOffset(menuWidth, controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
-		-- Sit immediately right of the native control cluster. NativeLeft is the
-		-- measured left edge of the region Roblox leaves free, so trust it when it
-		-- is reported and fall back to the historical estimate only when Roblox
-		-- reports no inset. Without this the toggle can render underneath Roblox's
-		-- own top-bar buttons and become unreachable.
-		local nativeControlWidth = if layout.NativeLeft > 0
-			then layout.NativeLeft
-			else (if layout.Compact then 224 else 360)
-		menuToggle.Position = UDim2.fromOffset(
-			math.min(
-				nativeControlWidth + NATIVE_CONTROL_GAP,
-				math.max(NATIVE_CONTROL_GAP, layout.Viewport.X - menuWidth - NATIVE_CONTROL_GAP)
-			),
-			-- Centre within the native band, never above the screen edge.
-			math.max(0, math.floor((nativeBand - controlSize) / 2))
-		)
+		-- Sit immediately right of the native control cluster, without guessing how
+		-- wide that cluster is.
+		--
+		-- This fell back to a flat 224 pixels whenever Roblox reported no inset, and
+		-- Roblox's cluster has since grown a voice-chat microphone: it now reaches
+		-- roughly 290 on a large phone in landscape. The button was therefore drawn
+		-- underneath that microphone, plainly visible and impossible to press, which
+		-- left no way into the menu at all.
+		--
+		-- The floor is expressed in multiples of the reported top-bar height rather
+		-- than as a pixel count. That height is reported reliably, and the cluster is
+		-- a row of controls sized from it, the logo and then a pill holding the menu,
+		-- chat and microphone, which together measure a little under five of them.
+		-- Derived this way it stays right on a tablet and on a desktop, where the same
+		-- controls are drawn at a different size, and it absorbs whatever Roblox adds
+		-- next far better than a constant chosen against one screenshot.
+		--
+		-- A measured NativeLeft still wins whenever Roblox reports one. The estimate
+		-- is only ever a floor, so an honest client is never second-guessed.
+		local estimatedCluster = layout.SafeLeft
+			+ math.floor(nativeBand * NATIVE_CLUSTER_BANDS + 0.5)
+		local besideCluster = math.max(layout.NativeLeft, estimatedCluster) + NATIVE_CONTROL_GAP
+		local rightmost = layout.Viewport.X - layout.SafeRight - menuWidth - NATIVE_CONTROL_GAP
+		if besideCluster <= rightmost then
+			menuToggle.Position = UDim2.fromOffset(
+				besideCluster,
+				-- Centre within the native band, never above the screen edge.
+				math.max(0, math.floor((nativeBand - controlSize) / 2))
+			)
+		else
+			-- The row has run out. Rather than push the control back underneath
+			-- Roblox's own, drop it to the line below, which belongs to us and which
+			-- nothing added to the top bar can ever cover.
+			menuToggle.Position = UDim2.fromOffset(
+				math.max(NATIVE_CONTROL_GAP, layout.SafeLeft + NATIVE_CONTROL_GAP),
+				nativeBand + NATIVE_CONTROL_GAP
+			)
+		end
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
 		-- One navigation language on every device: a top bar mirrors Roblox's
@@ -2110,7 +2154,7 @@ function App.mount(context: any): ScreenGui
 			brand.Size = UDim2.fromOffset(
 				if narrow
 					then math.max(80, layout.SafeViewport.X - headerLeft - safeRight - 18)
-					else 270,
+					else (if shortLandscape() then 198 else 270),
 				30
 			)
 			brand.TextSize = 14
@@ -2120,7 +2164,10 @@ function App.mount(context: any): ScreenGui
 			-- Wide enough for the navigation to share the title's row, so it
 			-- starts past the title rather than at a fixed offset that could
 			-- land on top of it once the title has been pushed right.
-			local navLeft = headerLeft + 282
+			-- The title reserves less of the row on a short screen. It is decorative
+			-- and already truncates, while the tabs beside it are the only way to
+			-- move around the menu, and they were the thing being squeezed.
+			local navLeft = headerLeft + (if shortLandscape() then 210 else 282)
 			navigation.Position = if narrow
 				then UDim2.fromOffset(safeLeft + 18, safeTop + 66)
 				else UDim2.fromOffset(navLeft, safeTop + 18)
@@ -2132,10 +2179,27 @@ function App.mount(context: any): ScreenGui
 			for _, item in navigation:GetChildren() do
 				if item:IsA("TextButton") then
 					item.Size = UDim2.new(1 / navItems, -5, 1, 0)
-					-- Never below twelve. These are the only way to move around the menu, and
-					-- ten pixels on the smallest screen is where they are least readable and
-					-- most needed.
-					item.TextSize = if narrow then 12 else 13
+					-- Shrink the label into its slot rather than letting it run out of one.
+					--
+					-- Every tab gets an equal share of the bar, but the words are not of
+					-- equal length. "Civilian jobs" wants about ninety pixels and its share
+					-- on a landscape phone is nearer eighty, so it overflowed and ran into
+					-- "Services" next to it: the highlight of one ending underneath the text
+					-- of the other. It read as a broken menu before the player had pressed
+					-- anything.
+					--
+					-- Scaled to fit rather than truncated, because "Civilian j..." is not a
+					-- usable label either. The floor is what stops the fit being achieved by
+					-- making the text unreadable: below about nine pixels these stop being
+					-- legible on a phone, and they are the only way around the menu.
+					item.TextScaled = true
+					local bounds = item:FindFirstChildOfClass("UITextSizeConstraint")
+					if not bounds then
+						bounds = Instance.new("UITextSizeConstraint")
+						bounds.Parent = item
+					end
+					bounds.MinTextSize = 9
+					bounds.MaxTextSize = if narrow then 12 else 13
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then

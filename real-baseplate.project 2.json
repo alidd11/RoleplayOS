@@ -1,0 +1,84 @@
+{
+  "name": "RoleplayOSRealBaseplate",
+  "globIgnorePaths": [
+    "**/*.tmp*",
+    "**/*.tmp.*",
+    "**/.DS_Store",
+    "**/*.swp",
+    "**/*~"
+  ],
+  "tree": {
+    "$className": "DataModel",
+    "$ignoreUnknownInstances": true,
+    "ReplicatedStorage": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOS": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Shared": {
+          "$path": "src/shared/Utility"
+        },
+        "Config": {
+          "$path": "src/shared/Config"
+        },
+        "Types": {
+          "$path": "src/shared/Types"
+        },
+        "Network": {
+          "$path": "src/shared/Network"
+        }
+      }
+    },
+    "ServerScriptService": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOS": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "Services": {
+          "$path": "src/server/Services"
+        },
+        "Systems": {
+          "$path": "src/server/Systems"
+        },
+        "Bootstrap": {
+          "$path": "src/server/Bootstrap.server.luau"
+        }
+      }
+    },
+    "ServerStorage": {
+      "$ignoreUnknownInstances": true,
+      "RoleplayOSAssets": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "AuthoringTemplates": { "$path": "server-assets/AuthoringTemplates" },
+        "PropertyInteriors": { "$path": "server-assets/PropertyInteriors" },
+        "Tools": { "$path": "server-assets/Tools" },
+        "Uniforms": { "$path": "server-assets/Uniforms" },
+        "Vehicles": { "$path": "server-assets/Vehicles" }
+      },
+      "RoleplayOSImportedSources": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true,
+        "BankRobberySource": {
+          "$path": "server-assets/ImportedSources/BankRobberySource.rbxm"
+        },
+        "PoliceEpaulettesSource": {
+          "$path": "server-assets/ImportedSources/PoliceEpaulettesSource.rbxm"
+        },
+        "ZenithRadioSystemSource": {
+          "$path": "server-assets/ImportedSources/ZenithRadioSystem.rbxm"
+        }
+      }
+    },
+    "StarterPlayer": {
+      "$ignoreUnknownInstances": true,
+      "StarterPlayerScripts": {
+        "$ignoreUnknownInstances": true,
+        "RoleplayOSClient": {
+          "$path": "src/client",
+          "$ignoreUnknownInstances": true
+        }
+      }
+    }
+  }
+}

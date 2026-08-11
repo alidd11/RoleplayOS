@@ -56,9 +56,25 @@ function RadioController:Init(context: any)
 	self.open = false
 	self.snapshot = nil
 	self.vehicleMode = false
-	-- The radio is an always-available operational surface while on duty.
-	-- It is not an inventory tool and has no close/collapse state.
-	self.expanded = true
+	-- The radio is an always-available operational surface while on duty, but
+	-- "available" is not the same as "occupying the screen".
+	--
+	-- It had no collapsed state at all, and a 300 by 320 panel on a landscape
+	-- phone is most of the height of the world: it sat over the stamina and
+	-- hunger bars and the hotbar, and its own transmit box fell off the bottom
+	-- edge. A player could see the game around it but could not use the parts it
+	-- was standing on.
+	--
+	-- Collapsed it is a single bar naming the channel, which is the only part
+	-- that matters when nothing is happening, and one press opens it.
+	self.collapsed = false
+	-- Set from the first layout: a phone starts collapsed, a desktop with room
+	-- to spare starts open.
+	self.collapseChosen = false
+	-- A full-screen device borrows the whole screen. The radio is not dismissed
+	-- while one is open, it is hidden, and comes back when the device closes.
+	self.deviceOpen = false
+	self.callsignEditable = false
 	self.muted = false
 end
 
@@ -148,11 +164,43 @@ function RadioController:_showCallsignModal()
 	input:CaptureFocus()
 end
 
+-- The body is shown when the radio is on duty AND no full-screen device has
+-- borrowed the screen. Kept in one place because two independent things hide it.
+function RadioController:_applyVisibility()
+	if self.body then
+		self.body.Visible = self.open and not self.deviceOpen
+	end
+end
+
+-- Whether an MDT or CCTV view currently owns the screen.
+--
+-- The listeners for these called _setOpen(self.open), which re-set the value it
+-- already had and therefore did nothing at all. The radio stayed on top of the
+-- terminal it was covering: it sits at DisplayOrder 38 against the MDT's 35, so
+-- it took the terminal's search box and the whole left column of its results.
+function RadioController:_refreshDeviceState()
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	self.deviceOpen = playerGui:GetAttribute("RoleplayOSMDTOpen") == true
+		or playerGui:GetAttribute("RoleplayOSCCTVOpen") == true
+	self:_applyVisibility()
+end
+
+function RadioController:_setCollapsed(collapsed: boolean)
+	self.collapsed = collapsed
+	if self.collapseIcon then
+		self.collapseIcon.Text = if collapsed then "\u{25B8}" else "\u{25BE}"
+	end
+	if self.lastLayout and self.resize then
+		self.resize(self.lastLayout)
+	end
+end
+
 function RadioController:_setOpen(open: boolean)
 	self.open = open
-	if self.body then
-		self.body.Visible = open
-	end
+	self:_applyVisibility()
 	local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if gui then
 		gui:SetAttribute("RoleplayOSRadioOpen", open)
@@ -187,9 +235,14 @@ function RadioController:_render()
 			else "Operational channel"
 	end
 	if self.editCallsign then
-		self.editCallsign.Visible = true
+		-- Recorded rather than shown directly: whether the control is available
+		-- is decided here, whether there is room for it is decided by the layout.
+		self.callsignEditable = true
+		self.editCallsign.Visible = not self.collapsed
 	end
-	self.content.Visible = self.open
+	-- Collapsed wins. A refresh arriving while the panel is shut must not
+	-- reopen its body underneath the closed header.
+	self.content.Visible = self.open and not self.collapsed
 	if not snapshot then
 		text(self.content, "Radio unavailable", 16, true).Size = UDim2.new(1, 0, 0, 28)
 		text(self.content, "Report for duty to access operational channels.", 12).Position =
@@ -407,6 +460,26 @@ function RadioController:Start()
 	callsign.Position = UDim2.fromOffset(14, 33)
 	callsign.Size = UDim2.new(1, -36, 0, 18)
 	callsign.TextColor3 = C.Muted
+	-- The header doubles as the collapse control, so the bar you can see when it
+	-- is shut is the same thing you press to open it. Stops short of the EDIT
+	-- button so that stays pressable.
+	local collapseToggle = Instance.new("TextButton")
+	collapseToggle.BackgroundTransparency = 1
+	collapseToggle.Text = ""
+	collapseToggle.Position = UDim2.fromOffset(0, 0)
+	collapseToggle.Size = UDim2.new(1, -70, 0, 46)
+	collapseToggle.ZIndex = 3
+	collapseToggle.Parent = body
+	collapseToggle.Activated:Connect(function()
+		self:_setCollapsed(not self.collapsed)
+	end)
+	local collapseIcon = text(body, "\u{25BE}", 14, true)
+	collapseIcon.AnchorPoint = Vector2.new(1, 0)
+	collapseIcon.Position = UDim2.new(1, -68, 0, 12)
+	collapseIcon.Size = UDim2.fromOffset(18, 24)
+	collapseIcon.TextColor3 = C.Muted
+	collapseIcon.ZIndex = 2
+	self.collapseIcon = collapseIcon
 	local editCallsign = button(body, "EDIT")
 	editCallsign.AnchorPoint = Vector2.new(1, 0)
 	editCallsign.Position = UDim2.new(1, -14, 0, 12)
@@ -430,20 +503,41 @@ function RadioController:Start()
 	self.bodyScale.Parent = body
 	self.resize = function(layout)
 		self.lastLayout = layout
-		local footprint = Vector2.new(300, 320)
-		content.Visible = self.open
+		-- A phone opens collapsed, a desktop opens ready to use. Decided once, so
+		-- a later layout signal never reopens a panel the player has just shut.
+		if not self.collapseChosen then
+			self.collapseChosen = true
+			self.collapsed = layout.Compact or layout.InputMode == "Touch"
+			if self.collapseIcon then
+				self.collapseIcon.Text = if self.collapsed then "\u{25B8}" else "\u{25BE}"
+			end
+		end
+		-- Smaller where there is less room, rather than the same panel everywhere
+		-- shrunk until its text is unreadable.
+		local footprint = if layout.Compact then Vector2.new(268, 236) else Vector2.new(300, 320)
+		local collapsedHeight = 46
+		local expanded = not self.collapsed
+		content.Visible = self.open and expanded
 		content.Position = UDim2.fromOffset(14, 76)
 		content.Size = UDim2.new(1, -28, 1, -88)
+		self.callsign.Visible = expanded
+		self.editCallsign.Visible = expanded and self.callsignEditable == true
+		body.AnchorPoint = Vector2.new(0, 0)
+		-- No inset is added here. This ScreenGui is mounted with CoreUISafeInsets,
+		-- so its own origin is already inside the region Roblox leaves free; adding
+		-- SafeLeft and NativeTop on top of that applied the cutout and the top bar
+		-- a second time and pushed the panel about fifty pixels further down than
+		-- intended, which is what drove its transmit box off the bottom edge.
+		body.Position = UDim2.fromOffset(12, 12)
+		body.Size = UDim2.fromOffset(footprint.X, if expanded then footprint.Y else collapsedHeight)
 		if layout.Compact then
-			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
-			body.Size = UDim2.fromOffset(footprint.X, footprint.Y)
+			-- Fitted against the height actually left below the panel's own top
+			-- margin. FitScale against the raw footprint returned 1.0 here, so
+			-- nothing shrank and a 320-tall panel stood on a 371-tall screen.
+			local available = Vector2.new(footprint.X, math.max(1, footprint.Y + 24))
 			self.bodyScale.Scale =
-				self.context.Controllers.UIOrchestrator:FitScale(layout, footprint, 20)
+				self.context.Controllers.UIOrchestrator:FitScale(layout, available, 24)
 		else
-			body.AnchorPoint = Vector2.new(0, 0)
-			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
-			body.Size = UDim2.fromOffset(footprint.X, footprint.Y)
 			self.bodyScale.Scale = math.clamp(
 				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,
@@ -472,15 +566,19 @@ function RadioController:Start()
 	table.insert(
 		self.connections,
 		playerGui:GetAttributeChangedSignal("RoleplayOSMDTOpen"):Connect(function()
-			self:_setOpen(self.open)
+			self:_refreshDeviceState()
 		end)
 	)
 	table.insert(
 		self.connections,
 		playerGui:GetAttributeChangedSignal("RoleplayOSCCTVOpen"):Connect(function()
-			self:_setOpen(self.open)
+			self:_refreshDeviceState()
 		end)
 	)
+	-- Read once at startup as well as on change: joining straight into a seat
+	-- with a terminal already open would otherwise leave the radio on top of it
+	-- until the player happened to close and reopen the device.
+	self:_refreshDeviceState()
 	local initial = self.context.Controllers.NetworkController:Request("GetRadioSnapshot", {})
 	if initial.Success then
 		self.snapshot = initial.Data
