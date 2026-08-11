@@ -56,7 +56,9 @@ function RadioController:Init(context: any)
 	self.open = false
 	self.snapshot = nil
 	self.vehicleMode = false
-	self.expanded = false
+	-- The radio is an always-available operational surface while on duty.
+	-- It is not an inventory tool and has no close/collapse state.
+	self.expanded = true
 	self.muted = false
 end
 
@@ -149,10 +151,7 @@ end
 function RadioController:_setOpen(open: boolean)
 	self.open = open
 	if self.body then
-		local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 		self.body.Visible = open
-			and not (playerGui and playerGui:GetAttribute("RoleplayOSMDTOpen") == true)
-			and not (playerGui and playerGui:GetAttribute("RoleplayOSDispatchOpen") == true)
 	end
 	local gui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if gui then
@@ -187,16 +186,10 @@ function RadioController:_render()
 			then "UNIT " .. tostring(snapshot.Callsign or "UNASSIGNED")
 			else "Operational channel"
 	end
-	if self.toggle then
-		self.toggle.Text = if self.expanded then "−" else "+"
-	end
 	if self.editCallsign then
-		self.editCallsign.Visible = self.expanded
+		self.editCallsign.Visible = true
 	end
-	self.content.Visible = self.expanded
-	if not self.expanded then
-		return
-	end
+	self.content.Visible = self.open
 	if not snapshot then
 		text(self.content, "Radio unavailable", 16, true).Size = UDim2.new(1, 0, 0, 28)
 		text(self.content, "Report for duty to access operational channels.", 12).Position =
@@ -232,7 +225,7 @@ function RadioController:_render()
 		end
 	end
 	local previous = button(channelBar, "‹")
-	previous.Size = UDim2.fromOffset(24, 30)
+	previous.Size = UDim2.fromOffset(22, 30)
 	previous.Activated:Connect(function()
 		chooseChannel(-1)
 	end)
@@ -244,21 +237,21 @@ function RadioController:_render()
 		end
 	end
 	local channelTitle = button(channelBar, channelName)
-	channelTitle.Position = UDim2.fromOffset(30, 0)
-	channelTitle.Size = UDim2.fromOffset(112, 30)
+	channelTitle.Position = UDim2.fromOffset(28, 0)
+	channelTitle.Size = UDim2.fromOffset(100, 30)
 	channelTitle.BackgroundColor3 = C.Green
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local nextChannel = button(channelBar, "›")
-	nextChannel.Position = UDim2.fromOffset(148, 0)
-	nextChannel.Size = UDim2.fromOffset(24, 30)
+	nextChannel.Position = UDim2.fromOffset(134, 0)
+	nextChannel.Size = UDim2.fromOffset(22, 30)
 	nextChannel.Activated:Connect(function()
 		chooseChannel(1)
 	end)
 	local mute = button(channelBar, "MIC")
-	mute.Position = UDim2.fromOffset(178, 0)
-	mute.Size = UDim2.fromOffset(48, 30)
+	mute.Position = UDim2.fromOffset(162, 0)
+	mute.Size = UDim2.fromOffset(44, 30)
 	mute.Activated:Connect(function()
 		self.muted = not self.muted
 		mute.Text = if self.muted then "MUTED" else "MIC"
@@ -266,8 +259,8 @@ function RadioController:_render()
 	end)
 	local panic = button(channelBar, "PANIC")
 	panic.Name = "Panic"
-	panic.Position = UDim2.fromOffset(232, 0)
-	panic.Size = UDim2.fromOffset(58, 30)
+	panic.Position = UDim2.fromOffset(214, 0)
+	panic.Size = UDim2.fromOffset(54, 30)
 	panic.BackgroundColor3 = C.Immediate
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
@@ -393,7 +386,7 @@ function RadioController:Start()
 	-- matching the native chat/control cluster rather than the bottom hotbar.
 	-- CoreUISafeInsets protects it from platform chrome and device cutouts.
 	body.Position = UDim2.new(1, -18, 0, 72)
-	body.Size = UDim2.fromOffset(235, 58)
+	body.Size = UDim2.fromOffset(300, 320)
 	body.BackgroundColor3 = C.Body
 	body.BackgroundTransparency = 0.12
 	body.BorderSizePixel = 0
@@ -423,18 +416,6 @@ function RadioController:Start()
 	editCallsign.Activated:Connect(function()
 		self:_showCallsignModal()
 	end)
-	local toggle = button(body, "+")
-	toggle.AnchorPoint = Vector2.new(1, 0)
-	toggle.Position = UDim2.new(1, -10, 0, 12)
-	toggle.Size = UDim2.fromOffset(26, 26)
-	toggle.TextSize = 16
-	toggle.Activated:Connect(function()
-		self.expanded = not self.expanded
-		if self.lastLayout then
-			self:resize(self.lastLayout)
-		end
-		self:_render()
-	end)
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
 	content.Position = UDim2.fromOffset(14, 76)
@@ -445,15 +426,14 @@ function RadioController:Start()
 	self.header = header
 	self.callsign = callsign
 	self.editCallsign = editCallsign
-	self.toggle = toggle
 	self.bodyScale = Instance.new("UIScale")
 	self.bodyScale.Parent = body
 	self.resize = function(layout)
 		self.lastLayout = layout
-		local footprint = if self.expanded then Vector2.new(330, 360) else Vector2.new(235, 58)
-		content.Visible = self.expanded and self.open
-		content.Position = UDim2.fromOffset(14, if self.expanded then 76 else 0)
-		content.Size = UDim2.new(1, -28, 1, if self.expanded then -88 else 0)
+		local footprint = Vector2.new(300, 320)
+		content.Visible = self.open
+		content.Position = UDim2.fromOffset(14, 76)
+		content.Size = UDim2.new(1, -28, 1, -88)
 		if layout.Compact then
 			body.AnchorPoint = Vector2.new(0, 0)
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
@@ -465,10 +445,7 @@ function RadioController:Start()
 			body.Position = UDim2.fromOffset(math.max(8, layout.SafeLeft + 2), layout.NativeTop + 2)
 			body.Size = UDim2.fromOffset(footprint.X, footprint.Y)
 			self.bodyScale.Scale = math.clamp(
-				math.min(
-					layout.SafeViewport.X / (if self.expanded then 1200 else 1000),
-					layout.SafeViewport.Y / 760
-				),
+				math.min(layout.SafeViewport.X / 1200, layout.SafeViewport.Y / 760),
 				0.82,
 				1
 			)
