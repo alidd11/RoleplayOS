@@ -63,11 +63,26 @@ local corner: (Instance, number) -> ()
 local stroke: (Instance, Color3?, number?) -> ()
 local cachedAvatarDescription: HumanoidDescription? = nil
 
+-- `placeholder` names what to show when the uniform has no clothing configured.
+--
+-- Passing nil keeps the old behaviour of falling back to the player's own
+-- avatar, which is right for a civilian character: their own clothes are their
+-- look. It is wrong for a role. Every service uniform in the configuration
+-- still has empty shirt and trouser IDs, so a role preview built the player's
+-- current outfit and presented it as the uniform: the firefighter and the
+-- paramedic showed the same person in the same clothes, and so did the civilian
+-- card next to them. A preview that shows the same thing whatever it previews
+-- is worse than no preview, because it looks like an answer.
+--
+-- It also skips building the avatar at all in that case. A departments page
+-- holds ten of these, and ten rigged R15 models were being assembled and
+-- rendered on a phone to show the same wrong outfit ten times.
 local function portraitPreview(
 	parent: Instance,
 	accent: Color3,
 	uniform: any?,
-	isCurrent: (() -> boolean)?
+	isCurrent: (() -> boolean)?,
+	placeholder: string?
 ): ViewportFrame
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "AvatarPreview"
@@ -88,6 +103,22 @@ local function portraitPreview(
 	wash.Rotation = 90
 	wash.Parent = viewport
 
+	local configuredShirt = tonumber(uniform and uniform.ShirtTemplate) or 0
+	local configuredTrousers = tonumber(uniform and uniform.TrousersTemplate) or 0
+	if placeholder and configuredShirt <= 0 and configuredTrousers <= 0 then
+		local mark = Instance.new("TextLabel")
+		mark.BackgroundTransparency = 1
+		mark.Font = Enum.Font.GothamBold
+		mark.Text = placeholder
+		mark.TextColor3 = accent
+		mark.TextTransparency = 0.25
+		mark.TextScaled = true
+		mark.Size = UDim2.fromScale(0.62, 0.42)
+		mark.Position = UDim2.fromScale(0.19, 0.29)
+		mark.Parent = viewport
+		return viewport
+	end
+
 	local camera = Instance.new("Camera")
 	camera.FieldOfView = 28
 	camera.CFrame = CFrame.lookAt(Vector3.new(0, 1.15, 7.6), Vector3.new(0, 1.05, 0))
@@ -103,15 +134,11 @@ local function portraitPreview(
 					Players:GetHumanoidDescriptionFromUserId(Players.LocalPlayer.UserId)
 			end
 			local description = cachedAvatarDescription:Clone()
-			if uniform then
-				local shirt = tonumber(uniform.ShirtTemplate)
-				local trousers = tonumber(uniform.TrousersTemplate)
-				if shirt and shirt > 0 then
-					description.Shirt = shirt
-				end
-				if trousers and trousers > 0 then
-					description.Pants = trousers
-				end
+			if configuredShirt > 0 then
+				description.Shirt = configuredShirt
+			end
+			if configuredTrousers > 0 then
+				description.Pants = configuredTrousers
 			end
 			return Players:CreateHumanoidModelFromDescriptionAsync(
 				description,
@@ -1135,7 +1162,11 @@ function App.mount(context: any): ScreenGui
 					role.PreviewUniform,
 					function()
 						return renderGeneration == careerGeneration and item.Parent == roleGrid
-					end
+					end,
+					-- Initials rather than the player's own clothes. Honest about
+					-- there being no uniform to show, and it reads as deliberate
+					-- rather than as a preview that failed to load.
+					string.upper(string.sub(role.Name, 1, 2))
 				)
 				preview.Position = UDim2.fromOffset(12, 14)
 				preview.Size = UDim2.new(1, -24, 0, if landscape then 102 else 118)
