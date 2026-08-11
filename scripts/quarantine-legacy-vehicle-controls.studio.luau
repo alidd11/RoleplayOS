@@ -19,6 +19,7 @@ local INVALID_SOUND_IDS = {
 	["1424721819"] = true,
 	["10652911149"] = true,
 	["10652911247"] = true,
+	["11503290062"] = true,
 	["100763417929561"] = true,
 	["127281808730042"] = true,
 	["129205600734760"] = true,
@@ -57,6 +58,27 @@ local function shouldQuarantine(instance)
 	while current and current ~= vehicle do
 		local name = string.lower(current.Name)
 		if name == "sirencontrol" or name == "old" or string.find(name, "easyls", 1, true) then
+			return true
+		end
+		-- Named individually because these are the ones actually throwing.
+		--
+		-- SmeersLightsHandler is the loud one: it reads Body.Brakes and
+		-- Body.Reverse, neither of which exists on this chassis, and it does so on
+		-- a loop -- the console fills with the same two errors several times a
+		-- second for as long as the vehicle exists. RoleplayOS owns emergency
+		-- lighting, so nothing is lost by removing it.
+		--
+		-- Kickstand reads Body.Kickstand, which also does not exist, and it copies
+		-- itself into PlayerGui, so it throws from two places at once.
+		--
+		-- The AC6C gauge cluster is a second speedometer. RoleplayOS draws its own,
+		-- so this one is both broken -- it reads a Dash that is not there -- and
+		-- redundant even when it works.
+		if
+			name == "smeerslightshandler"
+			or name == "kickstand"
+			or string.find(name, "ac6c", 1, true) ~= nil
+		then
 			return true
 		end
 		current = current.Parent

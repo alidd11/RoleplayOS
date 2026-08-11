@@ -22,10 +22,13 @@ type Counts = {
 	Models: number,
 	Lights: number,
 	Sounds: number,
+	-- Counted apart from "nothing needed changing", because the two look
+	-- identical in a total of zero and mean opposite things.
+	Refused: number,
 }
 
 local function newCounts(): Counts
-	return { Meshes = 0, Models = 0, Lights = 0, Sounds = 0 }
+	return { Meshes = 0, Models = 0, Lights = 0, Sounds = 0, Refused = 0 }
 end
 
 function WorldBudgetService:Init(context: any)
@@ -59,6 +62,8 @@ function WorldBudgetService:_apply(instance: Instance, counts: Counts)
 			end)
 			if ok and changed then
 				counts.Meshes += 1
+			elseif not ok then
+				counts.Refused += 1
 			end
 		end
 		return
@@ -83,6 +88,8 @@ function WorldBudgetService:_apply(instance: Instance, counts: Counts)
 			end)
 			if ok and changed then
 				counts.Models += 1
+			elseif not ok then
+				counts.Refused += 1
 			end
 		end
 		return
@@ -160,19 +167,36 @@ end
 -- report on the engine, and it must not be the thing that breaks when the
 -- engine changes underneath it.
 function WorldBudgetService:_reportStreaming()
-	local ok, detail = pcall(function()
-		return {
-			IntegrityMode = Workspace.StreamingIntegrityMode.Name,
-			ModelBehaviour = Workspace.ModelStreamingBehavior.Name,
-		}
+	-- Read one property at a time.
+	--
+	-- These were read together inside a single pcall, so the first unreadable one
+	-- took the whole report down with it and the log said only that the settings
+	-- could not be read. StreamingIntegrityMode turns out to be another of the
+	-- Workspace properties Studio displays but scripts may not read, exactly like
+	-- StreamingMinRadius before it, so in practice this reported nothing at all
+	-- and the one line telling us whether streaming is even on never appeared.
+	local detail: { [string]: any } = {}
+	local function record(name: string, read: () -> any)
+		local ok, value = pcall(read)
+		detail[name] = if ok then value else "unreadable"
+	end
+	record("TargetRadius", function()
+		return Workspace.StreamingTargetRadius
 	end)
-	if not ok then
-		self.context.Logger:Warning("Could not read the streaming settings", {
-			Error = tostring(detail),
-		})
+	record("IntegrityMode", function()
+		return Workspace.StreamingIntegrityMode.Name
+	end)
+	record("ModelBehaviour", function()
+		return Workspace.ModelStreamingBehavior.Name
+	end)
+	local enabledOk, enabled = pcall(function()
+		return Workspace.StreamingEnabled
+	end)
+	if not enabledOk then
+		self.context.Logger:Warning("Could not read whether streaming is on", detail)
 		return
 	end
-	if Workspace.StreamingEnabled then
+	if enabled then
 		self.context.Logger:Info("Streaming is on", detail)
 	else
 		self.context.Logger:Warning(
@@ -210,7 +234,24 @@ function WorldBudgetService:Start()
 			ModelsGivenDistantDetail = counts.Models,
 			LightsMadeCheaper = counts.Lights,
 			SoundsGivenAFalloff = counts.Sounds,
+			RefusedByEngine = counts.Refused,
 		})
+		-- Said out loud rather than left as a zero on the line above.
+		--
+		-- Roblox restricts writes to RenderFidelity and Model.LevelOfDetail to
+		-- threads holding the plugin capability, and a server Script does not hold
+		-- it. Every attempt is refused, and because each is wrapped in a pcall so
+		-- it can never break a vehicle spawn, the level of detail pass reported a
+		-- tidy zero and read as having found nothing to do. It is the largest
+		-- saving this service exists to make and it has never once been applied.
+		-- Baking the values into the templates in Studio is how to get it.
+		if counts.Refused > 0 then
+			self.context.Logger:Warning("Level of detail could not be applied at runtime", {
+				Refused = counts.Refused,
+				Reason = "Roblox restricts these properties to plugin threads",
+				Remedy = "Set RenderFidelity and LevelOfDetail on the models in Studio",
+			})
+		end
 	end)
 end
 
