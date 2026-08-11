@@ -10,6 +10,19 @@ local EXIT_ACTION = "RoleplayOSExitCCTV"
 local NAVIGATE_ACTION = "RoleplayOSNavigateCCTV"
 local CCTVController = { connections = {}, cameras = {}, index = 1, viewing = false }
 
+local function isCCTVHelper(instance: Instance): boolean
+	local path = instance:GetFullName()
+	return string.find(path, "Workspace.RoleplayOSMapSpawns", 1, true) ~= nil
+		or string.find(path, "Workspace.Bank Robbery System V2.Alarms", 1, true) ~= nil
+		or string.find(
+				path,
+				"Workspace.Bank Robbery System V2.tools.Hack.Handle.Model",
+				1,
+				true
+			)
+			~= nil
+end
+
 local function button(parent: Instance, text: string): TextButton
 	local item = Instance.new("TextButton")
 	item.BackgroundColor3 = Color3.fromRGB(18, 26, 38)
@@ -27,6 +40,26 @@ end
 
 function CCTVController:Init(context: any)
 	self.context = context
+	self.hiddenHelpers = {}
+end
+
+function CCTVController:_setHelperVisibility(hidden: boolean)
+	if hidden then
+		self.hiddenHelpers = {}
+		for _, instance in workspace:GetDescendants() do
+			if instance:IsA("BasePart") and isCCTVHelper(instance) then
+				self.hiddenHelpers[instance] = instance.LocalTransparencyModifier
+				instance.LocalTransparencyModifier = 1
+			end
+		end
+	else
+		for instance, transparency in self.hiddenHelpers do
+			if instance.Parent then
+				instance.LocalTransparencyModifier = transparency
+			end
+		end
+		self.hiddenHelpers = {}
+	end
 end
 
 function CCTVController:_mount()
@@ -62,6 +95,13 @@ function CCTVController:_mount()
 	local nextButton = button(bar, "NEXT ›")
 	nextButton.Position = UDim2.new(1, -218, 0, 12)
 	nextButton.Size = UDim2.fromOffset(104, 34)
+	local returnToMDT = button(bar, "RETURN TO MDT")
+	returnToMDT.Position = UDim2.new(1, -330, 0, 12)
+	returnToMDT.Size = UDim2.fromOffset(104, 34)
+	returnToMDT.BackgroundColor3 = Color3.fromRGB(24, 104, 148)
+	returnToMDT.Visible = false
+	self.returnToMDT = returnToMDT
+	self.nextButton = nextButton
 	local exit = button(bar, "EXIT CCTV")
 	exit.Position = UDim2.new(1, -104, 0, 12)
 	exit.Size = UDim2.fromOffset(94, 34)
@@ -92,6 +132,12 @@ function CCTVController:_mount()
 		nextButton.Activated:Connect(function()
 			self.index = if self.index >= #self.cameras then 1 else self.index + 1
 			self:_apply()
+		end)
+	)
+	table.insert(
+		self.connections,
+		returnToMDT.Activated:Connect(function()
+			self:Exit(true)
 		end)
 	)
 	table.insert(
@@ -139,10 +185,18 @@ function CCTVController:Open()
 	self.viewing = true
 	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
+		self.returnToMDTVisible = playerGui:GetAttribute("RoleplayOSMDTOpen") == true
 		playerGui:SetAttribute("RoleplayOSCCTVOpen", true)
 		playerGui:SetAttribute("RoleplayOSMDTOpen", false)
 		playerGui:SetAttribute("RoleplayOSDispatchOpen", false)
 		playerGui:SetAttribute("RoleplayOSDeviceOpen", true)
+	end
+	self:_setHelperVisibility(true)
+	if self.returnToMDT then
+		self.returnToMDT.Visible = self.returnToMDTVisible == true
+	end
+	if self.nextButton then
+		self.nextButton.Visible = self.returnToMDTVisible ~= true
 	end
 	pcall(function()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
@@ -152,9 +206,10 @@ function CCTVController:Open()
 	GuiService.SelectedObject = self.exitButton
 end
 
-function CCTVController:Exit()
+function CCTVController:Exit(returnToMDT: boolean?)
 	self.viewing = false
 	self.gui.Enabled = false
+	self:_setHelperVisibility(false)
 	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
 		playerGui:SetAttribute("RoleplayOSCCTVOpen", false)
@@ -173,6 +228,20 @@ function CCTVController:Exit()
 	local camera = workspace.CurrentCamera
 	if camera then
 		camera.CameraType = Enum.CameraType.Custom
+	end
+	if
+		returnToMDT
+		and self.returnToMDTVisible
+		and self.context.Controllers.MDTController.setOpen
+	then
+		self.context.Controllers.MDTController.setOpen(true)
+	end
+	self.returnToMDTVisible = false
+	if self.returnToMDT then
+		self.returnToMDT.Visible = false
+	end
+	if self.nextButton then
+		self.nextButton.Visible = true
 	end
 end
 

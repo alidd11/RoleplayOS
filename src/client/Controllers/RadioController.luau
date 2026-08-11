@@ -362,6 +362,9 @@ function RadioController:refresh()
 		self.snapshot = response.Data
 	else
 		self.snapshot = nil
+		if self.open and response.Message and response.Message ~= "" then
+			self.context.Controllers.NotificationController:Show(response.Message, "Radio")
+		end
 	end
 	self:_render()
 end
