@@ -2246,10 +2246,16 @@ function App.mount(context: any): ScreenGui
 		-- completely different sidebar information architecture.
 		local horizontal = true
 		local narrow = layout.SafeViewport.X < 600
+		local compactLandscape = shortLandscape()
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
+		local compactNativeRowBottom = nativeBand + controlSize + 14
 		if horizontal then
-			local barHeight = safeTop + (if narrow then 112 else 108)
+			-- On a landscape phone Roblox's native controls consume the whole first
+			-- row. Give the product identity and tabs their own row below it instead
+			-- of placing the title into the native logo/chat/microphone cluster.
+			local barHeight = safeTop
+				+ (if narrow then 140 else if compactLandscape then 178 else 108)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2258,15 +2264,24 @@ function App.mount(context: any): ScreenGui
 			-- device cutout, so clearing that alone left the title underneath
 			-- them in portrait, where the control cluster is proportionally much
 			-- wider. NativeLeft is where Roblox reports its controls end.
-			local headerLeft = math.max(safeLeft, layout.NativeLeft) + 18
+			local headerLeft = if compactLandscape
+				then safeLeft + 18
+				else math.max(safeLeft, layout.NativeLeft) + 18
 			-- Keep the product name directly below Roblox's native control band.
 			-- It should read as the experience identity, not compete with Roblox's
 			-- own logo, chat and microphone controls.
-			brand.Position = UDim2.fromOffset(headerLeft, nativeBand + 6)
+			brand.Position = UDim2.fromOffset(
+				headerLeft,
+				if compactLandscape then compactNativeRowBottom else nativeBand + 6
+			)
 			brand.Size = UDim2.fromOffset(
-				if narrow
-					then math.max(80, layout.SafeViewport.X - headerLeft - safeRight - 18)
-					else (if shortLandscape() then 198 else 270),
+				if compactLandscape
+					then math.max(160, layout.SafeViewport.X - headerLeft - safeRight - 36)
+					elseif narrow then math.max(
+						80,
+						layout.SafeViewport.X - headerLeft - safeRight - 18
+					)
+					else 270,
 				30
 			)
 			brand.TextSize = 14
@@ -2279,12 +2294,22 @@ function App.mount(context: any): ScreenGui
 			-- The title reserves less of the row on a short screen. It is decorative
 			-- and already truncates, while the tabs beside it are the only way to
 			-- move around the menu, and they were the thing being squeezed.
-			local navLeft = headerLeft + (if shortLandscape() then 210 else 282)
+			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
 				then UDim2.fromOffset(safeLeft + 18, safeTop + 66)
+				elseif compactLandscape then UDim2.fromOffset(
+					headerLeft,
+					compactNativeRowBottom + 44
+				)
 				else UDim2.fromOffset(navLeft, safeTop + 18)
 			navigation.Size = if narrow
 				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 38)
+				elseif compactLandscape then UDim2.new(
+					1,
+					-(headerLeft + safeRight + 18),
+					0,
+					42
+				)
 				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 46)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
