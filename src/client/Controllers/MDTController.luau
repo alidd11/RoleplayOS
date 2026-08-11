@@ -248,10 +248,12 @@ function MDTController:_mount()
 	local title = text(shell, "FORCE CONTROL  ·  OPERATIONAL MDT", 16, true)
 	title.Position = UDim2.fromOffset(22, 15)
 	title.Size = UDim2.new(1, -110, 0, 24)
+	self.serviceTitle = title
 	local subtitle = text(shell, "COMMAND & CONTROL / RECORDS GATEWAY  ·  RESTRICTED", 10)
 	subtitle.Position = UDim2.fromOffset(22, 39)
 	subtitle.Size = UDim2.new(1, -110, 0, 18)
 	subtitle.TextColor3 = C.Muted
+	self.serviceSubtitle = subtitle
 	local secure = text(shell, "●  SECURE SESSION", 9, true)
 	secure.AnchorPoint = Vector2.new(1, 0)
 	secure.Position = UDim2.new(1, -104, 0, 42)

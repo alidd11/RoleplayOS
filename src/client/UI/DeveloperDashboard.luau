@@ -947,6 +947,8 @@ function App.mount(context: any): ScreenGui
 			"Civilian lives keep their own money, vehicles and property."
 		)
 		local landscape = shortLandscape()
+		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
+		local compactEmptyCard = compactViewport.X < 1000 or compactViewport.Y < 500
 		local function enterCivilian(characterId: string)
 			local spawnId = "CityCivilian"
 			for _, role in menuData.Roles do
@@ -968,18 +970,38 @@ function App.mount(context: any): ScreenGui
 			end
 		end
 		if not menuData or #menuData.Characters == 0 then
-			local empty = card(scroll, if landscape then 108 else 150)
+			local empty =
+				card(scroll, if compactEmptyCard then 164 else if landscape then 108 else 150)
 			local titleItem = text(empty, "Start your first story", 18, COLOURS.Text, true)
-			titleItem.Position = UDim2.fromOffset(20, if landscape then 13 else 18)
-			titleItem.Size = UDim2.new(1, -210, 0, 28)
+			titleItem.Position =
+				UDim2.fromOffset(20, if compactEmptyCard then 14 else if landscape then 13 else 18)
+			titleItem.Size = UDim2.new(
+				1,
+				if compactEmptyCard then -40 else if landscape then -218 else -40,
+				0,
+				if compactEmptyCard then 28 else if landscape then 34 else 28
+			)
+			titleItem.TextSize = if compactEmptyCard or landscape then 16 else 18
+			titleItem.TextWrapped = compactEmptyCard or landscape
+			titleItem.TextTruncate = Enum.TextTruncate.None
 			local copy =
 				text(empty, "Create a civilian identity to enter the city.", 13, COLOURS.Muted)
-			copy.Position = UDim2.fromOffset(20, if landscape then 42 else 50)
-			copy.Size = UDim2.new(1, -210, 0, 50)
+			copy.Position =
+				UDim2.fromOffset(20, if compactEmptyCard then 45 else if landscape then 42 else 50)
+			copy.Size = UDim2.new(
+				1,
+				if compactEmptyCard then -40 else if landscape then -218 else -40,
+				0,
+				if compactEmptyCard then 42 else if landscape then 44 else 50
+			)
 			copy.TextWrapped = true
+			copy.TextTruncate = Enum.TextTruncate.None
 			local create = button(empty, "Create character", true)
-			create.AnchorPoint = Vector2.new(1, 0.5)
-			create.Position = UDim2.new(1, -20, 0.5, 0)
+			create.AnchorPoint = if compactEmptyCard then Vector2.new(0, 1) else Vector2.new(1, 0.5)
+			create.Position = if compactEmptyCard
+				then UDim2.new(0, 20, 1, -14)
+				else UDim2.new(1, -20, 0.5, 0)
+			create.Size = if compactEmptyCard then UDim2.new(1, -40, 0, 40) else create.Size
 			create.Activated:Connect(showModal)
 		else
 			local columns = portraitCardColumns()
@@ -1095,7 +1117,9 @@ function App.mount(context: any): ScreenGui
 				createPreview.BackgroundColor3 = COLOURS.SurfaceRaised
 				createPreview.BorderSizePixel = 0
 				createPreview.Position = UDim2.fromOffset(12, 14)
-				createPreview.Size = UDim2.new(1, -24, 0, if landscape then 112 else 132)
+				createPreview.Size = if landscape
+					then UDim2.fromOffset(112, 112)
+					else UDim2.new(1, -24, 0, 132)
 				createPreview.Parent = createCard
 				corner(createPreview, 12)
 				stroke(createPreview, COLOURS.Accent, 0.62)
@@ -1103,17 +1127,29 @@ function App.mount(context: any): ScreenGui
 				plus.Size = UDim2.fromScale(1, 1)
 				plus.TextXAlignment = Enum.TextXAlignment.Center
 				local createTitle = text(createCard, "New character", 17, COLOURS.Text, true)
-				createTitle.Position = UDim2.fromOffset(16, if landscape then 134 else 156)
-				createTitle.Size = UDim2.new(1, -32, 0, 27)
+				createTitle.Position = if landscape
+					then UDim2.fromOffset(136, 16)
+					else UDim2.fromOffset(16, 156)
+				createTitle.Size = if landscape
+					then UDim2.new(1, -152, 0, 27)
+					else UDim2.new(1, -32, 0, 27)
 				local createCopy =
 					text(createCard, "Create another civilian identity.", 13, COLOURS.Muted)
-				createCopy.Position = UDim2.fromOffset(16, if landscape then 163 else 185)
-				createCopy.Size = UDim2.new(1, -32, 0, 40)
+				createCopy.Position = if landscape
+					then UDim2.fromOffset(136, 46)
+					else UDim2.fromOffset(16, 185)
+				createCopy.Size = if landscape
+					then UDim2.new(1, -152, 0, 38)
+					else UDim2.new(1, -32, 0, 40)
 				createCopy.TextWrapped = true
 				local create = button(createCard, "Create character", false)
 				create.AnchorPoint = Vector2.new(0, 1)
-				create.Position = UDim2.new(0, 16, 1, -14)
-				create.Size = UDim2.new(1, -32, 0, 42)
+				create.Position = if landscape
+					then UDim2.new(0, 136, 1, -14)
+					else UDim2.new(0, 16, 1, -14)
+				create.Size = if landscape
+					then UDim2.new(1, -152, 0, 34)
+					else UDim2.new(1, -32, 0, 42)
 				create.Activated:Connect(showModal)
 			end
 		end
@@ -1347,10 +1383,15 @@ function App.mount(context: any): ScreenGui
 			"These are safe framework slots for future job systems; no job is granted from this menu alone."
 		)
 		local jobs = {}
-		for _, job in menuData and menuData.Jobs or {} do
+		for _, job in pairs(menuData and menuData.Jobs or {}) do
 			table.insert(jobs, job)
 		end
 		table.sort(jobs, function(a, b)
+			local aLive = tostring(a.Id) == "TaxiDriver"
+			local bLive = tostring(b.Id) == "TaxiDriver"
+			if aLive ~= bLive then
+				return aLive
+			end
 			return tostring(a.Name) < tostring(b.Name)
 		end)
 		if #jobs == 0 then
@@ -1363,7 +1404,7 @@ function App.mount(context: any): ScreenGui
 		end
 		local columns = portraitCardColumns()
 		local grid = tileGrid(scroll, #jobs, 156, columns)
-		for _, job in jobs do
+		for _, job in ipairs(jobs) do
 			local item = card(grid, 156)
 			local rail = Instance.new("Frame")
 			rail.BackgroundColor3 = COLOURS.Accent
@@ -1379,7 +1420,7 @@ function App.mount(context: any): ScreenGui
 				item,
 				access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
 				11,
-				true
+				COLOURS.Muted
 			)
 			detail.Position = UDim2.fromOffset(16, 51)
 			detail.Size = UDim2.new(1, -32, 0, 20)
@@ -2369,7 +2410,15 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 		end
-		brand.Text = data.Framework.GameName
+		local gameName = data.Framework.GameName
+		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
+		local compactHeader = shortLandscape()
+			or compactViewport.X < 1000
+			or compactViewport.Y < 500
+		-- On compact phones the full place name competes with the navigation row.
+		-- Preserve a complete, meaningful label instead of truncating it halfway
+		-- through the place name.
+		brand.Text = if compactHeader and #gameName > 22 then "Emergency Response" else gameName
 		version.Visible = data.Framework.ShowRoleplayOSMark
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
