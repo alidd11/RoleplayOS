@@ -32,9 +32,7 @@
         <Properties>
           <string name="Name">SprayEmitter</string>
           <bool name="Enabled">false</bool>
-          <float name="Lifetime">0.25</float>
           <float name="Rate">35</float>
-          <float name="Speed">18</float>
         </Properties>
       </Item>
     </Item>
