@@ -566,9 +566,10 @@ function App.mount(context: any): ScreenGui
 	brand.TextSize = 17
 	brand.TextTruncate = Enum.TextTruncate.None
 	brand.TextWrapped = true
-	local version = text(sidebar, "POWERED BY ROLEPLAYOS  ·  0.1", 10, COLOURS.Muted, true)
-	version.Position = UDim2.fromOffset(27, 66)
-	version.Size = UDim2.fromOffset(180, 18)
+	local brandTextConstraint = Instance.new("UITextSizeConstraint")
+	brandTextConstraint.MinTextSize = 10
+	brandTextConstraint.MaxTextSize = 17
+	brandTextConstraint.Parent = brand
 
 	local navigation = Instance.new("Frame")
 	navigation.BackgroundTransparency = 1
@@ -2248,7 +2249,7 @@ function App.mount(context: any): ScreenGui
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
 		if horizontal then
-			local barHeight = safeTop + (if narrow then 112 else 82)
+			local barHeight = safeTop + (if narrow then 112 else 108)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2258,7 +2259,10 @@ function App.mount(context: any): ScreenGui
 			-- them in portrait, where the control cluster is proportionally much
 			-- wider. NativeLeft is where Roblox reports its controls end.
 			local headerLeft = math.max(safeLeft, layout.NativeLeft) + 18
-			brand.Position = UDim2.fromOffset(headerLeft, safeTop + 8)
+			-- Keep the product name directly below Roblox's native control band.
+			-- It should read as the experience identity, not compete with Roblox's
+			-- own logo, chat and microphone controls.
+			brand.Position = UDim2.fromOffset(headerLeft, nativeBand + 6)
 			brand.Size = UDim2.fromOffset(
 				if narrow
 					then math.max(80, layout.SafeViewport.X - headerLeft - safeRight - 18)
@@ -2267,8 +2271,8 @@ function App.mount(context: any): ScreenGui
 			)
 			brand.TextSize = 14
 			brand.TextWrapped = false
-			brand.TextTruncate = Enum.TextTruncate.AtEnd
-			version.Position = UDim2.fromOffset(headerLeft + 1, safeTop + 37)
+			brand.TextScaled = true
+			brand.TextTruncate = Enum.TextTruncate.None
 			-- Wide enough for the navigation to share the title's row, so it
 			-- starts past the title rather than at a fixed offset that could
 			-- land on top of it once the title has been pushed right.
@@ -2355,9 +2359,9 @@ function App.mount(context: any): ScreenGui
 			brand.Position = UDim2.fromOffset(safeLeft + 26, safeTop + 20)
 			brand.Size = UDim2.new(1, -(52 + safeLeft), 0, 42)
 			brand.TextSize = 17
+			brand.TextScaled = false
 			brand.TextWrapped = true
 			brand.TextTruncate = Enum.TextTruncate.None
-			version.Position = UDim2.fromOffset(safeLeft + 27, safeTop + 66)
 			navigation.Position = UDim2.fromOffset(safeLeft + 18, safeTop + 112)
 			navigation.Size = UDim2.new(1, -(36 + safeLeft), 0, navItems * 44 + (navItems - 1) * 7)
 			navLayout.FillDirection = Enum.FillDirection.Vertical
@@ -2411,15 +2415,7 @@ function App.mount(context: any): ScreenGui
 			end
 		end
 		local gameName = data.Framework.GameName
-		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
-		local compactHeader = shortLandscape()
-			or compactViewport.X < 1000
-			or compactViewport.Y < 500
-		-- On compact phones the full place name competes with the navigation row.
-		-- Preserve a complete, meaningful label instead of truncating it halfway
-		-- through the place name.
-		brand.Text = if compactHeader and #gameName > 22 then "Emergency Response" else gameName
-		version.Visible = data.Framework.ShowRoleplayOSMark
+		brand.Text = gameName
 		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
 		status.TextColor3 = COLOURS.Success
 		finishLoading()
