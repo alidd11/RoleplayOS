@@ -1623,21 +1623,6 @@ local Config = {
 			},
 		},
 	},
-	Vehicles = {
-		CorollaTaxi = {
-			Id = "CorollaTaxi",
-			Name = "Toyota Corolla Taxi",
-			Price = 0,
-			ModelName = "CorollaTaxi",
-			WorkspaceModelName = "CorollaTaxi",
-			AssetPath = { "Vehicles", "Civilian", "Taxi", "CorollaTaxi" },
-			Colours = { "White", "Black", "Yellow" },
-			Access = { AccessType = "Public" },
-			Category = "Civilian",
-			JobId = "TaxiDriver",
-			Fleet = true,
-		},
-	},
 	Spawning = {
 		-- Tag applied to the SpawnLocation pads the framework manages. Tagging
 		-- lets startup ask for the pads directly; without it every descendant of

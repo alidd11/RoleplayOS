@@ -20,6 +20,19 @@
 -- forecourt is written out for that reason.
 return {
 	Vehicles = {
+		CorollaTaxi = {
+			Id = "CorollaTaxi",
+			Name = "Toyota Corolla Taxi",
+			Price = 0,
+			ModelName = "CorollaTaxi",
+			WorkspaceModelName = "CorollaTaxi",
+			AssetPath = { "Vehicles", "Civilian", "Taxi", "CorollaTaxi" },
+			Colours = { "White", "Black", "Yellow" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+			JobId = "TaxiDriver",
+			Fleet = true,
+		},
 		HondaADV160 = {
 			Id = "HondaADV160",
 			Name = "Honda ADV 160",
