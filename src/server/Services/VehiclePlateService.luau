@@ -67,8 +67,23 @@ function VehiclePlateService:_isPlateText(instance: Instance): boolean
 	return false
 end
 
+-- Some imported vehicles ship with a complete, functional plate system of
+-- their own (including the taxi's TAXIPERM front/rear displays). Those models
+-- must remain authoritative: replacing their text with the framework's
+-- registration string creates a second, visually conflicting plate. We still
+-- retain RoleplayOSRegistration on the vehicle for ANPR, records and fines;
+-- this only prevents us from repainting the imported model's UI.
+function VehiclePlateService:_usesNativePlateSystem(vehicle: Model): boolean
+	local taxiPerm = vehicle:FindFirstChild("TAXIPERM", true)
+	local nativePlate = taxiPerm and taxiPerm:FindFirstChild("Plate", true)
+	return taxiPerm ~= nil and nativePlate ~= nil
+end
+
 function VehiclePlateService:Apply(vehicle: Model, registration: string): number
 	vehicle:SetAttribute("RoleplayOSRegistration", registration)
+	if self:_usesNativePlateSystem(vehicle) then
+		return 0
+	end
 	local changed = 0
 	for _, instance in vehicle:GetDescendants() do
 		if
