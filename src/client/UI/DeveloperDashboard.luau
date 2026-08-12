@@ -875,7 +875,8 @@ function App.mount(context: any): ScreenGui
 		-- actual viewport has already rotated. Use the live viewport for the
 		-- orientation decision so a phone cannot accidentally take the tall
 		-- desktop header branch after a landscape switch.
-		local viewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
+		local camera = workspace.CurrentCamera
+		local viewport = if camera then camera.ViewportSize else context.Controllers.UIOrchestrator:GetLayout().Viewport
 		return viewport.X > viewport.Y and viewport.Y < 720
 	end
 	local function portraitCardColumns(): number
@@ -2282,7 +2283,7 @@ function App.mount(context: any): ScreenGui
 			-- own logo, chat and microphone controls.
 			brand.Position = UDim2.fromOffset(
 				headerLeft,
-				if compactLandscape then compactNativeRowBottom else nativeBand + 6
+					if compactLandscape then math.max(8, nativeBand + 8) else nativeBand + 6
 			)
 			brand.Size = UDim2.fromOffset(
 				if compactLandscape
