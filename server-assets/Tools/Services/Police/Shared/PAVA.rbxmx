@@ -28,11 +28,12 @@
         <Color3uint8 name="Color3">4281545523</Color3uint8>
         <Vector3 name="Size"><X>0.3</X><Y>0.3</Y><Z>0.8</Z></Vector3>
       </Properties>
-      <Item class="ParticleEmitter" referent="RBX_PAVA_Emitter">
+        <Item class="ParticleEmitter" referent="RBX_PAVA_Emitter">
         <Properties>
           <string name="Name">SprayEmitter</string>
           <bool name="Enabled">false</bool>
           <float name="Rate">35</float>
+          <NumberRange name="Lifetime">0.12 0.22 </NumberRange>
         </Properties>
       </Item>
     </Item>

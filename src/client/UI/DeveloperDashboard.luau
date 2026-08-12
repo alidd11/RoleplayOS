@@ -178,7 +178,8 @@ local function tileGrid(
 	itemHeight: number,
 	columns: number
 ): Frame
-	local gap = 14
+	local safeWidth = if parent:IsA("GuiObject") then parent.AbsoluteSize.X else 0
+	local gap = if safeWidth > 0 and safeWidth < 720 then 10 else 14
 	local rows = math.max(1, math.ceil(itemCount / columns))
 	local grid = Instance.new("Frame")
 	grid.Name = "PortraitGrid"
@@ -193,6 +194,8 @@ local function tileGrid(
 	local layout = Instance.new("UIGridLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.FillDirectionMaxCells = columns
 	layout.CellPadding = UDim2.fromOffset(gap, gap)
 	layout.CellSize = UDim2.new(1 / columns, -gap * (columns - 1) / columns, 0, itemHeight)
 	layout.Parent = grid
@@ -868,16 +871,20 @@ function App.mount(context: any): ScreenGui
 	local renderControls: () -> ()
 	local currentRender: (() -> ())? = nil
 	local function shortLandscape(): boolean
-		local viewport = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
+		-- SafeViewport can retain the simulator's device-safe padding while the
+		-- actual viewport has already rotated. Use the live viewport for the
+		-- orientation decision so a phone cannot accidentally take the tall
+		-- desktop header branch after a landscape switch.
+		local viewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
 		return viewport.X > viewport.Y and viewport.Y < 720
 	end
 	local function portraitCardColumns(): number
 		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
-		if width >= 1180 then
-			return 4
-		elseif width >= 840 then
+		if shortLandscape() then
+			return if width >= 980 then 2 else 1
+		elseif width >= 1280 then
 			return 3
-		elseif width >= 560 then
+		elseif width >= 720 then
 			return 2
 		end
 		return 1
@@ -1377,44 +1384,46 @@ function App.mount(context: any): ScreenGui
 		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Civilian jobs"
-		pageDescription.Text =
-			"Choose civilian employment systems when they are installed in this experience."
+		pageDescription.Text = "Pick up work that is available in the city today."
 		sectionHeading(
-			"Employment catalogue",
-			"These are safe framework slots for future job systems; no job is granted from this menu alone."
+			"Available work",
+			"Only fully connected civilian jobs appear here."
 		)
 		local jobs = {}
 		for _, job in pairs(menuData and menuData.Jobs or {}) do
-			table.insert(jobs, job)
-		end
-		table.sort(jobs, function(a, b)
-			local aLive = tostring(a.Id) == "TaxiDriver"
-			local bLive = tostring(b.Id) == "TaxiDriver"
-			if aLive ~= bLive then
-				return aLive
+			-- A catalogue entry is a promise: it must have a working join path.
+			-- Do not show future/application placeholders as if they were playable.
+			if tostring(job.Id) == "TaxiDriver" then
+				table.insert(jobs, job)
 			end
-			return tostring(a.Name) < tostring(b.Name)
-		end)
+		end
 		if #jobs == 0 then
-			local empty = card(scroll, 112)
-			local copy =
-				text(empty, "No civilian job systems are installed yet.", 14, COLOURS.Muted)
-			copy.Position = UDim2.fromOffset(20, 20)
-			copy.Size = UDim2.new(1, -40, 0, 28)
+			local empty = card(scroll, if shortLandscape() then 110 else 132)
+			local title = text(empty, "No work is available yet", 17, COLOURS.Text, true)
+			title.Position = UDim2.fromOffset(20, 18)
+			title.Size = UDim2.new(1, -40, 0, 26)
+			local copy = text(empty, "New civilian systems will appear here when they are ready to play.", 13, COLOURS.Muted)
+			copy.Position = UDim2.fromOffset(20, 50)
+			copy.Size = UDim2.new(1, -40, 0, 42)
+			copy.TextWrapped = true
 			return
 		end
 		local columns = portraitCardColumns()
-		local grid = tileGrid(scroll, #jobs, 156, columns)
+		local landscape = shortLandscape()
+		local tileHeight = if landscape then 154 else 204
+		local grid = tileGrid(scroll, #jobs, tileHeight, columns)
 		for _, job in ipairs(jobs) do
-			local item = card(grid, 156)
+			local item = card(grid, tileHeight)
+			item.ClipsDescendants = true
 			local rail = Instance.new("Frame")
-			rail.BackgroundColor3 = COLOURS.Accent
+			rail.BackgroundColor3 = COLOURS.Success
 			rail.BorderSizePixel = 0
 			rail.Size = UDim2.new(1, 0, 0, 3)
 			rail.Parent = item
-			local title = text(item, tostring(job.Name), 16, COLOURS.Text, true)
-			title.Position = UDim2.fromOffset(16, 18)
-			title.Size = UDim2.new(1, -32, 0, 24)
+			local title = text(item, tostring(job.Name), 18, COLOURS.Text, true)
+			title.Position = UDim2.fromOffset(18, 18)
+			title.Size = UDim2.new(1, -36, 0, 28)
+			title.TextTruncate = Enum.TextTruncate.None
 			local access = tostring(job.Class) == "Public" and "PUBLIC EMPLOYMENT"
 				or "APPLICATION ROLE"
 			local detail = text(
@@ -1423,8 +1432,8 @@ function App.mount(context: any): ScreenGui
 				11,
 				COLOURS.Muted
 			)
-			detail.Position = UDim2.fromOffset(16, 51)
-			detail.Size = UDim2.new(1, -32, 0, 20)
+			detail.Position = UDim2.fromOffset(18, 53)
+			detail.Size = UDim2.new(1, -36, 0, 20)
 			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
 				then COLOURS.Success
 				else COLOURS.Warning
@@ -1437,13 +1446,14 @@ function App.mount(context: any): ScreenGui
 				11,
 				if isTaxi then COLOURS.Success else COLOURS.Muted
 			)
-			jobStatus.Position = UDim2.fromOffset(16, 82)
-			jobStatus.Size = UDim2.new(1, -32, 0, 22)
-			local action = button(item, if isTaxi then "JOIN TAXI" else "COMING SOON", false)
-			action.Position = UDim2.new(1, -126, 1, -44)
-			action.Size = UDim2.fromOffset(110, 30)
-			action.TextSize = 10
-			action.TextColor3 = if isTaxi then COLOURS.Text else COLOURS.Muted
+			jobStatus.Position = UDim2.fromOffset(18, 84)
+			jobStatus.Size = UDim2.new(1, -36, 0, 24)
+			local action = button(item, "START SHIFT", true)
+			action.AnchorPoint = Vector2.new(0, 1)
+			action.Position = UDim2.new(0, 18, 1, -16)
+			action.Size = UDim2.new(1, -36, 0, if landscape then 34 else 40)
+			action.TextSize = 11
+			action.TextColor3 = COLOURS.Text
 			action.Selectable = isTaxi
 			if isTaxi then
 				action.BackgroundColor3 = COLOURS.Success
@@ -1457,7 +1467,7 @@ function App.mount(context: any): ScreenGui
 						dismissToWorld()
 					else
 						action.Active = true
-						action.Text = "JOIN TAXI"
+						action.Text = "START SHIFT"
 					end
 				end)
 			end
@@ -2255,7 +2265,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 140 else if compactLandscape then 178 else 86)
+				+ (if narrow then 128 else if compactLandscape then 150 else 86)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2296,7 +2306,7 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 66)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 52)
 				elseif compactLandscape then UDim2.fromOffset(
 					headerLeft,
 					compactNativeRowBottom + 44
@@ -2308,7 +2318,7 @@ function App.mount(context: any): ScreenGui
 					1,
 					-(headerLeft + safeRight + 18),
 					0,
-					42
+					36
 				)
 				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 46)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
