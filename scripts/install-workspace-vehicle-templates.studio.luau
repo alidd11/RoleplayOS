@@ -75,6 +75,40 @@ for definitionId, definition in config.Vehicles do
 				end
 			end
 		end
+		if definitionId == "HondaADV160" then
+			for _, descendant in template:GetDescendants() do
+				if descendant:IsA("LocalScript") and descendant.Name == "Wheelie" then
+					local sourceText = descendant.Source
+					local marker = "while wait(clock) do"
+					if not string.find(sourceText, "RoleplayOSWheelieInput", 1, true) then
+						local mobileBridge = [[
+
+	-- RoleplayOS mobile bridge. Keyboard T and gamepad input above remain intact.
+	local function readRoleplayOSWheelie()
+		local mobile = bike:GetAttribute("RoleplayOSWheelieInput")
+		if type(mobile) == "boolean" then
+			KeyWhel = mobile
+			WheelieInput = if mobile then 1 else 0
+		end
+	end
+]]
+						local at = string.find(sourceText, marker, 1, true)
+						if at then
+							descendant.Source = string.sub(sourceText, 1, at - 1)
+								.. mobileBridge
+								.. string.sub(sourceText, at)
+							local loopMarker = "while wait(clock) do\n"
+							local loopAt = string.find(descendant.Source, loopMarker, 1, true)
+							if loopAt then
+								descendant.Source = string.sub(descendant.Source, 1, loopAt + #loopMarker - 1)
+									.. "\n\treadRoleplayOSWheelie()"
+									.. string.sub(descendant.Source, loopAt + #loopMarker)
+							end
+						end
+					end
+				end
+			end
+		end
 		template:SetAttribute("RoleplayOSVehicleTemplate", true)
 		template:SetAttribute("RoleplayOSDefinitionId", definitionId)
 		template.Parent = parent
