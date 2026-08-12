@@ -2228,7 +2228,7 @@ function App.mount(context: any): ScreenGui
 			menuToggle.Position = UDim2.fromOffset(
 				besideCluster,
 				-- Centre within the native band, never above the screen edge.
-				math.max(0, math.floor((nativeBand - controlSize) / 2))
+				safeTop + math.max(0, math.floor((nativeBand - controlSize) / 2))
 			)
 		else
 			-- The row has run out. Rather than push the control back underneath
@@ -2236,7 +2236,7 @@ function App.mount(context: any): ScreenGui
 			-- nothing added to the top bar can ever cover.
 			menuToggle.Position = UDim2.fromOffset(
 				math.max(NATIVE_CONTROL_GAP, layout.SafeLeft + NATIVE_CONTROL_GAP),
-				nativeBand + NATIVE_CONTROL_GAP
+				safeTop + nativeBand + NATIVE_CONTROL_GAP
 			)
 		end
 		-- Compact already accounts for a short landscape phone, so the height is
@@ -2255,7 +2255,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 140 else if compactLandscape then 178 else 108)
+				+ (if narrow then 140 else if compactLandscape then 178 else 86)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
