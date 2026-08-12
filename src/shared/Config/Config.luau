@@ -1547,6 +1547,9 @@ local Config = {
 			Fire = "FireLockerRoom",
 			Control = "ControlRoom",
 			Transport = "TransportDepot",
+			-- Taxi shifts use the Transport character pad; there is no duplicate
+			-- taxi-only pad to maintain or accidentally leave on the map.
+			Taxi = "TransportDepot",
 			Highways = "HighwaysDepot",
 			Prison = "PrisonStaff",
 		},

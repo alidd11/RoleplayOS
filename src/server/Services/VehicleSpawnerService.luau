@@ -187,6 +187,14 @@ function VehicleSpawnerService:_authorise(player: Player, spawnerId: string): (I
 	end
 	local departmentId = spawner:GetAttribute("DepartmentId")
 	if type(departmentId) == "string" and departmentId ~= "" then
+		-- Taxi shifts are civilian employment, not a Transport duty profile.
+		-- They still use the Transport depot, so authorise them through the
+		-- employment credential before applying department-duty checks.
+		if departmentId == "Transport"
+			and self.context.Services:Get("TaxiService"):IsDriver(player)
+		then
+			return spawner, nil
+		end
 		local duty = self.context.Services:Get("DutyService"):Get(player)
 		if not duty or duty.DepartmentId ~= departmentId then
 			return nil, "WRONG_DEPARTMENT"
@@ -206,6 +214,13 @@ function VehicleSpawnerService:_definitionAllowed(
 ): boolean
 	local departmentId = spawner:GetAttribute("DepartmentId")
 	if type(departmentId) == "string" and departmentId ~= "" then
+		-- Taxi is a public employment vehicle, but its operational bay belongs
+		-- to Transport. Keep the Corolla civilian-owned/free while allowing an
+		-- on-shift taxi driver to use the shared Transport fleet facility.
+		if departmentId == "Transport" and definition.JobId == "TaxiDriver" then
+			return definition.Fleet == true
+				and self.context.Services:Get("TaxiService"):IsDriver(player)
+		end
 		if definition.Category ~= "Service" or definition.DepartmentId ~= departmentId then
 			return false
 		end

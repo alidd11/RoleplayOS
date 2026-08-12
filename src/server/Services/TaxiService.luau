@@ -88,11 +88,15 @@ function TaxiService:StartShift(player: Player): (any?, string?)
 	if not employment then
 		return nil, "TAXI_JOB_UNAVAILABLE"
 	end
-	local taxiTeam = self.context.Services:Get("TeamService"):Get("Taxi")
-	if not taxiTeam then
-		return nil, "TAXI_TEAM_UNAVAILABLE"
+	local transportTeam = self.context.Services:Get("TeamService"):Get("Transport")
+	if not transportTeam then
+		return nil, "TRANSPORT_TEAM_UNAVAILABLE"
 	end
-	player.Team = taxiTeam
+	-- Taxi is a civilian employment, but its operational base and character
+	-- spawn are the shared Transport depot. Reusing that department keeps the
+	-- player aligned with the one Transport fleet facility and avoids a second
+	-- taxi-only spawn pad/team route.
+	player.Team = transportTeam
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return { State = "OnDuty", EmploymentId = employment.EmploymentId }, nil
 end

@@ -31,7 +31,6 @@ local definitions = {
 		nil,
 		Vector3.new(18, 0, 0),
 	},
-	{ "Civilian", "TaxiFleet", "Taxi fleet", "CityCivilian", nil, nil, Vector3.new(46, 0, 0) },
 	{
 		"Police",
 		"PoliceFrontline",
@@ -99,6 +98,16 @@ local definitions = {
 }
 
 local created = 0
+
+-- Taxi vehicles operate from the shared Transport facility. Remove the old
+-- civilian-side TaxiFleet when this installer is rerun so there is only one
+-- authoritative taxi spawner in the place.
+local legacyCivilian = root:FindFirstChild("Civilian")
+local legacyTaxi = legacyCivilian and legacyCivilian:FindFirstChild("TaxiFleet")
+if legacyTaxi then
+	legacyTaxi:Destroy()
+end
+
 for _, definition in definitions do
 	local departmentName, spawnerId, displayName, anchorId, departmentId, divisionId, offset =
 		table.unpack(definition)
