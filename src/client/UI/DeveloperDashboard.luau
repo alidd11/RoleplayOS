@@ -2241,7 +2241,7 @@ function App.mount(context: any): ScreenGui
 				besideCluster,
 				-- Centre within the native band, never above the screen edge.
 				if compactLandscape
-					then 8
+					then safeTop + 86
 					else math.max(4, safeTop + math.floor((nativeBand - controlSize) / 2))
 			)
 		else
@@ -2250,7 +2250,7 @@ function App.mount(context: any): ScreenGui
 			-- nothing added to the top bar can ever cover.
 			menuToggle.Position = UDim2.fromOffset(
 				math.max(NATIVE_CONTROL_GAP, layout.SafeLeft + NATIVE_CONTROL_GAP),
-				if compactLandscape then 8 else safeTop + nativeBand + NATIVE_CONTROL_GAP
+				if compactLandscape then safeTop + 86 else safeTop + nativeBand + NATIVE_CONTROL_GAP
 			)
 		end
 		-- Compact already accounts for a short landscape phone, so the height is
