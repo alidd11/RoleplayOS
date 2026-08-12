@@ -25,7 +25,7 @@ end
 
 local function vehicleRoot(instance)
 	local current = instance
-	while current and current.Parent ~= workspace do
+	while current and current.Parent ~= workspace and current.Parent ~= ServerStorage do
 		current = current.Parent
 	end
 	if current and current:IsA("Model") and current:FindFirstChildWhichIsA("VehicleSeat", true) then
@@ -75,9 +75,16 @@ local function isBrokenLegacyControl(instance)
 end
 
 local candidates = {}
-for _, descendant in workspace:GetDescendants() do
-	if isBrokenLegacyControl(descendant) then
-		table.insert(candidates, descendant)
+local roots = { workspace }
+local templates = ServerStorage:FindFirstChild("RoleplayOSVehicleTemplates")
+if templates then
+	table.insert(roots, templates)
+end
+for _, root in roots do
+	for _, descendant in root:GetDescendants() do
+		if isBrokenLegacyControl(descendant) then
+			table.insert(candidates, descendant)
+		end
 	end
 end
 
@@ -86,8 +93,8 @@ table.sort(candidates, function(a, b)
 end)
 
 local removed = 0
-for _, instance in candidates do
-	if instance:IsDescendantOf(workspace) then
+or _, instance in candidates do
+	if instance:IsDescendantOf(workspace) or instance:IsDescendantOf(ServerStorage) then
 		local selectedAncestor = false
 		local ancestor = instance.Parent
 		while ancestor and ancestor ~= workspace do

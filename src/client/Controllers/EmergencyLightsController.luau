@@ -121,12 +121,15 @@ function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone:
 	local sounds = {}
 	for _, descendant in model:GetDescendants() do
 		if descendant:IsA("Sound") then
-			sounds[descendant.Name] = descendant
+			-- Imported ELS kits vary in casing (for example AirHorn/Airhorn).
+			-- Resolve the vehicle's native sounds case-insensitively so a visible
+			-- siren button cannot silently produce no audio.
+			sounds[string.lower(descendant.Name)] = descendant
 		end
 	end
 	for _, aliases in SIREN_SOUND_ALIASES do
 		for _, name in aliases do
-			local sound = sounds[name]
+			local sound = sounds[string.lower(name)]
 			if sound then
 				sound.Looped = true
 				sound:Stop()
@@ -138,7 +141,7 @@ function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone:
 	end
 	local selected: Sound? = nil
 	for _, name in SIREN_SOUND_ALIASES[tone] or {} do
-		selected = sounds[name]
+		selected = sounds[string.lower(name)]
 		if selected then
 			break
 		end

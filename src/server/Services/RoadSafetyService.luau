@@ -264,6 +264,26 @@ function RoadSafetyService:_registrationOf(seat: BasePart): (string?, Model?)
 	return nil, outermost
 end
 
+-- A-Chassis publishes horizontal velocity in Values.Velocity. Prefer that
+-- value, matching the speedometer, and fall back to the seat for plain Roblox
+-- vehicles. AssemblyLinearVelocity.Magnitude includes jumps and suspension
+-- bounce, which could otherwise trigger a camera while the vehicle is not
+-- actually travelling faster along the road.
+function RoadSafetyService:_speedMph(seat: VehicleSeat): number
+	local values = seat:FindFirstChild(self.context.Configuration.Chassis.ValuesFolderName, true)
+	local published = nil
+	for _, name in self.context.Configuration.Chassis.VelocityValueNames or {} do
+		local item = values and values:FindFirstChild(name)
+		if item and item:IsA("Vector3Value") then
+			published = item.Value
+			break
+		end
+	end
+	local velocity = if typeof(published) == "Vector3" then published else seat.AssemblyLinearVelocity
+	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+		* self.context.Configuration.VehicleData.StudsPerSecondToMph
+end
+
 function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePart)
 	local seat = self:_seatFromHit(hit)
 	if not seat then
@@ -304,8 +324,7 @@ function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePa
 	-- split wheels and bodywork into separate assemblies, so the first touched
 	-- part can report a very different velocity from the actual vehicle.
 	local registration, vehicle = self:_registrationOf(seat)
-	local mph = seat.AssemblyLinearVelocity.Magnitude
-		* self.context.Configuration.VehicleData.StudsPerSecondToMph
+	local mph = self:_speedMph(seat)
 	if mph < limit + settings.ToleranceMph then
 		return
 	end
@@ -353,8 +372,7 @@ function RoadSafetyService:_taggedFixed(sensor: BasePart, hit: BasePart)
 	if (perSensor[vehicle] or 0) > now then
 		return
 	end
-	local mph = seat.AssemblyLinearVelocity.Magnitude
-		* self.context.Configuration.VehicleData.StudsPerSecondToMph
+	local mph = self:_speedMph(seat)
 	local issued = self:IssueFine({
 		Registration = vehicle:GetAttribute("RoleplayOSRegistration"),
 		Mph = mph,

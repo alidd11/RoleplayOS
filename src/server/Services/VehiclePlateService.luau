@@ -79,10 +79,36 @@ function VehiclePlateService:_usesNativePlateSystem(vehicle: Model): boolean
 	return taxiPerm ~= nil and nativePlate ~= nil
 end
 
+local function writeNativePlate(plate: Instance, registration: string): number
+	local candidates = {}
+	for _, instance in plate:GetDescendants() do
+		if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+			table.insert(candidates, instance)
+		elseif instance:IsA("StringValue") then
+			table.insert(candidates, instance)
+		end
+	end
+	-- Imported plate systems usually expose one text node below TAXIPERM.Plate.
+	-- Only write an unambiguous single node; this preserves the model's own
+	-- artwork and avoids replacing its country mark or taxi branding.
+	if #candidates ~= 1 then
+		return 0
+	end
+	local target = candidates[1]
+	if target:IsA("StringValue") then
+		target.Value = registration
+	else
+		(target :: TextLabel).Text = registration
+	end
+	return 1
+end
+
 function VehiclePlateService:Apply(vehicle: Model, registration: string): number
 	vehicle:SetAttribute("RoleplayOSRegistration", registration)
 	if self:_usesNativePlateSystem(vehicle) then
-		return 0
+		local taxiPerm = vehicle:FindFirstChild("TAXIPERM", true)
+		local nativePlate = taxiPerm and taxiPerm:FindFirstChild("Plate", true)
+		return if nativePlate then writeNativePlate(nativePlate, registration) else 0
 	end
 	local changed = 0
 	for _, instance in vehicle:GetDescendants() do

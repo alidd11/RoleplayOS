@@ -52,6 +52,9 @@ local function button(parent: Instance, value: string, colour: Color3?): TextBut
 	item.Text = value
 	item.TextColor3 = C.Text
 	item.TextSize = 11
+	item.TextWrapped = true
+	item.TextXAlignment = Enum.TextXAlignment.Center
+	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	corner(item, 10)
 	local scale = Instance.new("UIScale")
@@ -270,7 +273,7 @@ function PhoneController:_mount()
 			Colour = Color3.fromRGB(120, 132, 158),
 		},
 		{ Page = "Emergency", Glyph = "999", Name = "SOS", Colour = C.Red },
-		{ Page = "Taxi", Glyph = "🚕", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
+		{ Page = "Taxi", Glyph = "TAXI", Name = "Taxi", Colour = Color3.fromRGB(246, 190, 47) },
 	}
 	for index, app in apps do
 		local tile = self:_appIcon(dock, app)
@@ -318,7 +321,7 @@ function PhoneController:_mount()
 			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(0, 0.5)
 			body.Position = UDim2.new(0, 18, 0.5, 0)
-			body.Size = UDim2.fromOffset(286, math.min(520, layout.SafeViewport.Y - 90))
+			body.Size = UDim2.fromOffset(286, math.min(520, math.max(280, layout.SafeViewport.Y - 90)))
 		else
 			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(1, 1)
@@ -484,7 +487,10 @@ end
 function PhoneController:_appIcon(parent: Instance, app: any): Frame
 	local tile = Instance.new("Frame")
 	tile.BackgroundTransparency = 1
-	tile.Size = UDim2.fromOffset(54, 68)
+	-- Keep the touch target stable while giving the label a second line. This
+	-- prevents names such as Messages and Contacts being clipped on narrow
+	-- screens and keeps the grid readable when the phone is scaled down.
+	tile.Size = UDim2.fromOffset(54, 76)
 	tile.Parent = parent
 
 	local glyph = Instance.new("TextButton")
@@ -494,9 +500,12 @@ function PhoneController:_appIcon(parent: Instance, app: any): Frame
 	glyph.Font = Enum.Font.GothamBold
 	glyph.Text = app.Glyph
 	glyph.TextColor3 = Color3.fromRGB(255, 255, 255)
-	glyph.TextSize = if #app.Glyph > 2 then 15 else 24
+	glyph.TextSize = if #app.Glyph > 2 then 12 else 24
 	glyph.Size = UDim2.fromOffset(50, 50)
 	glyph.Position = UDim2.fromOffset(2, 0)
+	glyph.TextWrapped = false
+	glyph.TextXAlignment = Enum.TextXAlignment.Center
+	glyph.TextYAlignment = Enum.TextYAlignment.Center
 	glyph.Parent = tile
 	-- Roblox has no squircle, so a generous radius is the closest match.
 	corner(glyph, 14)
@@ -536,8 +545,10 @@ function PhoneController:_appIcon(parent: Instance, app: any): Frame
 
 	local name = label(tile, app.Name, 9)
 	name.Position = UDim2.fromOffset(0, 52)
-	name.Size = UDim2.new(1, 0, 0, 14)
+	name.Size = UDim2.new(1, 0, 0, 22)
 	name.TextXAlignment = Enum.TextXAlignment.Center
+	name.TextYAlignment = Enum.TextYAlignment.Top
+	name.TextSize = 8
 	return tile
 end
 
@@ -548,8 +559,11 @@ function PhoneController:_renderHome()
 	grid.Size = UDim2.fromScale(1, 1)
 	grid.Parent = self.content
 	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromOffset(54, 68)
-	layout.CellPadding = UDim2.fromOffset(16, 14)
+	-- Percentage cells keep four apps inside the available content width even
+	-- when the handset is docked beside a vehicle HUD or rendered on a small
+	-- phone. The offset leaves a small, consistent gutter between touch targets.
+	layout.CellSize = UDim2.new(0.25, -10, 0, 76)
+	layout.CellPadding = UDim2.fromOffset(6, 10)
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
@@ -702,8 +716,9 @@ function PhoneController:_renderBank()
 		corner(row, 10)
 		local description = label(row, tostring(transaction.Description), 9, true)
 		description.Position = UDim2.fromOffset(10, 6)
-		description.Size = UDim2.new(1, -100, 0, 18)
-		description.TextTruncate = Enum.TextTruncate.AtEnd
+		description.Size = UDim2.new(1, -108, 0, 30)
+		description.TextYAlignment = Enum.TextYAlignment.Top
+		description.TextWrapped = true
 		local transactionAmount = label(
 			row,
 			(if transaction.Direction == "Credit" then "+" else "−") .. money(transaction.Amount),
@@ -717,7 +732,7 @@ function PhoneController:_renderBank()
 		transactionAmount.TextColor3 = if transaction.Direction == "Credit" then C.Green else C.Text
 		local timestamp =
 			label(row, os.date("%d %b · %H:%M", tonumber(transaction.Timestamp) or os.time()), 8)
-		timestamp.Position = UDim2.fromOffset(10, 27)
+		timestamp.Position = UDim2.fromOffset(10, 34)
 		timestamp.Size = UDim2.new(1, -20, 0, 14)
 		timestamp.TextColor3 = C.Muted
 	end
@@ -764,7 +779,8 @@ function PhoneController:_render()
 		layout.Parent = list
 		for _, contact in contacts do
 			local row = button(list, contact.Name .. "\n" .. contact.Number)
-			row.Size = UDim2.new(1, -4, 0, 54)
+			row.Size = UDim2.new(1, -4, 0, 60)
+			row.TextYAlignment = Enum.TextYAlignment.Center
 			row.Activated:Connect(function()
 				local response = self.context.Controllers.NetworkController:Request(
 					"PhonePlaceCall",
@@ -837,17 +853,19 @@ function PhoneController:_render()
 			row.BackgroundColor3 = if record.Direction == "Outgoing" then C.Blue else C.Card
 			row.BackgroundTransparency = if record.Direction == "Outgoing" then 0.15 else 0
 			row.BorderSizePixel = 0
-			row.Size = UDim2.new(1, -4, 0, 50)
+			row.Size = UDim2.new(1, -4, 0, 66)
 			row.Parent = history
 			corner(row, 10)
 			local body = label(row, record.Body, 10)
 			body.Position = UDim2.fromOffset(10, 6)
-			body.Size = UDim2.new(1, -20, 0, 24)
+			body.Size = UDim2.new(1, -20, 0, 38)
+			body.TextYAlignment = Enum.TextYAlignment.Top
+			body.TextWrapped = true
 			local peer = if record.Direction == "Outgoing"
 				then record.ToNumber
 				else record.FromNumber
 			local meta = label(row, record.Direction .. "  ·  " .. peer, 8)
-			meta.Position = UDim2.fromOffset(10, 31)
+			meta.Position = UDim2.fromOffset(10, 48)
 			meta.Size = UDim2.new(1, -20, 0, 13)
 			meta.TextColor3 = C.Muted
 		end

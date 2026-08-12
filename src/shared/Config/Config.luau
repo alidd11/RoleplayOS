@@ -1566,6 +1566,10 @@ local Config = {
 		-- A pedal held this long with the vehicle still stationary means the
 		-- chassis reads its input somewhere the pedals do not reach.
 		NoResponseSeconds = 2.5,
+		-- Touch-only actions are still driven by the imported vehicle's native
+		-- sounds/values. They are hidden when the vehicle does not expose the
+		-- corresponding native capability.
+		ActionSize = 58,
 	},
 	-- Speeding, and who is exempt from it.
 	--
@@ -1720,8 +1724,12 @@ local Config = {
 		-- sweep is a bar of discrete segments.
 		SweepSegments = 22,
 		RpmValueName = "RPM",
+		-- A-Chassis publishes a Vector3 velocity in Values. Prefer it over the
+		-- seat assembly velocity, which can include vertical bounce or a detached
+		-- wheel assembly and made the displayed speed disagree with the chassis.
+		VelocityValueNames = { "Velocity", "LinearVelocity" },
 		FuelValueNames = { "Fuel", "FuelLevel", "FuelPercent" },
-		HandbrakeValueNames = { "Handbrake", "ParkingBrake", "PBrake", "ParkBrake" },
+		HandbrakeValueNames = { "Handbrake", "HandBrake", "ParkingBrake", "PBrake", "ParkBrake" },
 	},
 	VehicleData = {
 		-- Retained for speed enforcement and the replacement spawner integration;

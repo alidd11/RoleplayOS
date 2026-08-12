@@ -1,16 +1,41 @@
 --!strict
 
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
 local PAVAController = { connections = {}, watched = {} }
 
-local function targetPlayer(mouse: Mouse): Player?
-	local part = mouse.Target
+local function playerFromPart(part: BasePart?): Player?
 	local character = part and part:FindFirstAncestorOfClass("Model")
 	return character and Players:GetPlayerFromCharacter(character) or nil
 end
 
-local function playAnimation(tool: Tool, character: Model, name: string)
+local function targetPlayer(mouse: Mouse?): Player?
+	if mouse then
+		local player = playerFromPart(mouse.Target)
+		if player then
+			return player
+		end
+	end
+
+	-- Tool.Activated does not provide a Mouse on touch/gamepad. Use the
+	-- platform's camera aim point so the same PAVA action remains available on
+	-- phones, tablets and console without weakening the server validation.
+	local camera = Workspace.CurrentCamera
+	if not camera then
+		return nil
+	end
+	local viewport = camera.ViewportSize
+	local ray = camera:ViewportPointToRay(viewport.X * 0.5, viewport.Y * 0.5)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local character = Players.LocalPlayer.Character
+	params.FilterDescendantsInstances = if character then { character } else {}
+	local result = Workspace:Raycast(ray.Origin, ray.Direction * 250, params)
+	return playerFromPart(result and result.Instance or nil)
+end
+
+local function playAnimation(tool: Tool, character: Model, name: string): boolean
 	local animation = tool:FindFirstChild(name)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if
@@ -19,7 +44,7 @@ local function playAnimation(tool: Tool, character: Model, name: string)
 		or animation.AnimationId == ""
 		or not humanoid
 	then
-		return
+		return false
 	end
 	local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator")
 	animator.Parent = humanoid
@@ -29,6 +54,22 @@ local function playAnimation(tool: Tool, character: Model, name: string)
 	if ok and track then
 		track.Priority = Enum.AnimationPriority.Action
 		track:Play(0.08)
+		return true
+	end
+	return false
+end
+
+local function setSprayEffect(tool: Tool, enabled: boolean)
+	local emitter = tool:FindFirstChild("SprayEmitter", true)
+	if emitter and emitter:IsA("ParticleEmitter") then
+		emitter.Enabled = enabled
+		if enabled then
+			task.delay(0.22, function()
+				if emitter.Parent then
+					emitter.Enabled = false
+				end
+			end)
+		end
 	end
 end
 
@@ -50,15 +91,16 @@ function PAVAController:_watch(tool: Instance)
 			self.mouse = mouse
 			local character = tool.Parent
 			if character and character:IsA("Model") then
-				playAnimation(tool, character, "PAVA Equipping")
+				if not playAnimation(tool, character, "PAVA Equipping") then
+					playAnimation(tool, character, "PAVA Equipped")
+				end
 			end
 		end)
 	)
 	table.insert(
 		self.connections,
 		tool.Activated:Connect(function()
-			local mouse = self.mouse
-			local target = mouse and targetPlayer(mouse)
+			local target = targetPlayer(self.mouse)
 			if not target then
 				self.context.Controllers.NotificationController:Show(
 					"Aim at a nearby player to deploy PAVA.",
@@ -66,6 +108,7 @@ function PAVAController:_watch(tool: Instance)
 				)
 				return
 			end
+			setSprayEffect(tool, true)
 			local response = self.context.Controllers.NetworkController:Request("PAVASpray", {
 				TargetUserId = target.UserId,
 			})

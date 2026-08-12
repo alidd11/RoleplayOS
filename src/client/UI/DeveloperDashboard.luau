@@ -22,7 +22,6 @@ local MAXIMUM_CONTENT_WIDTH = 1680
 -- the pill holding the menu, chat and microphone buttons. Used only as a floor
 -- when Roblox reports no inset of its own, so our controls are never drawn
 -- underneath its own.
-local NATIVE_CLUSTER_BANDS = 4.6
 
 local App = {}
 local COLOURS = {
@@ -379,7 +378,13 @@ function App.mount(context: any): ScreenGui
 	menuToggleGui.Name = "RoleplayOSMenuToggle"
 	menuToggleGui:SetAttribute("RoleplayOSManagedUI", true)
 	menuToggleGui.ResetOnSpawn = false
-	menuToggleGui.ScreenInsets = Enum.ScreenInsets.None
+	-- Roblox's TopbarSafeInsets rectangle begins immediately after the native
+	-- logo/chat/voice cluster and changes with voice chat, device orientation,
+	-- safe areas and CoreGui visibility. Mounting the button in that rectangle
+	-- makes its (0, 0) origin the first genuinely available top-bar position;
+	-- estimating the cluster width in gameplay coordinates caused the mobile
+	-- button to drift down and overlap the radio/header.
+	menuToggleGui.ScreenInsets = Enum.ScreenInsets.TopbarSafeInsets
 	menuToggleGui.ClipToDeviceSafeArea = true
 	-- Keep the control above the menu canvas as well as the gameplay HUD. It is
 	-- both the opener and the always-available close/back action.
@@ -401,6 +406,7 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
+	menuToggle.Position = UDim2.fromOffset(8, 0)
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
@@ -668,6 +674,18 @@ function App.mount(context: any): ScreenGui
 
 	menuToggle.Activated:Connect(function()
 		if playerGui:GetAttribute("RoleplayOSMenuOpen") == true and gui.Enabled then
+			-- The menu is also the first-load character/role gate. Do not allow the
+			-- native-looking toggle to bypass it before the player has entered a
+			-- character or reported for duty.
+			local activeCharacter = menuData and menuData.ActiveCharacterId
+			local hasCharacter = type(activeCharacter) == "string" and activeCharacter ~= ""
+			if not hasCharacter then
+				context.Controllers.NotificationController:Show(
+					"Create or select a character before entering the city.",
+					"Character required"
+				)
+				return
+			end
 			dismissToWorld()
 		else
 			openFromWorld()
@@ -900,6 +918,15 @@ function App.mount(context: any): ScreenGui
 	-- yield a render checks it is still the current one and gives up if not.
 	local renderGeneration = 0
 	dismissToWorld = function()
+		local activeCharacter = menuData and menuData.ActiveCharacterId
+		if type(activeCharacter) ~= "string" or activeCharacter == "" then
+			context.Controllers.NotificationController:Show(
+				"Create or select a character before entering the city.",
+				"Character required"
+			)
+			setMenuOpen(true)
+			return
+		end
 		setMenuOpen(false)
 		if not interfaceMotionEnabled() then
 			gui.Enabled = false
@@ -2238,62 +2265,18 @@ function App.mount(context: any): ScreenGui
 		local navItems = navCount()
 		bleedBackdrop.Position = UDim2.fromOffset(0, -safeTop)
 		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop)
-		-- Size the toggle from the band Roblox actually reports rather than the
-		-- floor-clamped NativeTop, so it matches the height of the native controls
-		-- instead of the taller safe region our own panels reserve.
+		-- Size the toggle from the band Roblox actually reports. Its position is
+		-- deliberately relative to TopbarSafeInsets above, never to the gameplay
+		-- viewport or a guessed native-cluster width.
 		local reportedBand = math.floor(GuiService.TopbarInset.Height + 0.5)
 		local nativeBand = if reportedBand > 0 then reportedBand else NATIVE_BAND_HEIGHT
-		-- Roblox's reported top-bar inset includes breathing room around the actual
-		-- controls. Using the entire inset made this control visibly taller and
-		-- shifted it above the native cluster on scaled displays.
 		local controlSize = math.clamp(math.floor(nativeBand * 0.78 + 0.5), 32, 52)
 		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
 		menuToggle.Size = UDim2.fromOffset(menuWidth, controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
-		-- Sit immediately right of the native control cluster, without guessing how
-		-- wide that cluster is.
-		--
-		-- This fell back to a flat 224 pixels whenever Roblox reported no inset, and
-		-- Roblox's cluster has since grown a voice-chat microphone: it now reaches
-		-- roughly 290 on a large phone in landscape. The button was therefore drawn
-		-- underneath that microphone, plainly visible and impossible to press, which
-		-- left no way into the menu at all.
-		--
-		-- The floor is expressed in multiples of the reported top-bar height rather
-		-- than as a pixel count. That height is reported reliably, and the cluster is
-		-- a row of controls sized from it, the logo and then a pill holding the menu,
-		-- chat and microphone, which together measure a little under five of them.
-		-- Derived this way it stays right on a tablet and on a desktop, where the same
-		-- controls are drawn at a different size, and it absorbs whatever Roblox adds
-		-- next far better than a constant chosen against one screenshot.
-		--
-		-- A measured NativeLeft still wins whenever Roblox reports one. The estimate
-		-- is only ever a floor, so an honest client is never second-guessed.
-		local estimatedCluster = layout.SafeLeft
-			+ math.floor(nativeBand * NATIVE_CLUSTER_BANDS + 0.5)
-		local besideCluster = math.max(layout.NativeLeft, estimatedCluster) + NATIVE_CONTROL_GAP
-		local rightmost = layout.Viewport.X - layout.SafeRight - menuWidth - NATIVE_CONTROL_GAP
-		local compactLandscape = shortLandscape()
-		if besideCluster <= rightmost then
-			local menuX = if compactLandscape
-				then math.min(rightmost, math.max(layout.NativeLeft, layout.SafeLeft + math.floor(nativeBand * 3.8)))
-				else besideCluster
-			menuToggle.Position = UDim2.fromOffset(
-				menuX,
-				-- Centre within the native band, never above the screen edge.
-				if compactLandscape
-					then safeTop + 28
-					else math.max(4, safeTop + math.floor((nativeBand - controlSize) / 2))
-			)
-		else
-			-- The row has run out. Rather than push the control back underneath
-			-- Roblox's own, drop it to the line below, which belongs to us and which
-			-- nothing added to the top bar can ever cover.
-			menuToggle.Position = UDim2.fromOffset(
-				math.max(NATIVE_CONTROL_GAP, layout.SafeLeft + NATIVE_CONTROL_GAP),
-				if compactLandscape then safeTop + 86 else safeTop + nativeBand + NATIVE_CONTROL_GAP
-			)
-		end
+		-- TopbarSafeInsets supplies the horizontal placement. Keep the control on
+		-- the same baseline as Roblox's native controls on every device.
+		menuToggle.Position = UDim2.fromOffset(8, math.max(0, math.floor((nativeBand - controlSize) / 2)))
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
 		-- One navigation language on every device: a top bar mirrors Roblox's
@@ -2301,6 +2284,10 @@ function App.mount(context: any): ScreenGui
 		-- completely different sidebar information architecture.
 		local horizontal = true
 		local narrow = layout.SafeViewport.X < 600
+		-- Landscape phones have a short usable height but a wide viewport. Keep
+		-- their header in a dedicated compact row instead of applying desktop
+		-- title/navigation offsets that overlap on-screen controls.
+		local compactLandscape = layout.SafeViewport.Y < 500 and layout.SafeViewport.X > layout.SafeViewport.Y
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
 		local compactNativeRowBottom = nativeBand + controlSize + 14

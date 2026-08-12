@@ -28,6 +28,7 @@ local DrivingControlsController = {
 	throttle = 0,
 	-- Weak keyed, so a destroyed vehicle does not keep its seat alive here.
 	valuesBySeat = setmetatable({}, { __mode = "k" }),
+	brakeState = false,
 }
 
 local function pedal(parent: Instance, name: string, glyph: string, colour: Color3): TextButton
@@ -105,6 +106,10 @@ function DrivingControlsController:_mount()
 	-- sole exception: a cuffed detainee cannot use this to escape transport.
 	self.exit = pedal(gui, "ExitVehicle", "EXIT", Color3.fromRGB(34, 48, 68))
 	self.exit.TextSize = 13
+	self.handbrake = pedal(gui, "Handbrake", "P BRAKE", Color3.fromRGB(88, 67, 38))
+	self.handbrake.TextSize = 11
+	self.horn = pedal(gui, "Horn", "HORN", Color3.fromRGB(38, 68, 93))
+	self.horn.TextSize = 11
 	table.insert(
 		self.connections,
 		self.exit.Activated:Connect(function()
@@ -128,6 +133,78 @@ function DrivingControlsController:_mount()
 
 	self:_bindPedal(self.accelerate, 1)
 	self:_bindPedal(self.brake, -1)
+	self:_bindHandbrake()
+	self:_bindHorn()
+end
+
+function DrivingControlsController:_vehicle(seat: VehicleSeat): Model?
+	return seat:FindFirstAncestorOfClass("Model")
+end
+
+function DrivingControlsController:_findNativeHorn(seat: VehicleSeat): Sound?
+	local vehicle = self:_vehicle(seat)
+	if not vehicle then return nil end
+	for _, item in vehicle:GetDescendants() do
+		if item:IsA("Sound") then
+			local name = string.lower(item.Name)
+			if name == "horn" or name == "honk" or name == "vehiclehorn" then
+				return item
+			end
+		end
+	end
+	return nil
+end
+
+function DrivingControlsController:_bindHandbrake()
+	local function setPressed(pressed: boolean)
+		local seat = self:_seat()
+		if not seat then return end
+		local values = self:_values(seat)
+		local target: BoolValue? = nil
+		for _, name in self.chassis.HandbrakeValueNames or {} do
+			local item = values and values:FindFirstChild(name)
+			if item and item:IsA("BoolValue") then
+				target = item
+				break
+			end
+		end
+		if target then target.Value = pressed end
+		local vehicle = self:_vehicle(seat)
+		if vehicle then vehicle:SetAttribute("RoleplayOSHandbrake", pressed) end
+		self.brakeState = pressed
+		self.handbrake.BackgroundTransparency = if pressed then 0.05 else 0.25
+	end
+	table.insert(self.connections, self.handbrake.Activated:Connect(function()
+		setPressed(not self.brakeState)
+	end))
+end
+
+function DrivingControlsController:_bindHorn()
+	local function stop()
+		if self.hornSound then
+			self.hornSound:Stop()
+			self.hornSound = nil
+		end
+		self.horn.BackgroundTransparency = 0.25
+	end
+	local function start(input: InputObject)
+		if input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		local seat = self:_seat()
+		local sound = seat and self:_findNativeHorn(seat)
+		if sound then
+			sound.Looped = true
+			sound:Play()
+			self.hornSound = sound
+			self.horn.BackgroundTransparency = 0.05
+		end
+	end
+	table.insert(self.connections, self.horn.InputBegan:Connect(start))
+	table.insert(self.connections, self.horn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch
+			or input.UserInputType == Enum.UserInputType.MouseButton1 then stop() end
+	end))
+	self.stopHorn = stop
 end
 
 -- Held rather than tapped, so a pedal releases when the finger lifts anywhere
@@ -283,6 +360,9 @@ function DrivingControlsController:Start()
 			self.exit.Visible = layout.InputMode == "Touch"
 				and layout.Vehicle
 				and Players.LocalPlayer:GetAttribute("RoleplayOSCuffed") ~= true
+			self.handbrake.Visible = shown
+			local seat = self:_seat()
+			self.horn.Visible = shown and seat ~= nil and self:_findNativeHorn(seat) ~= nil
 			self.scale.Scale = layout.HudScale
 			local size = self.settings.PedalSize
 			local pedalWidth = math.floor(size * 0.7)
@@ -298,11 +378,12 @@ function DrivingControlsController:Start()
 			self.brake.AnchorPoint = Vector2.new(1, 1)
 			self.accelerate.Position = UDim2.new(0.5, hotbarHalfWidth, 1, -bottom)
 			self.brake.Position = UDim2.new(0.5, -hotbarHalfWidth, 1, -bottom)
-			self.exit.Size = UDim2.fromOffset(58, 58)
+			local actionSize = self.settings.ActionSize or 58
+			self.exit.Size = UDim2.fromOffset(actionSize, actionSize)
 			self.exit.AnchorPoint = Vector2.new(0, 1)
 			self.exit.Position = UDim2.new(
 				0.5,
-				hotbarHalfWidth + math.floor((pedalWidth - 58) / 2),
+				hotbarHalfWidth + math.floor((pedalWidth - actionSize) / 2),
 				1,
 				-(bottom + pedalHeight + 10)
 			)
@@ -336,6 +417,8 @@ function DrivingControlsController:Start()
 			if not seat then
 				self.throttle = 0
 				self.heldFor = 0
+				self.brakeState = false
+				if self.stopHorn then self.stopHorn() end
 				return
 			end
 			-- Our pedal wins while it is held; otherwise take whatever the device

@@ -80,6 +80,12 @@ local function prepareVisibleTool(tool: Tool, toolId: string)
 	end
 end
 
+-- Imported presentation objects are intentionally retained. The asset
+-- validator removes executable third-party content at the template boundary,
+-- while Animation, ParticleEmitter, MeshPart and Sound instances remain
+-- available to the reviewed RoleplayOS controllers and the asset's own
+-- published ownership permissions.
+
 -- Loadouts overlap: several police loadouts issue handcuffs, and applying one
 -- again on respawn would issue a second set. An officer should carry one of
 -- each, so a tool already held is not issued again. The equipped tool lives on
@@ -95,18 +101,6 @@ local function alreadyIssued(player: Player, toolId: string): boolean
 		end
 	end
 	return false
-end
-
-local function removeImportedAnimations(tool: Tool)
-	-- The purchased taser package references animations that are not available
-	-- to this group-owned experience. Keep the reviewed taser client/server
-	-- scripts and let RoleplayOS's local pose controller handle the presentation,
-	-- but remove the unavailable animation objects before the tool is issued.
-	for _, descendant in tool:GetDescendants() do
-		if descendant:IsA("Animation") then
-			descendant:Destroy()
-		end
-	end
 end
 
 function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, string?)
@@ -142,9 +136,6 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(ToolFactory.medicalBag(), backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
-			if toolId == "Taser" then
-				removeImportedAnimations(clone)
-			end
 			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name
 			prepareVisibleTool(clone, toolId)
 			clone.CanBeDropped = false

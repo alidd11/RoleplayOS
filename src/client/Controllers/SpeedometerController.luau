@@ -94,6 +94,18 @@ local function readsOn(value: any): boolean
 	return false
 end
 
+local function speedMph(seat: VehicleSeat, values: Folder?): number
+	local published = readFirstValue(values, Config.Chassis.VelocityValueNames)
+	if typeof(published) == "Vector3" then
+		local horizontal = Vector3.new(published.X, 0, published.Z).Magnitude
+		return horizontal * Config.VehicleData.StudsPerSecondToMph
+	end
+	-- Fallback for plain VehicleSeats and packages that do not publish telemetry.
+	local velocity = seat.AssemblyLinearVelocity
+	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+		* Config.VehicleData.StudsPerSecondToMph
+end
+
 local C = {
 	Panel = Color3.fromRGB(8, 12, 19),
 	Track = Color3.fromRGB(28, 36, 48),
@@ -419,7 +431,8 @@ function SpeedometerController:Start()
 			if not seat then
 				return
 			end
-			local mph = math.floor(seat.AssemblyLinearVelocity.Magnitude * 0.626 + 0.5)
+			local values = self:_chassisValues(seat)
+			local mph = math.floor(speedMph(seat, values) + 0.5)
 			-- Assigned only on change. A property write replicates and dirties
 			-- layout even when the value is identical, and at this refresh rate a
 			-- car standing still would otherwise rewrite the whole cluster
@@ -429,7 +442,6 @@ function SpeedometerController:Start()
 			-- The chassis knows its own gear, including reverse and each ratio,
 			-- which throttle direction alone cannot tell apart. Fall back to
 			-- throttle only where no chassis is present.
-			local values = self:_chassisValues(seat)
 			local gear = readValue(values, self.settings.GearValueName)
 			self:_setText(
 				self.gear,
