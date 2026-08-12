@@ -12,9 +12,25 @@ root.Name = "RoleplayOSVehicleTemplates"
 root.Parent = ServerStorage
 
 local installedBySource = {}
+local function findSource(definition)
+	local sourcePath = definition.WorkspaceSourcePath
+	if type(sourcePath) == "table" then
+		local current = workspace
+		for _, segment in sourcePath do
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+		return current
+	end
+	local sourceName = definition.WorkspaceModelName
+	return type(sourceName) == "string" and workspace:FindFirstChild(sourceName) or nil
+end
+
 for definitionId, definition in config.Vehicles do
 	local sourceName = definition.WorkspaceModelName
-	local source = type(sourceName) == "string" and workspace:FindFirstChild(sourceName) or nil
+	local source = findSource(definition)
 	if source and source:IsA("Model") and type(definition.AssetPath) == "table" then
 		local parent = root
 		for index = 1, #definition.AssetPath - 1 do

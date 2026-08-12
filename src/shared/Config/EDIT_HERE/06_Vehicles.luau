@@ -26,7 +26,10 @@ return {
 			Price = 0,
 			ModelName = "CorollaTaxi",
 			WorkspaceModelName = "CorollaTaxi",
-			AssetPath = { "Vehicles", "Civilian", "Taxi", "CorollaTaxi" },
+			-- Taxi is a public job, but its fleet is issued from the shared
+			-- Transport depot. Keeping the template in the Transport branch makes
+			-- the asset location agree with the live spawner and the authoring guide.
+			AssetPath = { "Vehicles", "Services", "Transport", "CorollaTaxi" },
 			Colours = { "White", "Black", "Yellow" },
 			Access = { AccessType = "Public" },
 			Category = "Civilian",
@@ -52,7 +55,8 @@ return {
 			Name = "Sur-Ron Roads Policing",
 			Price = 0,
 			ModelName = "SurronPolice",
-			WorkspaceModelName = "Surron Police",
+			WorkspaceModelName = "23' Plate Surron Ultra Bee | Marked",
+			WorkspaceSourcePath = { "Surron Ultra Bee", "23' Plate Surron Ultra Bee | Marked" },
 			AssetPath = { "Vehicles", "Services", "Police", "RoadsPolicing", "SurronPolice" },
 			Colours = { "Police" },
 			Category = "Service",
@@ -69,7 +73,8 @@ return {
 			Name = "Sur-Ron Light Bee",
 			Price = 9500,
 			ModelName = "SurronCivilian",
-			WorkspaceModelName = "Surron",
+			WorkspaceModelName = "23' Plate Surron Ultra Bee | Civilian",
+			WorkspaceSourcePath = { "Surron Ultra Bee", "23' Plate Surron Ultra Bee | Civilian" },
 			AssetPath = { "Vehicles", "Civilian", "Premium", "SurronCivilian" },
 			Colours = { "Black", "Red", "White" },
 			Access = {

@@ -33,6 +33,10 @@ Vehicles/Services/Police/RoadsPolicing
 Vehicles/Services/Ambulance, Fire, Control, Transport, Highways, Prison
   Vehicles for each respective service.
 
+Public employment fleets still live with the service that issues them. For
+example, the TaxiDriver job uses Vehicles/Services/Transport/CorollaTaxi and
+the shared TransportFleet spawner; it does not need a second TaxiFleet folder.
+
 Tools/Shared
   Shared service tools.
 

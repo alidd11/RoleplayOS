@@ -25,7 +25,7 @@ RoleplayOSAssets
 │   │   ├── Starter                starter vehicles
 │   │   ├── Standard               normal dealership vehicles
 │   │   └── Premium                gamepass-restricted vehicles
-│   └── Services/<Department>      team/rank vehicles
+│   └── Services/<Department>      team/rank and issued public-job fleets
 └── Tools
     ├── Civilian
     ├── Shared
