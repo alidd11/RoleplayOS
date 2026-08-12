@@ -2271,7 +2271,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 128 else if compactLandscape then 150 else 86)
+				+ (if narrow then 146 else if compactLandscape then 150 else 104)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2288,7 +2288,7 @@ function App.mount(context: any): ScreenGui
 			-- own logo, chat and microphone controls.
 			brand.Position = UDim2.fromOffset(
 				headerLeft,
-					if compactLandscape then math.max(8, nativeBand + 8) else nativeBand + 6
+					safeTop + nativeBand + controlSize + 8
 			)
 			brand.Size = UDim2.fromOffset(
 				if compactLandscape
@@ -2312,7 +2312,7 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 52)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 96)
 				elseif compactLandscape then UDim2.fromOffset(
 					headerLeft,
 					compactNativeRowBottom + 44
