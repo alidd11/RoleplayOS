@@ -150,6 +150,7 @@ function StartMenuService:Build(player: Player): (any?, string?)
 		},
 		Server = server,
 		Characters = self.context.Services:Get("CharacterService"):List(player),
+		ActiveCharacterId = session.ActiveCharacterId,
 		DutyProfiles = dutyProfiles,
 		EmptySlots = math.max(0, slotCount - #session.Profile.CharacterSlots),
 		Roles = roles,

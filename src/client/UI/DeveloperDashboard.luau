@@ -1449,7 +1449,13 @@ function App.mount(context: any): ScreenGui
 			)
 			jobStatus.Position = UDim2.fromOffset(18, 84)
 			jobStatus.Size = UDim2.new(1, -36, 0, 24)
-			local action = button(item, "START SHIFT", true)
+			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
+				and menuData.ActiveCharacterId ~= ""
+			local action = button(
+				item,
+				if hasActiveCharacter then "START SHIFT" else "ENTER CITY & START SHIFT",
+				true
+			)
 			action.AnchorPoint = Vector2.new(0, 1)
 			action.Position = UDim2.new(0, 18, 1, -16)
 			action.Size = UDim2.new(1, -36, 0, if landscape then 34 else 40)
@@ -1460,7 +1466,35 @@ function App.mount(context: any): ScreenGui
 				action.BackgroundColor3 = COLOURS.Success
 				action.Activated:Connect(function()
 					action.Active = false
-					action.Text = "STARTING…"
+					action.Text = if hasActiveCharacter then "STARTING…" else "ENTERING CITY…"
+					if not hasActiveCharacter then
+						local characterId = selectedCharacterId or (menuData and menuData.LastCharacterId)
+						if not characterId and menuData and menuData.Characters and #menuData.Characters == 1 then
+							characterId = menuData.Characters[1].CharacterId
+						end
+						if not characterId then
+							context.Controllers.NotificationController:Show(
+								"Create a civilian character before starting work.",
+								"Taxi unavailable"
+							)
+							action.Active = true
+							action.Text = "ENTER CITY & START SHIFT"
+							return
+						end
+						local selected = context.Controllers.CharacterController:Select(characterId)
+						local entered = if selected.Success
+							then context.Controllers.DutyController:EnterCivilian(characterId, "CityCivilian")
+							else selected
+						if not entered.Success then
+							context.Controllers.NotificationController:Show(
+								"Select a civilian character before starting work.",
+								"Taxi unavailable"
+							)
+							action.Active = true
+							action.Text = "ENTER CITY & START SHIFT"
+							return
+						end
+					end
 					local response =
 						context.Controllers.NetworkController:Request("TaxiStartShift", {})
 					context.Controllers.NotificationController:Show(response.Message, "Taxi")
