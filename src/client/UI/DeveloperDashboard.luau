@@ -22,7 +22,7 @@ local MAXIMUM_CONTENT_WIDTH = 1680
 -- the pill holding the menu, chat and microphone buttons. Used only as a floor
 -- when Roblox reports no inset of its own, so our controls are never drawn
 -- underneath its own.
-local NATIVE_CLUSTER_BANDS = 5.2
+local NATIVE_CLUSTER_BANDS = 4.6
 
 local App = {}
 local COLOURS = {
@@ -877,7 +877,11 @@ function App.mount(context: any): ScreenGui
 		-- desktop header branch after a landscape switch.
 		local camera = workspace.CurrentCamera
 		local viewport = if camera then camera.ViewportSize else context.Controllers.UIOrchestrator:GetLayout().Viewport
-		return viewport.X > viewport.Y and viewport.Y < 720
+		-- Desktop Studio and laptop clients can report a content height below 720
+		-- after Roblox's own top bar is excluded. Require the short axis to be
+		-- genuinely phone-sized as well, otherwise desktop uses the phone row and
+		-- drops MENU into the page header.
+		return viewport.X > viewport.Y and viewport.X < 1000 and viewport.Y < 600
 	end
 	local function portraitCardColumns(): number
 		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
