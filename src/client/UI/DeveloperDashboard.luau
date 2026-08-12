@@ -2235,11 +2235,14 @@ function App.mount(context: any): ScreenGui
 			+ math.floor(nativeBand * NATIVE_CLUSTER_BANDS + 0.5)
 		local besideCluster = math.max(layout.NativeLeft, estimatedCluster) + NATIVE_CONTROL_GAP
 		local rightmost = layout.Viewport.X - layout.SafeRight - menuWidth - NATIVE_CONTROL_GAP
+		local compactLandscape = shortLandscape()
 		if besideCluster <= rightmost then
 			menuToggle.Position = UDim2.fromOffset(
 				besideCluster,
 				-- Centre within the native band, never above the screen edge.
-				safeTop + math.max(0, math.floor((nativeBand - controlSize) / 2))
+				if compactLandscape
+					then 8
+					else math.max(4, safeTop + math.floor((nativeBand - controlSize) / 2))
 			)
 		else
 			-- The row has run out. Rather than push the control back underneath
@@ -2247,7 +2250,7 @@ function App.mount(context: any): ScreenGui
 			-- nothing added to the top bar can ever cover.
 			menuToggle.Position = UDim2.fromOffset(
 				math.max(NATIVE_CONTROL_GAP, layout.SafeLeft + NATIVE_CONTROL_GAP),
-				safeTop + nativeBand + NATIVE_CONTROL_GAP
+				if compactLandscape then 8 else safeTop + nativeBand + NATIVE_CONTROL_GAP
 			)
 		end
 		-- Compact already accounts for a short landscape phone, so the height is
@@ -2257,7 +2260,6 @@ function App.mount(context: any): ScreenGui
 		-- completely different sidebar information architecture.
 		local horizontal = true
 		local narrow = layout.SafeViewport.X < 600
-		local compactLandscape = shortLandscape()
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
 		local compactNativeRowBottom = nativeBand + controlSize + 14
