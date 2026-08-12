@@ -137,6 +137,81 @@ local function seatPlayer(player: Player, seat: VehicleSeat)
 	end)
 end
 
+-- Imported vehicle kits often bundle optional plugins for a different model
+-- hierarchy. Running those plugins against a model without their expected
+-- Body.Brakes, Body.Kickstand, SirenControl or sound nodes produces a tight
+-- error loop and can consume several gigabytes over a session. The chassis,
+-- seat, animation and native plate systems are deliberately left untouched.
+local function removePath(root: Instance, path: { string }): boolean
+	local current = root
+	for index, segment in path do
+		local child = current:FindFirstChild(segment)
+		if not child then
+			return false
+		end
+		if index == #path then
+			child:Destroy()
+			return true
+		end
+		current = child
+	end
+	return false
+end
+
+local function sanitiseImportedVehicle(vehicle: Model)
+	local removed = 0
+	local function remove(path: { string })
+		if removePath(vehicle, path) then
+			removed += 1
+		end
+	end
+
+	-- Honda ADV/NCT optional plugins. The README says these are independent
+	-- plugins; this particular model does not provide their required nodes.
+	for _, path in {
+		{ "Tuner", "Plugins", "Kickstand" },
+		{ "Tuner", "Plugins", "LightAddon" },
+		{ "Tuner", "Plugins", "AC6C_Style_Gauges" },
+		{ "Tuner", "Plugins", "AC6_Sounds" },
+		{ "Tuner", "Plugins", "EPICLIGHTS_V4" },
+	} do
+		remove(path)
+	end
+
+	-- Corolla optional legacy controls. Taxi lighting and sound are not sirens,
+	-- and the framework owns the vehicle UI and emergency-lighting boundary.
+	for _, path in {
+		{ "DriveSeat", "Pickup" },
+		{ "DriveSeat", "SirenControl" },
+		{ "SmeersLightsHandler" },
+		{ "AC6_FE_Sounds" },
+	} do
+		remove(path)
+	end
+
+	-- Remove known inaccessible Creator Store sounds. Empty/invalid audio must
+	-- not be allowed to throw repeatedly from imported handlers.
+	local blocked = {
+		["10652911149"] = true,
+		["10652911247"] = true,
+		["11503290062"] = true,
+		["11503290062"] = true,
+		["370689846"] = true,
+	}
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA("Sound") then
+			local id = string.match(descendant.SoundId, "%d+")
+			if id and blocked[id] then
+				descendant:Destroy()
+				removed += 1
+			end
+		end
+	end
+	if removed > 0 then
+		vehicle:SetAttribute("RoleplayOSSafelyAdapted", true)
+	end
+end
+
 -- Removes the player's vehicle, whatever the reason.
 function VehicleSpawnerService:Remove(userId: number)
 	local vehicle = self.active[userId]
@@ -430,6 +505,7 @@ function VehicleSpawnerService:Spawn(
 	end
 	local vehicle = template:Clone()
 	vehicle.Name = string.format("%s_%d", definition.ModelName or definitionId, player.UserId)
+	sanitiseImportedVehicle(vehicle)
 	local ownership = self.context.Services:Get("VehicleOwnershipService")
 	local registration: string? = nil
 	self.spawning[player.UserId] = true
