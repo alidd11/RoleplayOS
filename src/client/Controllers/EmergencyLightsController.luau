@@ -28,6 +28,13 @@ local COMPACT_PANEL = Vector2.new(420, 188)
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
+local SIREN_SOUND_ALIASES = {
+	Wail = { "Wail" },
+	Yelp = { "Yelp" },
+	Phaser = { "Phaser", "Priority" },
+	Horn = { "Horn", "Airhorn" },
+}
+
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
 	{ Id = "FrontBlue", Label = "FRONT\nBLUE" },
@@ -103,10 +110,54 @@ function EmergencyLightsController:_adopt(model: Instance)
 	if #parts == 0 then
 		return
 	end
-	self.tracked[model] = { Parts = parts, Lit = false }
+	self.tracked[model] = { Parts = parts, Lit = false, Siren = "", MissingSiren = {} }
 end
 
-function EmergencyLightsController:_restore(entry: any)
+function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone: string)
+	if entry.Siren == tone then
+		return
+	end
+	entry.Siren = tone
+	local sounds = {}
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("Sound") then
+			sounds[descendant.Name] = descendant
+		end
+	end
+	for _, aliases in SIREN_SOUND_ALIASES do
+		for _, name in aliases do
+			local sound = sounds[name]
+			if sound then
+				sound.Looped = true
+				sound:Stop()
+			end
+		end
+	end
+	if tone == "" then
+		return
+	end
+	local selected: Sound? = nil
+	for _, name in SIREN_SOUND_ALIASES[tone] or {} do
+		selected = sounds[name]
+		if selected then
+			break
+		end
+	end
+	if not selected then
+		if not entry.MissingSiren[tone] then
+			entry.MissingSiren[tone] = true
+			warn("[RoleplayOS] Vehicle has no native siren sound for " .. tone .. ": " .. model:GetFullName())
+		end
+		return
+	end
+	selected.Looped = true
+	selected.Volume = self.settings.SirenVolume
+	selected.RollOffMaxDistance = self.settings.SirenRangeStuds
+	selected.RollOffMode = Enum.RollOffMode.InverseTapered
+	selected:Play()
+end
+
+function EmergencyLightsController:_restore(entry: any, model: Instance?)
 	for _, record in entry.Parts do
 		if record.Part.Parent then
 			record.Part.Color = record.Colour
@@ -128,6 +179,9 @@ function EmergencyLightsController:_restore(entry: any)
 		record.LastBrightness = nil
 	end
 	entry.Lit = false
+	if model then
+		self:_syncSiren(model, entry, "")
+	end
 end
 
 function EmergencyLightsController:_step()
@@ -138,6 +192,8 @@ function EmergencyLightsController:_step()
 		if not model.Parent then
 			continue
 		end
+		local siren = model:GetAttribute(settings.SirenAttribute)
+		self:_syncSiren(model, entry, if type(siren) == "string" then siren else "")
 		local stage = model:GetAttribute(settings.StageAttribute)
 		local lightsActive = model:GetAttribute(settings.StateAttribute) == true
 		if type(stage) ~= "number" then
@@ -145,7 +201,7 @@ function EmergencyLightsController:_step()
 		end
 		if not lightsActive then
 			if entry.Lit then
-				self:_restore(entry)
+				self:_restore(entry, model)
 			end
 			continue
 		end
@@ -615,7 +671,7 @@ function EmergencyLightsController:Start()
 		CollectionService:GetInstanceRemovedSignal(self.settings.Tag):Connect(function(model)
 			local entry = self.tracked[model]
 			if entry then
-				self:_restore(entry)
+				self:_restore(entry, model)
 				self.tracked[model] = nil
 			end
 		end)

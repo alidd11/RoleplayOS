@@ -8,11 +8,9 @@
 -- model into the template store, and what the emergency-lighting pass matches on
 -- when it adopts a vehicle that was placed by hand rather than spawned.
 --
--- The two Surron names below are the one thing here I could not verify: nothing
--- in the repository records what those models are actually called in your
--- baseplate. If they differ, correct the two WorkspaceModelName lines and
--- nothing else needs touching. On the next boot the lighting pass names every
--- parked vehicle it could not place, so the log will tell you the real names.
+-- The Surron source names below match the three variants in the imported source
+-- package: marked, unmarked and civilian. If the source package is replaced,
+-- update the corresponding WorkspaceSourcePath and nothing else needs touching.
 --
 -- A note on the forecourt list further down: the merge walks tables key by key,
 -- and an array is a table whose keys are 1, 2, 3. Listing only the new vehicle
@@ -58,6 +56,21 @@ return {
 			WorkspaceModelName = "23' Plate Surron Ultra Bee | Marked",
 			WorkspaceSourcePath = { "Surron Ultra Bee", "23' Plate Surron Ultra Bee | Marked" },
 			AssetPath = { "Vehicles", "Services", "Police", "RoadsPolicing", "SurronPolice" },
+			Colours = { "Police" },
+			Category = "Service",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			DivisionId = "RoadsPolicing",
+			RoleIds = { "RoadsPolicingOfficer" },
+		},
+		SurronPoliceUnmarked = {
+			Id = "SurronPoliceUnmarked",
+			Name = "Sur-Ron Roads Policing (Unmarked)",
+			Price = 0,
+			ModelName = "SurronPoliceUnmarked",
+			WorkspaceModelName = "23' Plate Surron Ultra Bee | UnMarked",
+			WorkspaceSourcePath = { "Surron Ultra Bee", "23' Plate Surron Ultra Bee | UnMarked" },
+			AssetPath = { "Vehicles", "Services", "Police", "RoadsPolicing", "SurronPoliceUnmarked" },
 			Colours = { "Police" },
 			Category = "Service",
 			TeamName = "Police",
