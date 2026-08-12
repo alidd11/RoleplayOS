@@ -2237,11 +2237,14 @@ function App.mount(context: any): ScreenGui
 		local rightmost = layout.Viewport.X - layout.SafeRight - menuWidth - NATIVE_CONTROL_GAP
 		local compactLandscape = shortLandscape()
 		if besideCluster <= rightmost then
+			local menuX = if compactLandscape
+				then math.min(rightmost, math.max(layout.NativeLeft, layout.SafeLeft + math.floor(nativeBand * 3.8)))
+				else besideCluster
 			menuToggle.Position = UDim2.fromOffset(
-				besideCluster,
+				menuX,
 				-- Centre within the native band, never above the screen edge.
 				if compactLandscape
-					then safeTop + 86
+					then safeTop + 28
 					else math.max(4, safeTop + math.floor((nativeBand - controlSize) / 2))
 			)
 		else
