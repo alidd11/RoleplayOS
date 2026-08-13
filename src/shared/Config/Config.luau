@@ -147,6 +147,13 @@ local Config = {
 					FireTaser = { ClassName = "RemoteEvent", Path = { "FireTaser" } },
 				},
 			},
+			PAVA = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied PAVA spray package with RoleplayOS server-authoritative logic",
+				RealWorldReference = "UK police incapacitant spray training prop",
+				ReviewedBy = "RoleplayOS engineering security review",
+			},
 			["Warrant Card"] = {
 				Certified = true,
 				ReviewVersion = 1,

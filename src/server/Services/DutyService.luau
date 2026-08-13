@@ -133,7 +133,22 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		return false, "ACTIVE_CUSTODY_SENTENCE"
 	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
-	local profile = session and session.Profile.DutyProfiles[request.DutyProfileId]
+	if not session then
+		return false, "PROFILE_UNAVAILABLE"
+	end
+	-- StartMenuService normally provisions one profile for every department the
+	-- player can access. Duty must remain safe when a client submits a valid role
+	-- request before that menu refresh finishes, or when an older profile has no
+	-- DutyProfiles table after migration.
+	session.Profile.DutyProfiles = session.Profile.DutyProfiles or {}
+	local profile = session.Profile.DutyProfiles[request.DutyProfileId]
+	if not profile then
+		local startMenu = self.context.Services:Get("StartMenuService")
+		if startMenu and type(startMenu.Build) == "function" then
+			startMenu:Build(player)
+		end
+		profile = session.Profile.DutyProfiles[request.DutyProfileId]
+	end
 	if not profile then
 		return false, "DUTY_PROFILE_NOT_FOUND"
 	end

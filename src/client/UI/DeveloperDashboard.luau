@@ -641,6 +641,9 @@ function App.mount(context: any): ScreenGui
 	-- sends and nothing read. Without it a returning player picks the same
 	-- character again on every join before they can do anything else.
 	local selectedCharacterId: string? = nil
+	-- The menu gates only the first entry. Once the server has accepted a
+	-- character or duty entry, a refreshed menu snapshot must not trap the player.
+	local hasEnteredWorld = false
 	local dismissToWorld: () -> ()
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	local function updateMenuToggleAppearance(isOpen: boolean)
@@ -683,18 +686,6 @@ function App.mount(context: any): ScreenGui
 
 	menuToggle.Activated:Connect(function()
 		if playerGui:GetAttribute("RoleplayOSMenuOpen") == true and gui.Enabled then
-			-- The menu is also the first-load character/role gate. Do not allow the
-			-- native-looking toggle to bypass it before the player has entered a
-			-- character or reported for duty.
-			local activeCharacter = menuData and menuData.ActiveCharacterId
-			local hasCharacter = type(activeCharacter) == "string" and activeCharacter ~= ""
-			if not hasCharacter then
-				context.Controllers.NotificationController:Show(
-					"Create or select a character before entering the city.",
-					"Character required"
-				)
-				return
-			end
 			dismissToWorld()
 		else
 			openFromWorld()
@@ -933,14 +924,21 @@ function App.mount(context: any): ScreenGui
 	-- yield a render checks it is still the current one and gives up if not.
 	local renderGeneration = 0
 	dismissToWorld = function()
-		local activeCharacter = menuData and menuData.ActiveCharacterId
-		if type(activeCharacter) ~= "string" or activeCharacter == "" then
-			context.Controllers.NotificationController:Show(
-				"Create or select a character before entering the city.",
-				"Character required"
-			)
-			setMenuOpen(true)
-			return
+		if not hasEnteredWorld then
+			local activeCharacter = menuData and menuData.ActiveCharacterId
+			local hasCharacter = (type(activeCharacter) == "string" and activeCharacter ~= "")
+				or (type(selectedCharacterId) == "string" and selectedCharacterId ~= "")
+			local duty = context.Controllers.DutyController.active
+			local hasDuty = type(duty) == "table" and type(duty.DepartmentId) == "string"
+			if not hasCharacter and not hasDuty then
+				context.Controllers.NotificationController:Show(
+					"Create or select a character before entering the city.",
+					"Character required"
+				)
+				setMenuOpen(true)
+				return
+			end
+			hasEnteredWorld = true
 		end
 		setMenuOpen(false)
 		if not interfaceMotionEnabled() then
@@ -1005,11 +1003,26 @@ function App.mount(context: any): ScreenGui
 		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
 		local compactEmptyCard = compactViewport.X < 1000 or compactViewport.Y < 500
 		local function enterCivilian(characterId: string)
-			local spawnId = "CityCivilian"
-			for _, role in menuData.Roles do
-				if role.Id == "Civilian" and role.Spawns[1] then
-					spawnId = role.Spawns[1].SpawnId
+			local spawnId: string? = nil
+			for _, role in menuData and menuData.Roles or {} do
+				if role.Id == "Civilian" then
+					for _, spawn in role.Spawns or {} do
+						if type(spawn.SpawnId) == "string" and spawn.SpawnId ~= "" then
+							spawnId = spawn.SpawnId
+							break
+						end
+					end
 				end
+				if spawnId then
+					break
+				end
+			end
+			if not spawnId then
+				context.Controllers.NotificationController:Show(
+					"No civilian spawn is configured on this server.",
+					"Civilian unavailable"
+				)
+				return
 			end
 			-- EnterCivilian requires the server session's ActiveCharacterId to
 			-- match the card being used. Selecting here also makes switching
@@ -1157,6 +1170,10 @@ function App.mount(context: any): ScreenGui
 						context.Controllers.CharacterController:Select(character.CharacterId)
 					if response.Success then
 						selectedCharacterId = character.CharacterId
+						if menuData then
+							menuData.ActiveCharacterId = character.CharacterId
+						end
+						context.Controllers.StartMenuController:Refresh()
 						context.Controllers.NotificationController:Show(
 							"Character selected.",
 							"Ready"
@@ -2572,6 +2589,15 @@ function App.mount(context: any): ScreenGui
 		finishLoading()
 		if currentRender then
 			currentRender()
+		end
+	end)
+	context.Events.CharacterChanged.Event:Connect(function(characterId)
+		if type(characterId) ~= "string" or characterId == "" then
+			return
+		end
+		selectedCharacterId = characterId
+		if menuData then
+			menuData.ActiveCharacterId = characterId
 		end
 	end)
 	-- Paint immediately so the menu is on screen while the first request is still
