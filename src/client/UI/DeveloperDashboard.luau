@@ -1209,7 +1209,6 @@ function App.mount(context: any): ScreenGui
 		pageDescription.Text = "Join a department, report for duty and start your next shift."
 
 		local roles = menuData and menuData.Roles or {}
-		local landscape = shortLandscape()
 		local visibleCount = 0
 		for _, role in roles do
 			if role.Visible and role.Id ~= "Civilian" and role.DepartmentId ~= "Civilian" then
@@ -1225,7 +1224,7 @@ function App.mount(context: any): ScreenGui
 		-- Service selection is a decision list, not a character showcase. Keep
 		-- every card short enough that a player can compare several departments
 		-- without losing the world behind the menu.
-		local tileHeight = if landscape then 116 else if narrowViewport() then 126 else 152
+		local tileHeight = if narrowViewport() then 88 else 100
 		local roleGrid = tileGrid(scroll, visibleCount, tileHeight, columns)
 		if visibleCount == 0 then
 			local empty = card(roleGrid, tileHeight)
@@ -1248,6 +1247,11 @@ function App.mount(context: any): ScreenGui
 				local item = card(roleGrid, tileHeight)
 				item.Name = "Career_" .. tostring(role.Id)
 				item.ClipsDescendants = true
+				-- This is a roster row, not a promotional tile. The compact height,
+				-- quiet border and right-hand action keep the player in the flow of
+				-- choosing a service instead of making every department look like a
+				-- separate dashboard widget.
+				item.BackgroundTransparency = 0.12
 				local rail = Instance.new("Frame")
 				rail.BackgroundColor3 = presentation.Colour
 				rail.BackgroundTransparency = if role.Locked then 0.42 else 0
@@ -1280,7 +1284,8 @@ function App.mount(context: any): ScreenGui
 				markText.TextXAlignment = Enum.TextXAlignment.Center
 				markText.TextYAlignment = Enum.TextYAlignment.Center
 				local textLeft = if narrowViewport() then 70 else 78
-				local textInset = -textLeft - 14
+				local actionReserve = if narrowViewport() then 144 else 156
+				local textInset = -textLeft - actionReserve
 				local departmentBadge = Instance.new("Frame")
 				departmentBadge.BackgroundColor3 = presentation.Colour
 				departmentBadge.BackgroundTransparency = 0.82
@@ -1297,7 +1302,7 @@ function App.mount(context: any): ScreenGui
 				badgeText.TextXAlignment = Enum.TextXAlignment.Center
 				local category = text(item, presentation.Label, 10, presentation.Colour, true)
 				category.Position = UDim2.fromOffset(textLeft, 12)
-				category.Size = UDim2.new(1, textInset - 76, 0, 16)
+				category.Size = UDim2.new(1, textInset, 0, 16)
 				local access = text(
 					item,
 					if role.Locked then "LOCKED" else "AVAILABLE",
@@ -1307,7 +1312,7 @@ function App.mount(context: any): ScreenGui
 				)
 				access.AnchorPoint = Vector2.new(1, 0)
 				access.Position = UDim2.new(1, -14, 0, 12)
-				access.Size = UDim2.fromOffset(70, 16)
+				access.Size = UDim2.fromOffset(actionReserve, 16)
 				access.TextXAlignment = Enum.TextXAlignment.Right
 				local name =
 					text(item, role.Name, if narrowViewport() then 16 else 18, COLOURS.Text, true)
@@ -1353,8 +1358,10 @@ function App.mount(context: any): ScreenGui
 				end
 				local action = button(item, actionLabel, false)
 				action.AnchorPoint = Vector2.new(0, 1)
-				action.Position = UDim2.new(0, 14, 1, -12)
-				action.Size = UDim2.new(1, -28, 0, if narrowViewport() then 30 else 34)
+				action.AnchorPoint = Vector2.new(1, 0.5)
+				action.Position = UDim2.new(1, -14, 0.5, 0)
+				action.Size =
+					UDim2.fromOffset(actionReserve - 14, if narrowViewport() then 28 else 30)
 				action.TextSize = if narrowViewport() then 11 else 12
 				if not role.Locked then
 					action.BackgroundColor3 = presentation.Colour:Lerp(COLOURS.Surface, 0.78)
