@@ -168,9 +168,13 @@ function DrivingControlsController:_bindHandbrake()
 				break
 			end
 		end
-		if target then target.Value = pressed end
+		if target then
+			target.Value = pressed
+		end
 		local vehicle = self:_vehicle(seat)
-		if vehicle then vehicle:SetAttribute("RoleplayOSHandbrake", pressed) end
+		if vehicle then
+			vehicle:SetAttribute("RoleplayOSHandbrake", pressed)
+		end
 		self.brakeState = pressed
 		self.handbrake.BackgroundTransparency = if pressed then 0.05 else 0.25
 	end
@@ -202,7 +206,10 @@ function DrivingControlsController:_bindHorn()
 	table.insert(self.connections, self.horn.InputBegan:Connect(start))
 	table.insert(self.connections, self.horn.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch
-			or input.UserInputType == Enum.UserInputType.MouseButton1 then stop() end
+			or input.UserInputType == Enum.UserInputType.MouseButton1
+		then
+			stop()
+		end
 	end))
 	self.stopHorn = stop
 end
@@ -418,7 +425,9 @@ function DrivingControlsController:Start()
 				self.throttle = 0
 				self.heldFor = 0
 				self.brakeState = false
-				if self.stopHorn then self.stopHorn() end
+				if self.stopHorn then
+					self.stopHorn()
+				end
 				return
 			end
 			-- Our pedal wins while it is held; otherwise take whatever the device

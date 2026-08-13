@@ -1475,7 +1475,7 @@ function App.mount(context: any): ScreenGui
 		local grid = Instance.new("Frame")
 		grid.Name = "CivilianJobRoster"
 		grid.BackgroundTransparency = 1
-		grid.Size = UDim2.new(1, 0, 0, 0)
+		grid.Size = UDim2.new(1, 0, 0, 1)
 		grid.AutomaticSize = Enum.AutomaticSize.Y
 		grid.Parent = scroll
 		local list = Instance.new("UIListLayout")
@@ -1513,7 +1513,8 @@ function App.mount(context: any): ScreenGui
 			local textLeft = if compact then 70 else 78
 			local actionReserve = if compact then 144 else 160
 			local textInset = -textLeft - actionReserve
-			local title = text(item, tostring(job.Name), if compact then 16 else 18, COLOURS.Text, true)
+			local title =
+				text(item, tostring(job.Name), if compact then 16 else 18, COLOURS.Text, true)
 			title.Position = UDim2.fromOffset(textLeft, if compact then 14 else 17)
 			title.Size = UDim2.new(1, textInset, 0, 24)
 			title.TextTruncate = Enum.TextTruncate.None
@@ -1543,7 +1544,9 @@ function App.mount(context: any): ScreenGui
 			jobStatus.Size = UDim2.new(1, textInset, 0, 18)
 			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
 				and menuData.ActiveCharacterId ~= ""
-			local initialActionText = if hasActiveCharacter then "START SHIFT" else "ENTER CITY & START SHIFT"
+			local initialActionText = if hasActiveCharacter
+				then "START SHIFT"
+				else "ENTER CITY & START SHIFT"
 			local action = button(item, initialActionText, true)
 			action.AnchorPoint = Vector2.new(1, 0.5)
 			action.Position = UDim2.new(1, -14, 0.5, 0)

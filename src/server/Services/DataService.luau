@@ -284,6 +284,10 @@ function DataService:ReserveCustomRegistration(
 	userId: number,
 	vehicleId: string
 ): (boolean, string?)
+	-- UK registrations are case-insensitive. Normalise at the datastore boundary
+	-- as well as in VehicleOwnershipService so older callers cannot create two
+	-- reservations for the same plate using different casing.
+	registration = string.upper(registration)
 	local registrationKey = self:_scopedKey(registration)
 	if self.mock then
 		local existing = self.mockRegistrations[registrationKey]
@@ -314,6 +318,7 @@ function DataService:ReleaseCustomRegistration(
 	userId: number,
 	vehicleId: string
 )
+	registration = string.upper(registration)
 	local registrationKey = self:_scopedKey(registration)
 	if self.mock then
 		local existing = self.mockRegistrations[registrationKey]
@@ -861,19 +866,25 @@ function DataService:Start()
 	end
 	task.spawn(function()
 		while self.running do
-			task.wait(
-				math.min(
-					self.context.Configuration.Framework.AutosaveSeconds,
-					math.max(
-						30,
-						math.floor(self.context.Configuration.Framework.SessionLeaseSeconds / 3)
-					)
+			local autosaveSeconds = math.min(
+				self.context.Configuration.Framework.AutosaveSeconds,
+				math.max(
+					30,
+					math.floor(self.context.Configuration.Framework.SessionLeaseSeconds / 3)
 				)
 			)
-			for _, player in Players:GetPlayers() do
+			task.wait(autosaveSeconds)
+			local players = Players:GetPlayers()
+			-- Spread requests across the cadence. The previous loop launched every
+			-- save in one frame, creating a DataStore burst with a full server.
+			local spacing = math.max(0.25, autosaveSeconds / math.max(#players, 1))
+			for index, player in players do
 				task.spawn(function()
 					self:Save(player, false)
 				end)
+				if index < #players then
+					task.wait(spacing)
+				end
 			end
 		end
 	end)

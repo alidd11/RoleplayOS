@@ -7,6 +7,10 @@ local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
 local HttpService = game:GetService("HttpService")
 
 local EconomyService = { seen = {}, order = {}, transferring = {}, connections = {} }
+
+local function transactionScope(userId: number, characterId: string): string
+	return tostring(userId) .. ":" .. characterId
+end
 function EconomyService:Init(context: any)
 	self.context = context
 end
@@ -19,7 +23,13 @@ function EconomyService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.transferring[player.UserId] = nil
-			self.seen[player.UserId] = nil
+			local prefix = tostring(player.UserId) .. ":"
+			for key in self.seen do
+				if string.sub(key, 1, #prefix) == prefix then
+					self.seen[key] = nil
+					self.order[key] = nil
+				end
+			end
 		end)
 	)
 end
@@ -29,8 +39,9 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	if not character or session.ActiveCharacterId ~= transaction.CharacterId then
 		return false, "CHARACTER_NOT_ACTIVE"
 	end
-	local seen = self.seen[transaction.CharacterId] or {}
-	self.seen[transaction.CharacterId] = seen
+	local scope = transactionScope(player.UserId, transaction.CharacterId)
+	local seen = self.seen[scope] or {}
+	self.seen[scope] = seen
 	local account, accountReason = Validator.account(transaction.Account)
 	if not account then
 		return false, accountReason
@@ -46,8 +57,8 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	-- Bounded. Identifiers are server generated GUIDs used once, so this only
 	-- needs to be long enough that a replay cannot outrun it; keeping every
 	-- identifier a character ever used grows for the life of the server.
-	local order = self.order[transaction.CharacterId] or {}
-	self.order[transaction.CharacterId] = order
+	local order = self.order[scope] or {}
+	self.order[scope] = order
 	table.insert(order, transaction.TransactionId)
 	local maximum = self.context.Configuration.Economy.MaximumTransactionHistory or 200
 	while #order > maximum do

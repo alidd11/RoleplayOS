@@ -40,11 +40,12 @@ function VehicleOwnershipService:_find(player: Player, vehicleId: string): (any?
 end
 
 function VehicleOwnershipService:GetByRegistration(registration: string): (any?, Player?)
+	registration = string.upper(registration)
 	for _, player in game:GetService("Players"):GetPlayers() do
 		local session = self.context.Services:Get("DataService"):GetSession(player)
 		for _, character in if session then session.Profile.Characters else {} do
 			for _, vehicle in character.Vehicles do
-				if vehicle.Registration == registration then
+				if string.upper(vehicle.Registration) == registration then
 					return vehicle, player
 				end
 			end

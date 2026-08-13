@@ -13,11 +13,53 @@ if not valid then
 	error("Invalid RoleplayOS configuration:\n" .. table.concat(errors, "\n"), 0)
 end
 
+-- Config is the immutable source definition. Imported content discovery needs
+-- to register runtime vehicles and tools, so give services a narrow mutable
+-- catalogue rather than allowing a validator to edit the required module.
+local function runtimeConfiguration(source: any): any
+	local result = table.clone(source)
+	result.Vehicles = table.clone(source.Vehicles or {})
+	for id, definition in result.Vehicles do
+		local copy = table.clone(definition)
+		if type(definition.AssetPath) == "table" then
+			copy.AssetPath = table.clone(definition.AssetPath)
+		end
+		if type(definition.Colours) == "table" then
+			copy.Colours = table.clone(definition.Colours)
+		end
+		if type(definition.RoleIds) == "table" then
+			copy.RoleIds = table.clone(definition.RoleIds)
+		end
+		result.Vehicles[id] = copy
+	end
+	result.Tools = table.clone(source.Tools or {})
+	for id, definition in result.Tools do
+		local copy = table.clone(definition)
+		if type(definition.AssetPath) == "table" then
+			copy.AssetPath = table.clone(definition.AssetPath)
+		end
+		result.Tools[id] = copy
+	end
+	result.Dealerships = table.clone(source.Dealerships or {})
+	for id, dealership in result.Dealerships do
+		local copy = table.clone(dealership)
+		copy.VehicleIds = table.clone(dealership.VehicleIds or {})
+		result.Dealerships[id] = copy
+	end
+	result.Loadouts = table.clone(source.Loadouts or {})
+	for id, loadout in result.Loadouts do
+		local copy = table.clone(loadout)
+		copy.ToolIds = table.clone(loadout.ToolIds or {})
+		result.Loadouts[id] = copy
+	end
+	return result
+end
+
 local logger = Logger.new("Bootstrap")
 local registry = ServiceRegistry.new()
 local context = {
 	Logger = logger,
-	Configuration = Config,
+	Configuration = runtimeConfiguration(Config),
 	Services = registry,
 	Sessions = {},
 	Network = NetworkServer.new(Config.Network, logger),
