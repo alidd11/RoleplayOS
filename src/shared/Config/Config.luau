@@ -668,6 +668,11 @@ local Config = {
 	-- work on keyboard, controller and touch without a second interaction system.
 	DealerRotation = {
 		Enabled = true,
+		AutoCreate = true,
+		-- This is the owner avatar id visible in the existing Studio test logs.
+		-- Change it here if the publishable place should use another Roblox avatar.
+		AvatarUserId = 4261672558,
+		GeneratedFolderName = "RoleplayOSDealers",
 		DealerTag = "RoleplayOSDealerAvatar",
 		PointTag = "RoleplayOSDealerPoint",
 		VendorTag = "RoleplayOSVendor",
@@ -675,6 +680,14 @@ local Config = {
 		RotationPeriodSeconds = 4 * 60 * 60,
 		ExpectedDealerCount = 6,
 		ExpectedPointCount = 6,
+		FallbackPointOffsets = {
+			Vector3.new(0, 0, -36),
+			Vector3.new(36, 0, -36),
+			Vector3.new(72, 0, -12),
+			Vector3.new(72, 0, 36),
+			Vector3.new(36, 0, 60),
+			Vector3.new(-24, 0, 36),
+		},
 	},
 	VehicleIdentity = {
 		MinimumRegistrationLength = 2,

@@ -104,6 +104,8 @@ function VendorService:_watch(model: Instance)
 	prompt.HoldDuration = self.settings.HoldSeconds
 	prompt.MaxActivationDistance = self.settings.ActivationDistance
 	prompt.RequiresLineOfSight = false
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.ClickablePrompt = true
 	prompt.Parent = anchor
 	self.prompts[model] = prompt
 	-- Held against the model so removing the tag releases the connection with the
