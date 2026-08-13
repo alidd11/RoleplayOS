@@ -59,8 +59,12 @@ local function prepareVisibleTool(tool: Tool, toolId: string)
 	handle.Massless = true
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
-	tool.Grip = if toolId == "PAVA"
-		then CFrame.new(0, -0.08, -0.72) * CFrame.Angles(math.rad(82), math.rad(4), math.rad(90))
+	-- Imported handcuff meshes were being presented edge-on because the generic
+	-- weapon grip applied a 90-degree roll to every tool. Keep the spray angled
+	-- for a natural forward-facing hold, while the cuffs sit flat across the
+	-- palm. The authored model remains intact; only its Tool grip is normalised.
+	tool.Grip = if toolId == "Handcuffs"
+		then CFrame.new(0, -0.12, -0.62) * CFrame.Angles(math.rad(78), math.rad(4), 0)
 		else CFrame.new(0, -0.08, -0.72) * CFrame.Angles(
 			math.rad(82),
 			math.rad(4),

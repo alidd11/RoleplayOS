@@ -195,7 +195,6 @@ local function sanitiseImportedVehicle(vehicle: Model)
 		["10652911149"] = true,
 		["10652911247"] = true,
 		["11503290062"] = true,
-		["11503290062"] = true,
 		["370689846"] = true,
 	}
 	for _, descendant in vehicle:GetDescendants() do

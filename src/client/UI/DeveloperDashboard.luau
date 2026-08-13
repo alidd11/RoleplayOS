@@ -388,8 +388,12 @@ function App.mount(context: any): ScreenGui
 	-- makes its (0, 0) origin the first genuinely available top-bar position;
 	-- estimating the cluster width in gameplay coordinates caused the mobile
 	-- button to drift down and overlap the radio/header.
-	menuToggleGui.ScreenInsets = Enum.ScreenInsets.None
-	menuToggleGui.ClipToDeviceSafeArea = false
+	-- This is an interactive control, so keep it inside Roblox's reported
+	-- top-bar safe area. The dashboard canvas itself may remain full-bleed, but
+	-- a guessed pixel offset is not stable across phones, notches, voice chat,
+	-- or hidden CoreGui controls.
+	menuToggleGui.ScreenInsets = Enum.ScreenInsets.TopbarSafeInsets
+	menuToggleGui.ClipToDeviceSafeArea = true
 	-- Keep the control above the menu canvas as well as the gameplay HUD. It is
 	-- both the opener and the always-available close/back action.
 	menuToggleGui.DisplayOrder = 60
@@ -411,7 +415,7 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
-	menuToggle.Position = UDim2.fromOffset(248, 8)
+	menuToggle.Position = UDim2.fromOffset(8, 8)
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
@@ -2309,13 +2313,12 @@ function App.mount(context: any): ScreenGui
 		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
 		menuToggle.Size = UDim2.fromOffset(math.clamp(menuWidth, 60, 72), controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
-		-- The native Roblox cluster is left aligned and varies slightly by device.
-		-- NativeLeft is used when reported; the fallback keeps the button beside
-		-- the logo/chat/voice cluster on clients that report a zero-width inset.
-		local nativeClusterEnd = if layout.NativeLeft > 40 then layout.NativeLeft else 248
+		-- TopbarSafeInsets makes (0, 0) the first safe point after Roblox's
+		-- native controls. Keep a small gap inside that inset instead of adding
+		-- the old desktop-only 248px cluster guess a second time.
 		menuToggle.Position = UDim2.fromOffset(
-			math.max(8, nativeClusterEnd + NATIVE_CONTROL_GAP),
-			math.max(6, math.floor((nativeBand - controlSize) / 2))
+			NATIVE_CONTROL_GAP,
+			math.max(4, math.floor((nativeBand - controlSize) / 2))
 		)
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.

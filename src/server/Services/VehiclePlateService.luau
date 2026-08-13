@@ -82,9 +82,12 @@ end
 local function writeNativePlate(plate: Instance, registration: string): number
 	local candidates = {}
 	for _, instance in plate:GetDescendants() do
-		if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
-			table.insert(candidates, instance)
-		elseif instance:IsA("StringValue") then
+		if
+			instance:IsA("TextLabel")
+			or instance:IsA("TextButton")
+			or instance:IsA("TextBox")
+			or instance:IsA("StringValue")
+		then
 			table.insert(candidates, instance)
 		end
 	end

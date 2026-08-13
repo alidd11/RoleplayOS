@@ -1186,7 +1186,11 @@ function MDTController:Start()
 		self.launcher.AnchorPoint = Vector2.new(0, 0)
 		self.launcher.Position = if layout.Vehicle
 			then UDim2.new(0, 18, minimapBottom, 12)
-			else UDim2.new(0, 18, 0.62, 0)
+			-- On foot, keep the persistent terminal affordance in the same safe
+			-- top-left rail as the radio instead of placing it at a fixed fraction
+			-- of the viewport. That fixed 62% position was effectively invisible on
+			-- tall displays and looked like the MDT had not been issued.
+			else UDim2.fromOffset(18, layout.NativeTop + 58)
 		-- The shell never shrinks below its minimum size, so it is scaled against
 		-- the usable area on every device class. Measuring the raw viewport
 		-- instead let the terminal spill under the top bar and device cutouts.

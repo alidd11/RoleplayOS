@@ -89,7 +89,9 @@ function ToolFactory.handcuffs(): Tool
 	tool.ToolTip = "Rigid handcuffs · select a nearby player"
 	tool.CanBeDropped = false
 	tool.RequiresHandle = true
-	tool.Grip = CFrame.new(0, -0.05, -0.75) * CFrame.Angles(math.rad(82), math.rad(4), math.rad(90))
+	-- Keep the fallback aligned with the authored handcuff presentation. The old
+	-- 90-degree roll made the cuffs appear on the side of the officer's hand.
+	tool.Grip = CFrame.new(0, -0.12, -0.62) * CFrame.Angles(math.rad(78), math.rad(4), 0)
 	local handle =
 		part(tool, "Handle", Vector3.new(0.78, 0.3, 0.2), DARK_METAL, Enum.Material.Metal)
 	local spine =
