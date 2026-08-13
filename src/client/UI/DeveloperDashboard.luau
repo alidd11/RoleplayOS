@@ -384,17 +384,18 @@ function App.mount(context: any): ScreenGui
 	-- makes its (0, 0) origin the first genuinely available top-bar position;
 	-- estimating the cluster width in gameplay coordinates caused the mobile
 	-- button to drift down and overlap the radio/header.
-	menuToggleGui.ScreenInsets = Enum.ScreenInsets.TopbarSafeInsets
-	menuToggleGui.ClipToDeviceSafeArea = true
+	menuToggleGui.ScreenInsets = Enum.ScreenInsets.None
+	menuToggleGui.ClipToDeviceSafeArea = false
 	-- Keep the control above the menu canvas as well as the gameplay HUD. It is
 	-- both the opener and the always-available close/back action.
 	menuToggleGui.DisplayOrder = 60
 	menuToggleGui.Parent = gui.Parent
-	-- Keep the explicit MENU label the player asked for, while matching the height
-	-- and baseline of Roblox's native top-bar controls.
+	-- Keep a compact text label, but place it in the same top row as Roblox's
+	-- native controls. A wide desktop pill or a second-row mobile button makes
+	-- the experience look like it has two competing navigation systems.
 	local menuToggle = Instance.new("TextButton")
 	menuToggle.Name = "OpenMenu"
-	menuToggle.Size = UDim2.fromOffset(NATIVE_CONTROL_SIZE, NATIVE_CONTROL_SIZE)
+	menuToggle.Size = UDim2.fromOffset(64, NATIVE_CONTROL_SIZE)
 	menuToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	menuToggle.BackgroundTransparency = 0.5
 	menuToggle.BorderSizePixel = 0
@@ -406,7 +407,7 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
-	menuToggle.Position = UDim2.fromOffset(8, 0)
+	menuToggle.Position = UDim2.fromOffset(248, 8)
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
@@ -894,12 +895,18 @@ function App.mount(context: any): ScreenGui
 		-- orientation decision so a phone cannot accidentally take the tall
 		-- desktop header branch after a landscape switch.
 		local camera = workspace.CurrentCamera
-		local viewport = if camera then camera.ViewportSize else context.Controllers.UIOrchestrator:GetLayout().Viewport
+		local viewport = if camera
+			then camera.ViewportSize
+			else context.Controllers.UIOrchestrator:GetLayout().Viewport
 		-- Desktop Studio and laptop clients can report a content height below 720
 		-- after Roblox's own top bar is excluded. Require the short axis to be
 		-- genuinely phone-sized as well, otherwise desktop uses the phone row and
 		-- drops MENU into the page header.
 		return viewport.X > viewport.Y and viewport.X < 1000 and viewport.Y < 600
+	end
+	local function narrowViewport(): boolean
+		local safe = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
+		return safe.X < 720 or safe.Y < 500
 	end
 	local function portraitCardColumns(): number
 		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
@@ -1203,7 +1210,6 @@ function App.mount(context: any): ScreenGui
 
 		local roles = menuData and menuData.Roles or {}
 		local landscape = shortLandscape()
-		local careerGeneration = renderGeneration
 		local visibleCount = 0
 		for _, role in roles do
 			if role.Visible and role.Id ~= "Civilian" and role.DepartmentId ~= "Civilian" then
@@ -1216,9 +1222,10 @@ function App.mount(context: any): ScreenGui
 			string.format("%d roles available in this server.", visibleCount)
 		)
 		local columns = portraitCardColumns()
-		-- Turned on its side in landscape, like the character cards, so a whole
-		-- card fits the roughly 174 pixels the list actually has.
-		local tileHeight = if landscape then 150 else 286
+		-- Service selection is a decision list, not a character showcase. Keep
+		-- every card short enough that a player can compare several departments
+		-- without losing the world behind the menu.
+		local tileHeight = if landscape then 116 else if narrowViewport() then 126 else 152
 		local roleGrid = tileGrid(scroll, visibleCount, tileHeight, columns)
 		if visibleCount == 0 then
 			local empty = card(roleGrid, tileHeight)
@@ -1247,34 +1254,40 @@ function App.mount(context: any): ScreenGui
 				rail.BorderSizePixel = 0
 				rail.Size = UDim2.new(1, 0, 0, 4)
 				rail.Parent = item
-				local preview = portraitPreview(
-					item,
-					presentation.Colour,
-					role.PreviewUniform,
-					function()
-						return renderGeneration == careerGeneration and item.Parent == roleGrid
-					end,
-					-- Initials rather than the player's own clothes. Honest about
-					-- there being no uniform to show, and it reads as deliberate
-					-- rather than as a preview that failed to load.
-					string.upper(string.sub(role.Name, 1, 2))
+				-- A small department mark is more honest and more useful than a
+				-- giant empty avatar viewport. It also prevents uniform thumbnails
+				-- from dominating the menu on a phone.
+				local mark = Instance.new("Frame")
+				mark.BackgroundColor3 = presentation.Colour
+				mark.BackgroundTransparency = if role.Locked then 0.72 else 0.82
+				mark.BorderSizePixel = 0
+				mark.Position = UDim2.fromOffset(14, 14)
+				mark.Size = UDim2.fromOffset(
+					if narrowViewport() then 42 else 48,
+					if narrowViewport() then 42 else 48
 				)
-				-- Beside the text in landscape, above it in portrait.
-				local textLeft = if landscape then 124 else 16
-				local textInset = if landscape then -140 else -32
-				preview.Position = UDim2.fromOffset(12, 12)
-				preview.Size = if landscape
-					then UDim2.fromOffset(100, 126)
-					else UDim2.new(1, -24, 0, 118)
-				if role.Locked then
-					preview.ImageTransparency = 0.28
-				end
+				mark.Parent = item
+				corner(mark, 10)
+				stroke(mark, presentation.Colour, 0.32)
+				local markText = text(
+					mark,
+					presentation.Icon,
+					if narrowViewport() then 12 else 14,
+					presentation.Colour,
+					true
+				)
+				markText.Size = UDim2.fromScale(1, 1)
+				markText.TextXAlignment = Enum.TextXAlignment.Center
+				markText.TextYAlignment = Enum.TextYAlignment.Center
+				local textLeft = if narrowViewport() then 70 else 78
+				local textInset = -textLeft - 14
 				local departmentBadge = Instance.new("Frame")
 				departmentBadge.BackgroundColor3 = presentation.Colour
 				departmentBadge.BackgroundTransparency = 0.82
 				departmentBadge.BorderSizePixel = 0
-				departmentBadge.Position = UDim2.fromOffset(textLeft, if landscape then 12 else 143)
-				departmentBadge.Size = UDim2.fromOffset(34, 34)
+				departmentBadge.Visible = false
+				departmentBadge.Position = UDim2.fromOffset(textLeft, 12)
+				departmentBadge.Size = UDim2.fromOffset(1, 1)
 				departmentBadge.Parent = item
 				corner(departmentBadge, 8)
 				stroke(departmentBadge, presentation.Colour, 0.48)
@@ -1283,8 +1296,8 @@ function App.mount(context: any): ScreenGui
 				badgeText.Size = UDim2.fromScale(1, 1)
 				badgeText.TextXAlignment = Enum.TextXAlignment.Center
 				local category = text(item, presentation.Label, 10, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(textLeft + 42, if landscape then 11 else 142)
-				category.Size = UDim2.new(1, textInset - 112, 0, 16)
+				category.Position = UDim2.fromOffset(textLeft, 12)
+				category.Size = UDim2.new(1, textInset - 76, 0, 16)
 				local access = text(
 					item,
 					if role.Locked then "LOCKED" else "AVAILABLE",
@@ -1293,15 +1306,13 @@ function App.mount(context: any): ScreenGui
 					true
 				)
 				access.AnchorPoint = Vector2.new(1, 0)
-				access.Position = UDim2.new(1, -16, 0, if landscape then 11 else 142)
+				access.Position = UDim2.new(1, -14, 0, 12)
 				access.Size = UDim2.fromOffset(70, 16)
 				access.TextXAlignment = Enum.TextXAlignment.Right
-				local name = text(item, role.Name, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(
-					if landscape then textLeft else 58,
-					if landscape then 44 else 158
-				)
-				name.Size = UDim2.new(1, if landscape then textInset else -74, 0, 28)
+				local name =
+					text(item, role.Name, if narrowViewport() then 16 else 18, COLOURS.Text, true)
+				name.Position = UDim2.fromOffset(textLeft, 31)
+				name.Size = UDim2.new(1, textInset, 0, 24)
 				name.TextWrapped = true
 				name.TextTruncate = Enum.TextTruncate.None
 				-- What this row can tell the player that the others cannot.
@@ -1327,8 +1338,8 @@ function App.mount(context: any): ScreenGui
 					end
 				end
 				local detail = text(item, detailText, 12, COLOURS.Muted)
-				detail.Position = UDim2.fromOffset(textLeft, if landscape then 70 else 185)
-				detail.Size = UDim2.new(1, textInset, 0, 30)
+				detail.Position = UDim2.fromOffset(textLeft, 57)
+				detail.Size = UDim2.new(1, textInset, 0, 18)
 				detail.TextWrapped = true
 				detail.TextYAlignment = Enum.TextYAlignment.Top
 				detail.TextTruncate = Enum.TextTruncate.None
@@ -1342,8 +1353,9 @@ function App.mount(context: any): ScreenGui
 				end
 				local action = button(item, actionLabel, false)
 				action.AnchorPoint = Vector2.new(0, 1)
-				action.Position = UDim2.new(0, textLeft, 1, -12)
-				action.Size = UDim2.new(1, textInset, 0, if landscape then 34 else 42)
+				action.Position = UDim2.new(0, 14, 1, -12)
+				action.Size = UDim2.new(1, -28, 0, if narrowViewport() then 30 else 34)
+				action.TextSize = if narrowViewport() then 11 else 12
 				if not role.Locked then
 					action.BackgroundColor3 = presentation.Colour:Lerp(COLOURS.Surface, 0.78)
 					action.TextColor3 = presentation.Colour:Lerp(Color3.new(1, 1, 1), 0.28)
@@ -1417,10 +1429,7 @@ function App.mount(context: any): ScreenGui
 		clear(scroll)
 		pageTitle.Text = "Civilian jobs"
 		pageDescription.Text = "Pick up work that is available in the city today."
-		sectionHeading(
-			"Available work",
-			"Only fully connected civilian jobs appear here."
-		)
+		sectionHeading("Available work", "Only fully connected civilian jobs appear here.")
 		local jobs = {}
 		for _, job in pairs(menuData and menuData.Jobs or {}) do
 			-- A catalogue entry is a promise: it must have a working join path.
@@ -1434,7 +1443,12 @@ function App.mount(context: any): ScreenGui
 			local title = text(empty, "No work is available yet", 17, COLOURS.Text, true)
 			title.Position = UDim2.fromOffset(20, 18)
 			title.Size = UDim2.new(1, -40, 0, 26)
-			local copy = text(empty, "New civilian systems will appear here when they are ready to play.", 13, COLOURS.Muted)
+			local copy = text(
+				empty,
+				"New civilian systems will appear here when they are ready to play.",
+				13,
+				COLOURS.Muted
+			)
 			copy.Position = UDim2.fromOffset(20, 50)
 			copy.Size = UDim2.new(1, -40, 0, 42)
 			copy.TextWrapped = true
@@ -1499,8 +1513,14 @@ function App.mount(context: any): ScreenGui
 					action.Active = false
 					action.Text = if hasActiveCharacter then "STARTING…" else "ENTERING CITY…"
 					if not hasActiveCharacter then
-						local characterId = selectedCharacterId or (menuData and menuData.LastCharacterId)
-						if not characterId and menuData and menuData.Characters and #menuData.Characters == 1 then
+						local characterId = selectedCharacterId
+							or (menuData and menuData.LastCharacterId)
+						if
+							not characterId
+							and menuData
+							and menuData.Characters
+							and #menuData.Characters == 1
+						then
 							characterId = menuData.Characters[1].CharacterId
 						end
 						if not characterId then
@@ -1514,7 +1534,10 @@ function App.mount(context: any): ScreenGui
 						end
 						local selected = context.Controllers.CharacterController:Select(characterId)
 						local entered = if selected.Success
-							then context.Controllers.DutyController:EnterCivilian(characterId, "CityCivilian")
+							then context.Controllers.DutyController:EnterCivilian(
+								characterId,
+								"CityCivilian"
+							)
 							else selected
 						if not entered.Success then
 							context.Controllers.NotificationController:Show(
@@ -2272,31 +2295,36 @@ function App.mount(context: any): ScreenGui
 		local nativeBand = if reportedBand > 0 then reportedBand else NATIVE_BAND_HEIGHT
 		local controlSize = math.clamp(math.floor(nativeBand * 0.78 + 0.5), 32, 52)
 		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
-		menuToggle.Size = UDim2.fromOffset(menuWidth, controlSize)
+		menuToggle.Size = UDim2.fromOffset(math.clamp(menuWidth, 60, 72), controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
-		-- TopbarSafeInsets supplies the horizontal placement. Keep the control on
-		-- the same baseline as Roblox's native controls on every device.
-		menuToggle.Position = UDim2.fromOffset(8, math.max(0, math.floor((nativeBand - controlSize) / 2)))
+		-- The native Roblox cluster is left aligned and varies slightly by device.
+		-- NativeLeft is used when reported; the fallback keeps the button beside
+		-- the logo/chat/voice cluster on clients that report a zero-width inset.
+		local nativeClusterEnd = if layout.NativeLeft > 40 then layout.NativeLeft else 248
+		menuToggle.Position = UDim2.fromOffset(
+			math.max(8, nativeClusterEnd + NATIVE_CONTROL_GAP),
+			math.max(6, math.floor((nativeBand - controlSize) / 2))
+		)
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
 		-- One navigation language on every device: a top bar mirrors Roblox's
 		-- established menu pattern and avoids presenting desktop players with a
 		-- completely different sidebar information architecture.
 		local horizontal = true
-		local narrow = layout.SafeViewport.X < 600
+		local narrow = layout.SafeViewport.X < 720
 		-- Landscape phones have a short usable height but a wide viewport. Keep
 		-- their header in a dedicated compact row instead of applying desktop
 		-- title/navigation offsets that overlap on-screen controls.
-		local compactLandscape = layout.SafeViewport.Y < 500 and layout.SafeViewport.X > layout.SafeViewport.Y
+		local compactLandscape = layout.SafeViewport.Y < 500
+			and layout.SafeViewport.X > layout.SafeViewport.Y
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
-		local compactNativeRowBottom = nativeBand + controlSize + 14
 		if horizontal then
 			-- On a landscape phone Roblox's native controls consume the whole first
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 146 else if compactLandscape then 150 else 104)
+				+ (if narrow then 112 else if compactLandscape then 108 else 104)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2313,7 +2341,7 @@ function App.mount(context: any): ScreenGui
 			-- own logo, chat and microphone controls.
 			brand.Position = UDim2.fromOffset(
 				headerLeft,
-					safeTop + nativeBand + controlSize + 8
+				if narrow or compactLandscape then safeTop + 42 else safeTop + 18
 			)
 			brand.Size = UDim2.fromOffset(
 				if compactLandscape
@@ -2337,14 +2365,11 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 96)
-				elseif compactLandscape then UDim2.fromOffset(
-					headerLeft,
-					compactNativeRowBottom + 44
-				)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 72)
+				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 72)
 				else UDim2.fromOffset(navLeft, safeTop + 18)
 			navigation.Size = if narrow
-				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 38)
+				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 32)
 				elseif compactLandscape then UDim2.new(
 					1,
 					-(headerLeft + safeRight + 18),

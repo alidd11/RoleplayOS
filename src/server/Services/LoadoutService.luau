@@ -270,7 +270,18 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 					and type(toolDefinition.AssetPath) == "table"
 				then resolve(assets, toolDefinition.AssetPath)
 				else tools:FindFirstChild(toolId)
-			if template and template:IsA("Tool") then
+			if not template and toolDefinition and toolDefinition.Weapon then
+				-- Gamepass ownership must remain useful while an authored mesh is
+				-- being reviewed. Issue the same server-created weapon used by the
+				-- cash vendor, keeping purchase, damage and seizure behaviour intact.
+				local fallback = ToolFactory.weapon(toolId)
+				fallback:SetAttribute("RoleplayOSToolId", toolId)
+				fallback:SetAttribute("RoleplayOSWeaponId", toolId)
+				fallback:SetAttribute("RoleplayOSWeaponPurchase", false)
+				fallback:SetAttribute("RoleplayOSEquipmentPassId", passId)
+				prepareVisibleTool(fallback, toolId)
+				fallback.Parent = backpack
+			elseif template and template:IsA("Tool") then
 				local clone = template:Clone()
 				clone:SetAttribute("RoleplayOSToolId", toolId)
 				if
