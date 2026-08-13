@@ -138,6 +138,11 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(ToolFactory.handcuffs(), backpack, loadoutId, toolId)
 		elseif toolId == "MedicalBag" and not template then
 			issue(ToolFactory.medicalBag(), backpack, loadoutId, toolId)
+		elseif not template and toolDefinition and toolDefinition.Weapon then
+			local fallback = ToolFactory.weapon(toolId)
+			prepareVisibleTool(fallback, toolId)
+			fallback.CanBeDropped = false
+			issue(fallback, backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
 			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name
@@ -180,6 +185,18 @@ function LoadoutService:GiveTool(
 	local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
 		then resolve(assets, toolDefinition.AssetPath)
 		else tools:FindFirstChild(toolId)
+	if not template and toolDefinition and toolDefinition.Weapon then
+		local fallback = ToolFactory.weapon(toolId)
+		fallback:SetAttribute("RoleplayOSToolId", toolId)
+		fallback:SetAttribute("RoleplayOSWeaponId", toolId)
+		fallback:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
+		prepareVisibleTool(fallback, toolId)
+		if source then
+			fallback:SetAttribute("RoleplayOSToolSource", source)
+		end
+		fallback.Parent = backpack
+		return true, nil
+	end
 	if not template or not template:IsA("Tool") then
 		self.context.Logger:Warning(
 			"Tool asset is unavailable",

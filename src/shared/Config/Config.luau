@@ -627,6 +627,20 @@ local Config = {
 						Price = 200,
 					},
 					{
+						Id = "RamboKnife",
+						Kind = "Tool",
+						ToolId = "RamboKnife",
+						Name = "Rambo Knife",
+						Price = 350,
+					},
+					{
+						Id = "ZKnife",
+						Kind = "Tool",
+						ToolId = "ZKnife",
+						Name = "Z Knife",
+						Price = 500,
+					},
+					{
 						Id = "Handgun",
 						Kind = "Tool",
 						ToolId = "Handgun",

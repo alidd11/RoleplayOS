@@ -120,6 +120,33 @@ function ToolFactory.handcuffs(): Tool
 	return tool
 end
 
+-- Functional fallback for reviewed civilian melee items. Imported meshes can
+-- replace these templates without changing the purchase, seizure, death-loss,
+-- or server-authoritative damage paths.
+function ToolFactory.weapon(toolId: string): Tool
+	local tool = Instance.new("Tool")
+	tool.Name = toolId
+	tool.ToolTip = string.format("%s · use on a nearby player", toolId)
+	tool.CanBeDropped = false
+	tool.RequiresHandle = true
+	local handle =
+		part(tool, "Handle", Vector3.new(0.18, 0.18, 0.7), DARK_METAL, Enum.Material.Metal)
+	local bladeColour = if toolId == "Machete"
+		then Color3.fromRGB(185, 185, 185)
+		else Color3.fromRGB(125, 130, 138)
+	local bladeSize = if toolId == "Machete"
+		then Vector3.new(0.2, 0.8, 2.6)
+		else Vector3.new(0.16, 0.5, 1.7)
+	local blade = part(tool, "Blade", bladeSize, bladeColour, Enum.Material.Metal)
+	attach(handle, blade, CFrame.new(0, 0, -1.05))
+	local guard =
+		part(tool, "Guard", Vector3.new(0.55, 0.12, 0.16), DARK_METAL, Enum.Material.Metal)
+	attach(handle, guard, CFrame.new(0, 0, -0.35))
+	tool:SetAttribute("RoleplayOSBuiltInFallback", true)
+	tool:SetAttribute("RoleplayOSAssetSource", "RoleplayOS reviewed fallback weapon")
+	return tool
+end
+
 function ToolFactory.mdt(): Tool
 	local tool = Instance.new("Tool")
 	tool.Name = "MDT"
