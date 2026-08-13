@@ -482,6 +482,18 @@ local Config = {
 			Name = "Civilian Knife Access",
 			Description = "Access approved civilian knife equipment where server rules permit it.",
 		},
+		RamboKnife = {
+			Id = "RamboKnife",
+			GamepassId = 0,
+			Name = "Rambo Knife Access",
+			Description = "Access the approved Rambo knife equipment.",
+		},
+		ZKnife = {
+			Id = "ZKnife",
+			GamepassId = 0,
+			Name = "Z Knife Access",
+			Description = "Access the approved Z knife equipment.",
+		},
 		CivilianHandgun = {
 			Id = "CivilianHandgun",
 			GamepassId = 1937822271,
@@ -565,6 +577,8 @@ local Config = {
 	},
 	EquipmentPasses = {
 		Knife = { GamepassId = 1937446295, TeamName = "Civilian", ToolNames = { "Knife" } },
+		RamboKnife = { GamepassId = 0, TeamName = "Civilian", ToolNames = { "RamboKnife" } },
+		ZKnife = { GamepassId = 0, TeamName = "Civilian", ToolNames = { "ZKnife" } },
 		Handgun = { GamepassId = 1937822271, TeamName = "Civilian", ToolNames = { "Handgun" } },
 		Shotgun = { GamepassId = 1934518052, TeamName = "Civilian", ToolNames = { "Shotgun" } },
 		Rifle = { GamepassId = 1934955986, TeamName = "Civilian", ToolNames = { "Rifle" } },
@@ -605,6 +619,13 @@ local Config = {
 				Subtitle = "No questions asked",
 				Items = {
 					{ Id = "Knife", Kind = "Tool", ToolId = "Knife", Name = "Knife", Price = 900 },
+					{
+						Id = "Machete",
+						Kind = "Tool",
+						ToolId = "Machete",
+						Name = "Machete",
+						Price = 200,
+					},
 					{
 						Id = "Handgun",
 						Kind = "Tool",
@@ -1455,6 +1476,30 @@ local Config = {
 		RoadsPolicing = { Id = "RoadsPolicing", DepartmentId = "Police", Name = "Roads Policing" },
 	},
 	Tools = {
+		Knife = {
+			Id = "Knife",
+			AssetPath = { "Tools", "Civilian", "Knife" },
+			DepartmentId = "Civilian",
+			Weapon = { Damage = 18, Cooldown = 0.65, Range = 8 },
+		},
+		Machete = {
+			Id = "Machete",
+			AssetPath = { "Tools", "Civilian", "Machete" },
+			DepartmentId = "Civilian",
+			Weapon = { Damage = 24, Cooldown = 0.8, Range = 8 },
+		},
+		RamboKnife = {
+			Id = "RamboKnife",
+			AssetPath = { "Tools", "Civilian", "RamboKnife" },
+			DepartmentId = "Civilian",
+			Weapon = { Damage = 20, Cooldown = 0.7, Range = 8 },
+		},
+		ZKnife = {
+			Id = "ZKnife",
+			AssetPath = { "Tools", "Civilian", "ZKnife" },
+			DepartmentId = "Civilian",
+			Weapon = { Damage = 20, Cooldown = 0.7, Range = 8 },
+		},
 		Handcuffs = {
 			Id = "Handcuffs",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Handcuffs" },
@@ -2046,6 +2091,7 @@ local Config = {
 			GetCustodyPolicy = { Capacity = 3, RefillPerSecond = 0.2 },
 			UseEarlyReleaseCredit = { Capacity = 2, RefillPerSecond = 0.1 },
 			BookCustody = { Capacity = 2, RefillPerSecond = 0.1 },
+			MeleeStrike = { Capacity = 8, RefillPerSecond = 4 },
 			GetPresentedId = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetPhone = { Capacity = 5, RefillPerSecond = 1 },
 			PhoneSendText = { Capacity = 5, RefillPerSecond = 0.5 },

@@ -269,6 +269,13 @@ function CustodyService:_authorised(player: Player): boolean
 	return duty ~= nil and RolePermissions.has(self.context.Configuration, duty, "Custody")
 end
 
+function CustodyService:IsAuthorisedForSeizure(player: Player): boolean
+	local duty = self.context.Services:Get("DutyService"):Get(player)
+	return duty ~= nil
+		and RolePermissions.has(self.context.Configuration, duty, "Custody")
+		and duty.DepartmentId == "Police"
+end
+
 function CustodyService:_lineOfSight(actor: Player, target: Player): boolean
 	local actorRoot = root(actor)
 	local targetRoot = root(target)
@@ -626,6 +633,8 @@ function CustodyService:Action(
 		result, reason = self:_escort(actor, target, state)
 	elseif action == "Search" then
 		result, reason = self:_search(actor, target, state, data)
+	elseif action == "SeizeWeapons" then
+		result, reason = self.context.Services:Get("MeleeWeaponService"):Seize(actor, targetUserId)
 	elseif action == "Vehicle" then
 		result, reason = self:_vehicle(actor, target, state)
 	elseif action == "Caution" then

@@ -12,6 +12,8 @@ return {
 		ExtraCharacterSlot = { GamepassId = 1934044063, PriceInRobux = 99 },
 		CustomRegistration = { GamepassId = 1937140343, PriceInRobux = 49 },
 		CivilianKnife = { GamepassId = 1937446295, PriceInRobux = 75 },
+		RamboKnife = { GamepassId = 0, PriceInRobux = 149 },
+		ZKnife = { GamepassId = 0, PriceInRobux = 149 },
 		CivilianHandgun = { GamepassId = 1937822271, PriceInRobux = 125 },
 		CivilianShotgun = { GamepassId = 1934518052, PriceInRobux = 175 },
 		CivilianRifle = { GamepassId = 1934955986, PriceInRobux = 225 },

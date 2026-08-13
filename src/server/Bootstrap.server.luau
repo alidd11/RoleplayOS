@@ -73,6 +73,7 @@ local serviceOrder = {
 	"AvatarNormalizationService",
 	"UniformService",
 	"LoadoutService",
+	"MeleeWeaponService",
 	"VendorService",
 	"SpawnService",
 	"DutyService",

@@ -1267,6 +1267,19 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("MeleeStrike", function(payload)
+		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("MeleeWeaponService"):Strike(player, payload.TargetUserId)
+		return {
+			Success = result ~= nil,
+			Code = if result then "OK" else reason,
+			Message = if result then "" else "That item could not be used.",
+			Data = result,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetCustodyPolicy",
 		tablePayload,

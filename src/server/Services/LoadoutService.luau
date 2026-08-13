@@ -22,7 +22,11 @@ local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: 
 end
 
 local function prepareVisibleTool(tool: Tool, toolId: string)
-	if toolId ~= "Handcuffs" and toolId ~= "PAVA" then
+	local isWeapon = toolId == "Knife"
+		or toolId == "Machete"
+		or toolId == "RamboKnife"
+		or toolId == "ZKnife"
+	if toolId ~= "Handcuffs" and toolId ~= "PAVA" and not isWeapon then
 		return
 	end
 	local handle = tool:FindFirstChild("Handle")
@@ -185,6 +189,12 @@ function LoadoutService:GiveTool(
 	end
 	local clone = template:Clone()
 	clone:SetAttribute("RoleplayOSToolId", toolId)
+	if
+		self.context.Configuration.Tools[toolId] and self.context.Configuration.Tools[toolId].Weapon
+	then
+		clone:SetAttribute("RoleplayOSWeaponId", toolId)
+		clone:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
+	end
 	prepareVisibleTool(clone, toolId)
 	if source then
 		clone:SetAttribute("RoleplayOSToolSource", source)
@@ -222,6 +232,9 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 		return true, nil
 	end
 	for passId, definition in passes do
+		if type(definition.GamepassId) ~= "number" or definition.GamepassId <= 0 then
+			continue
+		end
 		if cache[tostring(definition.GamepassId)] ~= true then
 			continue
 		end
@@ -243,6 +256,13 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 			if template and template:IsA("Tool") then
 				local clone = template:Clone()
 				clone:SetAttribute("RoleplayOSToolId", toolId)
+				if
+					self.context.Configuration.Tools[toolId]
+					and self.context.Configuration.Tools[toolId].Weapon
+				then
+					clone:SetAttribute("RoleplayOSWeaponId", toolId)
+					clone:SetAttribute("RoleplayOSWeaponPurchase", false)
+				end
 				clone:SetAttribute("RoleplayOSEquipmentPassId", passId)
 				prepareVisibleTool(clone, toolId)
 				clone.Parent = backpack

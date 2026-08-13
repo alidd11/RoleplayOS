@@ -53,7 +53,7 @@ function VendorService:_catalogue(player: Player, definition: any): { any }
 				continue
 			end
 			price = food.Price
-		elseif item.GamepassId then
+		elseif type(item.GamepassId) == "number" and item.GamepassId > 0 then
 			owned = cache[tostring(item.GamepassId)] == true
 			-- Owning the pass hands it over for nothing, so no price is shown even
 			-- where one exists for everybody else.
@@ -191,7 +191,7 @@ function VendorService:Purchase(player: Player, payload: any): (any?, string?)
 	-- An item may carry a pass, a price, or both, and the three cases are all
 	-- ordinary. Owning the pass is the cheapest way to have it, so that is checked
 	-- first and hands the item over without charging.
-	if item.GamepassId then
+	if type(item.GamepassId) == "number" and item.GamepassId > 0 then
 		-- Checked live rather than from the cache. The cache is written once and
 		-- never revisited, so a refunded or revoked pass would go on handing out a
 		-- weapon for nothing. A failed check falls back to what was cached, since
