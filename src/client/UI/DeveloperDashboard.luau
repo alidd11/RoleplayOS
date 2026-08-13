@@ -1220,12 +1220,20 @@ function App.mount(context: any): ScreenGui
 			"Departments",
 			string.format("%d roles available in this server.", visibleCount)
 		)
-		local columns = portraitCardColumns()
-		-- Service selection is a decision list, not a character showcase. Keep
-		-- every card short enough that a player can compare several departments
-		-- without losing the world behind the menu.
-		local tileHeight = if narrowViewport() then 88 else 100
-		local roleGrid = tileGrid(scroll, visibleCount, tileHeight, columns)
+		-- This is intentionally a roster, not a grid of product cards. A full-width
+		-- list gives every service the same visual weight and keeps the action in a
+		-- predictable place on touch devices.
+		local tileHeight = if narrowViewport() then 78 else 88
+		local roleGrid = Instance.new("Frame")
+		roleGrid.Name = "ServiceRoster"
+		roleGrid.BackgroundTransparency = 1
+		roleGrid.Size = UDim2.fromScale(1, 0)
+		roleGrid.AutomaticSize = Enum.AutomaticSize.Y
+		roleGrid.Parent = scroll
+		local rosterLayout = Instance.new("UIListLayout")
+		rosterLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		rosterLayout.Padding = UDim.new(0, 4)
+		rosterLayout.Parent = roleGrid
 		if visibleCount == 0 then
 			local empty = card(roleGrid, tileHeight)
 			local emptyTitle = text(empty, "No roles available", 18, COLOURS.Text, true)
@@ -1244,19 +1252,19 @@ function App.mount(context: any): ScreenGui
 		for _, role in roles do
 			if role.Visible and role.Id ~= "Civilian" and role.DepartmentId ~= "Civilian" then
 				local presentation = rolePresentation(role)
-				local item = card(roleGrid, tileHeight)
+				local item = Instance.new("Frame")
+				item.Size = UDim2.new(1, 0, 0, tileHeight)
+				item.BackgroundColor3 = COLOURS.Surface
+				item.BackgroundTransparency = if role.Locked then 0.2 else 0.06
+				item.BorderSizePixel = 0
+				item.Parent = roleGrid
 				item.Name = "Career_" .. tostring(role.Id)
 				item.ClipsDescendants = true
-				-- This is a roster row, not a promotional tile. The compact height,
-				-- quiet border and right-hand action keep the player in the flow of
-				-- choosing a service instead of making every department look like a
-				-- separate dashboard widget.
-				item.BackgroundTransparency = 0.12
 				local rail = Instance.new("Frame")
 				rail.BackgroundColor3 = presentation.Colour
-				rail.BackgroundTransparency = if role.Locked then 0.42 else 0
+				rail.BackgroundTransparency = if role.Locked then 0.5 else 0
 				rail.BorderSizePixel = 0
-				rail.Size = UDim2.new(1, 0, 0, 4)
+				rail.Size = UDim2.new(0, 4, 1, 0)
 				rail.Parent = item
 				-- A small department mark is more honest and more useful than a
 				-- giant empty avatar viewport. It also prevents uniform thumbnails
@@ -1265,7 +1273,7 @@ function App.mount(context: any): ScreenGui
 				mark.BackgroundColor3 = presentation.Colour
 				mark.BackgroundTransparency = if role.Locked then 0.72 else 0.82
 				mark.BorderSizePixel = 0
-				mark.Position = UDim2.fromOffset(14, 14)
+				mark.Position = UDim2.fromOffset(18, if narrowViewport() then 17 else 20)
 				mark.Size = UDim2.fromOffset(
 					if narrowViewport() then 42 else 48,
 					if narrowViewport() then 42 else 48
@@ -1286,22 +1294,8 @@ function App.mount(context: any): ScreenGui
 				local textLeft = if narrowViewport() then 70 else 78
 				local actionReserve = if narrowViewport() then 144 else 156
 				local textInset = -textLeft - actionReserve
-				local departmentBadge = Instance.new("Frame")
-				departmentBadge.BackgroundColor3 = presentation.Colour
-				departmentBadge.BackgroundTransparency = 0.82
-				departmentBadge.BorderSizePixel = 0
-				departmentBadge.Visible = false
-				departmentBadge.Position = UDim2.fromOffset(textLeft, 12)
-				departmentBadge.Size = UDim2.fromOffset(1, 1)
-				departmentBadge.Parent = item
-				corner(departmentBadge, 8)
-				stroke(departmentBadge, presentation.Colour, 0.48)
-				local badgeText =
-					text(departmentBadge, presentation.Icon, 10, presentation.Colour, true)
-				badgeText.Size = UDim2.fromScale(1, 1)
-				badgeText.TextXAlignment = Enum.TextXAlignment.Center
 				local category = text(item, presentation.Label, 10, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(textLeft, 12)
+				category.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 11 else 14)
 				category.Size = UDim2.new(1, textInset, 0, 16)
 				local access = text(
 					item,
@@ -1311,12 +1305,13 @@ function App.mount(context: any): ScreenGui
 					true
 				)
 				access.AnchorPoint = Vector2.new(1, 0)
-				access.Position = UDim2.new(1, -14, 0, 12)
+				access.Position =
+					UDim2.new(1, -actionReserve, 0, if narrowViewport() then 11 else 14)
 				access.Size = UDim2.fromOffset(actionReserve, 16)
 				access.TextXAlignment = Enum.TextXAlignment.Right
 				local name =
 					text(item, role.Name, if narrowViewport() then 16 else 18, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(textLeft, 31)
+				name.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 28 else 32)
 				name.Size = UDim2.new(1, textInset, 0, 24)
 				name.TextWrapped = true
 				name.TextTruncate = Enum.TextTruncate.None
@@ -1343,7 +1338,7 @@ function App.mount(context: any): ScreenGui
 					end
 				end
 				local detail = text(item, detailText, 12, COLOURS.Muted)
-				detail.Position = UDim2.fromOffset(textLeft, 57)
+				detail.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 51 else 56)
 				detail.Size = UDim2.new(1, textInset, 0, 18)
 				detail.TextWrapped = true
 				detail.TextYAlignment = Enum.TextYAlignment.Top
@@ -1357,22 +1352,28 @@ function App.mount(context: any): ScreenGui
 						else "View requirements"
 				end
 				local action = button(item, actionLabel, false)
-				action.AnchorPoint = Vector2.new(0, 1)
 				action.AnchorPoint = Vector2.new(1, 0.5)
 				action.Position = UDim2.new(1, -14, 0.5, 0)
 				action.Size =
 					UDim2.fromOffset(actionReserve - 14, if narrowViewport() then 28 else 30)
 				action.TextSize = if narrowViewport() then 11 else 12
+				action.BackgroundTransparency = 1
+				action.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
+				local actionStroke = action:FindFirstChildOfClass("UIStroke")
+				if actionStroke then
+					actionStroke.Transparency = 1
+				end
+				local divider = Instance.new("Frame")
+				divider.BackgroundColor3 = COLOURS.Border
+				divider.BackgroundTransparency = 0.68
+				divider.BorderSizePixel = 0
+				divider.Position = UDim2.new(0, 18, 1, -1)
+				divider.Size = UDim2.new(1, -36, 0, 1)
+				divider.Parent = item
 				if not role.Locked then
-					action.BackgroundColor3 = presentation.Colour:Lerp(COLOURS.Surface, 0.78)
-					action.TextColor3 = presentation.Colour:Lerp(Color3.new(1, 1, 1), 0.28)
-					local actionStroke = action:FindFirstChildOfClass("UIStroke")
-					if actionStroke then
-						actionStroke.Color = presentation.Colour
-						actionStroke.Transparency = 0.5
-					end
+					action.Text = "JOIN  →"
 				elseif role.Action ~= "PromptGamepass" then
-					action.TextColor3 = COLOURS.Muted
+					action.Text = "REQUIREMENTS  →"
 				end
 				action.Selectable = true
 				action.Activated:Connect(function()
