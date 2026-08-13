@@ -271,16 +271,16 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 	item.BackgroundColor3 = if primary then COLOURS.AccentFill else COLOURS.SurfaceRaised
 	item.Font = Enum.Font.GothamBold
 	item.Text = label
-	item.TextSize = 14
+	item.TextSize = 13
 	item.TextColor3 = COLOURS.Text
-	item.Size = UDim2.fromOffset(170, 44)
+	item.Size = UDim2.fromOffset(170, 40)
 	item.Parent = parent
 	if parent:IsA("ScrollingFrame") then
 		local nextOrder = (parent:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
 		parent:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
 		item.LayoutOrder = nextOrder
 	end
-	corner(item, 10)
+	corner(item, 8)
 	stroke(item, if primary then COLOURS.Accent else COLOURS.Border, if primary then 0.55 else 0)
 	pressable(item)
 	return item
@@ -318,12 +318,16 @@ local function card(parent: Instance, height: number): Frame
 		parent:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
 		item.LayoutOrder = nextOrder
 	end
-	corner(item, 12)
-	stroke(item)
+	corner(item, 9)
+	stroke(item, COLOURS.Border, 0.18)
 	local surfaceGradient = Instance.new("UIGradient")
 	surfaceGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(31, 41, 57)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 29, 41)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 35, 48)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(21, 27, 38)),
+	})
+	surfaceGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.18),
+		NumberSequenceKeypoint.new(1, 0.34),
 	})
 	surfaceGradient.Rotation = 90
 	surfaceGradient.Parent = item
@@ -2233,9 +2237,9 @@ function App.mount(context: any): ScreenGui
 		item.TextColor3 = COLOURS.Muted
 		item.TextSize = 14
 		item.TextXAlignment = Enum.TextXAlignment.Left
-		item.Size = UDim2.new(1, 0, 0, 44)
+		item.Size = UDim2.new(1, 0, 0, 40)
 		item.Parent = navigation
-		corner(item, 9)
+		corner(item, 8)
 		local itemPadding = Instance.new("UIPadding")
 		itemPadding.PaddingLeft = UDim.new(0, 14)
 		itemPadding.Parent = item
@@ -2332,7 +2336,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 112 else if compactLandscape then 108 else 104)
+				+ (if narrow then 106 else if compactLandscape then 92 else 82)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2349,7 +2353,7 @@ function App.mount(context: any): ScreenGui
 			-- own logo, chat and microphone controls.
 			brand.Position = UDim2.fromOffset(
 				headerLeft,
-				if narrow or compactLandscape then safeTop + 42 else safeTop + 18
+				if narrow or compactLandscape then safeTop + 38 else safeTop + 16
 			)
 			brand.Size = UDim2.fromOffset(
 				if compactLandscape
@@ -2373,18 +2377,18 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 72)
-				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 72)
-				else UDim2.fromOffset(navLeft, safeTop + 18)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 68)
+				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 54)
+				else UDim2.fromOffset(navLeft, safeTop + 16)
 			navigation.Size = if narrow
 				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 32)
 				elseif compactLandscape then UDim2.new(
 					1,
 					-(headerLeft + safeRight + 18),
 					0,
-					36
+					32
 				)
-				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 46)
+				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 40)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
 			for _, item in navigation:GetChildren() do
@@ -2410,7 +2414,7 @@ function App.mount(context: any): ScreenGui
 						bounds.Parent = item
 					end
 					bounds.MinTextSize = 9
-					bounds.MaxTextSize = if narrow then 12 else 13
+					bounds.MaxTextSize = if narrow then 11 else 12
 					item.TextXAlignment = Enum.TextXAlignment.Center
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
