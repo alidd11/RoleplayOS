@@ -1,7 +1,6 @@
 --!strict
 
 local ContextActionService = game:GetService("ContextActionService")
-local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 
 local NeedsController = {}
@@ -51,6 +50,7 @@ function NeedsController:Start()
 	gui:SetAttribute("RoleplayOSManagedUI", true)
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	-- Anchored to a screen edge, so it must stay clear of notches, rounded
 	-- corners and home indicators rather than being clipped by them.
 	gui.ClipToDeviceSafeArea = true
@@ -67,14 +67,9 @@ function NeedsController:Start()
 	local hudScale = Instance.new("UIScale")
 	hudScale.Parent = hud
 	self.hudScale = hudScale
-	self.stamina = bar(hud, "STAMINA", Color3.fromRGB(67, 175, 255), 0)
-	self.hunger = bar(hud, "HUNGER", Color3.fromRGB(255, 174, 66), 0.52)
+	self.stamina = bar(hud, "STAMINA", Color3.fromRGB(91, 156, 255), 0)
+	self.hunger = bar(hud, "FOCUS", Color3.fromRGB(174, 184, 201), 0.52)
 	self.hud = hud
-	local blur = Instance.new("BlurEffect")
-	blur.Name = "RoleplayOSHungerBlur"
-	blur.Size = 0
-	blur.Parent = Lighting
-	self.blur = blur
 	-- The live feed is optional: the bars must still mount and lay out even if the
 	-- server has not registered the event, otherwise the HUD never appears at all.
 	local remote = self.context.Controllers.NetworkController:ResolveEvent("NeedsChanged")
@@ -82,7 +77,6 @@ function NeedsController:Start()
 		self.connection = remote.OnClientEvent:Connect(function(state)
 			self.stamina.Fill.Size = UDim2.fromScale(math.clamp(state.Stamina / 100, 0, 1), 1)
 			self.hunger.Fill.Size = UDim2.fromScale(math.clamp(state.Hunger / 100, 0, 1), 1)
-			self.blur.Size = if menuOpen then 0 else math.clamp((20 - state.Hunger) * 0.6, 0, 12)
 		end)
 	end
 	-- A purpose-built control rather than the generic touch button, so touch
@@ -165,7 +159,6 @@ function NeedsController:Start()
 	end)
 
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Needs", function(layout)
-		self.blur.Enabled = not layout.VR and not menuOpen
 		self.hudScale.Scale = layout.HudScale
 		self.padScale.Scale = layout.HudScale
 		self.hud.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(0.5, 1)
@@ -173,8 +166,8 @@ function NeedsController:Start()
 			then UDim2.new(0, 18, 1, -18)
 			else UDim2.new(0.5, 0, 1, -layout.HotbarBottom)
 		self.hud.Size = if layout.Vehicle
-			then UDim2.fromOffset(if layout.Compact then 164 else 220, 14)
-			else UDim2.fromOffset(if layout.Compact then 224 else 270, 15)
+			then UDim2.fromOffset(if layout.Compact then 164 else 220, 10)
+			else UDim2.fromOffset(if layout.Compact then 224 else 270, 10)
 		-- Only touch players need an on-screen control, and never while driving,
 		-- where the pad would sit over the vehicle controls.
 		self.sprintPad.Visible = not menuOpen and layout.InputMode == "Touch" and not layout.Vehicle
@@ -192,12 +185,9 @@ function NeedsController:Start()
 			menuOpen = playerGui:GetAttribute("RoleplayOSMenuOpen") == true
 			gui.Enabled = not menuOpen
 			if menuOpen then
-				self.blur.Size = 0
-				self.blur.Enabled = false
 				self.sprintPad.Visible = false
 			else
 				local layout = self.context.Controllers.UIOrchestrator:GetLayout()
-				self.blur.Enabled = not layout.VR
 				self.sprintPad.Visible = layout.InputMode == "Touch" and not layout.Vehicle
 			end
 		end)
@@ -226,9 +216,6 @@ function NeedsController:Destroy()
 	end
 	if self.menuConnection then
 		self.menuConnection:Disconnect()
-	end
-	if self.blur then
-		self.blur:Destroy()
 	end
 	if self.gui then
 		self.gui:Destroy()

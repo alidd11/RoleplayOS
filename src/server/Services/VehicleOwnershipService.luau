@@ -9,6 +9,14 @@ function VehicleOwnershipService:Init(context: any)
 end
 function VehicleOwnershipService:Start() end
 
+function VehicleOwnershipService:_vehicleDefinition(definitionId: string): any?
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.GetVehicleDefinition then
+		return validator:GetVehicleDefinition(definitionId)
+	end
+	return self.context.Configuration.Vehicles[definitionId]
+end
+
 function VehicleOwnershipService:_allocate(player: Player, vehicleId: string): (string?, string?)
 	for _ = 1, 12 do
 		local registration = Registration.generate()
@@ -61,7 +69,7 @@ function VehicleOwnershipService:List(player: Player): { any }
 		and session.Profile.Characters[session.ActiveCharacterId]
 	local result = {}
 	for _, vehicle in if character then character.Vehicles else {} do
-		local definition = self.context.Configuration.Vehicles[vehicle.DefinitionId]
+		local definition = self:_vehicleDefinition(vehicle.DefinitionId)
 		table.insert(result, {
 			VehicleId = vehicle.VehicleId,
 			DefinitionId = vehicle.DefinitionId,
@@ -123,7 +131,7 @@ function VehicleOwnershipService:GetOrCreateTeamRegistration(
 	definitionId: string
 ): (string?, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
-	if not session or not self.context.Configuration.Vehicles[definitionId] then
+	if not session or not self:_vehicleDefinition(definitionId) then
 		return nil, "INVALID_TEAM_VEHICLE"
 	end
 	local key = teamName .. ":" .. definitionId
@@ -232,7 +240,7 @@ function VehicleOwnershipService:Create(
 	colour: string,
 	garageId: string
 ): (any?, string?)
-	local definition = self.context.Configuration.Vehicles[definitionId]
+	local definition = self:_vehicleDefinition(definitionId)
 	if not definition or not table.find(definition.Colours, colour) then
 		return nil, "INVALID_VEHICLE_SELECTION"
 	end

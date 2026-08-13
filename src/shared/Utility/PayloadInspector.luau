@@ -26,7 +26,7 @@ function PayloadInspector.validate(value: any, limits: any?): (boolean, string?)
 		elseif kind == "boolean" or kind == "nil" then
 			return true, nil
 		elseif kind ~= "table" then
-			return false, "UNSUPPORTED_VALUE"
+			return false, "UNSUPPORTED_ROBLOX_TYPE:" .. kind
 		end
 		if visiting[item] then
 			return false, "CYCLIC_TABLE"

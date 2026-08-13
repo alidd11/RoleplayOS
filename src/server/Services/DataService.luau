@@ -7,8 +7,14 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ProfileSchema = require(ReplicatedStorage.RoleplayOS.Shared.ProfileSchema)
 
-local DataService =
-	{ Critical = true, sessions = {}, running = false, connections = {}, loading = {} }
+local DataService = {
+	Critical = true,
+	sessions = {},
+	running = false,
+	connections = {},
+	loading = {},
+	budgetWarnings = {},
+}
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
 local REGISTRATION_STORE_NAME = "RoleplayOS_CustomRegistrations_v1"
@@ -20,7 +26,7 @@ local SHOULDER_STORE_NAME = "RoleplayOS_ShoulderNumbers_v1"
 -- megabytes. Both arrive as an ordinary error from a call this framework already
 -- retries, so without an explicit check they look like a transient outage and are
 -- retried forever instead of being recognised as a fault that will never clear.
-local MAXIMUM_KEY_LENGTH = 50
+local MAXIMUM_KEY_LENGTH = 48
 local MAXIMUM_VALUE_BYTES = 4 * 1024 * 1024
 
 function DataService:_checkKey(key: string, store: string): boolean
@@ -78,6 +84,7 @@ end
 
 function DataService:Init(context: any)
 	self.context = context
+	self.budgetWarnings = {}
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockSharedRecords = {}
 	self.mockRegistrations = {}
@@ -404,9 +411,13 @@ function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
 	local waited = false
 	while DataStoreService:GetRequestBudgetForRequestType(requestType) < 1 do
 		if os.clock() >= deadline then
-			self.context.Logger:Warning("DataStore budget did not recover; writing anyway", {
-				RequestType = requestType.Name,
-			})
+			local warningKey = requestType.Name .. ":deadline"
+			if os.clock() - (self.budgetWarnings[warningKey] or 0) >= 30 then
+				self.budgetWarnings[warningKey] = os.clock()
+				self.context.Logger:Warning("DataStore budget did not recover; writing anyway", {
+					RequestType = requestType.Name,
+				})
+			end
 			return
 		end
 		waited = true
@@ -415,9 +426,13 @@ function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
 	if waited then
 		-- Logged, because throttling that nobody sees is throttling nobody fixes,
 		-- and the fix is usually saving less often rather than saving harder.
-		self.context.Logger:Warning("Waited for DataStore budget", {
-			RequestType = requestType.Name,
-		})
+		local warningKey = requestType.Name .. ":wait"
+		if os.clock() - (self.budgetWarnings[warningKey] or 0) >= 30 then
+			self.budgetWarnings[warningKey] = os.clock()
+			self.context.Logger:Warning("Waited for DataStore budget", {
+				RequestType = requestType.Name,
+			})
+		end
 	end
 end
 
@@ -682,7 +697,9 @@ function DataService:Load(player: Player, waited: boolean?): (any?, string?)
 	end
 	-- Measured once per join rather than on every save, which would encode the
 	-- whole profile every forty seconds for a number that barely moves.
-	self:_measure(player, loaded)
+	task.spawn(function()
+		self:_measure(player, loaded)
+	end)
 	return loaded, nil
 end
 

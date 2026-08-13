@@ -265,7 +265,11 @@ function EmergencyLightsService:Start()
 	end
 	task.spawn(function()
 		local byModelName: { [string]: any } = {}
-		for _, definition in self.context.Configuration.Vehicles do
+		local validator = self.context.Services:Get("ContentValidationService")
+		local vehicleDefinitions = if validator and validator.GetVehicleDefinitions
+			then validator:GetVehicleDefinitions()
+			else self.context.Configuration.Vehicles
+		for _, definition in vehicleDefinitions do
 			local name = definition.WorkspaceModelName or definition.ModelName or definition.Id
 			if type(name) == "string" then
 				byModelName[name] = definition

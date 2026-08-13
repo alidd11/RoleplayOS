@@ -108,6 +108,10 @@ local Config = {
 		MaximumDrivingFines = 80,
 		MaximumEmploymentHistory = 40,
 	},
+	AssetPreload = {
+		Critical = {},
+		Background = {},
+	},
 	ContentQuality = {
 		RequireCertification = true,
 		CertificationVersion = 1,
@@ -1729,7 +1733,7 @@ local Config = {
 			{ Name = "Band C", MaximumExcessMph = 30, Fine = 700, Points = 6 },
 			-- Disqualification territory in reality. There is no licence to take
 			-- away yet, so it is the ceiling instead.
-			{ Name = "Band C", MaximumExcessMph = math.huge, Fine = 1000, Points = 6 },
+			{ Name = "Band C", MaximumExcessMph = 999, Fine = 1000, Points = 6 },
 		},
 		-- An emergency driver on a blue light run is exempt. The same driver with
 		-- the lights off is not, which is the whole point of the rule: the
@@ -1844,7 +1848,7 @@ local Config = {
 		-- rather than pointed at a bike: this is meant to be a free first car
 		-- and nothing in the catalogue is that today. Name a definition here
 		-- when the replacement fleet arrives.
-		StarterDefinitionId = "",
+		StarterDefinitionId = nil,
 		StarterColour = "Blue",
 		StarterGarageId = "CityGarage",
 	},

@@ -3,7 +3,7 @@
 local Players = game:GetService("Players")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local RadioService = { channels = {}, current = {}, messages = {} }
+local RadioService = { channels = {}, current = {}, messages = {}, bursts = {} }
 
 local CHANNELS = {
 	{ Id = "Operations", Name = "Operations", DepartmentId = nil },
@@ -27,6 +27,7 @@ function RadioService:Init(context: any)
 	self.event = context.Network:RegisterEvent("RadioChanged")
 	self.current = {}
 	self.messages = {}
+	self.bursts = {}
 	self.connections = {}
 end
 
@@ -95,6 +96,29 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 	if not channel or not self:_allowed(duty, channel) then
 		return false, "RADIO_CHANNEL_FORBIDDEN"
 	end
+	-- Keep the burst window authoritative on the server: three rapid radio
+	-- messages trigger a short cooldown, regardless of client UI state.
+	local now = os.clock()
+	local burst = self.bursts[player.UserId] or { SentAt = {}, CooldownUntil = 0 }
+	if now < burst.CooldownUntil then
+		self.bursts[player.UserId] = burst
+		return false, "RADIO_COOLDOWN"
+	end
+	local recent = {}
+	for _, sentAt in burst.SentAt do
+		if now - sentAt <= 5 then
+			table.insert(recent, sentAt)
+		end
+	end
+	if #recent >= 3 then
+		burst.SentAt = {}
+		burst.CooldownUntil = now + 5
+		self.bursts[player.UserId] = burst
+		return false, "RADIO_COOLDOWN"
+	end
+	table.insert(recent, now)
+	burst.SentAt = recent
+	self.bursts[player.UserId] = burst
 	local cleaned = string.gsub(string.sub(message, 1, 180), "[%c]", " ")
 	local filtered, filterReason =
 		TextFilter.forBroadcast(cleaned, player.UserId, Enum.TextFilterContext.PublicChat)
@@ -111,7 +135,7 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 	}
 	self.messages[channelId] = self.messages[channelId] or {}
 	table.insert(self.messages[channelId], entry)
-	while #self.messages[channelId] > 30 do
+	while #self.messages[channelId] > 50 do
 		table.remove(self.messages[channelId], 1)
 	end
 	for _, recipient in Players:GetPlayers() do
@@ -132,6 +156,7 @@ function RadioService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.current[player.UserId] = nil
+			self.bursts[player.UserId] = nil
 		end)
 	)
 end
@@ -143,6 +168,7 @@ function RadioService:Destroy()
 	table.clear(self.connections or {})
 	table.clear(self.current)
 	table.clear(self.messages)
+	table.clear(self.bursts)
 end
 
 return RadioService

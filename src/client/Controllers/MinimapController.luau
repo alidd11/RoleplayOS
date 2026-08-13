@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
+local TooltipSystem = require(script.Parent.Parent.UI.TooltipSystem)
 
 local MinimapController = { connections = {}, running = false }
 local C = {
@@ -33,6 +34,7 @@ local function makeLabel(parent: Instance, text: string, size: number): TextLabe
 	item.TextSize = size
 	item.TextXAlignment = Enum.TextXAlignment.Left
 	item.TextYAlignment = Enum.TextYAlignment.Center
+	item.TextTruncate = Enum.TextTruncate.AtEnd
 	item.Parent = parent
 	return item
 end
@@ -40,6 +42,7 @@ end
 function MinimapController:Init(context: any)
 	self.context = context
 	self.settings = Config.Minimap
+	TooltipSystem:Init(context)
 end
 
 function MinimapController:_mount()
@@ -182,8 +185,9 @@ function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: n
 	if typeof(text) == "string" and text ~= "" then
 		local caption = makeLabel(dot, text, 9)
 		caption.Position = UDim2.fromOffset(8, -4)
-		caption.Size = UDim2.fromOffset(100, 16)
+		caption.Size = UDim2.fromOffset(140, 16)
 		caption.ZIndex = 4
+		TooltipSystem:Attach(caption, text)
 	end
 	return true
 end
@@ -272,12 +276,18 @@ function MinimapController:_redraw(centre: Vector3)
 			marker.Parent = self.viewport
 			corner(marker, 12)
 			local distance = math.floor((self.waypoint.Position - centre).Magnitude)
-			local caption =
-				makeLabel(marker, string.format("%s  %dm", self.waypoint.Caption, distance), 8)
+			local caption = makeLabel(marker, self.waypoint.Caption, 8)
 			caption.Position = UDim2.fromOffset(17, 2)
-			caption.Size = UDim2.fromOffset(110, 18)
+			caption.Size = UDim2.fromOffset(78, 18)
 			caption.TextColor3 = C.Text
 			caption.ZIndex = 8
+			TooltipSystem:Attach(caption, self.waypoint.Caption)
+			local distanceLabel = makeLabel(marker, string.format("%dm", distance), 8)
+			distanceLabel.Position = UDim2.fromOffset(94, 2)
+			distanceLabel.Size = UDim2.fromOffset(36, 18)
+			distanceLabel.TextColor3 = C.Muted
+			distanceLabel.TextXAlignment = Enum.TextXAlignment.Right
+			distanceLabel.ZIndex = 8
 		end
 	end
 	self.drawnAt = centre

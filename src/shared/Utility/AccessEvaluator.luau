@@ -95,7 +95,7 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 				CurrentRank = membership.HighestRank,
 			})
 		end
-		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 	end
 	if kind == "Rank" then
 		if
@@ -129,7 +129,7 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 	end
 	if kind == "Staff" then
 		if subject.Permissions and subject.Permissions[rule.Id] then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("STAFF_REQUIRED")
 	end

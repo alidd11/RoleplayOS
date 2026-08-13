@@ -3,16 +3,33 @@
 local RateLimiter = {}
 RateLimiter.__index = RateLimiter
 
-function RateLimiter.new(capacity: number, refillPerSecond: number, clock: (() -> number)?)
+function RateLimiter.new(
+	capacity: number,
+	refillPerSecond: number,
+	clock: (() -> number)?,
+	ttlSeconds: number?
+)
 	assert(capacity > 0 and refillPerSecond >= 0, "Invalid token bucket configuration")
-	return setmetatable(
-		{ capacity = capacity, refill = refillPerSecond, clock = clock or os.clock, buckets = {} },
-		RateLimiter
-	)
+	return setmetatable({
+		capacity = capacity,
+		refill = refillPerSecond,
+		clock = clock or os.clock,
+		ttl = ttlSeconds or 300,
+		lastPrune = 0,
+		buckets = {},
+	}, RateLimiter)
 end
 
 function RateLimiter:Allow(key: string, cost: number?): boolean
 	local now = self.clock()
+	if now - self.lastPrune >= 30 then
+		for bucketKey, stale in self.buckets do
+			if now - stale.updated > self.ttl then
+				self.buckets[bucketKey] = nil
+			end
+		end
+		self.lastPrune = now
+	end
 	local bucket = self.buckets[key] or { tokens = self.capacity, updated = now }
 	bucket.tokens = math.min(self.capacity, bucket.tokens + (now - bucket.updated) * self.refill)
 	bucket.updated = now

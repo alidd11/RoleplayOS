@@ -5,6 +5,8 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
+local TooltipSystem = require(script.Parent.TooltipSystem)
+local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
 
 -- Roblox's unified top bar is a 36px band on an unscaled desktop client and
 -- carries 32px square icon controls inside it, leaving a 2px gutter above and
@@ -114,7 +116,12 @@ local function portraitPreview(
 		mark.Text = placeholder
 		mark.TextColor3 = accent
 		mark.TextTransparency = 0.25
-		mark.TextScaled = true
+		mark.TextScaled = false
+		mark.TextTruncate = Enum.TextTruncate.AtEnd
+		local markBounds = Instance.new("UITextSizeConstraint")
+		markBounds.MinTextSize = 12
+		markBounds.MaxTextSize = 18
+		markBounds.Parent = mark
 		mark.Size = UDim2.fromScale(0.62, 0.42)
 		mark.Position = UDim2.fromScale(0.19, 0.29)
 		mark.Parent = viewport
@@ -219,7 +226,8 @@ local function text(
 	value: string,
 	size: number,
 	colour: Color3?,
-	bold: boolean?
+	bold: boolean?,
+	truncate: Enum.TextTruncate?
 ): TextLabel
 	local item = Instance.new("TextLabel")
 	item.BackgroundTransparency = 1
@@ -229,7 +237,7 @@ local function text(
 	item.TextColor3 = colour or COLOURS.Text
 	item.TextXAlignment = Enum.TextXAlignment.Left
 	item.TextYAlignment = Enum.TextYAlignment.Center
-	item.TextTruncate = Enum.TextTruncate.AtEnd
+	item.TextTruncate = truncate or Enum.TextTruncate.None
 	item.Parent = parent
 	return item
 end
@@ -273,6 +281,8 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 	item.Text = label
 	item.TextSize = 13
 	item.TextColor3 = COLOURS.Text
+	item.TextTruncate = Enum.TextTruncate.AtEnd
+	item.TextWrapped = false
 	item.Size = UDim2.fromOffset(170, 40)
 	item.Parent = parent
 	if parent:IsA("ScrollingFrame") then
@@ -377,6 +387,7 @@ function App.mount(context: any): ScreenGui
 	-- draw over the menu, but below the controls overlay at 90.
 	gui.DisplayOrder = 50
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local preloader = AssetPreloader.new(context)
 
 	local menuToggleGui = Instance.new("ScreenGui")
 	menuToggleGui.Name = "RoleplayOSMenuToggle"
@@ -509,31 +520,51 @@ function App.mount(context: any): ScreenGui
 	loadingBar.ZIndex = 101
 	loadingBar.Parent = loadingOverlay
 	local loadingFill = Instance.new("Frame")
-	loadingFill.Size = UDim2.fromScale(0.16, 1)
+	loadingFill.Name = "ProgressBar"
+	loadingFill.Size = UDim2.fromScale(0, 1)
 	loadingFill.BackgroundColor3 = COLOURS.Accent
 	loadingFill.BorderSizePixel = 0
 	loadingFill.ZIndex = 102
 	loadingFill.Parent = loadingBar
-	local loadingTween = TweenService:Create(
-		loadingFill,
-		TweenInfo.new(1.1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{ Position = UDim2.fromScale(0.84, 0) }
-	)
-	loadingTween:Play()
+	local preloaderInteractive = false
+	local continueLoading: TextButton? = nil
+	local function updateLoadingStatus(progress: number)
+		local statusText = if progress < 0.2
+			then "Connecting to server…"
+			elseif progress < 0.4 then "Loading vehicles…"
+			elseif progress < 0.6 then "Loading equipment…"
+			elseif progress < 0.8 then "Preparing menu…"
+			elseif progress < 1 then "Finalizing…"
+			else "Ready"
+		loadingStatus.Text = statusText
+		loadingFill.Size = UDim2.fromScale(math.clamp(progress, 0, 1), 1)
+	end
 	local function finishLoading()
-		loadingTween:Cancel()
+		if not preloaderInteractive then
+			return
+		end
 		loadingOverlay.Visible = false
 	end
-	-- Named for what it does rather than for giving up. A player who reaches for
-	-- this is not impatient, they are stuck, and "Skip loading" tells them they
-	-- are about to miss something rather than that they can get out.
-	local skipLoading = button(loadingOverlay, "Continue anyway", false)
-	skipLoading.AnchorPoint = Vector2.new(0.5, 1)
-	skipLoading.Position = UDim2.new(0.5, 0, 1, -30)
-	skipLoading.Size = UDim2.fromOffset(190, 44)
-	skipLoading.ZIndex = 103
-	skipLoading.Activated:Connect(function()
-		finishLoading()
+	preloader.onProgress.Event:Connect(updateLoadingStatus)
+	preloader.onPhaseChange.Event:Connect(function(phase: string)
+		if phase == "interactive" then
+			preloaderInteractive = true
+			loadingOverlay.BackgroundTransparency = 0.6
+			continueLoading = button(loadingOverlay, "Continue", true)
+			continueLoading.AnchorPoint = Vector2.new(0.5, 1)
+			continueLoading.Position = UDim2.new(0.5, 0, 1, -30)
+			continueLoading.Size = UDim2.fromOffset(190, 44)
+			continueLoading.ZIndex = 103
+			continueLoading.Activated:Connect(function()
+				if continueLoading then
+					continueLoading:Destroy()
+					continueLoading = nil
+				end
+				finishLoading()
+			end)
+		elseif phase == "complete" then
+			finishLoading()
+		end
 	end)
 
 	-- Retrying is the thing that actually fixes this, and there was no way to do
@@ -561,6 +592,7 @@ function App.mount(context: any): ScreenGui
 			loadingStatus.TextColor3 = COLOURS.Danger
 		end)
 	end)
+	preloader:Start()
 
 	local sidebar = Instance.new("Frame")
 	sidebar.Size = UDim2.new(0, 250, 1, 0)
@@ -646,8 +678,10 @@ function App.mount(context: any): ScreenGui
 	local hasEnteredWorld = false
 	local dismissToWorld: () -> ()
 	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	TooltipSystem:Init(context)
 	local function updateMenuToggleAppearance(isOpen: boolean)
 		menuToggle.Text = "MENU"
+		menuToggle.TextTruncate = Enum.TextTruncate.AtEnd
 		menuToggle:SetAttribute("AccessibilityLabel", if isOpen then "Close menu" else "Open menu")
 	end
 	local function setMenuOpen(isOpen: boolean)
@@ -850,8 +884,13 @@ function App.mount(context: any): ScreenGui
 		modal.Size =
 			UDim2.fromOffset(math.min(480, safe.X - 32), math.min(modalHeight, safe.Y - 32))
 		for index, spawnOption in spawnOptions do
-			local displayName = string.gsub(spawnOption.SpawnId, "(%l)(%u)", "%1 %2")
-			local choice = button(modal, spawnOption.StationName .. "  ·  " .. displayName, false)
+			local displayName = if type(spawnOption.DisplayName) == "string"
+					and spawnOption.DisplayName ~= ""
+				then spawnOption.DisplayName
+				else string.gsub(spawnOption.SpawnId or "", "_", " ")
+			local choiceText = spawnOption.StationName .. "  ·  " .. displayName
+			local choice = button(modal, choiceText, false)
+			TooltipSystem:Attach(choice, choiceText)
 			choice.LayoutOrder = 10 + index
 			choice.Size = UDim2.new(1, 0, 0, 48)
 			choice.Activated:Connect(function()
@@ -1612,10 +1651,32 @@ function App.mount(context: any): ScreenGui
 						end
 						local selected = context.Controllers.CharacterController:Select(characterId)
 						local entered = if selected.Success
-							then context.Controllers.DutyController:EnterCivilian(
-								characterId,
-								"CityCivilian"
-							)
+							then (function()
+								local civilianSpawnId: string? = nil
+								for _, role in menuData and menuData.Roles or {} do
+									if role.Id == "Civilian" or role.DepartmentId == "Civilian" then
+										for _, spawn in role.Spawns or {} do
+											if
+												type(spawn.SpawnId) == "string"
+												and spawn.SpawnId ~= ""
+											then
+												civilianSpawnId = spawn.SpawnId
+												break
+											end
+										end
+									end
+									if civilianSpawnId then
+										break
+									end
+								end
+								if not civilianSpawnId then
+									return { Success = false }
+								end
+								return context.Controllers.DutyController:EnterCivilian(
+									characterId,
+									civilianSpawnId
+								)
+							end)()
 							else selected
 						if not entered.Success then
 							context.Controllers.NotificationController:Show(
@@ -1790,27 +1851,40 @@ function App.mount(context: any): ScreenGui
 					image.Parent = artwork
 					corner(image, 10)
 				else
-					local monogram = text(
-						artwork,
-						string.upper(string.sub(pass.Name, 1, 2)),
-						25,
-						if pass.Owned then COLOURS.Success else COLOURS.Accent,
-						true
-					)
-					monogram.Size = UDim2.fromScale(1, 1)
-					monogram.TextXAlignment = Enum.TextXAlignment.Center
+					local shape = Instance.new("Frame")
+					shape.AnchorPoint = Vector2.new(0.5, 0.5)
+					shape.Position = UDim2.fromScale(0.5, 0.5)
+					shape.Size = UDim2.fromOffset(42, 42)
+					shape.Rotation = -12
+					shape.BackgroundColor3 = if pass.Owned then COLOURS.Success else COLOURS.Accent
+					shape.BackgroundTransparency = 0.28
+					shape.BorderSizePixel = 0
+					shape.Parent = artwork
+					corner(shape, 12)
+					local detail = Instance.new("Frame")
+					detail.AnchorPoint = Vector2.new(0.5, 0.5)
+					detail.Position = UDim2.fromScale(0.5, 0.5)
+					detail.Size = UDim2.fromOffset(68, 2)
+					detail.Rotation = 35
+					detail.BackgroundColor3 = COLOURS.Text
+					detail.BackgroundTransparency = 0.7
+					detail.BorderSizePixel = 0
+					detail.Parent = artwork
 				end
 				local name = text(item, pass.Name, 17, COLOURS.Text, true)
 				name.Position = UDim2.fromOffset(16, 98)
 				name.Size = UDim2.new(1, -32, 0, 25)
 				name.TextWrapped = true
-				name.TextTruncate = Enum.TextTruncate.None
+				name.TextWrapped = false
+				name.TextTruncate = Enum.TextTruncate.AtEnd
+				TooltipSystem:Attach(name, pass.Name)
 				local description = text(item, pass.Description, 12, COLOURS.Muted)
 				description.Position = UDim2.fromOffset(16, 126)
 				description.Size = UDim2.new(1, -32, 0, 40)
 				description.TextWrapped = true
 				description.TextYAlignment = Enum.TextYAlignment.Top
 				description.TextTruncate = Enum.TextTruncate.AtEnd
+				TooltipSystem:Attach(description, pass.Description)
 				local price = tonumber(pass.PriceInRobux or pass.Price)
 				local stateCopy = if pass.Owned
 					then "OWNED"
@@ -2432,8 +2506,16 @@ function App.mount(context: any): ScreenGui
 			)
 			brand.TextSize = 14
 			brand.TextWrapped = false
-			brand.TextScaled = true
-			brand.TextTruncate = Enum.TextTruncate.None
+			brand.TextScaled = false
+			brand.TextTruncate = Enum.TextTruncate.AtEnd
+			local brandBounds = brand:FindFirstChildOfClass("UITextSizeConstraint")
+			if not brandBounds then
+				brandBounds = Instance.new("UITextSizeConstraint")
+				brandBounds.Parent = brand
+			end
+			brandBounds.MinTextSize = 10
+			brandBounds.MaxTextSize = 17
+			TooltipSystem:Attach(brand, brand.Text)
 			-- Wide enough for the navigation to share the title's row, so it
 			-- starts past the title rather than at a fixed offset that could
 			-- land on top of it once the title has been pushed right.
@@ -2472,15 +2554,17 @@ function App.mount(context: any): ScreenGui
 					-- usable label either. The floor is what stops the fit being achieved by
 					-- making the text unreadable: below about nine pixels these stop being
 					-- legible on a phone, and they are the only way around the menu.
-					item.TextScaled = true
+					item.TextScaled = false
+					item.TextTruncate = Enum.TextTruncate.AtEnd
 					local bounds = item:FindFirstChildOfClass("UITextSizeConstraint")
 					if not bounds then
 						bounds = Instance.new("UITextSizeConstraint")
 						bounds.Parent = item
 					end
-					bounds.MinTextSize = 9
+					bounds.MinTextSize = 10
 					bounds.MaxTextSize = if narrow then 11 else 12
 					item.TextXAlignment = Enum.TextXAlignment.Center
+					TooltipSystem:Attach(item, item.Text)
 					local padding = item:FindFirstChildOfClass("UIPadding")
 					if padding then
 						padding.PaddingLeft = UDim.new()
@@ -2584,7 +2668,7 @@ function App.mount(context: any): ScreenGui
 		end
 		local gameName = data.Framework.GameName
 		brand.Text = gameName
-		status.Text = "●  ONLINE  ·  " .. string.upper(data.Server.Kind)
+		status.Text = "●  Online  ·  " .. data.Server.Kind
 		status.TextColor3 = COLOURS.Success
 		finishLoading()
 		if currentRender then

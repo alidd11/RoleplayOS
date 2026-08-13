@@ -2,6 +2,7 @@
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local TooltipSystem = require(script.Parent.Parent.UI.TooltipSystem)
 
 local ProgressionController = { connections = {} }
 local C = {
@@ -29,6 +30,7 @@ local function label(parent: Instance, value: string, size: number, bold: boolea
 	item.TextSize = size
 	item.TextXAlignment = Enum.TextXAlignment.Left
 	item.TextYAlignment = Enum.TextYAlignment.Center
+	item.TextTruncate = Enum.TextTruncate.AtEnd
 	item.Parent = parent
 	return item
 end
@@ -54,6 +56,7 @@ end
 function ProgressionController:Init(context: any)
 	self.context = context
 	self.expanded = false
+	TooltipSystem:Init(context)
 end
 
 function ProgressionController:_motionEnabled(): boolean
@@ -164,6 +167,7 @@ function ProgressionController:_renderRoles(roles: { any })
 		name.Size = UDim2.new(1, -100, 0, 20)
 		-- The 100 reserved on the right is the level badge.
 		name.TextTruncate = Enum.TextTruncate.AtEnd
+		TooltipSystem:Attach(name, role.Name)
 		local level = label(item, "LV " .. tostring(role.Progression.Level), 10, true)
 		level.AnchorPoint = Vector2.new(1, 0)
 		level.Position = UDim2.new(1, -12, 0, 8)
@@ -181,7 +185,7 @@ function ProgressionController:Render(data: any?)
 		return
 	end
 	local progression = data.Overall
-	self.teamLabel.Text = string.upper(data.Team.Name) .. "  ·  PUBLIC PROGRESSION"
+	self.teamLabel.Text = data.Team.Name .. "  ·  Public progression"
 	self.levelLabel.Text = "Level " .. tostring(progression.Level)
 	self.xpLabel.Text =
 		string.format("%d / %d XP", progression.CurrentLevelXP, progression.RequiredLevelXP)

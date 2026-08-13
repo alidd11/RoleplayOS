@@ -106,7 +106,7 @@ function System:Show(message: string, level: string?)
 	local toast = Instance.new("Frame")
 	toast.Name = "Toast_" .. self.nextId
 	toast.LayoutOrder = self.nextId
-	toast.Size = UDim2.new(1, 0, 0, 76)
+	toast.Size = UDim2.new(1, 0, 0, 96)
 	toast.BackgroundColor3 = COLOURS.SurfaceRaised
 	toast.BackgroundTransparency = 0.08
 	toast.BorderSizePixel = 0
@@ -141,15 +141,39 @@ function System:Show(message: string, level: string?)
 	local body = Instance.new("TextLabel")
 	body.BackgroundTransparency = 1
 	body.Position = UDim2.fromOffset(18, 32)
-	body.Size = UDim2.new(1, -30, 0, 30)
+	body.Size = UDim2.new(1, -30, 0, 48)
 	body.Font = Enum.Font.Gotham
 	body.Text = message
 	body.TextColor3 = COLOURS.Muted
 	body.TextSize = 12
 	body.TextWrapped = true
+	body.TextTruncate = Enum.TextTruncate.AtEnd
 	body.TextXAlignment = Enum.TextXAlignment.Left
 	body.TextYAlignment = Enum.TextYAlignment.Top
 	body.Parent = toast
+	if (key == "danger" or key == "error") and #message > 120 then
+		local expanded = false
+		local readMore = Instance.new("TextButton")
+		readMore.Name = "ReadMore"
+		readMore.BackgroundTransparency = 1
+		readMore.AnchorPoint = Vector2.new(1, 1)
+		readMore.Position = UDim2.new(1, -12, 1, -8)
+		readMore.Size = UDim2.fromOffset(82, 18)
+		readMore.Font = Enum.Font.GothamBold
+		readMore.Text = "Read more"
+		readMore.TextColor3 = style.Colour
+		readMore.TextSize = 11
+		readMore.TextXAlignment = Enum.TextXAlignment.Right
+		readMore.ZIndex = 3
+		readMore.Parent = toast
+		readMore.Activated:Connect(function()
+			expanded = not expanded
+			body.TextTruncate = if expanded then Enum.TextTruncate.None else Enum.TextTruncate.AtEnd
+			body.Size = if expanded then UDim2.new(1, -30, 0, 100) else UDim2.new(1, -30, 0, 48)
+			readMore.Text = if expanded then "Show less" else "Read more"
+			toast.Size = if expanded then UDim2.new(1, 0, 0, 148) else UDim2.new(1, 0, 0, 96)
+		end)
+	end
 
 	local progress = Instance.new("Frame")
 	progress.Name = "Progress"
@@ -182,7 +206,7 @@ function System:Show(message: string, level: string?)
 			{ Size = UDim2.fromOffset(0, 3) }
 		):Play()
 	else
-		progress.Size = UDim2.fromOffset(0, 3)
+		progress.Size = UDim2.new(1, 0, 0, 3)
 	end
 
 	task.delay(5, function()

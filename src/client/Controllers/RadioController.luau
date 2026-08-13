@@ -31,7 +31,8 @@ local function text(parent: Instance, value: string, size: number, bold: boolean
 	item.Text = value
 	item.TextColor3 = C.Text
 	item.TextSize = size
-	item.TextWrapped = true
+	item.TextTruncate = Enum.TextTruncate.AtEnd
+	item.TextWrapped = false
 	item.TextXAlignment = Enum.TextXAlignment.Left
 	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
@@ -47,6 +48,8 @@ local function button(parent: Instance, value: string): TextButton
 	item.Text = value
 	item.TextColor3 = C.Text
 	item.TextSize = 11
+	item.TextTruncate = Enum.TextTruncate.AtEnd
+	item.TextWrapped = false
 	item.Parent = parent
 	corner(item, 9)
 	local scale = Instance.new("UIScale")
@@ -443,6 +446,15 @@ function RadioController:_render()
 			input.Text = ""
 			self:refresh()
 		else
+			if response.Message == "RADIO_COOLDOWN" then
+				input.PlaceholderText = "Cooldown active — try again in 5s"
+				task.delay(5, function()
+					if input.Parent then
+						input.PlaceholderText = "Transmit on "
+							.. tostring(snapshot.CurrentChannelId)
+					end
+				end)
+			end
 			self.context.Controllers.NotificationController:Show(response.Message, "Radio")
 		end
 	end)

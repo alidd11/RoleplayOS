@@ -20,6 +20,22 @@ local VehicleSpawnerService = {
 	seatConnections = {},
 }
 
+function VehicleSpawnerService:_vehicleDefinitions(): { [string]: any }
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.GetVehicleDefinitions then
+		return validator:GetVehicleDefinitions()
+	end
+	return self.context.Configuration.Vehicles
+end
+
+function VehicleSpawnerService:_vehicleDefinition(definitionId: string): any?
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.GetVehicleDefinition then
+		return validator:GetVehicleDefinition(definitionId)
+	end
+	return self.context.Configuration.Vehicles[definitionId]
+end
+
 local function rootPosition(player: Player): Vector3?
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	return if root and root:IsA("BasePart") then root.Position else nil
@@ -331,7 +347,7 @@ function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, s
 	local vehicles = {}
 	local departmentId = spawner:GetAttribute("DepartmentId")
 	if type(departmentId) == "string" and departmentId ~= "" then
-		for id, definition in self.context.Configuration.Vehicles do
+		for id, definition in self:_vehicleDefinitions() do
 			local template = self:_template(definition)
 			if self:_definitionAllowed(player, spawner, definition) and template then
 				table.insert(vehicles, {
@@ -344,7 +360,7 @@ function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, s
 		end
 	else
 		for _, owned in self.context.Services:Get("VehicleOwnershipService"):List(player) do
-			local definition = self.context.Configuration.Vehicles[owned.DefinitionId]
+			local definition = self:_vehicleDefinition(owned.DefinitionId)
 			local template = definition and self:_template(definition)
 			if definition and definition.Category == "Civilian" and template then
 				table.insert(vehicles, {
@@ -488,7 +504,7 @@ function VehicleSpawnerService:Spawn(
 	if not spawner then
 		return nil, reason
 	end
-	local definition = self.context.Configuration.Vehicles[definitionId]
+	local definition = self:_vehicleDefinition(definitionId)
 	if not definition or not self:_definitionAllowed(player, spawner, definition) then
 		return nil, "VEHICLE_NOT_ALLOWED"
 	end

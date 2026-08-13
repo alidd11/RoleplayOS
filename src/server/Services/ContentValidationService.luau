@@ -11,6 +11,9 @@ local ContentValidationService = {
 	report = { Ready = {}, Missing = {}, Invalid = {}, Discovered = {}, WorldReady = {} },
 	assetIdentities = {},
 	replacements = {},
+	discoveredVehicles = {},
+	discoveredTools = {},
+	discoveredLoadoutTools = {},
 }
 
 local forbiddenClasses = {
@@ -81,6 +84,12 @@ end
 
 local function validCertificationText(value: any): boolean
 	return type(value) == "string" and #value >= 3 and #value <= 240
+end
+
+local function appendUnique(list: { string }, value: string)
+	if not table.find(list, value) then
+		table.insert(list, value)
+	end
 end
 
 local function qualityIssue(
@@ -167,6 +176,36 @@ function ContentValidationService:Init(context: any)
 	self.report = { Ready = {}, Missing = {}, Invalid = {}, Discovered = {}, WorldReady = {} }
 	self.assetIdentities = {}
 	self.replacements = {}
+	self.discoveredVehicles = {}
+	self.discoveredTools = {}
+	self.discoveredLoadoutTools = {}
+end
+
+function ContentValidationService:GetVehicleDefinition(id: string): any?
+	return self.context.Configuration.Vehicles[id] or self.discoveredVehicles[id]
+end
+
+function ContentValidationService:GetToolDefinition(id: string): any?
+	return self.context.Configuration.Tools[id] or self.discoveredTools[id]
+end
+
+function ContentValidationService:GetVehicleDefinitions(): { [string]: any }
+	local result = table.clone(self.context.Configuration.Vehicles)
+	for id, definition in self.discoveredVehicles do
+		result[id] = definition
+	end
+	return result
+end
+
+function ContentValidationService:GetLoadoutToolIds(
+	loadoutId: string,
+	configured: { string }
+): { string }
+	local result = table.clone(configured)
+	for _, toolId in self.discoveredLoadoutTools[loadoutId] or {} do
+		appendUnique(result, toolId)
+	end
+	return result
 end
 
 function ContentValidationService:_registerIdentity(root: Instance, fallbackId: string): boolean
@@ -368,12 +407,6 @@ local function roleIdsFor(configuration: any, departmentId: string, divisionId: 
 	return result
 end
 
-local function appendUnique(list: { string }, value: string)
-	if not table.find(list, value) then
-		table.insert(list, value)
-	end
-end
-
 function ContentValidationService:_discoverVehicle(assets: Instance, model: Model)
 	local path = pathFor(model, assets)
 	if #path < 4 or path[1] ~= "Vehicles" then
@@ -417,7 +450,10 @@ function ContentValidationService:_discoverVehicle(assets: Instance, model: Mode
 			table.insert(self.report.Invalid, "Vehicle:" .. id .. ":UNKNOWN_DEALERSHIP")
 			return
 		end
-		appendUnique(dealership.VehicleIds, id)
+		-- Imported content is runtime-discovered data. Never append it to the
+		-- frozen authoring configuration; that made the result depend on asset
+		-- load order and allowed a model to rewrite dealership definitions.
+		definition.DealershipId = dealershipId
 	elseif path[2] == "Services" then
 		local departmentId = path[3]
 		if not self.context.Configuration.Departments[departmentId] then
@@ -434,7 +470,7 @@ function ContentValidationService:_discoverVehicle(assets: Instance, model: Mode
 	else
 		return
 	end
-	self.context.Configuration.Vehicles[id] = definition
+	self.discoveredVehicles[id] = definition
 	table.insert(self.report.Discovered, "Vehicle:" .. id)
 end
 
@@ -448,7 +484,7 @@ function ContentValidationService:_discoverTool(assets: Instance, tool: Tool)
 		table.insert(self.report.Invalid, "Tool:" .. tool:GetFullName() .. ":INVALID_ID")
 		return
 	end
-	local existing = self.context.Configuration.Tools[id]
+	local existing = self.context.Configuration.Tools[id] or self.discoveredTools[id]
 	if existing then
 		if table.concat(existing.AssetPath or {}, "/") ~= table.concat(path, "/") then
 			table.insert(self.report.Invalid, "Tool:" .. id .. ":DUPLICATE_OR_WRONG_FOLDER")
@@ -474,13 +510,14 @@ function ContentValidationService:_discoverTool(assets: Instance, tool: Tool)
 	elseif path[2] ~= "Civilian" then
 		return
 	end
-	self.context.Configuration.Tools[id] = definition
+	self.discoveredTools[id] = definition
 	if tool:GetAttribute("AutoEquip") ~= false then
 		for _, loadoutId in targetLoadouts do
 			local loadout = self.context.Configuration.Loadouts[loadoutId]
 			if loadout then
-				loadout.ToolIds = loadout.ToolIds or {}
-				appendUnique(loadout.ToolIds, id)
+				self.discoveredLoadoutTools[loadoutId] = self.discoveredLoadoutTools[loadoutId]
+					or {}
+				appendUnique(self.discoveredLoadoutTools[loadoutId], id)
 			end
 		end
 	end
@@ -606,10 +643,14 @@ function ContentValidationService:Start()
 		end
 	else
 		self:_discover(assets)
-		for id, definition in self.context.Configuration.Vehicles do
+		for id, definition in self:GetVehicleDefinitions() do
 			self:_check(assets, "Vehicle", id, definition, "Model")
 		end
-		for id, definition in self.context.Configuration.Tools do
+		local toolDefinitions = table.clone(self.context.Configuration.Tools)
+		for id, definition in self.discoveredTools do
+			toolDefinitions[id] = definition
+		end
+		for id, definition in toolDefinitions do
 			self:_check(assets, "Tool", id, definition, "Tool")
 		end
 	end

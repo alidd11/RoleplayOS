@@ -14,6 +14,23 @@ function LoadoutService:Init(context: any)
 	self.context = context
 end
 function LoadoutService:Start() end
+
+function LoadoutService:_toolDefinition(toolId: string): any?
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.GetToolDefinition then
+		return validator:GetToolDefinition(toolId)
+	end
+	return self.context.Configuration.Tools[toolId]
+end
+
+function LoadoutService:_toolIds(loadoutId: string, definition: any): { string }
+	local configured = definition.ToolIds or definition.ToolNames or {}
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.GetLoadoutToolIds then
+		return validator:GetLoadoutToolIds(loadoutId, configured)
+	end
+	return table.clone(configured)
+end
 local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: string)
 	tool:SetAttribute("RoleplayOSDutyIssued", true)
 	tool:SetAttribute("RoleplayOSLoadoutId", loadoutId)
@@ -126,11 +143,11 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		self.context.Logger:Warning("Loadout assets are unavailable", { LoadoutId = loadoutId })
 		return true, nil
 	end
-	for _, toolId in definition.ToolIds or definition.ToolNames or {} do
+	for _, toolId in self:_toolIds(loadoutId, definition) do
 		if alreadyIssued(player, toolId) then
 			continue
 		end
-		local toolDefinition = self.context.Configuration.Tools[toolId]
+		local toolDefinition = self:_toolDefinition(toolId)
 		local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
 			then resolve(assets, toolDefinition.AssetPath)
 			else tools:FindFirstChild(toolId)
@@ -185,7 +202,7 @@ function LoadoutService:GiveTool(
 	if not tools then
 		return false, "TOOL_UNAVAILABLE"
 	end
-	local toolDefinition = self.context.Configuration.Tools[toolId]
+	local toolDefinition = self:_toolDefinition(toolId)
 	local template = if toolDefinition and type(toolDefinition.AssetPath) == "table"
 		then resolve(assets, toolDefinition.AssetPath)
 		else tools:FindFirstChild(toolId)
@@ -210,9 +227,7 @@ function LoadoutService:GiveTool(
 	end
 	local clone = template:Clone()
 	clone:SetAttribute("RoleplayOSToolId", toolId)
-	if
-		self.context.Configuration.Tools[toolId] and self.context.Configuration.Tools[toolId].Weapon
-	then
+	if toolDefinition and toolDefinition.Weapon then
 		clone:SetAttribute("RoleplayOSWeaponId", toolId)
 		clone:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
 	end
@@ -269,7 +284,7 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 			if alreadyIssued(player, toolId) then
 				continue
 			end
-			local toolDefinition = self.context.Configuration.Tools[toolId]
+			local toolDefinition = self:_toolDefinition(toolId)
 			local template = if toolDefinition
 					and type(toolDefinition.AssetPath) == "table"
 				then resolve(assets, toolDefinition.AssetPath)
@@ -288,10 +303,7 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 			elseif template and template:IsA("Tool") then
 				local clone = template:Clone()
 				clone:SetAttribute("RoleplayOSToolId", toolId)
-				if
-					self.context.Configuration.Tools[toolId]
-					and self.context.Configuration.Tools[toolId].Weapon
-				then
+				if toolDefinition and toolDefinition.Weapon then
 					clone:SetAttribute("RoleplayOSWeaponId", toolId)
 					clone:SetAttribute("RoleplayOSWeaponPurchase", false)
 				end

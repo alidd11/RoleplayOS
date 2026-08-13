@@ -196,8 +196,19 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	if amount > self.context.Configuration.Economy.TransferMaximum then
 		return nil, "TRANSFER_LIMIT"
 	end
-	if self.transferring[sender.UserId] or self.transferring[recipient.UserId] then
+	-- Acquire both locks in ascending UserId order, and check/set them without a
+	-- yield. Luau code is single-threaded between yields, so opposing A→B and
+	-- B→A requests cannot both pass the check and then deadlock each other.
+	local firstUserId = math.min(sender.UserId, recipient.UserId)
+	local secondUserId = math.max(sender.UserId, recipient.UserId)
+	if self.transferring[firstUserId] or self.transferring[secondUserId] then
 		return nil, "TRANSFER_IN_PROGRESS"
+	end
+	self.transferring[firstUserId] = true
+	self.transferring[secondUserId] = true
+	local function releaseTransferLocks()
+		self.transferring[sender.UserId] = nil
+		self.transferring[recipient.UserId] = nil
 	end
 	local data = self.context.Services:Get("DataService")
 	local senderSession = data:GetSession(sender)
@@ -207,12 +218,15 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	local senderCharacter = senderId and senderSession.Profile.Characters[senderId]
 	local recipientCharacter = recipientId and recipientSession.Profile.Characters[recipientId]
 	if not senderCharacter then
+		releaseTransferLocks()
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
 	end
 	if not recipientCharacter then
+		releaseTransferLocks()
 		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
 	end
 	if amount > senderCharacter.Economy.Balance then
+		releaseTransferLocks()
 		return nil, "INSUFFICIENT_FUNDS"
 	end
 
@@ -221,14 +235,6 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	-- letting one write an older snapshot over the other transfer.
 	-- Always acquire locks in ascending UserId order. This invariant prevents
 	-- future multi-step transfer code from introducing lock-order deadlocks.
-	local firstUserId = math.min(sender.UserId, recipient.UserId)
-	local secondUserId = math.max(sender.UserId, recipient.UserId)
-	self.transferring[firstUserId] = true
-	self.transferring[secondUserId] = true
-	local function releaseTransferLocks()
-		self.transferring[sender.UserId] = nil
-		self.transferring[recipient.UserId] = nil
-	end
 	local transferId = HttpService:GenerateGUID(false)
 	local recipientName = recipientCharacter.Identity.FirstName
 		.. " "
