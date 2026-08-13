@@ -83,14 +83,17 @@ function TaxiService:StartShift(player: Player): (any?, string?)
 	if self:_isDriver(player) then
 		return self:_statusFor(player) or { State = "OnDuty" }, nil
 	end
+	local transportTeam = self.context.Services:Get("TeamService"):Get("Transport")
+	if not transportTeam then
+		-- Check the destination before creating durable employment state. This
+		-- keeps a broken/misconfigured depot from leaving a player with a taxi
+		-- job they cannot actually use or end cleanly.
+		return nil, "TRANSPORT_TEAM_UNAVAILABLE"
+	end
 	local employment =
 		self.context.Services:Get("EmploymentService"):Hire(player, characterId, "TaxiDriver")
 	if not employment then
 		return nil, "TAXI_JOB_UNAVAILABLE"
-	end
-	local transportTeam = self.context.Services:Get("TeamService"):Get("Transport")
-	if not transportTeam then
-		return nil, "TRANSPORT_TEAM_UNAVAILABLE"
 	end
 	-- Taxi is a civilian employment, but its operational base and character
 	-- spawn are the shared Transport depot. Reusing that department keeps the

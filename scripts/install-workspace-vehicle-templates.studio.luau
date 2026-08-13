@@ -12,6 +12,77 @@ root.Name = "RoleplayOSVehicleTemplates"
 root.Parent = ServerStorage
 
 local installedBySource = {}
+
+local function removePath(rootInstance, path)
+	local current = rootInstance
+	for index, segment in path do
+		local child = current:FindFirstChild(segment)
+		if not child then
+			return false
+		end
+		if index == #path then
+			child:Destroy()
+			return true
+		end
+		current = child
+	end
+	return false
+end
+
+local function sanitiseImportedVehicle(template, definitionId)
+	local removed = 0
+	local function remove(path)
+		if removePath(template, path) then
+			removed += 1
+		end
+	end
+
+	-- These optional plugins target a different model hierarchy than the
+	-- supplied vehicles. Leaving them in a stored template creates repeating
+	-- runtime errors as soon as every player spawns the vehicle.
+	if definitionId == "HondaADV160" then
+		for _, path in
+			{
+				{ "Tuner", "Plugins", "Kickstand" },
+				{ "Tuner", "Plugins", "LightAddon" },
+				{ "Tuner", "Plugins", "AC6C_Style_Gauges" },
+				{ "Tuner", "Plugins", "AC6_Sounds" },
+				{ "Tuner", "Plugins", "EPICLIGHTS_V4" },
+			}
+		do
+			remove(path)
+		end
+	elseif definitionId == "CorollaTaxi" then
+		for _, path in
+			{
+				{ "DriveSeat", "Pickup" },
+				{ "DriveSeat", "SirenControl" },
+				{ "SmeersLightsHandler" },
+				{ "AC6_FE_Sounds" },
+			}
+		do
+			remove(path)
+		end
+	end
+
+	local blockedAudio = {
+		["10652911149"] = true,
+		["10652911247"] = true,
+		["11503290062"] = true,
+		["370689846"] = true,
+	}
+	for _, descendant in template:GetDescendants() do
+		if descendant:IsA("Sound") then
+			local id = string.match(descendant.SoundId, "%d+")
+			if id and blockedAudio[id] then
+				descendant:Destroy()
+				removed += 1
+			end
+		end
+	end
+	return removed
+end
+
 local function findSource(definition)
 	local sourcePath = definition.WorkspaceSourcePath
 	if type(sourcePath) == "table" then
@@ -100,14 +171,23 @@ for definitionId, definition in config.Vehicles do
 							local loopMarker = "while wait(clock) do\n"
 							local loopAt = string.find(descendant.Source, loopMarker, 1, true)
 							if loopAt then
-								descendant.Source = string.sub(descendant.Source, 1, loopAt + #loopMarker - 1)
-									.. "\n\treadRoleplayOSWheelie()"
-									.. string.sub(descendant.Source, loopAt + #loopMarker)
+								descendant.Source = string.sub(
+									descendant.Source,
+									1,
+									loopAt + #loopMarker - 1
+								) .. "\n\treadRoleplayOSWheelie()" .. string.sub(
+									descendant.Source,
+									loopAt + #loopMarker
+								)
 							end
 						end
 					end
 				end
 			end
+		end
+		local sanitisedCount = sanitiseImportedVehicle(template, definitionId)
+		if sanitisedCount > 0 then
+			print("ROLEPLAYOS_VEHICLE_SANITISED", definitionId, sanitisedCount)
 		end
 		template:SetAttribute("RoleplayOSVehicleTemplate", true)
 		template:SetAttribute("RoleplayOSDefinitionId", definitionId)

@@ -1470,21 +1470,52 @@ function App.mount(context: any): ScreenGui
 			copy.TextWrapped = true
 			return
 		end
-		local columns = portraitCardColumns()
-		local landscape = shortLandscape()
-		local tileHeight = if landscape then 154 else 204
-		local grid = tileGrid(scroll, #jobs, tileHeight, columns)
+		local compact = narrowViewport()
+		local tileHeight = if compact then 82 else 92
+		local grid = Instance.new("Frame")
+		grid.Name = "CivilianJobRoster"
+		grid.BackgroundTransparency = 1
+		grid.Size = UDim2.new(1, 0, 0, 0)
+		grid.AutomaticSize = Enum.AutomaticSize.Y
+		grid.Parent = scroll
+		local list = Instance.new("UIListLayout")
+		list.SortOrder = Enum.SortOrder.LayoutOrder
+		list.Padding = UDim.new(0, 4)
+		list.Parent = grid
 		for _, job in ipairs(jobs) do
-			local item = card(grid, tileHeight)
+			local item = Instance.new("Frame")
+			item.Name = "Job_" .. tostring(job.Id)
+			item.Size = UDim2.new(1, 0, 0, tileHeight)
+			item.BackgroundColor3 = COLOURS.Surface
+			item.BackgroundTransparency = 0.06
+			item.BorderSizePixel = 0
+			item.ClipsDescendants = true
+			item.Parent = grid
 			item.ClipsDescendants = true
 			local rail = Instance.new("Frame")
 			rail.BackgroundColor3 = COLOURS.Success
 			rail.BorderSizePixel = 0
-			rail.Size = UDim2.new(1, 0, 0, 3)
+			rail.Size = UDim2.new(0, 4, 1, 0)
 			rail.Parent = item
-			local title = text(item, tostring(job.Name), 18, COLOURS.Text, true)
-			title.Position = UDim2.fromOffset(18, 18)
-			title.Size = UDim2.new(1, -36, 0, 28)
+			local mark = Instance.new("Frame")
+			mark.BackgroundColor3 = COLOURS.Success
+			mark.BackgroundTransparency = 0.82
+			mark.BorderSizePixel = 0
+			mark.Position = UDim2.fromOffset(18, if compact then 18 else 22)
+			mark.Size = UDim2.fromOffset(if compact then 42 else 48, if compact then 42 else 48)
+			mark.Parent = item
+			corner(mark, 10)
+			stroke(mark, COLOURS.Success, 0.32)
+			local markText = text(mark, "TAXI", if compact then 9 else 10, COLOURS.Success, true)
+			markText.Size = UDim2.fromScale(1, 1)
+			markText.TextXAlignment = Enum.TextXAlignment.Center
+			markText.TextYAlignment = Enum.TextYAlignment.Center
+			local textLeft = if compact then 70 else 78
+			local actionReserve = if compact then 144 else 160
+			local textInset = -textLeft - actionReserve
+			local title = text(item, tostring(job.Name), if compact then 16 else 18, COLOURS.Text, true)
+			title.Position = UDim2.fromOffset(textLeft, if compact then 14 else 17)
+			title.Size = UDim2.new(1, textInset, 0, 24)
 			title.TextTruncate = Enum.TextTruncate.None
 			local access = tostring(job.Class) == "Public" and "PUBLIC EMPLOYMENT"
 				or "APPLICATION ROLE"
@@ -1494,8 +1525,8 @@ function App.mount(context: any): ScreenGui
 				11,
 				COLOURS.Muted
 			)
-			detail.Position = UDim2.fromOffset(18, 53)
-			detail.Size = UDim2.new(1, -36, 0, 20)
+			detail.Position = UDim2.fromOffset(textLeft, if compact then 39 else 45)
+			detail.Size = UDim2.new(1, textInset, 0, 18)
 			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
 				then COLOURS.Success
 				else COLOURS.Warning
@@ -1508,21 +1539,32 @@ function App.mount(context: any): ScreenGui
 				11,
 				if isTaxi then COLOURS.Success else COLOURS.Muted
 			)
-			jobStatus.Position = UDim2.fromOffset(18, 84)
-			jobStatus.Size = UDim2.new(1, -36, 0, 24)
+			jobStatus.Position = UDim2.fromOffset(textLeft, if compact then 58 else 65)
+			jobStatus.Size = UDim2.new(1, textInset, 0, 18)
 			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
 				and menuData.ActiveCharacterId ~= ""
-			local action = button(
-				item,
-				if hasActiveCharacter then "START SHIFT" else "ENTER CITY & START SHIFT",
-				true
-			)
-			action.AnchorPoint = Vector2.new(0, 1)
-			action.Position = UDim2.new(0, 18, 1, -16)
-			action.Size = UDim2.new(1, -36, 0, if landscape then 34 else 40)
+			local initialActionText = if hasActiveCharacter then "START SHIFT" else "ENTER CITY & START SHIFT"
+			local action = button(item, initialActionText, true)
+			action.AnchorPoint = Vector2.new(1, 0.5)
+			action.Position = UDim2.new(1, -14, 0.5, 0)
+			action.Size = UDim2.fromOffset(actionReserve - 14, if compact then 28 else 32)
 			action.TextSize = 11
 			action.TextColor3 = COLOURS.Text
 			action.Selectable = isTaxi
+			action.BackgroundTransparency = 1
+			action.TextColor3 = COLOURS.Success
+			local actionStroke = action:FindFirstChildOfClass("UIStroke")
+			if actionStroke then
+				actionStroke.Transparency = 1
+			end
+			action.Text = if hasActiveCharacter then "START SHIFT  →" else "ENTER CITY  →"
+			local divider = Instance.new("Frame")
+			divider.BackgroundColor3 = COLOURS.Border
+			divider.BackgroundTransparency = 0.68
+			divider.BorderSizePixel = 0
+			divider.Position = UDim2.new(0, 18, 1, -1)
+			divider.Size = UDim2.new(1, -36, 0, 1)
+			divider.Parent = item
 			if isTaxi then
 				action.BackgroundColor3 = COLOURS.Success
 				action.Activated:Connect(function()
@@ -1572,7 +1614,7 @@ function App.mount(context: any): ScreenGui
 						dismissToWorld()
 					else
 						action.Active = true
-						action.Text = "START SHIFT"
+						action.Text = initialActionText
 					end
 				end)
 			end
