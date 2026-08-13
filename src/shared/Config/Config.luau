@@ -662,6 +662,20 @@ local Config = {
 			},
 		},
 	},
+	-- Six avatar-based StreetDealer vendors can be placed in the map once and
+	-- rotated between six tagged points by the server. The models remain ordinary
+	-- vendor models, so the existing purchase validation and ProximityPrompt UI
+	-- work on keyboard, controller and touch without a second interaction system.
+	DealerRotation = {
+		Enabled = true,
+		DealerTag = "RoleplayOSDealerAvatar",
+		PointTag = "RoleplayOSDealerPoint",
+		VendorTag = "RoleplayOSVendor",
+		VendorId = "StreetDealer",
+		RotationPeriodSeconds = 4 * 60 * 60,
+		ExpectedDealerCount = 6,
+		ExpectedPointCount = 6,
+	},
 	VehicleIdentity = {
 		MinimumRegistrationLength = 2,
 		MaximumRegistrationLength = 8,

@@ -54,6 +54,7 @@
         "AuthoringTemplates": { "$path": "server-assets/AuthoringTemplates" },
         "PropertyInteriors": { "$path": "server-assets/PropertyInteriors" },
         "Tools": { "$path": "server-assets/Tools" },
+        "WorldAssets": { "$path": "server-assets/WorldAssets" },
         "Uniforms": { "$path": "server-assets/Uniforms" },
         "Vehicles": { "$path": "server-assets/Vehicles" }
       },
