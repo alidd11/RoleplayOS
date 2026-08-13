@@ -321,7 +321,8 @@ function PhoneController:_mount()
 			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(0, 0.5)
 			body.Position = UDim2.new(0, 18, 0.5, 0)
-			body.Size = UDim2.fromOffset(286, math.min(520, math.max(280, layout.SafeViewport.Y - 90)))
+			body.Size =
+				UDim2.fromOffset(286, math.min(520, math.max(280, layout.SafeViewport.Y - 90)))
 		else
 			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(1, 1)

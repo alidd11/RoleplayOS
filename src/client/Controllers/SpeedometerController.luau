@@ -102,8 +102,7 @@ local function speedMph(seat: VehicleSeat, values: Folder?): number
 	end
 	-- Fallback for plain VehicleSeats and packages that do not publish telemetry.
 	local velocity = seat.AssemblyLinearVelocity
-	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude
-		* Config.VehicleData.StudsPerSecondToMph
+	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude * Config.VehicleData.StudsPerSecondToMph
 end
 
 local C = {

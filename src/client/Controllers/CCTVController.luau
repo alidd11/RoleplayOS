@@ -39,14 +39,18 @@ local function button(parent: Instance, text: string): TextButton
 	local scale = Instance.new("UIScale")
 	scale.Parent = item
 	item.MouseButton1Down:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Scale = 0.97,
-		}):Play()
+		TweenService
+			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 0.97,
+			})
+			:Play()
 	end)
 	item.MouseButton1Up:Connect(function()
-		TweenService:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Scale = 1,
-		}):Play()
+		TweenService
+			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Scale = 1,
+			})
+			:Play()
 	end)
 	return item
 end

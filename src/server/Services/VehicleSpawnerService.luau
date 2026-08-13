@@ -168,24 +168,28 @@ local function sanitiseImportedVehicle(vehicle: Model)
 
 	-- Honda ADV/NCT optional plugins. The README says these are independent
 	-- plugins; this particular model does not provide their required nodes.
-	for _, path in {
-		{ "Tuner", "Plugins", "Kickstand" },
-		{ "Tuner", "Plugins", "LightAddon" },
-		{ "Tuner", "Plugins", "AC6C_Style_Gauges" },
-		{ "Tuner", "Plugins", "AC6_Sounds" },
-		{ "Tuner", "Plugins", "EPICLIGHTS_V4" },
-	} do
+	for _, path in
+		{
+			{ "Tuner", "Plugins", "Kickstand" },
+			{ "Tuner", "Plugins", "LightAddon" },
+			{ "Tuner", "Plugins", "AC6C_Style_Gauges" },
+			{ "Tuner", "Plugins", "AC6_Sounds" },
+			{ "Tuner", "Plugins", "EPICLIGHTS_V4" },
+		}
+	do
 		remove(path)
 	end
 
 	-- Corolla optional legacy controls. Taxi lighting and sound are not sirens,
 	-- and the framework owns the vehicle UI and emergency-lighting boundary.
-	for _, path in {
-		{ "DriveSeat", "Pickup" },
-		{ "DriveSeat", "SirenControl" },
-		{ "SmeersLightsHandler" },
-		{ "AC6_FE_Sounds" },
-	} do
+	for _, path in
+		{
+			{ "DriveSeat", "Pickup" },
+			{ "DriveSeat", "SirenControl" },
+			{ "SmeersLightsHandler" },
+			{ "AC6_FE_Sounds" },
+		}
+	do
 		remove(path)
 	end
 
@@ -264,7 +268,8 @@ function VehicleSpawnerService:_authorise(player: Player, spawnerId: string): (I
 		-- Taxi shifts are civilian employment, not a Transport duty profile.
 		-- They still use the Transport depot, so authorise them through the
 		-- employment credential before applying department-duty checks.
-		if departmentId == "Transport"
+		if
+			departmentId == "Transport"
 			and self.context.Services:Get("TaxiService"):IsDriver(player)
 		then
 			return spawner, nil

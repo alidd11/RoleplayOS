@@ -34,13 +34,44 @@ local function resolve(root: Instance, path: { string }): Instance?
 	return current
 end
 
+local function relativePath(root: Instance, descendant: Instance): { string }?
+	local path = {}
+	local current: Instance? = descendant
+	while current and current ~= root do
+		table.insert(path, 1, current.Name)
+		current = current.Parent
+	end
+	if current ~= root then
+		return nil
+	end
+	return path
+end
+
 local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 	for _, descendant in root:GetDescendants() do
 		if forbiddenClasses[descendant.ClassName] or descendant:IsA("LuaSourceContainer") then
 			-- A certified repository asset may carry narrowly reviewed framework
-			-- logic. Both identity and class must match; similarly named arbitrary
-			-- scripts or remotes remain unsafe and reject production startup.
-			if type(allowed) ~= "table" or allowed[descendant.Name] ~= descendant.ClassName then
+			-- logic. Both identity and class and the exact root-relative ancestry
+			-- must match; similarly named arbitrary scripts or remotes remain unsafe.
+			local specification = type(allowed) == "table" and allowed[descendant.Name]
+			local descendantPath = relativePath(root, descendant)
+			local expectedPath = type(specification) == "table" and specification.Path
+			local pathMatches = type(descendantPath) == "table"
+				and type(expectedPath) == "table"
+				and #descendantPath == #expectedPath
+			if pathMatches then
+				for index, segment in descendantPath do
+					if expectedPath[index] ~= segment then
+						pathMatches = false
+						break
+					end
+				end
+			end
+			if
+				type(specification) ~= "table"
+				or specification.ClassName ~= descendant.ClassName
+				or not pathMatches
+			then
 				return descendant
 			end
 		end
@@ -547,7 +578,16 @@ function ContentValidationService:Start()
 	local quality = self.context.Configuration.ContentQuality
 	local quarantine = workspace:FindFirstChild(quality.QuarantineRootName)
 		or ServerStorage:FindFirstChild(quality.QuarantineRootName)
-	if quarantine and #quarantine:GetDescendants() > 0 then
+	local hasObsoleteContent = false
+	if quarantine then
+		for _, descendant in quarantine:GetDescendants() do
+			if not descendant:IsA("Folder") then
+				hasObsoleteContent = true
+				break
+			end
+		end
+	end
+	if hasObsoleteContent then
 		local issue = "Quarantine:"
 			.. quarantine:GetFullName()
 			.. ":OBSOLETE_ASSETS_MUST_BE_DELETED"

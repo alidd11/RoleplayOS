@@ -1,15 +1,14 @@
 --!strict
-local StarterGui = game:GetService("StarterGui")
+local NotificationSystem = require(script.Parent.Parent.UI.NotificationSystem)
 local NotificationController = {}
-function NotificationController:Init(_context: any) end
+function NotificationController:Init(context: any)
+	NotificationSystem:Init(context)
+end
 function NotificationController:Start() end
 function NotificationController:Show(message: string, level: string?)
-	pcall(
-		StarterGui.SetCore,
-		StarterGui,
-		"SendNotification",
-		{ Title = "RoleplayOS" .. (level and " · " .. level or ""), Text = message, Duration = 5 }
-	)
+	NotificationSystem:Show(message, level)
 end
-function NotificationController:Destroy() end
+function NotificationController:Destroy()
+	NotificationSystem:Destroy()
+end
 return NotificationController

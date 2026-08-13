@@ -132,13 +132,19 @@ local Config = {
 				-- class match this reviewed manifest. This keeps arbitrary scripts in
 				-- imported tools fatal while allowing the audited replacement logic.
 				AllowedUnsafeDescendants = {
-					RoleplayOSTaserServer = "Script",
-					RoleplayOSTaserClient = "LocalScript",
-					UpdateAmmo = "RemoteEvent",
-					Reload = "RemoteEvent",
-					Laser = "RemoteEvent",
-					Flashlight = "RemoteEvent",
-					FireTaser = "RemoteEvent",
+					RoleplayOSTaserServer = {
+						ClassName = "Script",
+						Path = { "RoleplayOSTaserServer" },
+					},
+					RoleplayOSTaserClient = {
+						ClassName = "LocalScript",
+						Path = { "RoleplayOSTaserClient" },
+					},
+					UpdateAmmo = { ClassName = "RemoteEvent", Path = { "UpdateAmmo" } },
+					Reload = { ClassName = "RemoteEvent", Path = { "Reload" } },
+					Laser = { ClassName = "RemoteEvent", Path = { "Laser" } },
+					Flashlight = { ClassName = "RemoteEvent", Path = { "Flashlight" } },
+					FireTaser = { ClassName = "RemoteEvent", Path = { "FireTaser" } },
 				},
 			},
 			["Warrant Card"] = {
@@ -148,7 +154,10 @@ local Config = {
 				RealWorldReference = "UK police warrant card",
 				ReviewedBy = "RoleplayOS engineering security review",
 				AllowedUnsafeDescendants = {
-					RoleplayOSWarrantCardClient = "LocalScript",
+					RoleplayOSWarrantCardClient = {
+						ClassName = "LocalScript",
+						Path = { "RoleplayOSWarrantCardClient" },
+					},
 				},
 			},
 			PoliceWarrantCard = {
@@ -158,7 +167,10 @@ local Config = {
 				RealWorldReference = "UK police warrant card",
 				ReviewedBy = "RoleplayOS engineering security review",
 				AllowedUnsafeDescendants = {
-					RoleplayOSWarrantCardClient = "LocalScript",
+					RoleplayOSWarrantCardClient = {
+						ClassName = "LocalScript",
+						Path = { "RoleplayOSWarrantCardClient" },
+					},
 				},
 			},
 		},

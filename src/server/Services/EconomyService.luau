@@ -32,6 +32,82 @@ function EconomyService:Start()
 			end
 		end)
 	)
+	task.spawn(function()
+		self:ReconcilePendingTransfers()
+	end)
+end
+
+function EconomyService:_queuePendingRefund(record: any)
+	local data = self.context.Services:Get("DataService")
+	local id = "pt:" .. record.TransferId
+	local _, recordReason = data:UpdateSharedRecord(id, function()
+		return record
+	end)
+	if recordReason then
+		self.context.Logger:Error("Pending transfer record persistence failed", {
+			TransferId = record.TransferId,
+			Error = recordReason,
+		})
+		return
+	end
+	local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
+		local index = if type(existing) == "table" then existing else {}
+		if not table.find(index, id) then
+			table.insert(index, id)
+		end
+		return index
+	end)
+	if indexReason then
+		self.context.Logger:Error("Pending transfer index persistence failed", {
+			TransferId = record.TransferId,
+			Error = indexReason,
+		})
+	end
+end
+
+function EconomyService:ReconcilePendingTransfers()
+	local data = self.context.Services:Get("DataService")
+	local index = data:GetSharedRecord("pending-transfer-index")
+	if type(index) ~= "table" then
+		return
+	end
+	local remaining = {}
+	for _, id in index do
+		local record = data:GetSharedRecord(id)
+		local player = type(record) == "table" and Players:GetPlayerByUserId(record.SenderUserId)
+		local session = player and data:GetSession(player)
+		local character = session
+			and session.ActiveCharacterId == record.SenderCharacterId
+			and session.Profile.Characters[record.SenderCharacterId]
+		if not character then
+			table.insert(remaining, id)
+			continue
+		end
+		local applied = self:Apply(player, {
+			TransactionId = HttpService:GenerateGUID(false),
+			CharacterId = record.SenderCharacterId,
+			Amount = record.Amount,
+			Direction = "Credit",
+			ReasonCode = "PLAYER_TRANSFER_REFUND_RECONCILE",
+			Description = "Recovered transfer refund",
+			RelatedEntityId = record.TransferId,
+			Metadata = {},
+		})
+		if applied then
+			data:Save(player)
+			data:UpdateSharedRecord(id, function(existing)
+				if type(existing) == "table" then
+					existing.Status = "Reconciled"
+				end
+				return existing
+			end)
+		else
+			table.insert(remaining, id)
+		end
+	end
+	data:UpdateSharedRecord("pending-transfer-index", function()
+		return remaining
+	end)
 end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
@@ -143,8 +219,12 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	-- Lock both profiles until both immediate saves finish. Locking only the
 	-- sender allowed A->B and B->A to overlap while the first Save yielded,
 	-- letting one write an older snapshot over the other transfer.
-	self.transferring[sender.UserId] = true
-	self.transferring[recipient.UserId] = true
+	-- Always acquire locks in ascending UserId order. This invariant prevents
+	-- future multi-step transfer code from introducing lock-order deadlocks.
+	local firstUserId = math.min(sender.UserId, recipient.UserId)
+	local secondUserId = math.max(sender.UserId, recipient.UserId)
+	self.transferring[firstUserId] = true
+	self.transferring[secondUserId] = true
 	local function releaseTransferLocks()
 		self.transferring[sender.UserId] = nil
 		self.transferring[recipient.UserId] = nil
@@ -197,6 +277,14 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		end
 		releaseTransferLocks()
 		if not refunded then
+			self:_queuePendingRefund({
+				TransferId = transferId,
+				SenderUserId = sender.UserId,
+				SenderCharacterId = senderId,
+				Amount = amount,
+				CreatedAt = os.time(),
+				Status = "Pending",
+			})
 			self.context.Logger:Error("Player transfer refund failed", {
 				SenderUserId = sender.UserId,
 				RecipientUserId = recipient.UserId,

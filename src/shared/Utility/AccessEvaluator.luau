@@ -37,16 +37,9 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		return denied("SUSPENDED", subject.SuspensionReason)
 	end
 	local current = now or os.time()
-	if
-		subject.TemporaryAccess
-		and rule.Id
-		and (subject.TemporaryAccess[rule.Id] or 0) > current
-	then
-		return { Allowed = true, ReasonCode = "TEMPORARY_ACCESS", Message = "", Metadata = {} }
-	end
 	local kind = rule.AccessType
 	if kind == "Public" then
-		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 	end
 	if kind == "ServerKind" then
 		-- Kind names one, Kinds names several. Several is how "anywhere except the
@@ -55,25 +48,25 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		if rule.Kinds ~= nil then
 			for _, allowed in rule.Kinds do
 				if subject.ServerKind == allowed then
-					return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+					return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 				end
 			end
 			return denied("SERVER_KIND_REQUIRED", rule.Message, { RequiredKinds = rule.Kinds })
 		end
 		if subject.ServerKind == rule.Kind then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("SERVER_KIND_REQUIRED", rule.Message, { RequiredKind = rule.Kind })
 	end
 	if kind == "Gamepass" then
 		if subject.Gamepasses and subject.Gamepasses[tostring(rule.GamepassId or rule.Id)] then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("GAMEPASS_REQUIRED", rule.Message, { GamepassId = rule.GamepassId })
 	end
 	if kind == "Application" then
 		if subject.Applications and subject.Applications[rule.DepartmentId] == "Accepted" then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("APPLICATION_REQUIRED", rule.Message, {
 			DepartmentId = rule.DepartmentId,
@@ -108,13 +101,13 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		if
 			(subject.Ranks and subject.Ranks[rule.DepartmentId] or -1) >= (rule.MinimumRank or 0)
 		then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("RANK_REQUIRED", rule.Message, { MinimumRank = rule.MinimumRank })
 	end
 	if kind == "Qualification" then
 		if subject.Qualifications and subject.Qualifications[rule.QualificationId] then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied(
 			"QUALIFICATION_REQUIRED",
@@ -124,13 +117,13 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 	end
 	if kind == "Department" then
 		if subject.Departments and subject.Departments[rule.DepartmentId] then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("DEPARTMENT_REQUIRED")
 	end
 	if kind == "Whitelist" then
 		if subject.Whitelists and subject.Whitelists[rule.Id] then
-			return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+			return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 		end
 		return denied("WHITELIST_REQUIRED")
 	end
@@ -162,7 +155,7 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		if matchAny then
 			return actionable or last
 		end
-		return { Allowed = true, ReasonCode = "OK", Message = "", Metadata = {} }
+		return { Allowed = true, ReasonCode = "OK", Metadata = {} }
 	end
 	return denied("ACCESS_DENIED")
 end

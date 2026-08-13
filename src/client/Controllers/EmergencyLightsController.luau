@@ -149,7 +149,12 @@ function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone:
 	if not selected then
 		if not entry.MissingSiren[tone] then
 			entry.MissingSiren[tone] = true
-			warn("[RoleplayOS] Vehicle has no native siren sound for " .. tone .. ": " .. model:GetFullName())
+			warn(
+				"[RoleplayOS] Vehicle has no native siren sound for "
+					.. tone
+					.. ": "
+					.. model:GetFullName()
+			)
 		end
 		return
 	end

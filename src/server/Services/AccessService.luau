@@ -35,7 +35,6 @@ function AccessService:Evaluate(player: Player, rule: any, extra: any?): any
 		Departments = extra and extra.Departments,
 		Ranks = extra and extra.Ranks,
 		Permissions = extra and extra.Permissions,
-		TemporaryAccess = profile.AuditMetadata.TemporaryAccess,
 		Suspended = profile.AuditMetadata.Suspended,
 		SuspensionReason = profile.AuditMetadata.SuspensionReason,
 		Blacklisted = profile.AuditMetadata.Blacklisted,

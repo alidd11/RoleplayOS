@@ -97,52 +97,68 @@ function VehicleActionsController:_mount()
 	for _, action in ACTIONS do
 		local item = button(gui, action)
 		self.buttons[action.Id] = item
-		table.insert(self.connections, item.InputBegan:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.Touch
-				or input.UserInputType == Enum.UserInputType.MouseButton1
-			then
-				self:_set(action, true)
-			end
-		end))
-		table.insert(self.connections, item.InputEnded:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.Touch
-				or input.UserInputType == Enum.UserInputType.MouseButton1
-			then
-				self:_set(action, false)
-			end
-		end))
+		table.insert(
+			self.connections,
+			item.InputBegan:Connect(function(input)
+				if
+					input.UserInputType == Enum.UserInputType.Touch
+					or input.UserInputType == Enum.UserInputType.MouseButton1
+				then
+					self:_set(action, true)
+				end
+			end)
+		)
+		table.insert(
+			self.connections,
+			item.InputEnded:Connect(function(input)
+				if
+					input.UserInputType == Enum.UserInputType.Touch
+					or input.UserInputType == Enum.UserInputType.MouseButton1
+				then
+					self:_set(action, false)
+				end
+			end)
+		)
 	end
 end
 
 function VehicleActionsController:Start()
 	self:_mount()
-	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("VehicleActions", function(layout)
-		local vehicle = self:_vehicle()
-		local shown = layout.InputMode == "Touch" and layout.State == "Driver" and vehicle ~= nil
-		local index = 0
-		for _, action in ACTIONS do
-			local item = self.buttons[action.Id]
-			local available = shown and vehicle and self:_supports(vehicle, action)
-			item.Visible = available == true
-			if available then
-				index += 1
-				local size = math.clamp(math.floor(72 * layout.HudScale), 58, 86)
-				item.Size = UDim2.fromOffset(size, size)
-				item.AnchorPoint = Vector2.new(1, 1)
-				item.Position = UDim2.new(
-					1,
-					-(layout.SafeRight + 18),
-					1,
-					-(layout.SafeBottom + 116 + (index - 1) * (size + 10))
-				)
+	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind(
+		"VehicleActions",
+		function(layout)
+			local vehicle = self:_vehicle()
+			local shown = layout.InputMode == "Touch"
+				and layout.State == "Driver"
+				and vehicle ~= nil
+			local index = 0
+			for _, action in ACTIONS do
+				local item = self.buttons[action.Id]
+				local available = shown and vehicle and self:_supports(vehicle, action)
+				item.Visible = available == true
+				if available then
+					index += 1
+					local size = math.clamp(math.floor(72 * layout.HudScale), 58, 86)
+					item.Size = UDim2.fromOffset(size, size)
+					item.AnchorPoint = Vector2.new(1, 1)
+					item.Position = UDim2.new(
+						1,
+						-(layout.SafeRight + 18),
+						1,
+						-(layout.SafeBottom + 116 + (index - 1) * (size + 10))
+					)
+				end
 			end
 		end
-	end)
-	table.insert(self.connections, Players.LocalPlayer.CharacterAdded:Connect(function()
-		for _, action in ACTIONS do
-			self:_set(action, false)
-		end
-	end))
+	)
+	table.insert(
+		self.connections,
+		Players.LocalPlayer.CharacterAdded:Connect(function()
+			for _, action in ACTIONS do
+				self:_set(action, false)
+			end
+		end)
+	)
 end
 
 function VehicleActionsController:Destroy()

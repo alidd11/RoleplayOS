@@ -143,7 +143,9 @@ end
 
 function DrivingControlsController:_findNativeHorn(seat: VehicleSeat): Sound?
 	local vehicle = self:_vehicle(seat)
-	if not vehicle then return nil end
+	if not vehicle then
+		return nil
+	end
 	for _, item in vehicle:GetDescendants() do
 		if item:IsA("Sound") then
 			local name = string.lower(item.Name)
@@ -158,7 +160,9 @@ end
 function DrivingControlsController:_bindHandbrake()
 	local function setPressed(pressed: boolean)
 		local seat = self:_seat()
-		if not seat then return end
+		if not seat then
+			return
+		end
 		local values = self:_values(seat)
 		local target: BoolValue? = nil
 		for _, name in self.chassis.HandbrakeValueNames or {} do
@@ -178,9 +182,12 @@ function DrivingControlsController:_bindHandbrake()
 		self.brakeState = pressed
 		self.handbrake.BackgroundTransparency = if pressed then 0.05 else 0.25
 	end
-	table.insert(self.connections, self.handbrake.Activated:Connect(function()
-		setPressed(not self.brakeState)
-	end))
+	table.insert(
+		self.connections,
+		self.handbrake.Activated:Connect(function()
+			setPressed(not self.brakeState)
+		end)
+	)
 end
 
 function DrivingControlsController:_bindHorn()
@@ -192,8 +199,12 @@ function DrivingControlsController:_bindHorn()
 		self.horn.BackgroundTransparency = 0.25
 	end
 	local function start(input: InputObject)
-		if input.UserInputType ~= Enum.UserInputType.Touch
-			and input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+		if
+			input.UserInputType ~= Enum.UserInputType.Touch
+			and input.UserInputType ~= Enum.UserInputType.MouseButton1
+		then
+			return
+		end
 		local seat = self:_seat()
 		local sound = seat and self:_findNativeHorn(seat)
 		if sound then
@@ -204,13 +215,17 @@ function DrivingControlsController:_bindHorn()
 		end
 	end
 	table.insert(self.connections, self.horn.InputBegan:Connect(start))
-	table.insert(self.connections, self.horn.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch
-			or input.UserInputType == Enum.UserInputType.MouseButton1
-		then
-			stop()
-		end
-	end))
+	table.insert(
+		self.connections,
+		self.horn.InputEnded:Connect(function(input)
+			if
+				input.UserInputType == Enum.UserInputType.Touch
+				or input.UserInputType == Enum.UserInputType.MouseButton1
+			then
+				stop()
+			end
+		end)
+	)
 	self.stopHorn = stop
 end
 

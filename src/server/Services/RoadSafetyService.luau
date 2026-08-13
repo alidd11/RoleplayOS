@@ -279,7 +279,9 @@ function RoadSafetyService:_speedMph(seat: VehicleSeat): number
 			break
 		end
 	end
-	local velocity = if typeof(published) == "Vector3" then published else seat.AssemblyLinearVelocity
+	local velocity = if typeof(published) == "Vector3"
+		then published
+		else seat.AssemblyLinearVelocity
 	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude
 		* self.context.Configuration.VehicleData.StudsPerSecondToMph
 end
