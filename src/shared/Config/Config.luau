@@ -114,15 +114,15 @@ local Config = {
 		-- be ready before the cards are displayed instead of arriving as blank
 		-- panels while Roblox fetches each image.
 		Background = {
-			"rbxassetid://124510305332365", -- Police
-			"rbxassetid://115689835891137", -- Ambulance
-			"rbxassetid://95977486831570", -- Firefighter
-			"rbxassetid://113064266300926", -- Civilian
-			"rbxassetid://133420507327997", -- Highways / council worker
-			"rbxassetid://102874702573163", -- Transport
-			"rbxassetid://88863810610980", -- Royalty Mail
-			"rbxassetid://127971383421481",
-			"rbxassetid://101846745500511",
+			"rbxthumb://type=Asset&id=124510305332365&w=768&h=768", -- Police
+			"rbxthumb://type=Asset&id=115689835891137&w=768&h=768", -- Ambulance
+			"rbxthumb://type=Asset&id=95977486831570&w=768&h=768", -- Firefighter
+			"rbxthumb://type=Asset&id=113064266300926&w=768&h=768", -- Civilian
+			"rbxthumb://type=Asset&id=133420507327997&w=768&h=768", -- Highways / council worker
+			"rbxthumb://type=Asset&id=102874702573163&w=768&h=768", -- Transport
+			"rbxthumb://type=Asset&id=88863810610980&w=768&h=768", -- Royalty Mail
+			"rbxthumb://type=Asset&id=127971383421481&w=768&h=768",
+			"rbxthumb://type=Asset&id=101846745500511&w=768&h=768",
 		},
 	},
 	ContentQuality = {

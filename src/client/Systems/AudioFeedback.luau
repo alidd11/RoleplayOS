@@ -62,11 +62,6 @@ function AudioFeedback.new(context)
 		end
 	end
 
-	local masterVolume = SoundService.Volume
-	if masterVolume and masterVolume <= 0 then
-		self.muted = true
-	end
-
 	self.soundGroup = Instance.new("SoundGroup")
 	self.soundGroup.Name = "RoleplayOS_UI"
 	self.soundGroup.Volume = 1
@@ -92,10 +87,6 @@ function AudioFeedback:_canPlay()
 		return false
 	end
 	if self.muted then
-		return false
-	end
-	local masterVolume = SoundService.Volume
-	if masterVolume and masterVolume <= 0 then
 		return false
 	end
 	return true

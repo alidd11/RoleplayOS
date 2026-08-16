@@ -31,7 +31,7 @@ local function addAsset(target: { any }, value: any)
 end
 
 function AssetPreloader:_discoverAssets()
-	local config = self.context.Configuration
+	local config = self.context.Configuration or {}
 	local critical = {}
 	local background = {}
 

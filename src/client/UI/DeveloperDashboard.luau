@@ -3,6 +3,7 @@
 local GuiService = game:GetService("GuiService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local TooltipSystem = require(script.Parent.TooltipSystem)
@@ -30,11 +31,11 @@ local App = {}
 local activeAudioFeedback: any = nil
 local activeMountGui: ScreenGui? = nil
 local COLOURS = {
-	Canvas = Color3.fromRGB(15, 20, 28),
-	Sidebar = Color3.fromRGB(18, 24, 34),
-	Surface = Color3.fromRGB(24, 31, 43),
-	SurfaceRaised = Color3.fromRGB(31, 40, 55),
-	Border = Color3.fromRGB(56, 68, 88),
+	Canvas = Color3.fromRGB(17, 22, 40),
+	Sidebar = Color3.fromRGB(19, 25, 43),
+	Surface = Color3.fromRGB(25, 32, 52),
+	SurfaceRaised = Color3.fromRGB(34, 43, 69),
+	Border = Color3.fromRGB(65, 78, 112),
 	Text = Color3.fromRGB(240, 244, 251),
 	Muted = Color3.fromRGB(174, 184, 201),
 	Accent = Color3.fromRGB(91, 156, 255),
@@ -74,12 +75,18 @@ local ROLE_TILE_ASSET_IDS = {
 	ComingSoon = "rbxassetid://101846745500511",
 }
 
-local function roleTileAssetId(role: any): string?
+local function roleTileImageUri(role: any): string?
 	local assetId = ROLE_TILE_ASSET_IDS[role.DepartmentId] or ROLE_TILE_ASSET_IDS[role.Id]
 	if not assetId then
 		return nil
 	end
-	return assetId
+	-- ImageLabels are more reliable with the rendered asset thumbnail than with
+	-- a Decal URI directly. This keeps the same approved artwork IDs while
+	-- avoiding the Studio/runtime fetch failure shown as a blank tile.
+	local numericId = string.match(assetId, "%d+")
+	return if numericId
+		then "rbxthumb://type=Asset&id=" .. numericId .. "&w=768&h=768"
+		else assetId
 end
 
 local function rolePresentation(role: any): any
@@ -487,7 +494,13 @@ function App.mount(context: any): ScreenGui
 			activeMountGui = nil
 		end
 	end)
-	local preloader = AssetPreloader.new(context)
+	local configuration = context.Configuration
+	if not configuration then
+		local roleplayOS = ReplicatedStorage:WaitForChild("RoleplayOS")
+		local configFolder = roleplayOS:WaitForChild("Config")
+		configuration = require(configFolder:WaitForChild("Config"))
+	end
+	local preloader = AssetPreloader.new({ Configuration = configuration })
 	local ModalSystem = require(script.Parent.ModalSystem)
 	local sharedModalSystem = context.Systems and context.Systems.ModalSystem
 	local modalSystem = sharedModalSystem or ModalSystem.new(context)
@@ -544,8 +557,8 @@ function App.mount(context: any): ScreenGui
 	local menuToggle = Instance.new("TextButton")
 	menuToggle.Name = "OpenMenu"
 	menuToggle.Size = UDim2.fromOffset(64, NATIVE_CONTROL_SIZE)
-	menuToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-	menuToggle.BackgroundTransparency = 0.5
+	menuToggle.BackgroundColor3 = Color3.fromRGB(27, 31, 58)
+	menuToggle.BackgroundTransparency = 0.06
 	menuToggle.BorderSizePixel = 0
 	menuToggle.AutoButtonColor = true
 	menuToggle.Text = "MENU"
@@ -561,6 +574,10 @@ function App.mount(context: any): ScreenGui
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
+	local menuToggleStroke = Instance.new("UIStroke")
+	menuToggleStroke.Color = Color3.fromRGB(96, 106, 171)
+	menuToggleStroke.Transparency = 0.32
+	menuToggleStroke.Parent = menuToggle
 	-- A dedicated non-interactive backdrop extends above the legacy GUI origin.
 	-- This keeps the visual treatment full bleed even on clients which still
 	-- apply the historical top-bar offset to an inset-free ScreenGui.
@@ -572,8 +589,9 @@ function App.mount(context: any): ScreenGui
 	bleedBackdrop.Parent = gui
 	local bleedGradient = Instance.new("UIGradient")
 	bleedGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 27, 38)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 18, 27)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 35, 70)),
+		ColorSequenceKeypoint.new(0.55, Color3.fromRGB(28, 25, 62)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 21, 42)),
 	})
 	bleedGradient.Rotation = 28
 	bleedGradient.Parent = bleedBackdrop
@@ -586,12 +604,53 @@ function App.mount(context: any): ScreenGui
 	root.Parent = gui
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 30, 42)),
-		ColorSequenceKeypoint.new(0.52, Color3.fromRGB(17, 24, 35)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(12, 18, 27)),
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(31, 48, 96)),
+		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(35, 32, 78)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 29, 58)),
 	})
 	gradient.Rotation = 28
 	gradient.Parent = root
+	-- Keep the canvas alive without turning it into a screensaver. Two oversized,
+	-- low-contrast washes drift behind the UI so the empty areas feel intentional
+	-- and the blue/purple brand treatment remains visible when artwork is sparse.
+	local ambientBlue = Instance.new("Frame")
+	ambientBlue.Name = "AmbientBlue"
+	ambientBlue.AnchorPoint = Vector2.new(0.5, 0.5)
+	ambientBlue.Position = UDim2.fromScale(0.12, 0.2)
+	ambientBlue.Size = UDim2.fromScale(0.8, 0.9)
+	ambientBlue.BackgroundColor3 = Color3.fromRGB(32, 92, 190)
+	ambientBlue.BackgroundTransparency = 0.94
+	ambientBlue.BorderSizePixel = 0
+	ambientBlue.ZIndex = -1
+	ambientBlue.Parent = root
+	local ambientBlueGradient = Instance.new("UIGradient")
+	ambientBlueGradient.Color = ColorSequence.new(Color3.fromRGB(45, 118, 235))
+	ambientBlueGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.18),
+		NumberSequenceKeypoint.new(0.6, 0.74),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	ambientBlueGradient.Rotation = 24
+	ambientBlueGradient.Parent = ambientBlue
+	local ambientPurple = Instance.new("Frame")
+	ambientPurple.Name = "AmbientPurple"
+	ambientPurple.AnchorPoint = Vector2.new(0.5, 0.5)
+	ambientPurple.Position = UDim2.fromScale(0.9, 0.78)
+	ambientPurple.Size = UDim2.fromScale(0.72, 0.82)
+	ambientPurple.BackgroundColor3 = Color3.fromRGB(126, 78, 220)
+	ambientPurple.BackgroundTransparency = 0.95
+	ambientPurple.BorderSizePixel = 0
+	ambientPurple.ZIndex = -1
+	ambientPurple.Parent = root
+	local ambientPurpleGradient = Instance.new("UIGradient")
+	ambientPurpleGradient.Color = ColorSequence.new(Color3.fromRGB(151, 94, 238))
+	ambientPurpleGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.2),
+		NumberSequenceKeypoint.new(0.62, 0.78),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	ambientPurpleGradient.Rotation = 202
+	ambientPurpleGradient.Parent = ambientPurple
 
 	local loadingOverlay = Instance.new("Frame")
 	loadingOverlay.Name = "LoadingExperience"
@@ -666,6 +725,26 @@ function App.mount(context: any): ScreenGui
 		local settings = context.Controllers.SettingsController:Get()
 		return not settings or settings.InterfaceMotion ~= false
 	end
+	task.spawn(function()
+		if not interfaceMotionEnabled() then
+			return
+		end
+		TweenService:Create(
+			gradient,
+			TweenInfo.new(18, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{ Offset = Vector2.new(0.28, 0.08) }
+		):Play()
+		TweenService:Create(
+			ambientBlue,
+			TweenInfo.new(16, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{ Position = UDim2.fromScale(0.2, 0.28) }
+		):Play()
+		TweenService:Create(
+			ambientPurple,
+			TweenInfo.new(20, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+			{ Position = UDim2.fromScale(0.78, 0.68) }
+		):Play()
+	end)
 
 	local function updateLoadingStatus(progress: number)
 		local statusText = if progress < 0.2
@@ -842,8 +921,8 @@ function App.mount(context: any): ScreenGui
 	local bottomDock = Instance.new("Frame")
 	bottomDock.Name = "BottomNavigation"
 	bottomDock.AnchorPoint = Vector2.new(0.5, 1)
-	bottomDock.BackgroundColor3 = Color3.fromRGB(12, 16, 24)
-	bottomDock.BackgroundTransparency = 0.04
+	bottomDock.BackgroundColor3 = Color3.fromRGB(20, 25, 49)
+	bottomDock.BackgroundTransparency = 0.08
 	bottomDock.BorderSizePixel = 0
 	bottomDock.ZIndex = 20
 	bottomDock.Parent = root
@@ -936,6 +1015,10 @@ function App.mount(context: any): ScreenGui
 	-- sends and nothing read. Without it a returning player picks the same
 	-- character again on every join before they can do anything else.
 	local selectedCharacterId: string? = nil
+	-- Civilian is the only team with character creation. Other teams use the
+	-- player's existing character and change uniform/loadout through locker-room
+	-- clickers, so their team selection should never open the character editor.
+	local selectedTeamId: string? = nil
 	-- The menu gates only the first entry. Once the server has accepted a
 	-- character or duty entry, a refreshed menu snapshot must not trap the player.
 	local hasEnteredWorld = false
@@ -1017,12 +1100,12 @@ function App.mount(context: any): ScreenGui
 		errorLabel.Size = UDim2.new(1, 0, 0, 28)
 		errorLabel.TextWrapped = true
 		modalSystem:Open({
-			Title = "Create a character",
+			Title = "Create Civilian Character",
 			Body = form,
 			Actions = {
 				{ Label = "Cancel", Primary = false, Callback = function() end },
 				{
-					Label = "Create character",
+					Label = "Create civilian character",
 					Primary = true,
 					Callback = function()
 						local response = context.Controllers.CharacterController:Create({
@@ -1131,6 +1214,7 @@ function App.mount(context: any): ScreenGui
 		})
 	end
 
+	local renderPlay: () -> ()
 	local function activateRole(role: any)
 		if role.Locked then
 			if role.Action == "PromptGamepass" then
@@ -1166,6 +1250,12 @@ function App.mount(context: any): ScreenGui
 			end
 			return
 		end
+		if role.Id == "Civilian" or role.DepartmentId == "Civilian" then
+			selectedTeamId = "Civilian"
+			renderPlay()
+			scroll.CanvasPosition = Vector2.zero
+			return
+		end
 		if not role.DepartmentId then
 			context.Controllers.NotificationController:Show(
 				"Select Civilian from the Play screen.",
@@ -1193,10 +1283,10 @@ function App.mount(context: any): ScreenGui
 			end
 			return
 		end
+		selectedTeamId = role.DepartmentId or role.Id
 		showDutySelection(role, dutyProfile)
 	end
 
-	local renderPlay: () -> ()
 	local renderCommunity: () -> ()
 	local renderCareers: () -> ()
 	local renderJobs: () -> ()
@@ -1315,7 +1405,9 @@ function App.mount(context: any): ScreenGui
 		renderGeneration += 1
 		clear(scroll)
 		pageTitle.Text = "Play"
-		pageDescription.Text = "Choose who you want to be today."
+		pageDescription.Text = if selectedTeamId == "Civilian"
+			then "Create or choose a civilian character, then enter the city."
+			else "Choose a service or step into civilian life."
 		-- Do not render the old role/job layout while the server payload is still
 		-- arriving. A single explicit loading state prevents the first-frame flash
 		-- that made the retired UX appear to be active.
@@ -1330,24 +1422,48 @@ function App.mount(context: any): ScreenGui
 			return
 		end
 		local availableRoles = {}
+		local civilianRoles = {}
+		local serviceRoles = {}
 		for _, role in menuData.Roles or {} do
-			if role.Visible then
-				table.insert(availableRoles, role)
+			if
+				role.Visible
+				and (
+					selectedTeamId == nil
+					or role.Id == selectedTeamId
+					or role.DepartmentId == selectedTeamId
+				)
+			then
+				if role.Id == "Civilian" or role.DepartmentId == "Civilian" then
+					table.insert(civilianRoles, role)
+				else
+					table.insert(serviceRoles, role)
+				end
 			end
 		end
-		sectionHeading("Start playing", "Choose a service or step into civilian life.")
+		for _, role in civilianRoles do
+			table.insert(availableRoles, role)
+		end
+		for _, role in serviceRoles do
+			table.insert(availableRoles, role)
+		end
+		sectionHeading(
+			if selectedTeamId == "Civilian" then "Civilian" else "Start playing",
+			if selectedTeamId == "Civilian"
+				then "Your character and civilian identity."
+				else "Choose a service or step into civilian life."
+		)
 		if #availableRoles > 0 then
 			-- Match the old Portsmouth Play screen: portrait tiles with artwork,
 			-- a dark lower label band and a large, consistent visual rhythm.
 			local roleWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
 			local roleColumns = if shortLandscape()
-				then 6
+				then 5
 				else if roleWidth >= 1100
-					then 6
+					then 5
 					else if roleWidth >= 900
 						then 4
 						else portraitCardColumns()
-			local roleTileHeight = if shortLandscape() then 270 else if roleWidth >= 1100 then 500 else 420
+			local roleTileHeight = if shortLandscape() then 240 else if roleWidth >= 1100 then 340 else 380
 			local roleGrid = tileGrid(scroll, #availableRoles, roleTileHeight, roleColumns)
 			-- Characters are the first decision on Play. Keep the role posters below
 			-- them so a new player never has to scroll past every department to create
@@ -1360,11 +1476,11 @@ function App.mount(context: any): ScreenGui
 				roleTile.ClipsDescendants = true
 				local artwork = Instance.new("ImageLabel")
 				artwork.Name = "RoleArtwork"
-				artwork.BackgroundColor3 = Color3.fromRGB(20, 25, 34)
+				artwork.BackgroundColor3 = Color3.fromRGB(28, 38, 68)
 				artwork.BorderSizePixel = 0
 				artwork.Position = UDim2.fromOffset(8, 8)
 				artwork.Size = UDim2.new(1, -16, 1, -16)
-				artwork.Image = roleTileAssetId(role) or ""
+				artwork.Image = roleTileImageUri(role) or ""
 				artwork.ImageColor3 = Color3.new(1, 1, 1)
 				artwork.ScaleType = Enum.ScaleType.Crop
 				artwork.ZIndex = 3
@@ -1372,8 +1488,8 @@ function App.mount(context: any): ScreenGui
 				corner(artwork, 10)
 				local artworkShade = Instance.new("Frame")
 				artworkShade.Name = "ArtworkShade"
-				artworkShade.BackgroundColor3 = Color3.fromRGB(5, 8, 13)
-				artworkShade.BackgroundTransparency = 0.18
+				artworkShade.BackgroundColor3 = Color3.fromRGB(10, 16, 34)
+				artworkShade.BackgroundTransparency = 0.36
 				artworkShade.BorderSizePixel = 0
 				artworkShade.Position = artwork.Position
 				artworkShade.Size = artwork.Size
@@ -1381,7 +1497,7 @@ function App.mount(context: any): ScreenGui
 				artworkShade.Parent = roleTile
 				corner(artworkShade, 10)
 				local shadeGradient = Instance.new("UIGradient")
-				shadeGradient.Color = ColorSequence.new(Color3.fromRGB(5, 8, 13))
+				shadeGradient.Color = ColorSequence.new(Color3.fromRGB(8, 14, 32))
 				shadeGradient.Transparency = NumberSequence.new({
 					NumberSequenceKeypoint.new(0, 0.95),
 					NumberSequenceKeypoint.new(0.58, 0.7),
@@ -1391,28 +1507,34 @@ function App.mount(context: any): ScreenGui
 				shadeGradient.Parent = artworkShade
 				local footer = Instance.new("Frame")
 				footer.Name = "RoleFooter"
-				footer.BackgroundColor3 = Color3.fromRGB(5, 8, 13)
-				footer.BackgroundTransparency = 0.04
+				footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
+				footer.BackgroundTransparency = 0.12
 				footer.BorderSizePixel = 0
 				footer.Position = UDim2.new(0, 8, 1, -92)
 				footer.Size = UDim2.new(1, -16, 0, 84)
 				footer.ZIndex = 10
 				footer.Parent = roleTile
 				corner(footer, 10)
-				local category = text(footer, presentation.Label, 12, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(12, 7)
-				category.Size = UDim2.new(1, -24, 0, 18)
-				category.ZIndex = 11
+				local isCivilianRole = role.Id == "Civilian" or role.DepartmentId == "Civilian"
+				local actionWidth = if isCivilianRole then 116 else 92
 				local roleName = text(footer, role.Name, 20, COLOURS.Text, true)
-				roleName.Position = UDim2.fromOffset(12, 27)
-				roleName.Size = UDim2.new(1, -120, 0, 28)
+				roleName.Position = UDim2.fromOffset(12, 18)
+				roleName.Size = UDim2.new(1, -(actionWidth + 30), 0, 34)
 				roleName.TextTruncate = Enum.TextTruncate.AtEnd
 				roleName.ZIndex = 11
-				local open = button(footer, if role.Locked then "REQUIREMENTS" else "JOIN", false)
+				local open = button(
+					footer,
+					if role.Locked
+						then "REQUIREMENTS"
+						elseif isCivilianRole
+						then "CREATE / JOIN"
+						else "JOIN",
+					false
+				)
 				open.ZIndex = 12
 				open.AnchorPoint = Vector2.new(1, 1)
 				open.Position = UDim2.new(1, -10, 1, -10)
-				open.Size = UDim2.fromOffset(92, 34)
+				open.Size = UDim2.fromOffset(actionWidth, 34)
 				open.TextSize = 12
 				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
 				local openStroke = open:FindFirstChildOfClass("UIStroke")
@@ -1422,8 +1544,13 @@ function App.mount(context: any): ScreenGui
 				end)
 			end
 		end
-		-- The cards already establish this section visually. Removing the repeated
-		-- heading gives the compact single-page picker more room above the fold.
+		if selectedTeamId ~= "Civilian" then
+			return
+		end
+		sectionHeading(
+			"Civilian characters",
+			"Create your civilian identity here. Team uniforms are selected separately in locker rooms."
+		)
 		local landscape = shortLandscape()
 		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
 		local compactEmptyCard = compactViewport.X < 1000 or compactViewport.Y < 500
@@ -2971,7 +3098,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 78 else if compactLandscape then 68 else 58)
+				+ (if narrow then 54 else if compactLandscape then 44 else 38)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -3082,7 +3209,10 @@ function App.mount(context: any): ScreenGui
 			local available = layout.Viewport.X - marginLeft - marginRight
 			local dockHeight = if narrow then 62 else 76
 			bottomDock.Visible = true
-			announcement.Visible = true
+			-- The rotating tip was creating a second header row on desktop. Keep the
+			-- menu control in Roblox's top band and let the page content start directly
+			-- beneath it; guidance remains available in Help.
+			announcement.Visible = false
 			bottomDock.Position = UDim2.new(0.5, 0, 1, -(layout.SafeBottom + 14))
 			bottomDock.Size = UDim2.new(1, -(marginLeft + marginRight), 0, dockHeight)
 			bottomDockPadding.PaddingLeft = UDim.new(0, if narrow then 5 else 8)
@@ -3092,7 +3222,7 @@ function App.mount(context: any): ScreenGui
 			for _, item in bottomNavItems do
 				item.TextSize = if narrow then 12 else 14
 			end
-			announcement.Position = UDim2.new(0.5, 0, 0, safeTop + if narrow then 18 else 20)
+			announcement.Position = UDim2.new(0.5, 0, 0, safeTop + 2)
 			announcement.Size = UDim2.fromOffset(if narrow then 260 else 420, 28)
 			pageTitle.Visible = false
 			pageDescription.Visible = false
