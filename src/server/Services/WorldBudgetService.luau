@@ -187,7 +187,7 @@ function WorldBudgetService:_reportStreaming()
 		return Workspace.StreamingIntegrityMode.Name
 	end)
 	record("ModelBehaviour", function()
-		return Workspace.ModelStreamingBehavior.Name
+		return Workspace.ModelStreamingMode.Name
 	end)
 	local enabledOk, enabled = pcall(function()
 		return Workspace.StreamingEnabled

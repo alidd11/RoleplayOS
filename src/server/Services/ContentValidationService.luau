@@ -50,6 +50,52 @@ local function relativePath(root: Instance, descendant: Instance): { string }?
 	return path
 end
 
+local function samePath(left: { string }?, right: any): boolean
+	if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then
+		return false
+	end
+	for index, segment in left do
+		if right[index] ~= segment then
+			return false
+		end
+	end
+	return true
+end
+
+-- Whether one executable descendant is accounted for by the manifest.
+--
+-- A specification is either a single {ClassName, Path} entry or a list of them
+-- sharing one name. The list form exists because imported content repeats names
+-- constantly: a single vehicle carries a `LED Handler` under Left, Right and
+-- both wheel stands, and a `Control` under every individual lamp. Keyed by name
+-- alone only one of those could ever be described, so an asset whose every
+-- script was genuinely accounted for still reported the second duplicate as
+-- unsafe and could never be certified at all -- which is why no vehicle in this
+-- place has a manifest today.
+--
+-- Class and full root-relative path are still both required for every entry, so
+-- this widens what can be described without widening what is accepted: a script
+-- appearing at a path nobody recorded is still rejected.
+local function certifiedBy(specification: any, descendant: Instance, path: { string }?): boolean
+	if type(specification) ~= "table" then
+		return false
+	end
+	if specification.ClassName ~= nil then
+		return specification.ClassName == descendant.ClassName
+			and samePath(path, specification.Path)
+	end
+	for _, entry in ipairs(specification) do
+		if
+			type(entry) == "table"
+			and entry.ClassName == descendant.ClassName
+			and samePath(path, entry.Path)
+		then
+			return true
+		end
+	end
+	return false
+end
+
 local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 	for _, descendant in root:GetDescendants() do
 		if forbiddenClasses[descendant.ClassName] or descendant:IsA("LuaSourceContainer") then
@@ -57,24 +103,7 @@ local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 			-- logic. Both identity and class and the exact root-relative ancestry
 			-- must match; similarly named arbitrary scripts or remotes remain unsafe.
 			local specification = type(allowed) == "table" and allowed[descendant.Name]
-			local descendantPath = relativePath(root, descendant)
-			local expectedPath = type(specification) == "table" and specification.Path
-			local pathMatches = type(descendantPath) == "table"
-				and type(expectedPath) == "table"
-				and #descendantPath == #expectedPath
-			if pathMatches then
-				for index, segment in descendantPath do
-					if expectedPath[index] ~= segment then
-						pathMatches = false
-						break
-					end
-				end
-			end
-			if
-				type(specification) ~= "table"
-				or specification.ClassName ~= descendant.ClassName
-				or not pathMatches
-			then
+			if not certifiedBy(specification, descendant, relativePath(root, descendant)) then
 				return descendant
 			end
 		end
