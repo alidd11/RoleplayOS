@@ -3049,6 +3049,9 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local playNav = addNav("Play", renderPlay)
+	-- Jobs sits beside Play because it is somewhere to go and be, not something
+	-- to buy. Without it the taxi shift has no entry point anywhere in the client.
+	addNav("Jobs", renderJobs)
 	addNav("Store", renderStore)
 	addNav("Servers", renderCommunity)
 	addNav("Help", renderTutorials)
@@ -3075,7 +3078,7 @@ function App.mount(context: any): ScreenGui
 	-- Play is the single role-selection route. The dock only exposes the four
 	-- destinations players need during a session; departments are filtered and
 	-- joined from the Play screen itself.
-	local bottomNavCount = 4
+	local bottomNavCount = 5
 	selectBottomNav = function(key: string)
 		local item = bottomNavItems[key]
 		local render = bottomNavRenders[key]
@@ -3122,6 +3125,7 @@ function App.mount(context: any): ScreenGui
 	-- desktop fallback sidebar, so changing page selection never leaves one of
 	-- them highlighting a different destination.
 	addBottomNav("Play", renderPlay, "Play")
+	addBottomNav("Jobs", renderJobs, "Jobs")
 	addBottomNav("Store", renderStore, "Store")
 	addBottomNav("Servers", renderCommunity, "Servers")
 	addBottomNav("Help", renderTutorials, "Help")
