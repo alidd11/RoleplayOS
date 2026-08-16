@@ -1085,7 +1085,8 @@ function App.mount(context: any): ScreenGui
 		creationFlow.Parent = form
 		local copy = text(
 			form,
-			"Build a civilian identity. Your current Roblox avatar is saved as the starting outfit; update it later with Save current outfit.",
+			"Name your civilian and set a date of birth. You choose how they look next, "
+				.. "and that look is set once.",
 			13,
 			COLOURS.Muted
 		)
@@ -1725,13 +1726,19 @@ function App.mount(context: any): ScreenGui
 				then
 					choose.Position = UDim2.new(0, textLeft, 1, -12)
 					choose.Size = UDim2.new(1, textInset, 0, if landscape then 30 else 36)
-					local saveOutfit = button(item, "Save current outfit", false)
+					local saveOutfit = button(item, "Save outfit", false)
 					saveOutfit.AnchorPoint = Vector2.new(0, 1)
 					-- Sat at the same height as the date of birth and the identity line
 					-- and drew straight over them, slicing "Born" in half. It stacks above
 					-- the choose button now, in space the text no longer claims.
-					saveOutfit.Position = UDim2.new(0, textLeft, 1, if landscape then -46 else -56)
-					saveOutfit.Size = UDim2.new(1, textInset, 0, if landscape then 28 else 30)
+					-- Two actions share this row: keep the Roblox outfit, or author one in
+					-- the creator. Stacking them would push the row into the date of birth
+					-- on a phone held sideways, so they sit side by side instead.
+					local actionRow = if landscape then -46 else -56
+					local actionHeight = if landscape then 28 else 30
+					local actionSize = UDim2.new(0.5, textInset / 2 - 4, 0, actionHeight)
+					saveOutfit.Position = UDim2.new(0, textLeft, 1, actionRow)
+					saveOutfit.Size = actionSize
 					saveOutfit.TextSize = 11
 					saveOutfit.Activated:Connect(function()
 						saveOutfit.Text = "Saving…"
@@ -1746,7 +1753,58 @@ function App.mount(context: any): ScreenGui
 							)
 							context.Controllers.StartMenuController:Refresh()
 						else
-							saveOutfit.Text = "Save current outfit"
+							saveOutfit.Text = "Save outfit"
+							if audioFeedback then
+								audioFeedback:Error()
+							end
+						end
+					end)
+					local editLook = button(item, "Edit look", false)
+					editLook.AnchorPoint = Vector2.new(0, 1)
+					editLook.Position = UDim2.new(0.5, textLeft + textInset / 2 + 4, 1, actionRow)
+					editLook.Size = actionSize
+					editLook.TextSize = 11
+					editLook.Activated:Connect(function()
+						editLook.Text = "Checking\u{2026}"
+						local state = context.Controllers.CharacterController:AppearanceEditState(
+							character.CharacterId
+						)
+						editLook.Text = "Edit look"
+						if not state.Success then
+							if audioFeedback then
+								audioFeedback:Error()
+							end
+							return
+						end
+						local editState = state.Data or {}
+						if editState.CanEdit then
+							characterCreator:Open(character.CharacterId, function()
+								context.Controllers.StartMenuController:Refresh()
+							end, editState)
+							return
+						end
+						-- Locked with no edit in hand. The product is the only way back in,
+						-- so offer it rather than reporting a dead end the player cannot act on.
+						local product = nil
+						for _, pass in menuData and menuData.Gamepasses or {} do
+							if
+								pass.Id == "CharacterAppearanceEdit"
+								and pass.PurchaseType == "DeveloperProduct"
+							then
+								product = pass
+								break
+							end
+						end
+						if product and product.ProductId then
+							MarketplaceService:PromptProductPurchase(
+								Players.LocalPlayer,
+								product.ProductId
+							)
+						else
+							context.Controllers.NotificationController:Show(
+								"Appearance edits are not on sale on this server yet.",
+								"Edit unavailable"
+							)
 							if audioFeedback then
 								audioFeedback:Error()
 							end

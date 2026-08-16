@@ -316,10 +316,11 @@ function CharacterCreator:_buildSlider(parent: Instance, definition: any)
 end
 
 -- Opens the creator. `onFinished(saved)` is called once, whichever way it closes.
-function CharacterCreator:Open(characterId: string, onFinished: ((boolean) -> ())?)
+function CharacterCreator:Open(characterId: string, onFinished: ((boolean) -> ())?, editState: any?)
 	self:Close()
 	self.characterId = characterId
 	self.onFinished = onFinished
+	self.editState = editState
 	self.draft = {}
 
 	local gui = Instance.new("ScreenGui")
@@ -351,8 +352,13 @@ function CharacterCreator:Open(characterId: string, onFinished: ((boolean) -> ()
 	title.Position = UDim2.fromOffset(20, 0)
 	title.Size = UDim2.new(1, -240, 1, 0)
 
-	local hint =
-		label(header, "Choose how this character looks. This is set once.", 11, COLOURS.Muted)
+	-- A first look is free and final; a later one is bought. Saying which applies
+	-- before anything is chosen matters, because the save is what spends the edit
+	-- and by then the player has already done the work.
+	local hintCopy = if editState and editState.CostsCredit
+		then "Editing this look will use one of your appearance edits when you save."
+		else "Choose how this character looks. This is set once."
+	local hint = label(header, hintCopy, 11, COLOURS.Muted)
 	hint.Position = UDim2.fromOffset(20, 26)
 	hint.Size = UDim2.new(1, -240, 0, 14)
 	self.hint = hint
