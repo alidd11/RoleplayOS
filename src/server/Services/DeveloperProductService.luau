@@ -43,10 +43,25 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 	local consumables = session.Profile.Consumables
 	local processed = consumables.ProcessedDeveloperReceipts
 	if processed[receiptId] == nil then
-		if definition.GrantType == "ExtraCharacterSlot" then
+		-- Both of these grant a counted consumable by the same rules: add, persist,
+		-- and roll the balance back untouched if the save fails, so a receipt is
+		-- never marked processed against a grant that did not reach the store.
+		local COUNTED_GRANTS = {
+			ExtraCharacterSlot = {
+				Field = "ExtraCharacterSlots",
+				Action = "DeveloperProduct.ExtraCharacterSlotGranted",
+			},
+			CharacterAppearanceEdit = {
+				Field = "AppearanceEdits",
+				Action = "DeveloperProduct.CharacterAppearanceEditGranted",
+			},
+		}
+		local counted = COUNTED_GRANTS[definition.GrantType]
+		if counted then
+			local field = counted.Field
 			local amount = math.max(1, math.floor(tonumber(definition.Amount) or 1))
-			local previousSlots = math.max(0, math.floor(tonumber(consumables.ExtraCharacterSlots) or 0))
-			consumables.ExtraCharacterSlots = previousSlots + amount
+			local previous = math.max(0, math.floor(tonumber(consumables[field]) or 0))
+			consumables[field] = previous + amount
 			processed[receiptId] = {
 				ProductId = receipt.ProductId,
 				GrantType = definition.GrantType,
@@ -56,7 +71,7 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 			dataService:MarkDirty(player)
 			local saved, reason = dataService:Save(player)
 			if not saved then
-				consumables.ExtraCharacterSlots = previousSlots
+				consumables[field] = previous
 				processed[receiptId] = nil
 				dataService:MarkDirty(player)
 				self.context.Logger:Error("Developer product grant could not be persisted", {
@@ -68,7 +83,7 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 			end
 			self.context.Services:Get("AuditService"):Record({
 				ActorUserId = player.UserId,
-				Action = "DeveloperProduct.ExtraCharacterSlotGranted",
+				Action = counted.Action,
 				Target = tostring(player.UserId),
 				Metadata = { ProductId = receipt.ProductId, Amount = amount },
 			})

@@ -4,11 +4,11 @@ local SettingsValidator = require(script.Parent.SettingsValidator)
 local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 11
+ProfileSchema.CURRENT_VERSION = 12
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 11,
+		SchemaVersion = 12,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -29,6 +29,7 @@ function ProfileSchema.default(userId: number): any
 		Consumables = {
 			EarlyReleaseCredits = 0,
 			ExtraCharacterSlots = 0,
+			AppearanceEdits = 0,
 			ProcessedDeveloperReceipts = {},
 		},
 		AuditMetadata = {},
@@ -198,6 +199,30 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 			consumables.ProcessedDeveloperReceipts = {}
 		end
 		data.SchemaVersion = 11
+	end
+	if data.SchemaVersion == 11 then
+		-- Appearance is authored once when a character is created and then fixed.
+		-- Reopening the editor is a purchase, so the right to do it is counted
+		-- here alongside the other consumables.
+		local consumables = data.Consumables
+		if type(consumables) ~= "table" then
+			consumables = {}
+			data.Consumables = consumables
+		end
+		consumables.AppearanceEdits =
+			math.max(0, math.floor(tonumber(consumables.AppearanceEdits) or 0))
+		-- Characters that already existed were built before the editor did, so
+		-- their look was captured from the player's Roblox avatar rather than
+		-- authored. Leaving them unlocked lets each set an appearance once
+		-- without paying for an edit they were never offered.
+		if type(data.Characters) == "table" then
+			for _, character in data.Characters do
+				if type(character) == "table" and character.AppearanceLocked == nil then
+					character.AppearanceLocked = false
+				end
+			end
+		end
+		data.SchemaVersion = 12
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))

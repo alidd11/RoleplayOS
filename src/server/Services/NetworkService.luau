@@ -478,6 +478,50 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("GetAppearanceEditState", function(payload)
+		return type(payload) == "table" and type(payload.CharacterId) == "string"
+	end, function(player, payload, requestId)
+		local state, reason = self.context.Services
+			:Get("CharacterService")
+			:AppearanceEditState(player, payload.CharacterId)
+		return {
+			Success = state ~= nil,
+			Code = if state then "OK" else reason,
+			Message = if state then "" else "That character could not be found.",
+			Data = state,
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("SetAuthoredAppearance", function(payload)
+		return type(payload) == "table"
+			and type(payload.CharacterId) == "string"
+			and type(payload.Appearance) == "table"
+	end, function(player, payload, requestId)
+		local saved, reason =
+			self.context.Services
+				:Get("CharacterService")
+				:SetAuthoredAppearance(player, payload.CharacterId, payload.Appearance)
+		local messages = {
+			CHARACTER_NOT_OWNED = "That character could not be found.",
+			CHARACTER_NOT_ACTIVE = "Select this character before changing how it looks.",
+			CIVILIAN_REQUIRED = "Change a character's appearance while off duty as a civilian.",
+			CHARACTER_UNAVAILABLE = "Your character is not ready yet.",
+			APPEARANCE_EDIT_REQUIRED = "This character's look is already set. "
+				.. "Buy a Change Character Appearance to edit it again.",
+			INVALID_APPEARANCE = "That appearance could not be read.",
+			INVALID_APPEARANCE_ASSET = "One of those items could not be used.",
+			INVALID_APPEARANCE_SCALE = "That body size is outside what is allowed.",
+			INVALID_APPEARANCE_COLOUR = "That skin colour could not be read.",
+		}
+		return {
+			Success = saved,
+			Code = if saved then "OK" else reason,
+			Message = if saved
+				then "Appearance saved."
+				else (reason and messages[reason]) or "The appearance could not be saved.",
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SubmitApplication", function(payload)
 		return type(payload) == "table" and type(payload.FormId) == "string" and type(
 			payload.Answers

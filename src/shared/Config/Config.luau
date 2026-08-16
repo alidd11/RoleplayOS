@@ -753,6 +753,19 @@ local Config = {
 			Description = "Permanently unlock one additional civilian identity.",
 			PriceRobux = 199,
 		},
+		-- A character's appearance is authored once, when it is created, and then
+		-- fixed. This buys the right to reopen the editor for one character and
+		-- change it again, which is why it is a consumable rather than a pass:
+		-- each purchase is one edit.
+		CharacterAppearanceEdit = {
+			Id = "CharacterAppearanceEdit",
+			ProductId = 0,
+			GrantType = "CharacterAppearanceEdit",
+			Amount = 1,
+			Name = "Change Character Appearance",
+			Description = "Reopen the appearance editor for one existing character.",
+			PriceRobux = 79,
+		},
 	},
 	Custody = {
 		BookingDeskTag = "RoleplayOSCustodyDesk",
@@ -2146,6 +2159,12 @@ local Config = {
 			CreateCharacter = { Capacity = 2, RefillPerSecond = 0.1 },
 			SelectCharacter = { Capacity = 3, RefillPerSecond = 0.5 },
 			SaveCivilianAppearance = { Capacity = 2, RefillPerSecond = 0.1 },
+			-- Read only and cheap, so the menu can ask whenever it repaints.
+			GetAppearanceEditState = { Capacity = 6, RefillPerSecond = 1 },
+			-- Writing an appearance ends the edit and may spend a purchase, so it
+			-- is deliberately slow: a player has no legitimate reason to submit
+			-- more than a couple in a row.
+			SetAuthoredAppearance = { Capacity = 2, RefillPerSecond = 0.1 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },

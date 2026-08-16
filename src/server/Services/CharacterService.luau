@@ -7,9 +7,14 @@ local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = { Critical = true }
 
--- Only values read from a server-owned HumanoidDescription are persisted. The
--- client never submits catalogue IDs, which keeps civilian outfit changes
--- editable without turning the endpoint into an asset injection surface.
+-- What SaveCurrentAppearance reads back off a server-owned HumanoidDescription.
+--
+-- This list used to be the whole story, and the note here said the client never
+-- submits catalogue ids. That stopped being true when the in-game creator was
+-- added: authoring an appearance necessarily means the client choosing items and
+-- sending them. The endpoint that accepts them is guarded by
+-- sanitiseAuthoredAppearance below, which is now the asset injection boundary
+-- this comment used to describe.
 local APPEARANCE_PROPERTIES = {
 	"BackAccessory",
 	"BodyTypeScale",
@@ -76,6 +81,122 @@ local COLOUR_FALLBACK_SOURCES: { [string]: string } = {
 	RightLegColor = "RightLegColor3",
 	TorsoColor = "TorsoColor3",
 }
+
+-- Scales the editor may set, and the range each is allowed to take.
+--
+-- Roblox clamps these itself, but only after the value has been written. Bounding
+-- them here means a payload asking for a head twenty times the normal size is
+-- refused outright rather than silently squashed into something legal, which
+-- keeps what is stored the same as what was asked for.
+local APPEARANCE_SCALE_BOUNDS: { [string]: { number } } = {
+	BodyTypeScale = { 0, 1 },
+	DepthScale = { 0.9, 1.1 },
+	HeadScale = { 0.95, 1.05 },
+	HeightScale = { 0.9, 1.05 },
+	ProportionScale = { 0, 1 },
+	WidthScale = { 0.7, 1 },
+}
+
+-- Everything a client is allowed to send when authoring an appearance.
+--
+-- Anything absent from here is dropped rather than rejected, so a payload with
+-- an unexpected extra field still succeeds minus that field. The asset entries
+-- are catalog ids, which Roblox moderates and resolves itself; what matters is
+-- that they are plausible ids in the right field rather than arbitrary values,
+-- and that the set of writable fields cannot grow from the client side.
+local AUTHORED_ASSET_FIELDS = {
+	"BackAccessory",
+	"Face",
+	"FaceAccessory",
+	"FrontAccessory",
+	"GraphicTShirt",
+	"HairAccessory",
+	"HatAccessory",
+	"Head",
+	"LeftArm",
+	"LeftLeg",
+	"NeckAccessory",
+	"Pants",
+	"RightArm",
+	"RightLeg",
+	"Shirt",
+	"ShoulderAccessory",
+	"Torso",
+	"WaistAccessory",
+}
+
+-- Accessory fields accept several ids at once, comma separated. Each is checked
+-- individually so one malformed entry cannot smuggle anything past the rest.
+local function sanitiseAssetList(value: any): string?
+	if type(value) == "number" then
+		value = tostring(math.floor(value))
+	end
+	if type(value) ~= "string" then
+		return nil
+	end
+	local ids = {}
+	for piece in string.gmatch(value, "[^,]+") do
+		local trimmed = string.match(piece, "^%s*(.-)%s*$") or ""
+		local id = tonumber(trimmed)
+		if not id or id < 0 or id ~= math.floor(id) or id > 1e15 then
+			return nil
+		end
+		if id > 0 then
+			table.insert(ids, tostring(math.floor(id)))
+		end
+		if #ids > 12 then
+			return nil
+		end
+	end
+	return table.concat(ids, ",")
+end
+
+-- Reduces a client payload to something safe to apply.
+--
+-- The editor runs on the client, so this is the boundary: everything below is
+-- treated as hostile until it has been through here. Returns nil with a reason
+-- rather than quietly correcting, because an appearance that is not what the
+-- player built is worse than one that is refused.
+local function sanitiseAuthoredAppearance(payload: any): ({ [string]: any }?, string?)
+	if type(payload) ~= "table" then
+		return nil, "INVALID_APPEARANCE"
+	end
+	local appearance: { [string]: any } = {}
+	for _, field in AUTHORED_ASSET_FIELDS do
+		local value = payload[field]
+		if value ~= nil then
+			local cleaned = sanitiseAssetList(value)
+			if not cleaned then
+				return nil, "INVALID_APPEARANCE_ASSET"
+			end
+			if cleaned ~= "" then
+				appearance[field] = cleaned
+			end
+		end
+	end
+	for field, bounds in APPEARANCE_SCALE_BOUNDS do
+		local value = tonumber(payload[field])
+		if value ~= nil then
+			if value ~= value or value < bounds[1] or value > bounds[2] then
+				return nil, "INVALID_APPEARANCE_SCALE"
+			end
+			appearance[field] = value
+		end
+	end
+	for _, field in APPEARANCE_COLOUR_PROPERTIES do
+		local value = payload[field]
+		if value ~= nil then
+			if type(value) ~= "string" or not string.match(value, "^%x%x%x%x%x%x$") then
+				return nil, "INVALID_APPEARANCE_COLOUR"
+			end
+			appearance[field] = string.lower(value)
+		end
+	end
+	if next(appearance) == nil then
+		return nil, "INVALID_APPEARANCE"
+	end
+	return appearance, nil
+end
 
 local function captureAppearance(character: Model): ({ [string]: any }?, string?)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -243,6 +364,10 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 		-- Capture the player's current Roblox avatar at creation time so the new
 		-- identity starts personalised instead of falling back to a blank outfit.
 		Appearance = startingAppearance,
+		-- Authored once, then fixed. The creator opens while this is false and
+		-- closes by setting it, so a character's look is a decision rather than
+		-- something quietly rewritten later. Reopening it costs an edit.
+		AppearanceLocked = false,
 		Economy = {
 			Balance = self.context.Configuration.Economy.StartingBankBalance,
 			Cash = self.context.Configuration.Economy.StartingCashBalance,
@@ -417,5 +542,95 @@ function CharacterService:Delete(
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return true, nil
 end
+-- Whether the appearance editor may be opened for this character, and at what
+-- cost. Read only, so the menu can show the right button without spending
+-- anything to find out.
+--
+-- A character created before the editor existed had its look captured from the
+-- player's Roblox avatar rather than authored, so it is treated as unlocked:
+-- the owner gets the one free authoring pass everybody else got at creation.
+function CharacterService:AppearanceEditState(player: Player, characterId: string): (any?, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not session or not character then
+		return nil, "CHARACTER_NOT_OWNED"
+	end
+	local credits =
+		math.max(0, math.floor(tonumber(session.Profile.Consumables.AppearanceEdits) or 0))
+	local locked = character.AppearanceLocked == true
+	return {
+		CharacterId = characterId,
+		Locked = locked,
+		EditCredits = credits,
+		-- Free while the character has never been authored, otherwise only with a
+		-- credit in hand.
+		CanEdit = not locked or credits > 0,
+		CostsCredit = locked,
+	},
+		nil
+end
+
+-- Writes an authored appearance and closes the editor for this character.
+--
+-- The credit is taken only once the write has actually persisted. Deducting
+-- first and saving afterwards would charge a player whose save then failed, and
+-- this is a purchase, so it has to fail closed in their favour rather than ours.
+function CharacterService:SetAuthoredAppearance(
+	player: Player,
+	characterId: string,
+	appearance: any
+): (boolean, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not session or not character then
+		return false, "CHARACTER_NOT_OWNED"
+	end
+	if session.ActiveCharacterId ~= characterId then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if
+		self.context.Services:Get("DutyService"):Get(player)
+		or not player.Team
+		or player.Team.Name ~= "Civilian"
+	then
+		return false, "CIVILIAN_REQUIRED"
+	end
+	local sanitised, reason = sanitiseAuthoredAppearance(appearance)
+	if not sanitised then
+		return false, reason
+	end
+	local locked = character.AppearanceLocked == true
+	local credits =
+		math.max(0, math.floor(tonumber(session.Profile.Consumables.AppearanceEdits) or 0))
+	if locked and credits <= 0 then
+		return false, "APPEARANCE_EDIT_REQUIRED"
+	end
+	local runtimeCharacter = player.Character
+	if not runtimeCharacter then
+		return false, "CHARACTER_UNAVAILABLE"
+	end
+	local applied, applyReason = applyAppearance(runtimeCharacter, sanitised)
+	if not applied then
+		return false, applyReason
+	end
+	-- Store what the body ended up wearing rather than what was asked for, so the
+	-- record matches the result after Roblox has resolved and conformed it.
+	local captured = captureAppearance(runtimeCharacter) or sanitised
+	character.Appearance = captured
+	character.AppearanceLocked = true
+	if locked then
+		session.Profile.Consumables.AppearanceEdits = credits - 1
+	end
+	runtimeCharacter:SetAttribute("RoleplayOSCivilianAppearance", true)
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = if locked then "Character.AppearanceReedited" else "Character.AppearanceAuthored",
+		Target = characterId,
+		Metadata = { SpentCredit = locked },
+	})
+	return true, nil
+end
+
 function CharacterService:Destroy() end
 return CharacterService
