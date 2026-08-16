@@ -84,9 +84,7 @@ local function roleTileImageUri(role: any): string?
 	-- a Decal URI directly. This keeps the same approved artwork IDs while
 	-- avoiding the Studio/runtime fetch failure shown as a blank tile.
 	local numericId = string.match(assetId, "%d+")
-	return if numericId
-		then "rbxthumb://type=Asset&id=" .. numericId .. "&w=768&h=768"
-		else assetId
+	return if numericId then "rbxthumb://type=Asset&id=" .. numericId .. "&w=768&h=768" else assetId
 end
 
 local function rolePresentation(role: any): any
@@ -505,6 +503,8 @@ function App.mount(context: any): ScreenGui
 	local sharedModalSystem = context.Systems and context.Systems.ModalSystem
 	local modalSystem = sharedModalSystem or ModalSystem.new(context)
 	local ownsModalSystem = sharedModalSystem == nil
+	local CharacterCreator = require(script.Parent.CharacterCreator)
+	local characterCreator = CharacterCreator.new(context)
 	local sharedAudioFeedback = context.Systems and context.Systems.AudioFeedback
 	local audioFeedback: any = sharedAudioFeedback
 	local ownsAudioFeedback = false
@@ -520,6 +520,7 @@ function App.mount(context: any): ScreenGui
 	activeAudioFeedback = audioFeedback
 	gui.Destroying:Connect(function()
 		preloader:Destroy()
+		characterCreator:Destroy()
 		if ownsModalSystem then
 			modalSystem:Destroy()
 		end
@@ -949,7 +950,8 @@ function App.mount(context: any): ScreenGui
 		"Play fair, keep scenes realistic, and respect other players",
 	}
 	local announcementIndex = 1
-	local announcement = text(root, announcementMessages[announcementIndex], 12, COLOURS.Muted, true)
+	local announcement =
+		text(root, announcementMessages[announcementIndex], 12, COLOURS.Muted, true)
 	announcement.Name = "Announcement"
 	announcement.AnchorPoint = Vector2.new(0.5, 0)
 	announcement.BackgroundColor3 = Color3.fromRGB(31, 25, 48)
@@ -1118,6 +1120,18 @@ function App.mount(context: any): ScreenGui
 								audioFeedback:Success()
 							end
 							context.Controllers.StartMenuController:Refresh()
+							-- Straight into the creator while the character is new
+							-- and its appearance is still free to author. Returning
+							-- to the menu first would leave the one unpaid edit
+							-- behind a button most players would never press.
+							local newId = response.Data and response.Data.CharacterId
+							if type(newId) == "string" then
+								task.defer(function()
+									characterCreator:Open(newId, function()
+										context.Controllers.StartMenuController:Refresh()
+									end)
+								end)
+							end
 						else
 							task.defer(function()
 								showCharacterCreationModal(response.Message)
@@ -1229,7 +1243,8 @@ function App.mount(context: any): ScreenGui
 					end
 					return
 				end
-				local prompted, promptError = context.Controllers.GamepassController:Prompt(gamepassId)
+				local prompted, promptError =
+					context.Controllers.GamepassController:Prompt(gamepassId)
 				if not prompted then
 					context.Controllers.NotificationController:Show(
 						promptError or "The Roblox purchase prompt could not be opened.",
@@ -1243,7 +1258,9 @@ function App.mount(context: any): ScreenGui
 			end
 			context.Controllers.NotificationController:Show(
 				role.LockMessage,
-				if role.Action == "OpenApplication" then "Application required" else "Access required"
+				if role.Action == "OpenApplication"
+					then "Application required"
+					else "Access required"
 			)
 			if audioFeedback then
 				audioFeedback:Error()
@@ -1460,10 +1477,10 @@ function App.mount(context: any): ScreenGui
 				then 5
 				else if roleWidth >= 1100
 					then 5
-					else if roleWidth >= 900
-						then 4
-						else portraitCardColumns()
-			local roleTileHeight = if shortLandscape() then 240 else if roleWidth >= 1100 then 340 else 380
+					else if roleWidth >= 900 then 4 else portraitCardColumns()
+			local roleTileHeight = if shortLandscape()
+				then 240
+				else if roleWidth >= 1100 then 340 else 380
 			local roleGrid = tileGrid(scroll, #availableRoles, roleTileHeight, roleColumns)
 			-- Characters are the first decision on Play. Keep the role posters below
 			-- them so a new player never has to scroll past every department to create
@@ -1526,8 +1543,7 @@ function App.mount(context: any): ScreenGui
 					footer,
 					if role.Locked
 						then "REQUIREMENTS"
-						elseif isCivilianRole
-						then "CREATE / JOIN"
+						elseif isCivilianRole then "CREATE / JOIN"
 						else "JOIN",
 					false
 				)
@@ -1538,7 +1554,9 @@ function App.mount(context: any): ScreenGui
 				open.TextSize = 12
 				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
 				local openStroke = open:FindFirstChildOfClass("UIStroke")
-				if openStroke then openStroke.Color = presentation.Colour end
+				if openStroke then
+					openStroke.Color = presentation.Colour
+				end
 				open.Activated:Connect(function()
 					activateRole(role)
 				end)
@@ -1650,9 +1668,11 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			local canCreate = menuData.EmptySlots > 0
-			local canOfferExtraSlot = not canCreate and extraSlotPass ~= nil and extraSlotPass.Owned ~= true
+			local canOfferExtraSlot = not canCreate
+				and extraSlotPass ~= nil
+				and extraSlotPass.Owned ~= true
 			local characterGrid = tileGrid(
-				 scroll,
+				scroll,
 				#menuData.Characters + (if canCreate or canOfferExtraSlot then 1 else 0),
 				tileHeight,
 				columns
@@ -1769,7 +1789,8 @@ function App.mount(context: any): ScreenGui
 				createPreview.Parent = createCard
 				corner(createPreview, 12)
 				stroke(createPreview, COLOURS.Accent, 0.62)
-				local plus = text(createPreview, if canCreate then "+" else "★", 42, COLOURS.Accent, true)
+				local plus =
+					text(createPreview, if canCreate then "+" else "★", 42, COLOURS.Accent, true)
 				plus.Size = UDim2.fromScale(1, 1)
 				plus.TextXAlignment = Enum.TextXAlignment.Center
 				local createTitle = text(
@@ -1785,15 +1806,14 @@ function App.mount(context: any): ScreenGui
 				createTitle.Size = if landscape
 					then UDim2.new(1, -152, 0, 27)
 					else UDim2.new(1, -32, 0, 27)
-				local createCopy =
-					text(
-						createCard,
-						if canCreate
-							then "Create one separate civilian identity."
-							else "Unlock one additional identity with a one-time purchase.",
-						13,
-						COLOURS.Muted
-					)
+				local createCopy = text(
+					createCard,
+					if canCreate
+						then "Create one separate civilian identity."
+						else "Unlock one additional identity with a one-time purchase.",
+					13,
+					COLOURS.Muted
+				)
 				createCopy.Position = if landscape
 					then UDim2.fromOffset(136, 46)
 					else UDim2.fromOffset(16, 185)
@@ -1817,7 +1837,10 @@ function App.mount(context: any): ScreenGui
 					if canCreate then
 						showCharacterCreationModal()
 					elseif extraSlotPass and extraSlotPass.ProductId then
-						MarketplaceService:PromptProductPurchase(Players.LocalPlayer, extraSlotPass.ProductId)
+						MarketplaceService:PromptProductPurchase(
+							Players.LocalPlayer,
+							extraSlotPass.ProductId
+						)
 					end
 				end)
 			end
@@ -3097,8 +3120,7 @@ function App.mount(context: any): ScreenGui
 			-- On a landscape phone Roblox's native controls consume the whole first
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
-			local barHeight = safeTop
-				+ (if narrow then 54 else if compactLandscape then 44 else 38)
+			local barHeight = safeTop + (if narrow then 54 else if compactLandscape then 44 else 38)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
