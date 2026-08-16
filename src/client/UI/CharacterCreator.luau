@@ -128,8 +128,21 @@ function CharacterCreator:_preview()
 	end)
 end
 
+-- Drops whatever the last attempt complained about.
+--
+-- "Choose something first." otherwise stayed on screen after the player had
+-- chosen something, which reads as the choice not having registered. Every path
+-- that changes the draft clears it, so the message only ever describes the
+-- current state.
+function CharacterCreator:_clearStatus()
+	if self.status and self.status.Text ~= "" then
+		self.status.Text = ""
+	end
+end
+
 function CharacterCreator:_setField(field: string, value: any)
 	self.draft[field] = value
+	self:_clearStatus()
 	self:_preview()
 end
 
@@ -165,11 +178,10 @@ function CharacterCreator:_itemTile(parent: Instance, item: any)
 			-- Selecting the item already worn takes it off, which is the only way
 			-- to remove an accessory once one has been chosen.
 			if self.draft[item.Field] == tostring(item.Id) then
-				self.draft[item.Field] = nil
+				self:_setField(item.Field, nil)
 			else
-				self.draft[item.Field] = tostring(item.Id)
+				self:_setField(item.Field, tostring(item.Id))
 			end
-			self:_preview()
 			self:_paintSelection(parent, item.Field)
 		end)
 	)
@@ -259,6 +271,7 @@ function CharacterCreator:_buildSkinRow(parent: Instance)
 				do
 					self.draft[field] = hex
 				end
+				self:_clearStatus()
 				self:_preview()
 			end)
 		)
@@ -395,7 +408,7 @@ function CharacterCreator:Open(characterId: string, onFinished: ((boolean) -> ()
 	local rail = Instance.new("ScrollingFrame")
 	rail.BackgroundColor3 = COLOURS.Surface
 	rail.BorderSizePixel = 0
-	rail.ScrollBarThickness = 3
+	rail.ScrollBarThickness = 6
 	rail.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	rail.CanvasSize = UDim2.new()
 	rail.Parent = root

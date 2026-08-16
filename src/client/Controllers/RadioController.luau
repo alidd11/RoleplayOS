@@ -378,7 +378,7 @@ function RadioController:_render()
 	log.BorderSizePixel = 0
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	log.ScrollBarThickness = 3
+	log.ScrollBarThickness = 6
 	log.Position = UDim2.fromOffset(0, 38)
 	log.Size = UDim2.new(1, 0, 1, -82)
 	log.Parent = self.content

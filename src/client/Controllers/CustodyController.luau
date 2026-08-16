@@ -210,7 +210,7 @@ function CustodyController:_mount()
 	playerList.BorderSizePixel = 0
 	playerList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	playerList.CanvasSize = UDim2.new()
-	playerList.ScrollBarThickness = 3
+	playerList.ScrollBarThickness = 6
 	playerList.Parent = panel
 	local playerLayout = Instance.new("UIListLayout")
 	playerLayout.Padding = UDim.new(0, 5)
@@ -242,7 +242,7 @@ function CustodyController:_mount()
 	offenceList.BorderSizePixel = 0
 	offenceList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	offenceList.CanvasSize = UDim2.new()
-	offenceList.ScrollBarThickness = 3
+	offenceList.ScrollBarThickness = 6
 	offenceList.Parent = panel
 	local offenceLayout = Instance.new("UIListLayout")
 	offenceLayout.Padding = UDim.new(0, 5)

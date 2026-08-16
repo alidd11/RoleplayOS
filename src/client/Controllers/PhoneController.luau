@@ -702,7 +702,7 @@ function PhoneController:_renderBank()
 	history.Size = UDim2.new(1, 0, 1, -230)
 	history.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	history.CanvasSize = UDim2.new()
-	history.ScrollBarThickness = 2
+	history.ScrollBarThickness = 6
 	history.Parent = self.content
 	local historyLayout = Instance.new("UIListLayout")
 	historyLayout.Padding = UDim.new(0, 7)
@@ -773,7 +773,7 @@ function PhoneController:_render()
 		list.Size = UDim2.fromScale(1, 1)
 		list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 		list.CanvasSize = UDim2.new()
-		list.ScrollBarThickness = 2
+		list.ScrollBarThickness = 6
 		list.Parent = self.content
 		local layout = Instance.new("UIListLayout")
 		layout.Padding = UDim.new(0, 8)
@@ -842,7 +842,7 @@ function PhoneController:_render()
 		history.Size = UDim2.new(1, 0, 1, -244)
 		history.AutomaticCanvasSize = Enum.AutomaticSize.Y
 		history.CanvasSize = UDim2.new()
-		history.ScrollBarThickness = 2
+		history.ScrollBarThickness = 6
 		history.Parent = self.content
 		local layout = Instance.new("UIListLayout")
 		layout.Padding = UDim.new(0, 7)

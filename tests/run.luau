@@ -132,6 +132,29 @@ H.test("server-tier access preserves the actionable whitelisted group denial", f
 		"whitelisted group denial was hidden by another server tier"
 	)
 end)
+H.test("a Combined rule with nothing to combine fails closed", function()
+	-- An All rule reached the unconditional allow at the end of the Combined
+	-- branch simply because the loop never ran, so a config typo opened the gate.
+	for _, rule in
+		{
+			{ AccessType = "Combined", Match = "All", Rules = {} },
+			{ AccessType = "Combined", Match = "All" },
+			{ AccessType = "Combined", Match = "Alll", Rules = {} },
+			{ AccessType = "Combined", Rules = {} },
+		}
+	do
+		local result =
+			Access.evaluate(rule, { ServerKind = "Public", Gamepasses = {}, Groups = {} })
+		H.expect(not result.Allowed, "an empty Combined rule granted access")
+	end
+	-- A populated All rule still has to work.
+	local satisfied = Access.evaluate({
+		AccessType = "Combined",
+		Match = "All",
+		Rules = { { AccessType = "Public" }, { AccessType = "ServerKind", Kind = "Public" } },
+	}, { ServerKind = "Public" })
+	H.expect(satisfied.Allowed, "a satisfied All rule was denied")
+end)
 H.test("Roblox group access enforces membership and rank", function()
 	local rule = { AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 10 }
 	local denied = Access.evaluate(rule, {

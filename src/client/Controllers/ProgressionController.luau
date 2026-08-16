@@ -135,7 +135,7 @@ function ProgressionController:_mount()
 	scroll.Size = UDim2.new(1, -28, 1, -82)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.CanvasSize = UDim2.new()
-	scroll.ScrollBarThickness = 3
+	scroll.ScrollBarThickness = 6
 	scroll.ScrollBarImageColor3 = C.Border
 	scroll.Parent = panel
 	local layout = Instance.new("UIListLayout")

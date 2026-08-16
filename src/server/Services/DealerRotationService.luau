@@ -35,6 +35,7 @@ function DealerRotationService:Init(context: any)
 	self.settings = context.Configuration.DealerRotation
 	self.lastRotation = nil
 	self.connections = {}
+	self.stopped = false
 end
 
 function DealerRotationService:_generatedFolder(): Folder
@@ -207,7 +208,10 @@ function DealerRotationService:Start()
 	end
 	local period = math.max(60, self.settings.RotationPeriodSeconds)
 	task.spawn(function()
-		while true do
+		-- Tied to the service lifetime rather than the server's. Destroy only
+		-- disconnected the events, so this thread outlived the service it belongs
+		-- to and kept the whole thing reachable behind it.
+		while not self.stopped do
 			local rotationIndex = math.floor(os.time() / period)
 			if rotationIndex ~= self.lastRotation then
 				self.lastRotation = rotationIndex
@@ -229,6 +233,7 @@ function DealerRotationService:Start()
 end
 
 function DealerRotationService:Destroy()
+	self.stopped = true
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

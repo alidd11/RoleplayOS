@@ -1004,7 +1004,7 @@ function App.mount(context: any): ScreenGui
 	scroll.Size = UDim2.new(1, -88, 1, -146)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.CanvasSize = UDim2.new()
-	scroll.ScrollBarThickness = 3
+	scroll.ScrollBarThickness = 8
 	scroll.ScrollBarImageColor3 = COLOURS.Border
 	scroll.Parent = content
 	local flow = Instance.new("UIListLayout")
@@ -1545,7 +1545,7 @@ function App.mount(context: any): ScreenGui
 					footer,
 					if role.Locked
 						then "REQUIREMENTS"
-						elseif isCivilianRole then "CREATE / JOIN"
+						elseif isCivilianRole then "CHARACTERS"
 						else "JOIN",
 					false
 				)
@@ -2410,7 +2410,7 @@ function App.mount(context: any): ScreenGui
 		-- The row does scroll, and with no scrollbar there was nothing to say so.
 		-- The last category simply appeared sliced off at the panel edge, which
 		-- reads as a broken layout rather than as more to reach.
-		categoryBar.ScrollBarThickness = 3
+		categoryBar.ScrollBarThickness = 6
 		categoryBar.ScrollBarImageTransparency = 0.4
 		categoryBar.ScrollingDirection = Enum.ScrollingDirection.X
 		categoryBar.Parent = scroll

@@ -389,7 +389,7 @@ function MDTController:_mount()
 	results.Size = UDim2.new(0.62, -34, 1, -222)
 	results.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	results.CanvasSize = UDim2.new()
-	results.ScrollBarThickness = 3
+	results.ScrollBarThickness = 6
 	results.Parent = shell
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 8)

@@ -200,7 +200,7 @@ function DispatchController:_mount()
 	calls.Size = UDim2.new(0.58, -30, 1, -232)
 	calls.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	calls.CanvasSize = UDim2.new()
-	calls.ScrollBarThickness = 3
+	calls.ScrollBarThickness = 6
 	calls.Parent = shell
 	local callsLayout = Instance.new("UIListLayout")
 	callsLayout.Padding = UDim.new(0, 8)
@@ -217,7 +217,7 @@ function DispatchController:_mount()
 	units.Size = UDim2.new(0.42, -20, 1, -226)
 	units.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	units.CanvasSize = UDim2.new()
-	units.ScrollBarThickness = 3
+	units.ScrollBarThickness = 6
 	units.Parent = shell
 	local unitsLayout = Instance.new("UIListLayout")
 	unitsLayout.Padding = UDim.new(0, 8)

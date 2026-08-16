@@ -134,10 +134,21 @@ function AccessEvaluator.evaluate(rule: any, subject: any, now: number?): any
 		return denied("STAFF_REQUIRED")
 	end
 	if kind == "Combined" then
+		local children = rule.Rules
+		-- A Combined rule with nothing to combine cannot be satisfied, so it denies.
+		--
+		-- An All rule used to be allowed here by omission: the loop below simply
+		-- never ran and execution fell through to the unconditional allow at the
+		-- end. That made an empty Rules list, a missing one, or a misspelled key
+		-- open the gate to everybody rather than close it, which is the wrong way
+		-- for an access check to fail.
+		if type(children) ~= "table" or #children == 0 then
+			return denied("ACCESS_DENIED")
+		end
 		local matchAny = rule.Match == "Any"
 		local last = denied("ACCESS_DENIED")
 		local actionable = nil
-		for _, child in rule.Rules or {} do
+		for _, child in children do
 			local result = AccessEvaluator.evaluate(child, subject, current)
 			if result.Allowed == matchAny then
 				return result
