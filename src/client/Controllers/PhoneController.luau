@@ -1042,7 +1042,11 @@ function PhoneController:Start()
 	)
 	local event = self.context.Controllers.NetworkController:ResolveEvent("PhoneChanged")
 	local function watchTool(tool: Instance)
-		if tool:IsA("Tool") and tool.Name == "Phone" and not self.watchedTools[tool] then
+		if
+			tool:IsA("Tool")
+			and (tool.Name == "Phone" or tool:GetAttribute("RoleplayOSToolId") == "Phone")
+			and not self.watchedTools[tool]
+		then
 			self.watchedTools[tool] = true
 			local function open()
 				self.body.Visible = true

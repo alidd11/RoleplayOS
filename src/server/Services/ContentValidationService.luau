@@ -562,6 +562,10 @@ function ContentValidationService:_check(
 	local template = resolve(assets, path)
 	if not template then
 		local issue = kind .. ":" .. id .. ":" .. table.concat(path, "/")
+		if kind == "Tool" and id == "MedicalBag" and definition.BuiltInFallback == "MedicalBag" then
+			table.insert(self.report.Ready, kind .. ":" .. id .. ":BUILT_IN_FALLBACK")
+			return
+		end
 		if self.context.Configuration.Framework.Environment == "Production" then
 			table.insert(self.report.Invalid, issue .. ":REQUIRED_TEMPLATE_MISSING")
 		else

@@ -36,7 +36,7 @@ local function targetPlayer(mouse: Mouse?): Player?
 end
 
 local function playAnimation(tool: Tool, character: Model, name: string): boolean
-	local animation = tool:FindFirstChild(name)
+	local animation = tool:FindFirstChild(name, true)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if
 		not animation
@@ -57,6 +57,11 @@ local function playAnimation(tool: Tool, character: Model, name: string): boolea
 		return true
 	end
 	return false
+end
+
+local function isPAVA(tool: Instance): boolean
+	return tool:IsA("Tool")
+		and (tool.Name == "PAVA" or tool:GetAttribute("RoleplayOSToolId") == "PAVA")
 end
 
 local function setSprayEffect(tool: Tool, enabled: boolean)
@@ -81,7 +86,7 @@ function PAVAController:Init(context: any)
 end
 
 function PAVAController:_watch(tool: Instance)
-	if not tool:IsA("Tool") or tool.Name ~= "PAVA" or self.watched[tool] then
+	if not isPAVA(tool) or self.watched[tool] then
 		return
 	end
 	self.watched[tool] = true
@@ -91,8 +96,10 @@ function PAVAController:_watch(tool: Instance)
 			self.mouse = mouse
 			local character = tool.Parent
 			if character and character:IsA("Model") then
-				if not playAnimation(tool, character, "PAVA Equipping") then
-					playAnimation(tool, character, "PAVA Equipped")
+				for _, animationName in { "PAVA Equipping", "PAVA Equip", "PAVA Equipped" } do
+					if playAnimation(tool, character, animationName) then
+						break
+					end
 				end
 			end
 		end)
@@ -108,11 +115,12 @@ function PAVAController:_watch(tool: Instance)
 				)
 				return
 			end
-			setSprayEffect(tool, true)
 			local response = self.context.Controllers.NetworkController:Request("PAVASpray", {
 				TargetUserId = target.UserId,
 			})
-			if not response.Success then
+			if response and response.Success then
+				setSprayEffect(tool, true)
+			elseif response and response.Message then
 				self.context.Controllers.NotificationController:Show(response.Message, "PAVA")
 			end
 		end)

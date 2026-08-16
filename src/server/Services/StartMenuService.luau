@@ -116,6 +116,22 @@ function StartMenuService:Build(player: Player): (any?, string?)
 				else "Upgrades",
 		})
 	end
+	for definitionId, definition in self.context.Configuration.DeveloperProducts or {} do
+		local productId = definition.ProductId
+		local configured = type(productId) == "number" and productId > 0
+		table.insert(gamepasses, {
+			Id = definitionId,
+			ProductId = if configured then productId else nil,
+			PurchaseType = "DeveloperProduct",
+			Name = definition.Name,
+			Description = definition.Description,
+			PriceInRobux = definition.PriceRobux,
+			Configured = configured,
+			Owned = false,
+			AvailableInServer = server.Kind == "Public",
+			Category = "Upgrades",
+		})
+	end
 	if server.Kind == "Public" then
 		for _, definition in self.context.Configuration.Custody.PublicEarlyRelease.Products do
 			local configured = type(definition.ProductId) == "number" and definition.ProductId > 0

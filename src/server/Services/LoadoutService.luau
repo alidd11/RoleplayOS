@@ -31,7 +31,18 @@ function LoadoutService:_toolIds(loadoutId: string, definition: any): { string }
 	end
 	return table.clone(configured)
 end
+local function canonicalizeTool(tool: Tool, toolId: string)
+	if tool.Name ~= toolId then
+		if tool:GetAttribute("RoleplayOSAssetName") == nil then
+			tool:SetAttribute("RoleplayOSAssetName", tool.Name)
+		end
+		tool.Name = toolId
+	end
+	tool:SetAttribute("RoleplayOSToolId", toolId)
+end
+
 local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: string)
+	canonicalizeTool(tool, toolId)
 	tool:SetAttribute("RoleplayOSDutyIssued", true)
 	tool:SetAttribute("RoleplayOSLoadoutId", loadoutId)
 	tool:SetAttribute("RoleplayOSToolId", toolId)
@@ -166,7 +177,7 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(fallback, backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
-			clone.Name = if toolId == "Handcuffs" then "Handcuffs" else clone.Name
+			canonicalizeTool(clone, toolId)
 			prepareVisibleTool(clone, toolId)
 			clone.CanBeDropped = false
 			issue(clone, backpack, loadoutId, toolId)
@@ -226,7 +237,7 @@ function LoadoutService:GiveTool(
 		return false, "TOOL_UNAVAILABLE"
 	end
 	local clone = template:Clone()
-	clone:SetAttribute("RoleplayOSToolId", toolId)
+	canonicalizeTool(clone, toolId)
 	if toolDefinition and toolDefinition.Weapon then
 		clone:SetAttribute("RoleplayOSWeaponId", toolId)
 		clone:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
@@ -294,7 +305,7 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 				-- being reviewed. Issue the same server-created weapon used by the
 				-- cash vendor, keeping purchase, damage and seizure behaviour intact.
 				local fallback = ToolFactory.weapon(toolId)
-				fallback:SetAttribute("RoleplayOSToolId", toolId)
+				canonicalizeTool(fallback, toolId)
 				fallback:SetAttribute("RoleplayOSWeaponId", toolId)
 				fallback:SetAttribute("RoleplayOSWeaponPurchase", false)
 				fallback:SetAttribute("RoleplayOSEquipmentPassId", passId)

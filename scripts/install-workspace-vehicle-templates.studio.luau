@@ -7,8 +7,11 @@ assert(
 
 local ServerStorage = game:GetService("ServerStorage")
 local config = require(game.ReplicatedStorage.RoleplayOS.Config.Config)
-local root = ServerStorage:FindFirstChild("RoleplayOSVehicleTemplates") or Instance.new("Folder")
-root.Name = "RoleplayOSVehicleTemplates"
+-- Install into the same canonical tree consumed by the real-baseplate
+-- deployment. The old RoleplayOSVehicleTemplates root bypassed the deployment
+-- validator and made a successful Studio install disappear from production.
+local root = ServerStorage:FindFirstChild("RoleplayOSAssets") or Instance.new("Folder")
+root.Name = "RoleplayOSAssets"
 root.Parent = ServerStorage
 
 local installedBySource = {}

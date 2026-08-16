@@ -104,13 +104,7 @@ end
 -- menu and creation path must agree, otherwise a purchased slot is unreachable.
 function CharacterService:SlotAllowance(session: any): number
 	local slots = self.context.Configuration.Characters.FreeSlots
-	if
-		session.Profile.GamepassCache[tostring(
-			self.context.Configuration.Gamepasses.ExtraCharacterSlot.GamepassId
-		)]
-	then
-		slots += 1
-	end
+	slots += math.max(0, math.floor(tonumber(session.Profile.Consumables.ExtraCharacterSlots) or 0))
 	return math.min(slots, self.context.Configuration.Characters.MaximumSlots)
 end
 function CharacterService:Create(player: Player, identity: any): (any?, string?)
@@ -140,10 +134,19 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	end
 	local id = HttpService:GenerateGUID(false)
 	local now = os.time()
+	local startingAppearance = {}
+	if player.Character then
+		local captured = captureAppearance(player.Character)
+		if captured then
+			startingAppearance = captured
+		end
+	end
 	local character = {
 		CharacterId = id,
 		Identity = filteredIdentity,
-		Appearance = {},
+		-- Capture the player's current Roblox avatar at creation time so the new
+		-- identity starts personalised instead of falling back to a blank outfit.
+		Appearance = startingAppearance,
 		Economy = {
 			Balance = self.context.Configuration.Economy.StartingBankBalance,
 			Cash = self.context.Configuration.Economy.StartingCashBalance,

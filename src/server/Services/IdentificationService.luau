@@ -91,7 +91,11 @@ local function warrantCardTemplate(): Tool?
 	-- facing tool is deliberately `Warrant Card`. Requiring the display name in
 	-- ServerStorage made the installed asset invisible to this resolver.
 	local template = shared
-		and (shared:FindFirstChild("Warrant Card") or shared:FindFirstChild("WarrantCard"))
+		and (
+			shared:FindFirstChild("Warrant Card")
+			or shared:FindFirstChild("WarrantCard")
+			or shared:FindFirstChild("PoliceWarrantCard")
+		)
 	return if template and template:IsA("Tool") then template else nil
 end
 

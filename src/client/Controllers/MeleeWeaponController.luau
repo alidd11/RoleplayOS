@@ -96,11 +96,14 @@ function MeleeWeaponController:_watch(tool: Instance)
 				{ TargetUserId = target.UserId }
 			)
 			local character = tool.Parent
-			if response.Success and character and character:IsA("Model") then
+			if response and response.Success and character and character:IsA("Model") then
 				attackAnimation(tool, character)
 			end
-			if not response.Success and response.Code ~= "WEAPON_COOLDOWN" then
-				self.context.Controllers.NotificationController:Show(response.Message, "Equipment")
+			if response and not response.Success and response.Code ~= "WEAPON_COOLDOWN" then
+				self.context.Controllers.NotificationController:Show(
+					response.Message or "That item could not be used.",
+					"Equipment"
+				)
 			end
 		end)
 	)

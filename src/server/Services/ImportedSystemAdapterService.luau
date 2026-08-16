@@ -39,6 +39,19 @@ local function sourceRoot(): Instance?
 	return ServerStorage:FindFirstChild("RoleplayOSImportedSources")
 end
 
+local function findFirstNamed(root: Instance?, names: { string }): Instance?
+	if not root then
+		return nil
+	end
+	for _, name in names do
+		local child = root:FindFirstChild(name)
+		if child then
+			return child
+		end
+	end
+	return nil
+end
+
 local function stripExecutableContent(root: Instance)
 	for _, descendant in root:GetDescendants() do
 		if
@@ -89,7 +102,10 @@ function ImportedSystemAdapterService:_adoptStudioImports()
 	if not root then
 		return
 	end
-	local bank = workspace:FindFirstChild("Bank Robbery V2 | Version Beta")
+	local bank = findFirstNamed(workspace, {
+		"Bank Robbery V2 | Version Beta+",
+		"Bank Robbery V2 | Version Beta",
+	})
 	if bank then
 		-- Scripts nested inside an installer model still execute in Workspace. Move
 		-- the untouched source package to inert storage before cloning its children
@@ -195,7 +211,7 @@ function ImportedSystemAdapterService:_auditEpauletteSource()
 		or (source and source:FindFirstChild("PoliceEpaulettesSource"))
 	local display = if package
 			and package:FindFirstChild("Arm1")
-			and package:FindFirstChild("Arm2")
+			and findFirstNamed(package, { "Arm2", "MArm2w", "Arm2w" })
 		then package
 		else package and package:FindFirstChild("PolEppauls", true)
 	self.report.EpauletteSource = display ~= nil
@@ -249,14 +265,14 @@ function ImportedSystemAdapterService:ApplyEpaulettes(
 	for _, specification in
 		{
 			{
-				Source = "Arm1",
+				SourceNames = { "Arm1" },
 				R15 = "LeftUpperArm",
 				R6 = "Left Arm",
 				Inward = 0.2,
 				Facing = CFrame.Angles(0, math.rad(180), 0),
 			},
 			{
-				Source = "Arm2",
+				SourceNames = { "Arm2", "MArm2w", "Arm2w" },
 				R15 = "RightUpperArm",
 				R6 = "Right Arm",
 				Inward = -0.2,
@@ -264,7 +280,7 @@ function ImportedSystemAdapterService:ApplyEpaulettes(
 			},
 		}
 	do
-		local armModel = display:FindFirstChild(specification.Source)
+		local armModel = findFirstNamed(display, specification.SourceNames)
 		local reference = armModel and armModel:FindFirstChild("Middle")
 		local target = character:FindFirstChild(specification.R15)
 			or character:FindFirstChild(specification.R6)

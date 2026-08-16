@@ -1111,7 +1111,11 @@ function MDTController:Start()
 	)
 	local watchedTools = {}
 	local function watchTool(tool: Instance)
-		if not tool:IsA("Tool") or tool.Name ~= "MDT" or watchedTools[tool] then
+		if
+			not tool:IsA("Tool")
+			or (tool.Name ~= "MDT" and tool:GetAttribute("RoleplayOSToolId") ~= "MDT")
+			or watchedTools[tool]
+		then
 			return
 		end
 		watchedTools[tool] = true

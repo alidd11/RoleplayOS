@@ -28,6 +28,9 @@ def main() -> int:
     }
     failures = 0
     for config_name, gamepass_id in sorted(configured.items()):
+        if gamepass_id <= 0:
+            print(f"INFO:  {config_name} is disabled until a GamepassId is configured")
+            continue
         url = (
             "https://apis.roblox.com/game-passes/v1/game-passes/"
             f"{gamepass_id}/product-info"

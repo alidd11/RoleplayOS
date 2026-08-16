@@ -404,17 +404,38 @@ function VehicleSpawnerService:AuthoriseCivilianFacility(
 end
 
 function VehicleSpawnerService:_template(definition: any): Model?
-	local current: Instance? = ServerStorage:FindFirstChild("RoleplayOSVehicleTemplates")
-		or ServerStorage:FindFirstChild("RoleplayOSAssets")
+	local current: Instance? = ServerStorage:FindFirstChild("RoleplayOSAssets")
+	-- Keep the former root as a development migration fallback only. Production
+	-- must resolve from the canonical asset tree that real-baseplate.project.json
+	-- owns and the deployment validator checks.
+	if not current and self.context.Configuration.Framework.Environment ~= "Production" then
+		current = ServerStorage:FindFirstChild("RoleplayOSVehicleTemplates")
+	end
 	for _, segment in definition.AssetPath or {} do
 		current = current and current:FindFirstChild(segment) or nil
 	end
 	if current and current:IsA("Model") then
 		return current
 	end
-	-- Never clone a live Workspace vehicle. Its A-Chassis initializer and bundled
-	-- scripts have already run, so it is mutable runtime state rather than a
-	-- reusable template. New imports must be installed in ServerStorage first.
+	-- Development places may use parked authoring vehicles directly. This is
+	-- deliberately unavailable in Production: a live Workspace chassis may
+	-- already have initialised and must never become a reusable server template.
+	if self.context.Configuration.Framework.Environment ~= "Production" then
+		local source: Instance? = Workspace
+		if type(definition.WorkspaceSourcePath) == "table" then
+			for _, segment in definition.WorkspaceSourcePath do
+				source = source and source:FindFirstChild(segment) or nil
+			end
+		else
+			local sourceName = definition.WorkspaceModelName
+			source = if type(sourceName) == "string" and sourceName ~= ""
+				then Workspace:FindFirstChild(sourceName)
+				else nil
+		end
+		if source and source:IsA("Model") then
+			return source
+		end
+	end
 	return nil
 end
 

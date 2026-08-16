@@ -31,12 +31,20 @@ def contains_assignment(source: str, key: str, value: str) -> bool:
 
 
 def configured_asset_paths(source: str, vehicles_disabled: bool) -> list[tuple[str, ...]]:
-    paths: list[tuple[str, ...]] = []
-    for match in re.finditer(r"AssetPath\s*=\s*\{([^}]*)\}", source):
-        segments = tuple(re.findall(r'"([^"]+)"', match.group(1)))
-        if segments and not (vehicles_disabled and segments[0] == "Vehicles"):
-            paths.append(segments)
-    return paths
+	paths: list[tuple[str, ...]] = []
+	builtin_fallbacks = set(
+		re.findall(r'\bBuiltInFallback\s*=\s*"([^"]+)"', source)
+	)
+	for match in re.finditer(r"AssetPath\s*=\s*\{([^}]*)\}", source):
+		segments = tuple(re.findall(r'"([^"]+)"', match.group(1)))
+		if not segments:
+			continue
+		if vehicles_disabled and segments[0] == "Vehicles":
+			continue
+		if segments[-1] in builtin_fallbacks:
+			continue
+		paths.append(segments)
+	return paths
 
 
 def asset_exists(path: tuple[str, ...]) -> bool:
@@ -113,8 +121,14 @@ def main() -> int:
     ):
         production_issues.append("one or more uniform template IDs are empty")
 
+    # Vehicle definitions are intentionally authored in EDIT_HERE/06_Vehicles
+    # and merged over the base Config at runtime. Validate both sources or a
+    # release can pass while its live vehicle catalogue points at empty folders.
+    configured_sources = config + "\n" + vehicles
     missing_assets = [
-        path for path in configured_asset_paths(config, vehicles_disabled) if not asset_exists(path)
+        path
+        for path in configured_asset_paths(configured_sources, vehicles_disabled)
+        if not asset_exists(path)
     ]
     if missing_assets:
         summary = ", ".join("/".join(path) for path in missing_assets[:6])

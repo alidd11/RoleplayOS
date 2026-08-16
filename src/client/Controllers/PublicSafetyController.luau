@@ -164,7 +164,12 @@ function PublicSafetyController:_watchTool(tool: Tool)
 	if self.watched[tool] then
 		return
 	end
-	if tool.Name ~= "Handcuffs" and tool.Name ~= "ID Card" and tool.Name ~= "Warrant Card" then
+	local roleplayToolId = tostring(tool:GetAttribute("RoleplayOSToolId") or tool.Name)
+	if
+		roleplayToolId ~= "Handcuffs"
+		and roleplayToolId ~= "ID Card"
+		and roleplayToolId ~= "Warrant Card"
+	then
 		return
 	end
 	self.watched[tool] = true
@@ -179,19 +184,19 @@ function PublicSafetyController:_watchTool(tool: Tool)
 				)
 				return
 			end
-			local isCuffs = tool.Name == "Handcuffs"
+			local isCuffs = roleplayToolId == "Handcuffs"
 			local response = self.context.Controllers.NetworkController:Request(
 				if isCuffs then "CuffPlayer" else "GetPresentedId",
 				if isCuffs
 					then { TargetUserId = target, Mode = "Apply" }
 					else {
 						TargetUserId = target,
-						CredentialType = if tool.Name == "Warrant Card"
+						CredentialType = if roleplayToolId == "Warrant Card"
 							then "Police"
 							else "Civilian",
 					}
 			)
-			self.context.Controllers.NotificationController:Show(response.Message, tool.Name)
+			self.context.Controllers.NotificationController:Show(response.Message, roleplayToolId)
 			if response.Success then
 				if isCuffs and response.Data.Cuffed then
 					self:_showActions(target)

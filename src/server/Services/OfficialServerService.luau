@@ -214,23 +214,27 @@ end
 -- identity is decided in one place rather than inferred separately by each
 -- service that cares.
 function OfficialServerService:CurrentEntry(): any?
-	-- Resolved from this server's own place first.
-	--
-	-- Teleport data does not survive a hop between experiences, so a whitelisted
-	-- world in its own experience never receives the entry it was sent as. Its
-	-- place id is the one thing it always knows about itself, and an entry that
-	-- names a place is uniquely identified by it.
-	for _, entry in self.settings.Entries do
-		if tonumber(entry.PlaceId) == game.PlaceId then
+	-- A same-place official server is identified by the server-issued teleport
+	-- data adopted in _learnFrom. Do not infer whitelist mode from PlaceId: the
+	-- public and official servers intentionally share one place.
+	if type(self.currentServerId) == "string" then
+		local entry = self.settings.Entries[self.currentServerId]
+		if entry and self:_placeIdFor(entry) == game.PlaceId then
 			return entry
 		end
 	end
-	-- Otherwise it is an entry sharing this place, told apart by what the
-	-- teleport carried, which only arrives within one experience.
-	if type(self.currentServerId) ~= "string" then
-		return nil
+	-- Dedicated-place entries remain supported for migration and archival
+	-- compatibility, but are no longer used by the live configuration.
+	for _, entry in self.settings.Entries do
+		if
+			tonumber(entry.PlaceId)
+			and tonumber(entry.PlaceId) > 0
+			and tonumber(entry.PlaceId) == game.PlaceId
+		then
+			return entry
+		end
 	end
-	return self.settings.Entries[self.currentServerId]
+	return nil
 end
 
 -- The group this server requires, when it requires one. The public place

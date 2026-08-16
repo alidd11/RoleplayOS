@@ -374,8 +374,22 @@ function CustodyService:SetCuffed(
 	if not self:_authorised(actor) or actor.UserId == targetUserId then
 		return nil, "NOT_AUTHORISED"
 	end
-	local equipped = actor.Character and actor.Character:FindFirstChild("Handcuffs")
-	if not equipped or not equipped:IsA("Tool") then
+	local equipped = false
+	if actor.Character then
+		for _, child in actor.Character:GetChildren() do
+			if
+				child:IsA("Tool")
+				and (
+					child.Name == "Handcuffs"
+					or child:GetAttribute("RoleplayOSToolId") == "Handcuffs"
+				)
+			then
+				equipped = true
+				break
+			end
+		end
+	end
+	if not equipped then
 		return nil, "HANDCUFFS_MUST_BE_EQUIPPED"
 	end
 	local target = Players:GetPlayerByUserId(targetUserId)

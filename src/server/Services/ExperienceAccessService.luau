@@ -20,21 +20,11 @@ end
 -- deliberately not through the services that decide the gate, because the point
 -- is to catch those failing.
 function ExperienceAccessService:_shouldBeGated(): boolean
-	local official = self.context.Configuration.OfficialServers
-	local entries = official and official.Entries
-	if type(entries) ~= "table" then
-		return false
-	end
-	for _, entry in entries do
-		if
-			entry.Whitelisted == true
-			and tonumber(entry.PlaceId) == game.PlaceId
-			and type(entry.RequiredGroupLinkId) == "string"
-		then
-			return true
-		end
-	end
-	return false
+	local officialService = self.context.Services:Get("OfficialServerService")
+	local entry = officialService:CurrentEntry()
+	return entry ~= nil
+		and entry.Whitelisted == true
+		and type(entry.RequiredGroupLinkId) == "string"
 end
 
 function ExperienceAccessService:_check(player: Player)

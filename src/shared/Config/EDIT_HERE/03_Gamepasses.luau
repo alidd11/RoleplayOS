@@ -9,11 +9,10 @@
 return {
 	Gamepasses = {
 		PremiumVehicles = { GamepassId = 1936590544, PriceInRobux = 199 },
-		ExtraCharacterSlot = { GamepassId = 1934044063, PriceInRobux = 99 },
 		CustomRegistration = { GamepassId = 1937140343, PriceInRobux = 49 },
 		CivilianKnife = { GamepassId = 1937446295, PriceInRobux = 75 },
-		RamboKnife = { GamepassId = 0, PriceInRobux = 149 },
-		ZKnife = { GamepassId = 0, PriceInRobux = 149 },
+		RamboKnife = { GamepassId = 1949228959, PriceInRobux = 149 },
+		ZKnife = { GamepassId = 1949486956, PriceInRobux = 149 },
 		CivilianHandgun = { GamepassId = 1937822271, PriceInRobux = 125 },
 		CivilianShotgun = { GamepassId = 1934518052, PriceInRobux = 175 },
 		CivilianRifle = { GamepassId = 1934955986, PriceInRobux = 225 },
@@ -34,14 +33,21 @@ return {
 		-- GamepassId is zero until the pass exists. Zero disables purchasing and
 		-- entitlement without breaking the menu, exactly as the note at the top of
 		-- this file describes, so the bike will show on the forecourt as locked
-		-- and simply cannot be bought yet. Create the pass in Creator Hub at 89
+		-- and simply cannot be bought yet. Create the pass in Creator Hub at 249
 		-- Robux and put its ID here; nothing else needs changing.
 		SurronBike = {
 			Id = "SurronBike",
-			GamepassId = 0,
-			PriceInRobux = 89,
+			GamepassId = 1950974931,
+			PriceInRobux = 249,
 			Name = "Sur-Ron Light Bee",
 			Description = "Own and spawn the Sur-Ron Light Bee electric bike from any civilian dealership.",
+		},
+	},
+	DeveloperProducts = {
+		-- Create this one-time Developer Product in Creator Hub and replace 0.
+		ExtraCharacterSlot = {
+			ProductId = 3708269661,
+			PriceRobux = 199,
 		},
 	},
 }

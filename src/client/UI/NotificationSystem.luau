@@ -1,226 +1,348 @@
 --!strict
+--[[
+	NotificationSystem.luau
+	Custom toast notification overlay for RoleplayOS.
+	Replaces StarterGui:SetCore("SendNotification") with civic-operations styled toasts.
+]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
 local COLOURS = {
-	Canvas = Color3.fromRGB(15, 20, 28),
-	SurfaceRaised = Color3.fromRGB(31, 40, 55),
-	Border = Color3.fromRGB(56, 68, 88),
-	Text = Color3.fromRGB(240, 244, 251),
-	Muted = Color3.fromRGB(174, 184, 201),
-	Success = Color3.fromRGB(84, 211, 142),
-	Warning = Color3.fromRGB(245, 188, 78),
-	Danger = Color3.fromRGB(244, 104, 112),
-	Info = Color3.fromRGB(91, 156, 255),
+	Canvas = Color3.fromHex("#0F141C"),
+	Surface = Color3.fromHex("#181F2B"),
+	SurfaceRaised = Color3.fromHex("#1F2837"),
+	Text = Color3.fromHex("#F0F4FB"),
+	Muted = Color3.fromHex("#AEB8C9"),
+	Border = Color3.fromHex("#38455C"),
+	Accent = Color3.fromHex("#5B9CFF"),
+	Success = Color3.fromHex("#54D38E"),
+	Warning = Color3.fromHex("#F5BC4E"),
+	Danger = Color3.fromHex("#F46870"),
+	Info = Color3.fromHex("#5B9CFF"),
+	AccentFill = Color3.fromHex("#1F5FD0"),
 }
 
 local LEVELS = {
-	success = { Colour = COLOURS.Success, Label = "SUCCESS" },
-	warning = { Colour = COLOURS.Warning, Label = "NOTICE" },
-	danger = { Colour = COLOURS.Danger, Label = "ACTION REQUIRED" },
-	error = { Colour = COLOURS.Danger, Label = "ACTION REQUIRED" },
-	info = { Colour = COLOURS.Info, Label = "INFORMATION" },
+	Success = { Stripe = COLOURS.Success, Icon = "✓" },
+	Warning = { Stripe = COLOURS.Warning, Icon = "!" },
+	Danger = { Stripe = COLOURS.Danger, Icon = "✕" },
+	Info = { Stripe = COLOURS.Info, Icon = "i" },
 }
 
-local System = { toasts = {}, nextId = 0 }
+local NotificationSystem = {}
+NotificationSystem.__index = NotificationSystem
 
-local function corner(parent: Instance, radius: number)
-	local item = Instance.new("UICorner")
-	item.CornerRadius = UDim.new(0, radius)
-	item.Parent = parent
-end
-
-local function motionEnabled(self): boolean
-	local settingsController = self.context.Controllers.SettingsController
-	local settings = settingsController and settingsController:Get()
-	return not settings or settings.InterfaceMotion ~= false
-end
-
-function System:Init(context: any)
+function NotificationSystem.new(context)
+	local self = setmetatable({}, NotificationSystem)
 	self.context = context
-	self.toasts = {}
-	self.nextId = 0
-	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-	local existing = playerGui:FindFirstChild("RoleplayOSNotifications")
-	if existing then
-		existing:Destroy()
-	end
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "RoleplayOSNotifications"
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	gui.DisplayOrder = 80
-	gui.IgnoreGuiInset = false
-	gui:SetAttribute("RoleplayOSManagedUI", true)
-	gui:SetAttribute("RoleplayOSInterfaceMotion", true)
-	gui.Parent = playerGui
-	self.gui = gui
+	self.interfaceMotion = true
 
-	local list = Instance.new("Frame")
-	list.Name = "ToastStack"
-	list.AnchorPoint = Vector2.new(1, 0)
-	list.Position = UDim2.new(1, -18, 0, 18)
-	list.Size = UDim2.new(0, 360, 1, -36)
-	list.BackgroundTransparency = 1
-	list.Parent = gui
-	self.list = list
-
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, 8)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	layout.Parent = list
-
-	local constraint = Instance.new("UISizeConstraint")
-	constraint.MinSize = Vector2.new(220, 0)
-	constraint.MaxSize = Vector2.new(360, math.huge)
-	constraint.Parent = list
-end
-
-function System:_remove(toast: Frame)
-	if not toast.Parent then
-		return
-	end
-	local animated = motionEnabled(self)
-	if animated then
-		local tween = TweenService:Create(
-			toast,
-			TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-			{ BackgroundTransparency = 1, Size = UDim2.new(1, 20, 0, 0) }
-		)
-		tween:Play()
-		tween.Completed:Wait()
-	end
-	toast:Destroy()
-end
-
-function System:Show(message: string, level: string?)
-	if not self.list or not self.list.Parent then
-		return
-	end
-	self.nextId += 1
-	local key = string.lower(level or "info")
-	local style = LEVELS[key] or LEVELS.info
-
-	local toast = Instance.new("Frame")
-	toast.Name = "Toast_" .. self.nextId
-	toast.LayoutOrder = self.nextId
-	toast.Size = UDim2.new(1, 0, 0, 96)
-	toast.BackgroundColor3 = COLOURS.SurfaceRaised
-	toast.BackgroundTransparency = 0.08
-	toast.BorderSizePixel = 0
-	toast.ClipsDescendants = true
-	toast.Parent = self.list
-	corner(toast, 10)
-
-	local outline = Instance.new("UIStroke")
-	outline.Color = COLOURS.Border
-	outline.Transparency = 0.15
-	outline.Thickness = 1
-	outline.Parent = toast
-
-	local stripe = Instance.new("Frame")
-	stripe.Name = "LevelStripe"
-	stripe.Size = UDim2.new(0, 4, 1, 0)
-	stripe.BackgroundColor3 = style.Colour
-	stripe.BorderSizePixel = 0
-	stripe.Parent = toast
-
-	local title = Instance.new("TextLabel")
-	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(18, 11)
-	title.Size = UDim2.new(1, -30, 0, 18)
-	title.Font = Enum.Font.GothamBold
-	title.Text = "ROLEPLAYOS  ·  " .. style.Label
-	title.TextColor3 = COLOURS.Text
-	title.TextSize = 13
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = toast
-
-	local body = Instance.new("TextLabel")
-	body.BackgroundTransparency = 1
-	body.Position = UDim2.fromOffset(18, 32)
-	body.Size = UDim2.new(1, -30, 0, 48)
-	body.Font = Enum.Font.Gotham
-	body.Text = message
-	body.TextColor3 = COLOURS.Muted
-	body.TextSize = 12
-	body.TextWrapped = true
-	body.TextTruncate = Enum.TextTruncate.AtEnd
-	body.TextXAlignment = Enum.TextXAlignment.Left
-	body.TextYAlignment = Enum.TextYAlignment.Top
-	body.Parent = toast
-	if (key == "danger" or key == "error") and #message > 120 then
-		local expanded = false
-		local readMore = Instance.new("TextButton")
-		readMore.Name = "ReadMore"
-		readMore.BackgroundTransparency = 1
-		readMore.AnchorPoint = Vector2.new(1, 1)
-		readMore.Position = UDim2.new(1, -12, 1, -8)
-		readMore.Size = UDim2.fromOffset(82, 18)
-		readMore.Font = Enum.Font.GothamBold
-		readMore.Text = "Read more"
-		readMore.TextColor3 = style.Colour
-		readMore.TextSize = 11
-		readMore.TextXAlignment = Enum.TextXAlignment.Right
-		readMore.ZIndex = 3
-		readMore.Parent = toast
-		readMore.Activated:Connect(function()
-			expanded = not expanded
-			body.TextTruncate = if expanded then Enum.TextTruncate.None else Enum.TextTruncate.AtEnd
-			body.Size = if expanded then UDim2.new(1, -30, 0, 100) else UDim2.new(1, -30, 0, 48)
-			readMore.Text = if expanded then "Show less" else "Read more"
-			toast.Size = if expanded then UDim2.new(1, 0, 0, 148) else UDim2.new(1, 0, 0, 96)
-		end)
-	end
-
-	local progress = Instance.new("Frame")
-	progress.Name = "Progress"
-	progress.Position = UDim2.new(0, 0, 1, -3)
-	progress.Size = UDim2.new(1, 0, 0, 3)
-	progress.BackgroundColor3 = style.Colour
-	progress.BorderSizePixel = 0
-	progress.Parent = toast
-
-	while #self.list:GetChildren() - 1 > 4 do
-		local oldest = self.list:FindFirstChildWhichIsA("Frame")
-		if oldest then
-			self:_remove(oldest)
-		else
-			break
+	if context and context.Controllers and context.Controllers.SettingsController then
+		local settings = context.Controllers.SettingsController
+		local values = settings:Get()
+		if values then
+			self.interfaceMotion = values.InterfaceMotion ~= false
 		end
 	end
 
-	if motionEnabled(self) then
-		toast.BackgroundTransparency = 1
-		toast.Position = UDim2.fromOffset(30, 0)
-		TweenService:Create(
-			toast,
-			TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-			{ BackgroundTransparency = 0.08, Position = UDim2.new(0, 0, 0, 0) }
-		):Play()
-		TweenService:Create(
-			progress,
-			TweenInfo.new(5, Enum.EasingStyle.Linear),
-			{ Size = UDim2.fromOffset(0, 3) }
-		):Play()
-	else
-		progress.Size = UDim2.new(1, 0, 0, 3)
+	self.activeToasts = {}
+	self.maxToasts = 4
+	self.toastHeight = 56
+	self.toastGap = 8
+	self.dismissSeconds = 5
+
+	self.screenGui = Instance.new("ScreenGui")
+	self.screenGui.Name = "RoleplayOSNotifications"
+	self.screenGui.ResetOnSpawn = false
+	self.screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	self.screenGui:SetAttribute("RoleplayOSManagedUI", true)
+	self.screenGui.DisplayOrder = 100
+	self.screenGui.Parent = playerGui
+
+	self.container = Instance.new("Frame")
+	self.container.Name = "Container"
+	self.container.Size = UDim2.fromOffset(360, 0)
+	self.container.Position = UDim2.new(1, -376, 0, 16)
+	self.container.BackgroundTransparency = 1
+	self.container.BorderSizePixel = 0
+	self.container.AutomaticSize = Enum.AutomaticSize.Y
+	self.container.Parent = self.screenGui
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, self.toastGap)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	layout.Parent = self.container
+
+	return self
+end
+
+function NotificationSystem:_createToast(title: string, message: string, level: string)
+	level = LEVELS[level] and level or "Info"
+	local config = LEVELS[level]
+
+	local toast = Instance.new("Frame")
+	toast.Name = "Toast_" .. level
+	toast.Size = UDim2.fromOffset(360, self.toastHeight)
+	toast.BackgroundColor3 = COLOURS.SurfaceRaised
+	toast.BackgroundTransparency = 0
+	toast.BorderSizePixel = 0
+	toast.Active = true
+	toast.LayoutOrder = #self.activeToasts + 1
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = toast
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = COLOURS.Border
+	stroke.Transparency = 0.85
+	stroke.Thickness = 1
+	stroke.Parent = toast
+
+	local accentStripe = Instance.new("Frame")
+	accentStripe.Name = "AccentStripe"
+	accentStripe.Size = UDim2.new(0, 4, 1, 0)
+	accentStripe.Position = UDim2.fromOffset(0, 0)
+	accentStripe.BackgroundColor3 = config.Stripe
+	accentStripe.BorderSizePixel = 0
+	accentStripe.Parent = toast
+
+	local stripeCorner = Instance.new("UICorner")
+	stripeCorner.CornerRadius = UDim.new(0, 10)
+	stripeCorner.Parent = accentStripe
+
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Name = "Icon"
+	iconLabel.Size = UDim2.fromOffset(20, 20)
+	iconLabel.Position = UDim2.fromOffset(12, 12)
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = config.Icon
+	iconLabel.TextColor3 = config.Stripe
+	iconLabel.Font = Enum.Font.GothamBold
+	iconLabel.TextSize = 14
+	iconLabel.Parent = toast
+
+	local titleLabel = Instance.new("TextLabel")
+	titleLabel.Name = "Title"
+	titleLabel.Size = UDim2.new(1, -44, 0, 16)
+	titleLabel.Position = UDim2.fromOffset(36, 10)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Text = title
+	titleLabel.TextColor3 = COLOURS.Text
+	titleLabel.Font = Enum.Font.GothamBold
+	titleLabel.TextSize = 13
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	titleLabel.Parent = toast
+
+	local bodyLabel = Instance.new("TextLabel")
+	bodyLabel.Name = "Body"
+	bodyLabel.Size = UDim2.new(1, -44, 0, 16)
+	bodyLabel.Position = UDim2.fromOffset(36, 28)
+	bodyLabel.BackgroundTransparency = 1
+	bodyLabel.Text = message
+	bodyLabel.TextColor3 = COLOURS.Muted
+	bodyLabel.Font = Enum.Font.Gotham
+	bodyLabel.TextSize = 12
+	bodyLabel.TextXAlignment = Enum.TextXAlignment.Left
+	bodyLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	bodyLabel.Parent = toast
+
+	local progressBar = Instance.new("Frame")
+	progressBar.Name = "ProgressBar"
+	progressBar.Size = UDim2.new(1, -8, 0, 2)
+	progressBar.Position = UDim2.new(0, 4, 1, -4)
+	progressBar.AnchorPoint = Vector2.new(0, 1)
+	progressBar.BackgroundColor3 = config.Stripe
+	progressBar.BackgroundTransparency = 0.3
+	progressBar.BorderSizePixel = 0
+	progressBar.Parent = toast
+
+	local progressCorner = Instance.new("UICorner")
+	progressCorner.CornerRadius = UDim.new(1, 0)
+	progressCorner.Parent = progressBar
+
+	return toast, progressBar
+end
+
+function NotificationSystem:_animateIn(toast: Frame)
+	if not self.interfaceMotion then
+		toast.Position = UDim2.fromOffset(0, 0)
+		toast.BackgroundTransparency = 0
+		return
 	end
 
-	task.delay(5, function()
-		self:_remove(toast)
+	toast.Position = UDim2.fromOffset(30, 0)
+	toast.BackgroundTransparency = 0.2
+
+	TweenService:Create(
+		toast,
+		TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		{ Position = UDim2.fromOffset(0, 0), BackgroundTransparency = 0 }
+	):Play()
+end
+
+function NotificationSystem:_animateOut(toast: Frame, callback: () -> ())
+	if not self.interfaceMotion then
+		if callback then
+			callback()
+		end
+		return
+	end
+
+	local fade = TweenService:Create(
+		toast,
+		TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+		{
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(340, self.toastHeight),
+		}
+	)
+
+	fade.Completed:Connect(function()
+		if callback then
+			callback()
+		end
+	end)
+
+	fade:Play()
+end
+
+function NotificationSystem:_dismissToast(toast: Frame)
+	local toastData
+	for i, t in ipairs(self.activeToasts) do
+		if t.frame == toast then
+			toastData = table.remove(self.activeToasts, i)
+			break
+		end
+	end
+	if not toastData then
+		return
+	end
+	if toastData.connection then
+		toastData.connection:Disconnect()
+		toastData.connection = nil
+	end
+
+	self:_animateOut(toast, function()
+		if toast.Parent then
+			toast:Destroy()
+		end
+		self:_repositionToasts()
 	end)
 end
 
-function System:Destroy()
-	if self.gui then
-		self.gui:Destroy()
+function NotificationSystem:_destroyToastData(toastData)
+	if toastData.connection then
+		toastData.connection:Disconnect()
+		toastData.connection = nil
 	end
-	self.gui = nil
-	self.list = nil
-	table.clear(self.toasts)
+	if toastData.frame and toastData.frame.Parent then
+		toastData.frame:Destroy()
+	end
 end
 
-return System
+function NotificationSystem:_repositionToasts()
+	for i, toastData in ipairs(self.activeToasts) do
+		toastData.frame.LayoutOrder = i
+	end
+
+	while #self.activeToasts > self.maxToasts do
+		local oldest = table.remove(self.activeToasts, 1)
+		if oldest then
+			self:_destroyToastData(oldest)
+		end
+	end
+end
+
+function NotificationSystem:Show(message: string, title: string?, level: string?)
+	title = title or "Notification"
+	level = level or "Info"
+
+	if #self.activeToasts >= self.maxToasts then
+		local oldest = table.remove(self.activeToasts, 1)
+		if oldest then
+			self:_destroyToastData(oldest)
+		end
+	end
+
+	local toast, progressBar = self:_createToast(title, message, level)
+	toast.Parent = self.container
+
+	local toastData = {
+		frame = toast,
+		startTime = tick(),
+		duration = self.dismissSeconds,
+		connection = nil,
+	}
+
+	table.insert(self.activeToasts, toastData)
+	self:_animateIn(toast)
+
+	local connection: RBXScriptConnection
+	connection = RunService.Heartbeat:Connect(function()
+		if not toast or not toast.Parent then
+			connection:Disconnect()
+			toastData.connection = nil
+			return
+		end
+
+		local elapsed = tick() - toastData.startTime
+		local remaining = math.max(0, toastData.duration - elapsed)
+		local progress = remaining / toastData.duration
+
+		progressBar.Size = UDim2.new(progress, -8 * progress, 0, 2)
+
+		if elapsed >= toastData.duration then
+			connection:Disconnect()
+			toastData.connection = nil
+			self:_dismissToast(toast)
+		end
+	end)
+	toastData.connection = connection
+
+	toast.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			connection:Disconnect()
+			toastData.connection = nil
+			self:_dismissToast(toast)
+		end
+	end)
+end
+
+function NotificationSystem:ShowSuccess(message: string, title: string?)
+	self:Show(message, title or "Success", "Success")
+end
+
+function NotificationSystem:ShowWarning(message: string, title: string?)
+	self:Show(message, title or "Warning", "Warning")
+end
+
+function NotificationSystem:ShowDanger(message: string, title: string?)
+	self:Show(message, title or "Error", "Danger")
+end
+
+function NotificationSystem:ShowInfo(message: string, title: string?)
+	self:Show(message, title or "Info", "Info")
+end
+
+function NotificationSystem:Destroy()
+	for _, toastData in ipairs(self.activeToasts) do
+		self:_destroyToastData(toastData)
+	end
+	if self.screenGui then
+		self.screenGui:Destroy()
+	end
+	self.activeToasts = {}
+end
+
+return NotificationSystem

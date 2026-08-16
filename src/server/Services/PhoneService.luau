@@ -9,6 +9,35 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local PhoneService = { calls = {}, userCalls = {}, connections = {} }
 
+local function isPhoneTool(instance: Instance): boolean
+	return instance:IsA("Tool")
+		and (instance.Name == "Phone" or instance:GetAttribute("RoleplayOSToolId") == "Phone")
+end
+
+local function findPhoneTool(player: Player, includeBackpack: boolean): Tool?
+	local character = player.Character
+	if character then
+		for _, child in character:GetChildren() do
+			if isPhoneTool(child) then
+				return child :: Tool
+			end
+		end
+	end
+
+	if includeBackpack then
+		local backpack = player:FindFirstChildOfClass("Backpack")
+		if backpack then
+			for _, child in backpack:GetChildren() do
+				if isPhoneTool(child) then
+					return child :: Tool
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
 function PhoneService:_makeTool(): Tool
 	local tool = Instance.new("Tool")
 	tool.Name = "Phone"
@@ -55,12 +84,11 @@ function PhoneService:EnsureTool(player: Player)
 	if not self:_character(player) then
 		return
 	end
+	if findPhoneTool(player, true) then
+		return
+	end
 	local backpack = player:FindFirstChildOfClass("Backpack")
-	if
-		not backpack
-		or backpack:FindFirstChild("Phone")
-		or (player.Character and player.Character:FindFirstChild("Phone"))
-	then
+	if not backpack then
 		return
 	end
 	self:_makeTool().Parent = backpack
@@ -70,7 +98,7 @@ function PhoneService:ToggleFlashlight(player: Player, enabled: any): (boolean, 
 	if type(enabled) ~= "boolean" then
 		return false, "INVALID_FLASHLIGHT_STATE"
 	end
-	local tool = player.Character and player.Character:FindFirstChild("Phone")
+	local tool = findPhoneTool(player, false)
 	local light = tool and tool:FindFirstChild("PhoneFlashlight", true)
 	if not light or not light:IsA("SpotLight") then
 		return false, "PHONE_MUST_BE_EQUIPPED"

@@ -21,9 +21,15 @@ end
 
 local function hasPAVA(player: Player): boolean
 	for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
-		local tool = container and container:FindFirstChild("PAVA")
-		if tool and tool:IsA("Tool") and tool:GetAttribute("RoleplayOSToolId") == "PAVA" then
-			return true
+		if container then
+			for _, child in container:GetChildren() do
+				if
+					child:IsA("Tool")
+					and (child.Name == "PAVA" or child:GetAttribute("RoleplayOSToolId") == "PAVA")
+				then
+					return true
+				end
+			end
 		end
 	end
 	return false

@@ -93,7 +93,7 @@ table.sort(candidates, function(a, b)
 end)
 
 local removed = 0
-or _, instance in candidates do
+for _, instance in candidates do
 	if instance:IsDescendantOf(workspace) or instance:IsDescendantOf(ServerStorage) then
 		local selectedAncestor = false
 		local ancestor = instance.Parent

@@ -19,16 +19,9 @@ function ServerModeService:RequiredGroupLinkId(): string?
 	if type(officialLinkId) == "string" and officialLinkId ~= "" then
 		return officialLinkId
 	end
-	local entries = self.context.Configuration.OfficialServers.Entries
-	for _, entry in entries do
-		if
-			entry.Whitelisted == true
-			and tonumber(entry.PlaceId) == game.PlaceId
-			and type(entry.RequiredGroupLinkId) == "string"
-		then
-			return entry.RequiredGroupLinkId
-		end
-	end
+	-- Never fall back to a place-wide whitelist: public and official servers
+	-- share the same PlaceId. An official link is valid only when the authoritative
+	-- service resolved the reserved-server identity above.
 	local access = self.context.Configuration.ExperienceAccess
 	if access.Enabled == true and type(access.RequiredGroupLinkId) == "string" then
 		return access.RequiredGroupLinkId

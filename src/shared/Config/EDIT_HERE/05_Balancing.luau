@@ -2,7 +2,9 @@
 
 return {
 	Characters = {
-		FreeSlots = 2,
+		-- Public players start with one civilian identity. ExtraCharacterSlot
+		-- grants one additional identity without changing the public role roster.
+		FreeSlots = 1,
 		MaximumSlots = 6,
 		MinimumAge = 16,
 		MaximumAge = 100,

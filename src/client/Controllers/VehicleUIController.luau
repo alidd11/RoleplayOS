@@ -15,21 +15,20 @@ function VehicleUIController:Init(context: any)
 end
 
 -- The chassis clones its own gauges into PlayerGui when a player takes a seat.
--- Matching them by name is unreliable: forks rename them freely, and a name
--- list is only ever as current as the last fork someone checked. Identify them
--- by behaviour instead. Anything that appears while seated, and is not ours, is
--- the chassis interface, whatever it happens to be called.
+-- Only explicitly configured duplicate gauge names are suppressed. A broad
+-- "hide every non-RoleplayOS ScreenGui" rule would also hide a vehicle package's
+-- native touch controls, chat, or other unrelated player interfaces.
 --
 -- They are disabled rather than destroyed, since the chassis may still be
 -- driving them, and re-enabled on leaving the seat so nothing is left broken
 -- for a system that expects to own them. The configured names remain as an
 -- immediate match for interfaces already present before sitting down.
-function VehicleUIController:_suppress(instance: Instance, seated: boolean)
+function VehicleUIController:_suppress(instance: Instance, _seated: boolean)
 	if not instance:IsA("ScreenGui") or instance:GetAttribute("RoleplayOSManagedUI") then
 		return
 	end
 	local named = table.find(self.settings.SuppressGuiNames, instance.Name) ~= nil
-	if not named and not seated then
+	if not named then
 		return
 	end
 	if not instance.Enabled then

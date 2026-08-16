@@ -7,6 +7,7 @@ local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local TooltipSystem = require(script.Parent.TooltipSystem)
 local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
+local AudioFeedback = require(script.Parent.Parent.Systems.AudioFeedback)
 
 -- Roblox's unified top bar is a 36px band on an unscaled desktop client and
 -- carries 32px square icon controls inside it, leaving a 2px gutter above and
@@ -26,6 +27,8 @@ local MAXIMUM_CONTENT_WIDTH = 1680
 -- underneath its own.
 
 local App = {}
+local activeAudioFeedback: any = nil
+local activeMountGui: ScreenGui? = nil
 local COLOURS = {
 	Canvas = Color3.fromRGB(15, 20, 28),
 	Sidebar = Color3.fromRGB(18, 24, 34),
@@ -56,6 +59,28 @@ local ROLE_PRESENTATION = {
 	Prison = { Icon = "HMP", Colour = Color3.fromRGB(167, 117, 75), Label = "PRISON SERVICE" },
 	Control = { Icon = "CTL", Colour = Color3.fromRGB(50, 190, 188), Label = "FORCE CONTROL" },
 }
+
+-- Uploaded through the Roblox Creator Dashboard. Keep these IDs in one small
+-- presentation map so replacing artwork never touches role-access logic.
+local ROLE_TILE_ASSET_IDS = {
+	Police = "rbxassetid://124510305332365",
+	Ambulance = "rbxassetid://115689835891137",
+	Fire = "rbxassetid://95977486831570",
+	Civilian = "rbxassetid://113064266300926",
+	Highways = "rbxassetid://133420507327997",
+	Transport = "rbxassetid://102874702573163",
+	RoyaltyMail = "rbxassetid://88863810610980",
+	Cashier = "rbxassetid://127971383421481",
+	ComingSoon = "rbxassetid://101846745500511",
+}
+
+local function roleTileAssetId(role: any): string?
+	local assetId = ROLE_TILE_ASSET_IDS[role.DepartmentId] or ROLE_TILE_ASSET_IDS[role.Id]
+	if not assetId then
+		return nil
+	end
+	return assetId
+end
 
 local function rolePresentation(role: any): any
 	local key = role.DepartmentId or role.Id
@@ -245,31 +270,67 @@ end
 local function pressable(button: GuiButton)
 	local scale = Instance.new("UIScale")
 	scale.Parent = button
+	local baseColour = button.BackgroundColor3
+	local hoverColour = baseColour:Lerp(Color3.new(1, 1, 1), 0.06)
+	local pressed = false
+	local hovered = false
 	local function motionEnabled(): boolean
 		local gui = button:FindFirstAncestorWhichIsA("ScreenGui")
 		return not gui or gui:GetAttribute("RoleplayOSInterfaceMotion") ~= false
 	end
-	button.MouseButton1Down:Connect(function()
+	local function setPressed(value: boolean)
+		pressed = value
+		local targetScale = value and 0.97 or 1
+		local targetColour = if value
+			then baseColour
+			else if hovered then hoverColour else baseColour
 		if not motionEnabled() then
-			scale.Scale = 0.97
+			scale.Scale = targetScale
+			button.BackgroundColor3 = targetColour
 			return
 		end
-		TweenService
-			:Create(scale, TweenInfo.new(0.1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-				Scale = 0.97,
-			})
-			:Play()
+		TweenService:Create(
+			scale,
+			TweenInfo.new(
+				if value then 0.1 else 0.14,
+				Enum.EasingStyle.Quart,
+				Enum.EasingDirection.Out
+			),
+			{ Scale = targetScale }
+		):Play()
+		TweenService:Create(
+			button,
+			TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+			{ BackgroundColor3 = targetColour }
+		):Play()
+	end
+	button.MouseEnter:Connect(function()
+		hovered = true
+		if not pressed then
+			setPressed(false)
+		end
 	end)
-	button.MouseButton1Up:Connect(function()
-		if not motionEnabled() then
-			scale.Scale = 1
-			return
+	button.MouseLeave:Connect(function()
+		hovered = false
+		if not pressed then
+			setPressed(false)
 		end
-		TweenService
-			:Create(scale, TweenInfo.new(0.14, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-				Scale = 1,
-			})
-			:Play()
+	end)
+	button.InputBegan:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			setPressed(true)
+		end
+	end)
+	button.InputEnded:Connect(function(input)
+		if
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch
+		then
+			setPressed(false)
+		end
 	end)
 end
 
@@ -283,6 +344,7 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 	item.TextColor3 = COLOURS.Text
 	item.TextTruncate = Enum.TextTruncate.AtEnd
 	item.TextWrapped = false
+	item.Selectable = true
 	item.Size = UDim2.fromOffset(170, 40)
 	item.Parent = parent
 	if parent:IsA("ScrollingFrame") then
@@ -293,6 +355,11 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 	corner(item, 8)
 	stroke(item, if primary then COLOURS.Accent else COLOURS.Border, if primary then 0.55 else 0)
 	pressable(item)
+	item.Activated:Connect(function()
+		if activeAudioFeedback then
+			activeAudioFeedback:ButtonClick()
+		end
+	end)
 	return item
 end
 
@@ -307,14 +374,6 @@ local function clear(container: Instance)
 		end
 	end
 	container:SetAttribute("RoleplayOSNextLayoutOrder", 0)
-end
-
-local function elevate(container: Instance, zIndex: number)
-	for _, descendant in container:GetDescendants() do
-		if descendant:IsA("GuiObject") then
-			descendant.ZIndex = zIndex
-		end
-	end
 end
 
 local function card(parent: Instance, height: number): Frame
@@ -360,7 +419,24 @@ local function input(parent: Instance, placeholder: string): TextBox
 	item.Size = UDim2.new(1, 0, 0, 46)
 	item.Parent = parent
 	corner(item, 9)
-	stroke(item)
+	local inputStroke = Instance.new("UIStroke")
+	inputStroke.Color = COLOURS.Border
+	inputStroke.Transparency = 0
+	inputStroke.Parent = item
+	item.Focused:Connect(function()
+		TweenService:Create(
+			inputStroke,
+			TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+			{ Color = COLOURS.Accent, Thickness = 1.5 }
+		):Play()
+	end)
+	item.FocusLost:Connect(function()
+		TweenService:Create(
+			inputStroke,
+			TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+			{ Color = COLOURS.Border, Thickness = 1 }
+		):Play()
+	end)
 	local padding = Instance.new("UIPadding")
 	padding.PaddingLeft = UDim.new(0, 14)
 	padding.PaddingRight = UDim.new(0, 14)
@@ -369,6 +445,24 @@ local function input(parent: Instance, placeholder: string): TextBox
 end
 
 function App.mount(context: any): ScreenGui
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	if activeMountGui and activeMountGui.Parent then
+		return activeMountGui
+	end
+
+	local function removeStaleLayer(name: string)
+		local existing = playerGui:FindFirstChild(name)
+		if existing then
+			existing:Destroy()
+		end
+	end
+
+	-- A Rojo sync or a client-script restart can rerun mount without resetting
+	-- PlayerGui. Remove only the exact RoleplayOS layers so old dashboards cannot
+	-- stack on top of the new one while unrelated HUD systems remain untouched.
+	removeStaleLayer("RoleplayOS")
+	removeStaleLayer("RoleplayOSMenuToggle")
+
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RoleplayOS"
 	gui:SetAttribute("RoleplayOSManagedUI", true)
@@ -386,8 +480,43 @@ function App.mount(context: any): ScreenGui
 	-- Above the gameplay HUD (minimap, needs, progression) which would otherwise
 	-- draw over the menu, but below the controls overlay at 90.
 	gui.DisplayOrder = 50
-	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+	gui.Parent = playerGui
+	activeMountGui = gui
+	gui.Destroying:Connect(function()
+		if activeMountGui == gui then
+			activeMountGui = nil
+		end
+	end)
 	local preloader = AssetPreloader.new(context)
+	local ModalSystem = require(script.Parent.ModalSystem)
+	local sharedModalSystem = context.Systems and context.Systems.ModalSystem
+	local modalSystem = sharedModalSystem or ModalSystem.new(context)
+	local ownsModalSystem = sharedModalSystem == nil
+	local sharedAudioFeedback = context.Systems and context.Systems.AudioFeedback
+	local audioFeedback: any = sharedAudioFeedback
+	local ownsAudioFeedback = false
+	if not audioFeedback then
+		ownsAudioFeedback = true
+		local audioOk, audioResult = pcall(AudioFeedback.new, context)
+		if audioOk then
+			audioFeedback = audioResult
+		else
+			warn("[RoleplayOS] Optional audio feedback unavailable: " .. tostring(audioResult))
+		end
+	end
+	activeAudioFeedback = audioFeedback
+	gui.Destroying:Connect(function()
+		preloader:Destroy()
+		if ownsModalSystem then
+			modalSystem:Destroy()
+		end
+		if ownsAudioFeedback and audioFeedback then
+			audioFeedback:Destroy()
+		end
+		if activeAudioFeedback == audioFeedback then
+			activeAudioFeedback = nil
+		end
+	end)
 
 	local menuToggleGui = Instance.new("ScreenGui")
 	menuToggleGui.Name = "RoleplayOSMenuToggle"
@@ -426,7 +555,9 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Visible = false
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
-	menuToggle.Position = UDim2.fromOffset(8, 8)
+	-- Match the final topbar layout from the first frame. Starting at (8, 8)
+	-- caused a visible hop before the responsive binding corrected it.
+	menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, 2)
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
@@ -527,7 +658,15 @@ function App.mount(context: any): ScreenGui
 	loadingFill.ZIndex = 102
 	loadingFill.Parent = loadingBar
 	local preloaderInteractive = false
+	local loadingFinished = false
 	local continueLoading: TextButton? = nil
+	local preloaderProgressConnection: RBXScriptConnection? = nil
+	local preloaderPhaseConnection: RBXScriptConnection? = nil
+	local function interfaceMotionEnabled(): boolean
+		local settings = context.Controllers.SettingsController:Get()
+		return not settings or settings.InterfaceMotion ~= false
+	end
+
 	local function updateLoadingStatus(progress: number)
 		local statusText = if progress < 0.2
 			then "Connecting to server…"
@@ -539,14 +678,40 @@ function App.mount(context: any): ScreenGui
 		loadingStatus.Text = statusText
 		loadingFill.Size = UDim2.fromScale(math.clamp(progress, 0, 1), 1)
 	end
-	local function finishLoading()
-		if not preloaderInteractive then
+	local function finishLoading(force: boolean?)
+		if loadingFinished then
 			return
 		end
+		if not force and not preloaderInteractive then
+			return
+		end
+		loadingFinished = true
+		if preloaderProgressConnection then
+			preloaderProgressConnection:Disconnect()
+			preloaderProgressConnection = nil
+		end
+		if preloaderPhaseConnection then
+			preloaderPhaseConnection:Disconnect()
+			preloaderPhaseConnection = nil
+		end
+		preloaderInteractive = true
+		if continueLoading then
+			continueLoading:Destroy()
+			continueLoading = nil
+		end
+		loadingFill.Size = UDim2.fromScale(1, 1)
+		loadingStatus.Text = "Ready"
+		loadingStatus.TextColor3 = COLOURS.Muted
+		loadingOverlay.BackgroundTransparency = 1
 		loadingOverlay.Visible = false
+		gui.Enabled = true
+		root.Visible = true
 	end
-	preloader.onProgress.Event:Connect(updateLoadingStatus)
-	preloader.onPhaseChange.Event:Connect(function(phase: string)
+	preloaderProgressConnection = preloader.onProgress.Event:Connect(updateLoadingStatus)
+	preloaderPhaseConnection = preloader.onPhaseChange.Event:Connect(function(phase: string)
+		if loadingFinished then
+			return
+		end
 		if phase == "interactive" then
 			preloaderInteractive = true
 			loadingOverlay.BackgroundTransparency = 0.6
@@ -560,7 +725,10 @@ function App.mount(context: any): ScreenGui
 					continueLoading:Destroy()
 					continueLoading = nil
 				end
-				finishLoading()
+				finishLoading(true)
+				if audioFeedback then
+					audioFeedback:ButtonClick()
+				end
 			end)
 		elseif phase == "complete" then
 			finishLoading()
@@ -590,9 +758,43 @@ function App.mount(context: any): ScreenGui
 			end
 			loadingStatus.Text = "Could not reach the server."
 			loadingStatus.TextColor3 = COLOURS.Danger
+			if audioFeedback then
+				audioFeedback:Error()
+			end
+			-- Does not force-finish. A failed retry means the server is still
+			-- unreachable, so the honest state is the retry screen staying up with
+			-- the button re-enabled, not a menu the player can open with no working
+			-- session behind it. Silently promoting past a confirmed failure here is
+			-- what caused a player to be dropped into gameplay immediately after
+			-- being told the connection failed.
 		end)
 	end)
 	preloader:Start()
+
+	-- Safety net only, not a substitute for the preloader actually finishing.
+	--
+	-- AssetPreloader now catches its own errors and guarantees it reaches
+	-- "interactive"/"complete" even when preloading throws, so this should rarely
+	-- if ever fire. It exists for the one case that isn't the preloader's fault:
+	-- something else in startup hangs before Start() even runs. Fifteen seconds is
+	-- long enough that it will not pre-empt a legitimate slow load, and it never
+	-- fires while the retry screen is already up and offering the player a real,
+	-- honest way forward.
+	task.delay(15, function()
+		if not loadingOverlay or not loadingOverlay.Parent or not loadingOverlay.Visible then
+			return
+		end
+		if retryLoading.Visible then
+			return
+		end
+		warn(
+			"[RoleplayOS] Startup exceeded 15s without the asset preloader reporting "
+				.. "interactive. Promoting to interactive without confirmation; this "
+				.. "indicates a real startup bug and should be investigated rather than "
+				.. "relied on."
+		)
+		finishLoading(true)
+	end)
 
 	local sidebar = Instance.new("Frame")
 	sidebar.Size = UDim2.new(0, 250, 1, 0)
@@ -611,6 +813,10 @@ function App.mount(context: any): ScreenGui
 	sidebarStroke.Parent = sidebar
 
 	local brand = text(sidebar, game.Name, 21, COLOURS.Text, true)
+	-- The Roblox top bar already identifies the experience. Repeating the game
+	-- name inside the dashboard consumed the most valuable part of the compact
+	-- header and pushed the useful announcement down.
+	brand.Visible = false
 	brand.Position = UDim2.fromOffset(26, 20)
 	brand.Size = UDim2.new(1, -52, 0, 42)
 	brand.TextSize = 17
@@ -629,6 +835,63 @@ function App.mount(context: any): ScreenGui
 	local navLayout = Instance.new("UIListLayout")
 	navLayout.Padding = UDim.new(0, 7)
 	navLayout.Parent = navigation
+	-- The old Portsmouth experience kept the product navigation at the bottom,
+	-- where it stayed available while the large role artwork carried the page.
+	-- Keep the original navigation instance as the responsive source of truth,
+	-- but render the player-facing controls in a dedicated dock below.
+	local bottomDock = Instance.new("Frame")
+	bottomDock.Name = "BottomNavigation"
+	bottomDock.AnchorPoint = Vector2.new(0.5, 1)
+	bottomDock.BackgroundColor3 = Color3.fromRGB(12, 16, 24)
+	bottomDock.BackgroundTransparency = 0.04
+	bottomDock.BorderSizePixel = 0
+	bottomDock.ZIndex = 20
+	bottomDock.Parent = root
+	corner(bottomDock, 16)
+	stroke(bottomDock, COLOURS.Border, 0.12)
+	local bottomDockPadding = Instance.new("UIPadding")
+	bottomDockPadding.PaddingLeft = UDim.new(0, 8)
+	bottomDockPadding.PaddingRight = UDim.new(0, 8)
+	bottomDockPadding.PaddingTop = UDim.new(0, 8)
+	bottomDockPadding.PaddingBottom = UDim.new(0, 8)
+	bottomDockPadding.Parent = bottomDock
+	local bottomDockLayout = Instance.new("UIListLayout")
+	bottomDockLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	bottomDockLayout.FillDirection = Enum.FillDirection.Horizontal
+	bottomDockLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	bottomDockLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	bottomDockLayout.Padding = UDim.new(0, 8)
+	bottomDockLayout.Parent = bottomDock
+
+	local announcementMessages = {
+		"Please read the rules before entering Portsmouth",
+		"Choose a role, then report for duty",
+		"Need help? Open Help for controls and guides",
+		"Play fair, keep scenes realistic, and respect other players",
+	}
+	local announcementIndex = 1
+	local announcement = text(root, announcementMessages[announcementIndex], 12, COLOURS.Muted, true)
+	announcement.Name = "Announcement"
+	announcement.AnchorPoint = Vector2.new(0.5, 0)
+	announcement.BackgroundColor3 = Color3.fromRGB(31, 25, 48)
+	announcement.BackgroundTransparency = 0.12
+	announcement.BorderSizePixel = 0
+	announcement.TextXAlignment = Enum.TextXAlignment.Center
+	announcement.Size = UDim2.fromOffset(420, 28)
+	announcement.ZIndex = 18
+	announcement.Parent = root
+	corner(announcement, 14)
+	stroke(announcement, Color3.fromRGB(126, 91, 189), 0.5)
+	task.spawn(function()
+		while announcement.Parent do
+			task.wait(10)
+			if not announcement.Parent then
+				break
+			end
+			announcementIndex = announcementIndex % #announcementMessages + 1
+			announcement.Text = announcementMessages[announcementIndex]
+		end
+	end)
 
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
@@ -677,7 +940,6 @@ function App.mount(context: any): ScreenGui
 	-- character or duty entry, a refreshed menu snapshot must not trap the player.
 	local hasEnteredWorld = false
 	local dismissToWorld: () -> ()
-	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
 	TooltipSystem:Init(context)
 	local function updateMenuToggleAppearance(isOpen: boolean)
 		menuToggle.Text = "MENU"
@@ -696,11 +958,6 @@ function App.mount(context: any): ScreenGui
 	playerGui:GetAttributeChangedSignal("RoleplayOSMenuOpen"):Connect(function()
 		updateMenuToggleAppearance(playerGui:GetAttribute("RoleplayOSMenuOpen") == true)
 	end)
-	local function interfaceMotionEnabled(): boolean
-		local settings = context.Controllers.SettingsController:Get()
-		return not settings or settings.InterfaceMotion ~= false
-	end
-
 	local function openFromWorld()
 		setMenuOpen(true)
 		gui.Enabled = true
@@ -724,174 +981,114 @@ function App.mount(context: any): ScreenGui
 		else
 			openFromWorld()
 		end
+		if audioFeedback then
+			audioFeedback:ButtonClick()
+		end
 	end)
 
-	local function showModal()
-		local currentLayout = context.Controllers.UIOrchestrator:GetLayout()
-		-- Sized against the usable area rather than the raw viewport: this canvas
-		-- is deliberately full bleed, so a modal measured against the whole screen
-		-- would run under a notch, island or home indicator.
-		local safeViewport = currentLayout.SafeViewport
-		local shortViewport = safeViewport.Y < 520
-		local shade = Instance.new("TextButton")
-		shade.Text = ""
-		shade.AutoButtonColor = false
-		shade.BackgroundColor3 = Color3.new(0, 0, 0)
-		shade.BackgroundTransparency = 0.25
-		shade.Size = UDim2.fromScale(1, 1)
-		shade.ZIndex = 20
-		shade.Parent = root
-		local modal = Instance.new("Frame")
-		modal.AnchorPoint = Vector2.new(0.5, 0.5)
-		modal.Position = UDim2.fromScale(0.5, 0.5)
-		modal.Size = UDim2.fromOffset(
-			math.min(460, safeViewport.X - 32),
-			if shortViewport then math.min(326, safeViewport.Y - 24) else 465
-		)
-		modal.BackgroundColor3 = COLOURS.Surface
-		modal.BorderSizePixel = 0
-		modal.ZIndex = 21
-		modal.Parent = shade
-		corner(modal, 15)
-		stroke(modal)
-		local modalPadding = Instance.new("UIPadding")
-		local modalInset = if shortViewport then 16 else 26
-		modalPadding.PaddingTop = UDim.new(0, modalInset)
-		modalPadding.PaddingBottom = UDim.new(0, modalInset)
-		modalPadding.PaddingLeft = UDim.new(0, modalInset)
-		modalPadding.PaddingRight = UDim.new(0, modalInset)
-		modalPadding.Parent = modal
-		local modalFlow = Instance.new("UIListLayout")
-		modalFlow.SortOrder = Enum.SortOrder.LayoutOrder
-		modalFlow.Padding = UDim.new(0, if shortViewport then 6 else 12)
-		modalFlow.Parent = modal
-		local title = text(modal, "Create a character", 24, COLOURS.Text, true)
-		title.LayoutOrder = 1
-		title.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 36)
-		title.TextSize = if shortViewport then 20 else 24
+	local function showCharacterCreationModal(previousError: string?)
+		local form = Instance.new("Frame")
+		form.Name = "CharacterCreationForm"
+		form.Size = UDim2.fromScale(1, 0)
+		form.AutomaticSize = Enum.AutomaticSize.Y
+		form.BackgroundTransparency = 1
+		form.BorderSizePixel = 0
+		local creationFlow = Instance.new("UIListLayout")
+		creationFlow.SortOrder = Enum.SortOrder.LayoutOrder
+		creationFlow.Padding = UDim.new(0, 8)
+		creationFlow.Parent = form
 		local copy = text(
-			modal,
-			"Build a civilian identity. You can customise appearance later.",
+			form,
+			"Build a civilian identity. Your current Roblox avatar is saved as the starting outfit; update it later with Save current outfit.",
 			13,
 			COLOURS.Muted
 		)
-		copy.LayoutOrder = 2
-		copy.Size = UDim2.new(1, 0, 0, if shortViewport then 30 else 38)
+		copy.LayoutOrder = 1
+		copy.Size = UDim2.new(1, 0, 0, 34)
 		copy.TextWrapped = true
-		local firstName = input(modal, "First name")
-		local lastName = input(modal, "Last name")
-		local dateOfBirth = input(modal, "Date of birth  ·  YYYY-MM-DD")
-		firstName.LayoutOrder = 3
-		lastName.LayoutOrder = 4
-		dateOfBirth.LayoutOrder = 5
-		if shortViewport then
-			firstName.Size = UDim2.new(1, 0, 0, 40)
-			lastName.Size = UDim2.new(1, 0, 0, 40)
-			dateOfBirth.Size = UDim2.new(1, 0, 0, 40)
-		end
-		local errorLabel = text(modal, "", 12, COLOURS.Danger)
-		errorLabel.LayoutOrder = 6
-		errorLabel.Size = UDim2.new(1, 0, 0, if shortViewport then 20 else 24)
-		local actions = Instance.new("Frame")
-		actions.LayoutOrder = 7
-		actions.BackgroundTransparency = 1
-		actions.Size = UDim2.new(1, 0, 0, if shortViewport then 42 else 46)
-		actions.Parent = modal
-		local cancel = button(actions, "Cancel", false)
-		cancel.Size = UDim2.new(0.5, -6, 1, 0)
-		local create = button(actions, "Create character", true)
-		create.Position = UDim2.new(0.5, 6, 0, 0)
-		create.Size = UDim2.new(0.5, -6, 1, 0)
-		cancel.Activated:Connect(function()
-			shade:Destroy()
-		end)
-		create.Activated:Connect(function()
-			create.Text = "Creating…"
-			local response = context.Controllers.CharacterController:Create({
-				FirstName = firstName.Text,
-				LastName = lastName.Text,
-				DateOfBirth = dateOfBirth.Text,
-			})
-			if response.Success then
-				shade:Destroy()
-				context.Controllers.StartMenuController:Refresh()
-			else
-				errorLabel.Text = response.Message
-				create.Text = "Create character"
-			end
-		end)
-		elevate(modal, 22)
-		if interfaceMotionEnabled() and not shortViewport then
-			modal.Size = UDim2.fromOffset(438, 442)
-			modal.BackgroundTransparency = 1
-			TweenService
-				:Create(
-					modal,
-					TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-					{
-						Size = UDim2.fromOffset(460, 465),
-						BackgroundTransparency = 0,
-					}
-				)
-				:Play()
-		end
+		local firstName = input(form, "First name")
+		firstName.LayoutOrder = 2
+		local lastName = input(form, "Last name")
+		lastName.LayoutOrder = 3
+		local dateOfBirth = input(form, "Date of birth  ·  YYYY-MM-DD")
+		dateOfBirth.LayoutOrder = 4
+		local errorLabel = text(form, previousError or "", 12, COLOURS.Danger)
+		errorLabel.LayoutOrder = 5
+		errorLabel.Size = UDim2.new(1, 0, 0, 28)
+		errorLabel.TextWrapped = true
+		modalSystem:Open({
+			Title = "Create a character",
+			Body = form,
+			Actions = {
+				{ Label = "Cancel", Primary = false, Callback = function() end },
+				{
+					Label = "Create character",
+					Primary = true,
+					Callback = function()
+						local response = context.Controllers.CharacterController:Create({
+							FirstName = firstName.Text,
+							LastName = lastName.Text,
+							DateOfBirth = dateOfBirth.Text,
+						})
+						if response.Success then
+							if audioFeedback then
+								audioFeedback:Success()
+							end
+							context.Controllers.StartMenuController:Refresh()
+						else
+							task.defer(function()
+								showCharacterCreationModal(response.Message)
+							end)
+						end
+					end,
+				},
+			},
+			Width = 460,
+			Dismissable = true,
+		})
 	end
 
 	local function showDutySelection(role: any, dutyProfile: any)
-		local shade = Instance.new("TextButton")
-		shade.Text = ""
-		shade.AutoButtonColor = false
-		shade.BackgroundColor3 = Color3.new(0, 0, 0)
-		shade.BackgroundTransparency = 0.25
-		shade.Size = UDim2.fromScale(1, 1)
-		shade.ZIndex = 20
-		shade.Parent = root
-		local modal = Instance.new("Frame")
-		modal.AnchorPoint = Vector2.new(0.5, 0.5)
-		modal.Position = UDim2.fromScale(0.5, 0.5)
-		-- Clamped, like every other modal here. Fixed at 390 tall it was already
-		-- flush to both edges of a four hundred pixel phone before the top bar,
-		-- and it grows by a button for every spawn point, so the Cancel control
-		-- was pushed off screen at a station with more than a couple. This is the
-		-- last step before a player actually reaches the game.
-		local safe = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
-		modal.Size = UDim2.fromOffset(math.min(480, safe.X - 32), math.min(390, safe.Y - 32))
-		modal.BackgroundColor3 = COLOURS.Surface
-		modal.BorderSizePixel = 0
-		modal.ZIndex = 21
-		modal.Parent = shade
-		corner(modal, 15)
-		stroke(modal)
-		local padding = Instance.new("UIPadding")
-		padding.PaddingTop = UDim.new(0, 26)
-		padding.PaddingBottom = UDim.new(0, 26)
-		padding.PaddingLeft = UDim.new(0, 26)
-		padding.PaddingRight = UDim.new(0, 26)
-		padding.Parent = modal
+		local body = Instance.new("Frame")
+		body.Name = "DutySpawnOptions"
+		body.Size = UDim2.fromScale(1, 0)
+		body.AutomaticSize = Enum.AutomaticSize.Y
+		body.BackgroundTransparency = 1
+		body.BorderSizePixel = 0
 		local layout = Instance.new("UIListLayout")
 		layout.Padding = UDim.new(0, 10)
 		layout.SortOrder = Enum.SortOrder.LayoutOrder
-		layout.Parent = modal
-		local title = text(modal, "Start " .. role.Name, 23, COLOURS.Text, true)
-		title.LayoutOrder = 1
-		title.Size = UDim2.new(1, 0, 0, 34)
+		layout.Parent = body
 		local copy =
-			text(modal, "Choose exactly where you want to report for duty.", 13, COLOURS.Muted)
-		copy.LayoutOrder = 2
+			text(body, "Choose exactly where you want to report for duty.", 13, COLOURS.Muted)
+		copy.LayoutOrder = 1
 		copy.Size = UDim2.new(1, 0, 0, 30)
-		local spawnOptions = role.Spawns or {}
-		local modalHeight = math.min(520, math.max(390, 250 + #spawnOptions * 58))
-		modal.Size =
-			UDim2.fromOffset(math.min(480, safe.X - 32), math.min(modalHeight, safe.Y - 32))
-		for index, spawnOption in spawnOptions do
+		copy.TextWrapped = true
+		local spawnOptions = if type(role.Spawns) == "table" then role.Spawns else {}
+		local validSpawnCount = 0
+		for _, spawnOption in spawnOptions do
+			if type(spawnOption) ~= "table" then
+				continue
+			end
+			local spawnId = if type(spawnOption.SpawnId) == "string"
+				then spawnOption.SpawnId
+				else ""
+			if spawnId == "" then
+				continue
+			end
+			local stationName = if type(spawnOption.StationName) == "string"
+					and spawnOption.StationName ~= ""
+				then spawnOption.StationName
+				else "Station"
 			local displayName = if type(spawnOption.DisplayName) == "string"
 					and spawnOption.DisplayName ~= ""
 				then spawnOption.DisplayName
-				else string.gsub(spawnOption.SpawnId or "", "_", " ")
-			local choiceText = spawnOption.StationName .. "  ·  " .. displayName
-			local choice = button(modal, choiceText, false)
+				else string.gsub(spawnId, "_", " ")
+			local choiceText = stationName .. "  ·  " .. displayName
+			local choice = button(body, choiceText, false)
 			TooltipSystem:Attach(choice, choiceText)
-			choice.LayoutOrder = 10 + index
+			validSpawnCount += 1
+			choice.LayoutOrder = 10 + validSpawnCount
 			choice.Size = UDim2.new(1, 0, 0, 48)
 			choice.Activated:Connect(function()
 				choice.Text = "Starting duty…"
@@ -899,23 +1096,104 @@ function App.mount(context: any): ScreenGui
 					DutyProfileId = dutyProfile.ProfileId,
 					RoleId = role.Id,
 					StationId = spawnOption.StationId,
-					SpawnId = spawnOption.SpawnId,
+					SpawnId = spawnId,
 				})
 				if response.Success then
-					shade:Destroy()
+					if audioFeedback then
+						audioFeedback:Success()
+					end
+					modalSystem:Close()
 					dismissToWorld()
 				else
-					choice.Text = spawnOption.StationName .. "  ·  " .. displayName
+					choice.Text = choiceText
 				end
 			end)
 		end
-		local cancel = button(modal, "Cancel", false)
-		cancel.LayoutOrder = 100
-		cancel.Size = UDim2.new(1, 0, 0, 44)
-		cancel.Activated:Connect(function()
-			shade:Destroy()
-		end)
-		elevate(modal, 22)
+		if validSpawnCount == 0 then
+			modalSystem:Open({
+				Title = "Duty unavailable",
+				Body = "No valid spawn point is configured for this role.",
+				Actions = { { Label = "Close", Primary = true, Callback = function() end } },
+				Width = 460,
+				Dismissable = true,
+			})
+			return
+		end
+		if audioFeedback then
+			audioFeedback:PanelOpen()
+		end
+		modalSystem:Open({
+			Title = "Start " .. role.Name,
+			Body = body,
+			Actions = { { Label = "Cancel", Primary = false, Callback = function() end } },
+			Width = 480,
+			Dismissable = true,
+		})
+	end
+
+	local function activateRole(role: any)
+		if role.Locked then
+			if role.Action == "PromptGamepass" then
+				local gamepassId = tonumber(role.GamepassId)
+				if not gamepassId or gamepassId <= 0 then
+					context.Controllers.NotificationController:Show(
+						"This pass is not available for purchase yet.",
+						"Pass unavailable"
+					)
+					if audioFeedback then
+						audioFeedback:Error()
+					end
+					return
+				end
+				local prompted, promptError = context.Controllers.GamepassController:Prompt(gamepassId)
+				if not prompted then
+					context.Controllers.NotificationController:Show(
+						promptError or "The Roblox purchase prompt could not be opened.",
+						"Purchase unavailable"
+					)
+					if audioFeedback then
+						audioFeedback:Error()
+					end
+				end
+				return
+			end
+			context.Controllers.NotificationController:Show(
+				role.LockMessage,
+				if role.Action == "OpenApplication" then "Application required" else "Access required"
+			)
+			if audioFeedback then
+				audioFeedback:Error()
+			end
+			return
+		end
+		if not role.DepartmentId then
+			context.Controllers.NotificationController:Show(
+				"Select Civilian from the Play screen.",
+				"Public role"
+			)
+			if audioFeedback then
+				audioFeedback:Error()
+			end
+			return
+		end
+		local dutyProfile = nil
+		for _, profile in menuData and menuData.DutyProfiles or {} do
+			if profile.DepartmentId == role.DepartmentId then
+				dutyProfile = profile
+				break
+			end
+		end
+		if not dutyProfile or not role.Spawns or #role.Spawns == 0 then
+			context.Controllers.NotificationController:Show(
+				"No valid duty profile or station is available.",
+				"Duty unavailable"
+			)
+			if audioFeedback then
+				audioFeedback:Error()
+			end
+			return
+		end
+		showDutySelection(role, dutyProfile)
 	end
 
 	local renderPlay: () -> ()
@@ -927,6 +1205,7 @@ function App.mount(context: any): ScreenGui
 	local renderSettings: () -> ()
 	local renderControls: () -> ()
 	local currentRender: (() -> ())? = nil
+	local selectBottomNav: ((string) -> ())? = nil
 	local function shortLandscape(): boolean
 		-- SafeViewport can retain the simulator's device-safe padding while the
 		-- actual viewport has already rotated. Use the live viewport for the
@@ -974,6 +1253,9 @@ function App.mount(context: any): ScreenGui
 					"Create or select a character before entering the city.",
 					"Character required"
 				)
+				if audioFeedback then
+					audioFeedback:Error()
+				end
 				setMenuOpen(true)
 				return
 			end
@@ -1032,12 +1314,116 @@ function App.mount(context: any): ScreenGui
 	renderPlay = function()
 		renderGeneration += 1
 		clear(scroll)
-		pageTitle.Text = "Players"
+		pageTitle.Text = "Play"
 		pageDescription.Text = "Choose who you want to be today."
-		sectionHeading(
-			"Your characters",
-			"Civilian lives keep their own money, vehicles and property."
-		)
+		-- Do not render the old role/job layout while the server payload is still
+		-- arriving. A single explicit loading state prevents the first-frame flash
+		-- that made the retired UX appear to be active.
+		if not menuData then
+			local loading = card(scroll, if shortLandscape() then 86 else 104)
+			local loadingCopy = text(loading, "Loading Portsmouth…", 17, COLOURS.Text, true)
+			loadingCopy.Position = UDim2.fromOffset(20, 16)
+			loadingCopy.Size = UDim2.new(1, -40, 0, 26)
+			local loadingDetail = text(loading, "Preparing roles and characters", 13, COLOURS.Muted)
+			loadingDetail.Position = UDim2.fromOffset(20, 48)
+			loadingDetail.Size = UDim2.new(1, -40, 0, 20)
+			return
+		end
+		local availableRoles = {}
+		for _, role in menuData.Roles or {} do
+			if role.Visible then
+				table.insert(availableRoles, role)
+			end
+		end
+		sectionHeading("Start playing", "Choose a service or step into civilian life.")
+		if #availableRoles > 0 then
+			-- Match the old Portsmouth Play screen: portrait tiles with artwork,
+			-- a dark lower label band and a large, consistent visual rhythm.
+			local roleWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
+			local roleColumns = if shortLandscape()
+				then 6
+				else if roleWidth >= 1100
+					then 6
+					else if roleWidth >= 900
+						then 4
+						else portraitCardColumns()
+			local roleTileHeight = if shortLandscape() then 270 else if roleWidth >= 1100 then 500 else 420
+			local roleGrid = tileGrid(scroll, #availableRoles, roleTileHeight, roleColumns)
+			-- Characters are the first decision on Play. Keep the role posters below
+			-- them so a new player never has to scroll past every department to create
+			-- their identity.
+			roleGrid.LayoutOrder = 50
+			for _, role in availableRoles do
+				local presentation = rolePresentation(role)
+				local roleTile = card(roleGrid, roleTileHeight)
+				roleTile.Name = "RoleTile_" .. tostring(role.Id)
+				roleTile.ClipsDescendants = true
+				local artwork = Instance.new("ImageLabel")
+				artwork.Name = "RoleArtwork"
+				artwork.BackgroundColor3 = Color3.fromRGB(20, 25, 34)
+				artwork.BorderSizePixel = 0
+				artwork.Position = UDim2.fromOffset(8, 8)
+				artwork.Size = UDim2.new(1, -16, 1, -16)
+				artwork.Image = roleTileAssetId(role) or ""
+				artwork.ImageColor3 = Color3.new(1, 1, 1)
+				artwork.ScaleType = Enum.ScaleType.Crop
+				artwork.ZIndex = 3
+				artwork.Parent = roleTile
+				corner(artwork, 10)
+				local artworkShade = Instance.new("Frame")
+				artworkShade.Name = "ArtworkShade"
+				artworkShade.BackgroundColor3 = Color3.fromRGB(5, 8, 13)
+				artworkShade.BackgroundTransparency = 0.18
+				artworkShade.BorderSizePixel = 0
+				artworkShade.Position = artwork.Position
+				artworkShade.Size = artwork.Size
+				artworkShade.ZIndex = 4
+				artworkShade.Parent = roleTile
+				corner(artworkShade, 10)
+				local shadeGradient = Instance.new("UIGradient")
+				shadeGradient.Color = ColorSequence.new(Color3.fromRGB(5, 8, 13))
+				shadeGradient.Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.95),
+					NumberSequenceKeypoint.new(0.58, 0.7),
+					NumberSequenceKeypoint.new(1, 0.08),
+				})
+				shadeGradient.Rotation = 90
+				shadeGradient.Parent = artworkShade
+				local footer = Instance.new("Frame")
+				footer.Name = "RoleFooter"
+				footer.BackgroundColor3 = Color3.fromRGB(5, 8, 13)
+				footer.BackgroundTransparency = 0.04
+				footer.BorderSizePixel = 0
+				footer.Position = UDim2.new(0, 8, 1, -92)
+				footer.Size = UDim2.new(1, -16, 0, 84)
+				footer.ZIndex = 10
+				footer.Parent = roleTile
+				corner(footer, 10)
+				local category = text(footer, presentation.Label, 12, presentation.Colour, true)
+				category.Position = UDim2.fromOffset(12, 7)
+				category.Size = UDim2.new(1, -24, 0, 18)
+				category.ZIndex = 11
+				local roleName = text(footer, role.Name, 20, COLOURS.Text, true)
+				roleName.Position = UDim2.fromOffset(12, 27)
+				roleName.Size = UDim2.new(1, -120, 0, 28)
+				roleName.TextTruncate = Enum.TextTruncate.AtEnd
+				roleName.ZIndex = 11
+				local open = button(footer, if role.Locked then "REQUIREMENTS" else "JOIN", false)
+				open.ZIndex = 12
+				open.AnchorPoint = Vector2.new(1, 1)
+				open.Position = UDim2.new(1, -10, 1, -10)
+				open.Size = UDim2.fromOffset(92, 34)
+				open.TextSize = 12
+				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
+				local openStroke = open:FindFirstChildOfClass("UIStroke")
+				if openStroke then openStroke.Color = presentation.Colour end
+				open.Activated:Connect(function()
+					activateRole(role)
+				end)
+			end
+		end
+		-- The cards already establish this section visually. Removing the repeated
+		-- heading gives the compact single-page picker more room above the fold.
 		local landscape = shortLandscape()
 		local compactViewport = context.Controllers.UIOrchestrator:GetLayout().Viewport
 		local compactEmptyCard = compactViewport.X < 1000 or compactViewport.Y < 500
@@ -1061,6 +1447,9 @@ function App.mount(context: any): ScreenGui
 					"No civilian spawn is configured on this server.",
 					"Civilian unavailable"
 				)
+				if audioFeedback then
+					audioFeedback:Error()
+				end
 				return
 			end
 			-- EnterCivilian requires the server session's ActiveCharacterId to
@@ -1073,6 +1462,9 @@ function App.mount(context: any): ScreenGui
 			end
 			local response = context.Controllers.DutyController:EnterCivilian(characterId, spawnId)
 			if response.Success then
+				if audioFeedback then
+					audioFeedback:Success()
+				end
 				dismissToWorld()
 			end
 		end
@@ -1109,7 +1501,9 @@ function App.mount(context: any): ScreenGui
 				then UDim2.new(0, 20, 1, -14)
 				else UDim2.new(1, -20, 0.5, 0)
 			create.Size = if compactEmptyCard then UDim2.new(1, -40, 0, 40) else create.Size
-			create.Activated:Connect(showModal)
+			create.Activated:Connect(function()
+				showCharacterCreationModal()
+			end)
 		else
 			local columns = portraitCardColumns()
 			-- Landscape turns the card on its side rather than shrinking it.
@@ -1121,10 +1515,18 @@ function App.mount(context: any): ScreenGui
 			-- portrait moves beside the text instead of above it and the whole card
 			-- fits, with the next one showing beneath to say the list continues.
 			local tileHeight = if landscape then 150 else 284
+			local extraSlotPass = nil
+			for _, pass in menuData.Gamepasses or {} do
+				if pass.Id == "ExtraCharacterSlot" and pass.PurchaseType == "DeveloperProduct" then
+					extraSlotPass = pass
+					break
+				end
+			end
 			local canCreate = menuData.EmptySlots > 0
+			local canOfferExtraSlot = not canCreate and extraSlotPass ~= nil and extraSlotPass.Owned ~= true
 			local characterGrid = tileGrid(
-				scroll,
-				#menuData.Characters + (if canCreate then 1 else 0),
+				 scroll,
+				#menuData.Characters + (if canCreate or canOfferExtraSlot then 1 else 0),
 				tileHeight,
 				columns
 			)
@@ -1197,6 +1599,9 @@ function App.mount(context: any): ScreenGui
 							context.Controllers.StartMenuController:Refresh()
 						else
 							saveOutfit.Text = "Save current outfit"
+							if audioFeedback then
+								audioFeedback:Error()
+							end
 						end
 					end)
 				end
@@ -1217,11 +1622,14 @@ function App.mount(context: any): ScreenGui
 							"Character selected.",
 							"Ready"
 						)
+						if audioFeedback then
+							audioFeedback:Success()
+						end
 						renderPlay()
 					end
 				end)
 			end
-			if canCreate then
+			if canCreate or canOfferExtraSlot then
 				local createCard = card(characterGrid, tileHeight)
 				createCard.ClipsDescendants = true
 				local createPreview = Instance.new("Frame")
@@ -1234,10 +1642,16 @@ function App.mount(context: any): ScreenGui
 				createPreview.Parent = createCard
 				corner(createPreview, 12)
 				stroke(createPreview, COLOURS.Accent, 0.62)
-				local plus = text(createPreview, "+", 42, COLOURS.Accent, true)
+				local plus = text(createPreview, if canCreate then "+" else "★", 42, COLOURS.Accent, true)
 				plus.Size = UDim2.fromScale(1, 1)
 				plus.TextXAlignment = Enum.TextXAlignment.Center
-				local createTitle = text(createCard, "New character", 17, COLOURS.Text, true)
+				local createTitle = text(
+					createCard,
+					if canCreate then "New character" else "Extra character slot",
+					17,
+					COLOURS.Text,
+					true
+				)
 				createTitle.Position = if landscape
 					then UDim2.fromOffset(136, 16)
 					else UDim2.fromOffset(16, 156)
@@ -1245,7 +1659,14 @@ function App.mount(context: any): ScreenGui
 					then UDim2.new(1, -152, 0, 27)
 					else UDim2.new(1, -32, 0, 27)
 				local createCopy =
-					text(createCard, "Create another civilian identity.", 13, COLOURS.Muted)
+					text(
+						createCard,
+						if canCreate
+							then "Create one separate civilian identity."
+							else "Unlock one additional identity with a one-time purchase.",
+						13,
+						COLOURS.Muted
+					)
 				createCopy.Position = if landscape
 					then UDim2.fromOffset(136, 46)
 					else UDim2.fromOffset(16, 185)
@@ -1253,7 +1674,11 @@ function App.mount(context: any): ScreenGui
 					then UDim2.new(1, -152, 0, 38)
 					else UDim2.new(1, -32, 0, 40)
 				createCopy.TextWrapped = true
-				local create = button(createCard, "Create character", false)
+				local create = button(
+					createCard,
+					if canCreate then "Create character" else "UNLOCK SLOT",
+					not canCreate
+				)
 				create.AnchorPoint = Vector2.new(0, 1)
 				create.Position = if landscape
 					then UDim2.new(0, 136, 1, -14)
@@ -1261,7 +1686,13 @@ function App.mount(context: any): ScreenGui
 				create.Size = if landscape
 					then UDim2.new(1, -152, 0, 34)
 					else UDim2.new(1, -32, 0, 42)
-				create.Activated:Connect(showModal)
+				create.Activated:Connect(function()
+					if canCreate then
+						showCharacterCreationModal()
+					elseif extraSlotPass and extraSlotPass.ProductId then
+						MarketplaceService:PromptProductPurchase(Players.LocalPlayer, extraSlotPass.ProductId)
+					end
+				end)
 			end
 		end
 	end
@@ -1287,7 +1718,7 @@ function App.mount(context: any): ScreenGui
 		-- This is intentionally a roster, not a grid of product cards. A full-width
 		-- list gives every service the same visual weight and keeps the action in a
 		-- predictable place on touch devices.
-		local tileHeight = if narrowViewport() then 78 else 88
+		local tileHeight = if narrowViewport() then 88 else 112
 		local roleGrid = Instance.new("Frame")
 		roleGrid.Name = "ServiceRoster"
 		roleGrid.BackgroundTransparency = 1
@@ -1337,10 +1768,10 @@ function App.mount(context: any): ScreenGui
 				mark.BackgroundColor3 = presentation.Colour
 				mark.BackgroundTransparency = if role.Locked then 0.72 else 0.82
 				mark.BorderSizePixel = 0
-				mark.Position = UDim2.fromOffset(18, if narrowViewport() then 17 else 20)
+				mark.Position = UDim2.fromOffset(18, if narrowViewport() then 20 else 28)
 				mark.Size = UDim2.fromOffset(
-					if narrowViewport() then 42 else 48,
-					if narrowViewport() then 42 else 48
+					if narrowViewport() then 48 else 56,
+					if narrowViewport() then 48 else 56
 				)
 				mark.Parent = item
 				corner(mark, 10)
@@ -1348,7 +1779,7 @@ function App.mount(context: any): ScreenGui
 				local markText = text(
 					mark,
 					presentation.Icon,
-					if narrowViewport() then 12 else 14,
+					if narrowViewport() then 13 else 15,
 					presentation.Colour,
 					true
 				)
@@ -1358,25 +1789,25 @@ function App.mount(context: any): ScreenGui
 				local textLeft = if narrowViewport() then 70 else 78
 				local actionReserve = if narrowViewport() then 144 else 156
 				local textInset = -textLeft - actionReserve
-				local category = text(item, presentation.Label, 10, presentation.Colour, true)
-				category.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 11 else 14)
-				category.Size = UDim2.new(1, textInset, 0, 16)
+				local category = text(item, presentation.Label, 12, presentation.Colour, true)
+				category.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 12 else 18)
+				category.Size = UDim2.new(1, textInset, 0, 18)
 				local access = text(
 					item,
 					if role.Locked then "LOCKED" else "AVAILABLE",
-					10,
+					12,
 					if role.Locked then COLOURS.Muted else COLOURS.Success,
 					true
 				)
 				access.AnchorPoint = Vector2.new(1, 0)
 				access.Position =
-					UDim2.new(1, -actionReserve, 0, if narrowViewport() then 11 else 14)
+					UDim2.new(1, -actionReserve, 0, if narrowViewport() then 12 else 18)
 				access.Size = UDim2.fromOffset(actionReserve, 16)
 				access.TextXAlignment = Enum.TextXAlignment.Right
 				local name =
-					text(item, role.Name, if narrowViewport() then 16 else 18, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 28 else 32)
-				name.Size = UDim2.new(1, textInset, 0, 24)
+					text(item, role.Name, if narrowViewport() then 17 else 20, COLOURS.Text, true)
+				name.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 34 else 42)
+				name.Size = UDim2.new(1, textInset, 0, 27)
 				name.TextWrapped = true
 				name.TextTruncate = Enum.TextTruncate.None
 				-- What this row can tell the player that the others cannot.
@@ -1402,8 +1833,9 @@ function App.mount(context: any): ScreenGui
 					end
 				end
 				local detail = text(item, detailText, 12, COLOURS.Muted)
-				detail.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 51 else 56)
-				detail.Size = UDim2.new(1, textInset, 0, 18)
+				detail.Position = UDim2.fromOffset(textLeft, if narrowViewport() then 62 else 76)
+				detail.Size = UDim2.new(1, textInset, 0, 20)
+				detail.TextSize = if narrowViewport() then 13 else 14
 				detail.TextWrapped = true
 				detail.TextYAlignment = Enum.TextYAlignment.Top
 				detail.TextTruncate = Enum.TextTruncate.None
@@ -1420,7 +1852,7 @@ function App.mount(context: any): ScreenGui
 				action.Position = UDim2.new(1, -14, 0.5, 0)
 				action.Size =
 					UDim2.fromOffset(actionReserve - 14, if narrowViewport() then 28 else 30)
-				action.TextSize = if narrowViewport() then 11 else 12
+				action.TextSize = if narrowViewport() then 12 else 14
 				action.BackgroundTransparency = 1
 				action.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
 				local actionStroke = action:FindFirstChildOfClass("UIStroke")
@@ -1449,6 +1881,9 @@ function App.mount(context: any): ScreenGui
 									"This pass is not available for purchase yet.",
 									"Pass unavailable"
 								)
+								if audioFeedback then
+									audioFeedback:Error()
+								end
 								return
 							end
 							local prompted, promptError =
@@ -1458,6 +1893,9 @@ function App.mount(context: any): ScreenGui
 									promptError or "The Roblox purchase prompt could not be opened.",
 									"Purchase unavailable"
 								)
+								if audioFeedback then
+									audioFeedback:Error()
+								end
 							end
 							return
 						end
@@ -1467,6 +1905,9 @@ function App.mount(context: any): ScreenGui
 								then "Application required"
 								else "Access required"
 						)
+						if audioFeedback then
+							audioFeedback:Error()
+						end
 						return
 					end
 					if not role.DepartmentId then
@@ -1474,6 +1915,9 @@ function App.mount(context: any): ScreenGui
 							"Select Civilian from the Play screen.",
 							"Public role"
 						)
+						if audioFeedback then
+							audioFeedback:Error()
+						end
 						return
 					end
 					local dutyProfile = nil
@@ -1488,6 +1932,9 @@ function App.mount(context: any): ScreenGui
 							"No valid duty profile or station is available.",
 							"Duty unavailable"
 						)
+						if audioFeedback then
+							audioFeedback:Error()
+						end
 						return
 					end
 					showDutySelection(role, dutyProfile)
@@ -1527,7 +1974,7 @@ function App.mount(context: any): ScreenGui
 			return
 		end
 		local compact = narrowViewport()
-		local tileHeight = if compact then 82 else 92
+		local tileHeight = if compact then 94 else 116
 		local grid = Instance.new("Frame")
 		grid.Name = "CivilianJobRoster"
 		grid.BackgroundTransparency = 1
@@ -1557,8 +2004,8 @@ function App.mount(context: any): ScreenGui
 			mark.BackgroundColor3 = COLOURS.Success
 			mark.BackgroundTransparency = 0.82
 			mark.BorderSizePixel = 0
-			mark.Position = UDim2.fromOffset(18, if compact then 18 else 22)
-			mark.Size = UDim2.fromOffset(if compact then 42 else 48, if compact then 42 else 48)
+			mark.Position = UDim2.fromOffset(18, if compact then 23 else 30)
+			mark.Size = UDim2.fromOffset(if compact then 48 else 56, if compact then 48 else 56)
 			mark.Parent = item
 			corner(mark, 10)
 			stroke(mark, COLOURS.Success, 0.32)
@@ -1570,20 +2017,20 @@ function App.mount(context: any): ScreenGui
 			local actionReserve = if compact then 144 else 160
 			local textInset = -textLeft - actionReserve
 			local title =
-				text(item, tostring(job.Name), if compact then 16 else 18, COLOURS.Text, true)
-			title.Position = UDim2.fromOffset(textLeft, if compact then 14 else 17)
-			title.Size = UDim2.new(1, textInset, 0, 24)
+				text(item, tostring(job.Name), if compact then 17 else 20, COLOURS.Text, true)
+			title.Position = UDim2.fromOffset(textLeft, if compact then 17 else 23)
+			title.Size = UDim2.new(1, textInset, 0, 28)
 			title.TextTruncate = Enum.TextTruncate.None
 			local access = tostring(job.Class) == "Public" and "PUBLIC EMPLOYMENT"
 				or "APPLICATION ROLE"
 			local detail = text(
 				item,
 				access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
-				11,
+				13,
 				COLOURS.Muted
 			)
-			detail.Position = UDim2.fromOffset(textLeft, if compact then 39 else 45)
-			detail.Size = UDim2.new(1, textInset, 0, 18)
+			detail.Position = UDim2.fromOffset(textLeft, if compact then 46 else 58)
+			detail.Size = UDim2.new(1, textInset, 0, 20)
 			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
 				then COLOURS.Success
 				else COLOURS.Warning
@@ -1593,11 +2040,11 @@ function App.mount(context: any): ScreenGui
 				if isTaxi
 					then "Live service · accept bookings through your phone"
 					else "Job system not installed",
-				11,
+				13,
 				if isTaxi then COLOURS.Success else COLOURS.Muted
 			)
-			jobStatus.Position = UDim2.fromOffset(textLeft, if compact then 58 else 65)
-			jobStatus.Size = UDim2.new(1, textInset, 0, 18)
+			jobStatus.Position = UDim2.fromOffset(textLeft, if compact then 67 else 82)
+			jobStatus.Size = UDim2.new(1, textInset, 0, 20)
 			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
 				and menuData.ActiveCharacterId ~= ""
 			local initialActionText = if hasActiveCharacter
@@ -1607,7 +2054,7 @@ function App.mount(context: any): ScreenGui
 			action.AnchorPoint = Vector2.new(1, 0.5)
 			action.Position = UDim2.new(1, -14, 0.5, 0)
 			action.Size = UDim2.fromOffset(actionReserve - 14, if compact then 28 else 32)
-			action.TextSize = 11
+			action.TextSize = if compact then 12 else 14
 			action.TextColor3 = COLOURS.Text
 			action.Selectable = isTaxi
 			action.BackgroundTransparency = 1
@@ -1645,6 +2092,9 @@ function App.mount(context: any): ScreenGui
 								"Create a civilian character before starting work.",
 								"Taxi unavailable"
 							)
+							if audioFeedback then
+								audioFeedback:Error()
+							end
 							action.Active = true
 							action.Text = "ENTER CITY & START SHIFT"
 							return
@@ -1683,6 +2133,9 @@ function App.mount(context: any): ScreenGui
 								"Select a civilian character before starting work.",
 								"Taxi unavailable"
 							)
+							if audioFeedback then
+								audioFeedback:Error()
+							end
 							action.Active = true
 							action.Text = "ENTER CITY & START SHIFT"
 							return
@@ -1696,6 +2149,9 @@ function App.mount(context: any): ScreenGui
 					else
 						action.Active = true
 						action.Text = initialActionText
+						if audioFeedback then
+							audioFeedback:Error()
+						end
 					end
 				end)
 			end
@@ -1997,39 +2453,15 @@ function App.mount(context: any): ScreenGui
 				then UDim2.new(1, -36, 0, 40)
 				else UDim2.fromOffset(150, 42)
 			open.Activated:Connect(function()
-				local shade = Instance.new("TextButton")
-				shade.Text = ""
-				shade.AutoButtonColor = false
-				shade.BackgroundColor3 = Color3.new(0, 0, 0)
-				shade.BackgroundTransparency = 0.2
-				shade.Size = UDim2.fromScale(1, 1)
-				shade.ZIndex = 20
-				shade.Parent = root
-				local guide = card(shade, 300)
-				guide.AnchorPoint = Vector2.new(0.5, 0.5)
-				guide.Position = UDim2.fromScale(0.5, 0.5)
 				local guideViewport = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
-				guide.Size = UDim2.fromOffset(
-					math.min(520, guideViewport.X - 32),
-					math.min(300, guideViewport.Y - 32)
-				)
-				guide.ZIndex = 21
-				local guideTitle = text(guide, tutorial.Title, 23, COLOURS.Text, true)
-				guideTitle.Position = UDim2.fromOffset(28, 24)
-				guideTitle.Size = UDim2.new(1, -56, 0, 36)
-				local guideBody = text(guide, tutorial.Body, 15, COLOURS.Muted)
-				guideBody.Position = UDim2.fromOffset(28, 70)
-				guideBody.Size = UDim2.new(1, -56, 0, 140)
-				guideBody.TextWrapped = true
-				guideBody.TextYAlignment = Enum.TextYAlignment.Top
-				local close = button(guide, "Close", true)
-				close.AnchorPoint = Vector2.new(1, 1)
-				close.Position = UDim2.new(1, -28, 1, -24)
-				close.Size = UDim2.fromOffset(140, 42)
-				close.Activated:Connect(function()
-					shade:Destroy()
-				end)
-				elevate(guide, 22)
+				modalSystem:Open({
+					Title = tutorial.Title,
+					Body = tutorial.Body,
+					Actions = { { Label = "Close", Primary = true, Callback = function() end } },
+					Width = math.min(520, guideViewport.X - 32),
+					Height = math.min(300, guideViewport.Y - 32),
+					Dismissable = true,
+				})
 			end)
 		end
 	end
@@ -2331,6 +2763,9 @@ function App.mount(context: any): ScreenGui
 					join.Active = true
 					join.Text = "JOIN"
 					context.Controllers.NotificationController:Show(response.Message, "Servers")
+					if not response.Success and audioFeedback then
+						audioFeedback:Error()
+					end
 				end)
 			end
 		end
@@ -2402,12 +2837,11 @@ function App.mount(context: any): ScreenGui
 		return item
 	end
 
-	local playNav = addNav("Players", renderPlay)
-	addNav("Services", renderCareers)
-	addNav("Civilian jobs", renderJobs)
+	local playNav = addNav("Play", renderPlay)
 	addNav("Store", renderStore)
 	addNav("Servers", renderCommunity)
 	addNav("Help", renderTutorials)
+	navigation.Visible = false
 	activeNav = playNav
 	currentRender = renderPlay
 	playNav.BackgroundColor3 = COLOURS.AccentSoft
@@ -2423,6 +2857,68 @@ function App.mount(context: any): ScreenGui
 	local environment = text(profile, "Development environment", 11, COLOURS.Muted)
 	environment.Position = UDim2.fromOffset(14, 35)
 	environment.Size = UDim2.new(1, -28, 0, 20)
+
+	local bottomNavItems: { [string]: TextButton } = {}
+	local bottomNavRenders: { [string]: () -> () } = {}
+	local bottomNavOrder = 0
+	-- Play is the single role-selection route. The dock only exposes the four
+	-- destinations players need during a session; departments are filtered and
+	-- joined from the Play screen itself.
+	local bottomNavCount = 4
+	selectBottomNav = function(key: string)
+		local item = bottomNavItems[key]
+		local render = bottomNavRenders[key]
+		if not item or not render then
+			return
+		end
+		for _, other in bottomNavItems do
+			other.BackgroundColor3 = Color3.fromRGB(24, 31, 43)
+			other.TextColor3 = COLOURS.Muted
+		end
+		item.BackgroundColor3 = Color3.fromRGB(82, 53, 142)
+		item.TextColor3 = COLOURS.Text
+		currentRender = render
+		render()
+	end
+	local function addBottomNav(labelValue: string, render: () -> (), key: string)
+		bottomNavOrder += 1
+		local item = Instance.new("TextButton")
+		item.Name = key .. "Tab"
+		item.AutoButtonColor = false
+		item.BackgroundColor3 = Color3.fromRGB(24, 31, 43)
+		item.BorderSizePixel = 0
+		item.Font = Enum.Font.GothamBold
+		item.Text = labelValue
+		item.TextColor3 = COLOURS.Muted
+		item.TextSize = 13
+		item.LayoutOrder = bottomNavOrder
+		item.Size = UDim2.new(1 / bottomNavCount, -10, 1, 0)
+		item.Selectable = true
+		item.ZIndex = 21
+		item.Parent = bottomDock
+		corner(item, 10)
+		stroke(item, COLOURS.Border, 0.25)
+		pressable(item)
+		bottomNavItems[key] = item
+		bottomNavRenders[key] = render
+		item.Activated:Connect(function()
+			if selectBottomNav then
+				selectBottomNav(key)
+			end
+		end)
+	end
+	-- The same route names and callbacks are used by the compact dock and the
+	-- desktop fallback sidebar, so changing page selection never leaves one of
+	-- them highlighting a different destination.
+	addBottomNav("Play", renderPlay, "Play")
+	addBottomNav("Store", renderStore, "Store")
+	addBottomNav("Servers", renderCommunity, "Servers")
+	addBottomNav("Help", renderTutorials, "Help")
+	local defaultDockItem = bottomNavItems.Play
+	if defaultDockItem then
+		defaultDockItem.BackgroundColor3 = Color3.fromRGB(82, 53, 142)
+		defaultDockItem.TextColor3 = COLOURS.Text
+	end
 
 	local function navCount(): number
 		local count = 0
@@ -2452,10 +2948,10 @@ function App.mount(context: any): ScreenGui
 		-- TopbarSafeInsets makes (0, 0) the first safe point after Roblox's
 		-- native controls. Keep a small gap inside that inset instead of adding
 		-- the old desktop-only 248px cluster guess a second time.
-		menuToggle.Position = UDim2.fromOffset(
-			NATIVE_CONTROL_GAP,
-			math.max(4, math.floor((nativeBand - controlSize) / 2))
-		)
+		-- The Whitelisted menu keeps a fixed 2px gutter inside the topbar row.
+		-- The safe-inset origin already tracks the native Roblox controls, so a
+		-- second vertical re-centering pass only creates the startup jump.
+		menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, 2)
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
 		-- One navigation language on every device: a top bar mirrors Roblox's
@@ -2475,7 +2971,7 @@ function App.mount(context: any): ScreenGui
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
 			local barHeight = safeTop
-				+ (if narrow then 106 else if compactLandscape then 92 else 82)
+				+ (if narrow then 78 else if compactLandscape then 68 else 58)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -2524,9 +3020,9 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 68)
-				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 54)
-				else UDim2.fromOffset(navLeft, safeTop + 16)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 44)
+				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 38)
+				else UDim2.fromOffset(navLeft, safeTop + 10)
 			navigation.Size = if narrow
 				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 32)
 				elseif compactLandscape then UDim2.new(
@@ -2584,6 +3080,20 @@ function App.mount(context: any): ScreenGui
 			local marginLeft = safeLeft + 24
 			local marginRight = safeRight + 24
 			local available = layout.Viewport.X - marginLeft - marginRight
+			local dockHeight = if narrow then 62 else 76
+			bottomDock.Visible = true
+			announcement.Visible = true
+			bottomDock.Position = UDim2.new(0.5, 0, 1, -(layout.SafeBottom + 14))
+			bottomDock.Size = UDim2.new(1, -(marginLeft + marginRight), 0, dockHeight)
+			bottomDockPadding.PaddingLeft = UDim.new(0, if narrow then 5 else 8)
+			bottomDockPadding.PaddingRight = UDim.new(0, if narrow then 5 else 8)
+			bottomDockPadding.PaddingTop = UDim.new(0, if narrow then 5 else 8)
+			bottomDockPadding.PaddingBottom = UDim.new(0, if narrow then 5 else 8)
+			for _, item in bottomNavItems do
+				item.TextSize = if narrow then 12 else 14
+			end
+			announcement.Position = UDim2.new(0.5, 0, 0, safeTop + if narrow then 18 else 20)
+			announcement.Size = UDim2.fromOffset(if narrow then 260 else 420, 28)
 			pageTitle.Visible = false
 			pageDescription.Visible = false
 			status.Position = UDim2.fromScale(1, 0)
@@ -2594,15 +3104,26 @@ function App.mount(context: any): ScreenGui
 				header.Position = UDim2.fromOffset(centred, 6)
 				header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 28)
 				scroll.Position = UDim2.fromOffset(centred, 38)
-				scroll.Size = UDim2.new(0, MAXIMUM_CONTENT_WIDTH, 1, -(46 + layout.SafeBottom))
+				scroll.Size = UDim2.new(
+					0,
+					MAXIMUM_CONTENT_WIDTH,
+					1,
+					-(46 + layout.SafeBottom + dockHeight + 12)
+				)
 			else
 				header.Position = UDim2.fromOffset(marginLeft, 6)
 				header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 28)
 				scroll.Position = UDim2.fromOffset(marginLeft, 38)
-				scroll.Size =
-					UDim2.new(1, -(marginLeft + marginRight), 1, -(46 + layout.SafeBottom))
+				scroll.Size = UDim2.new(
+					1,
+					-(marginLeft + marginRight),
+					1,
+					-(46 + layout.SafeBottom + dockHeight + 12)
+				)
 			end
 		else
+			bottomDock.Visible = false
+			announcement.Visible = false
 			-- The sidebar hugs the left edge, so it absorbs the left reserve and
 			-- the content pane starts after it. Only the sidebar needs to know.
 			sidebar.Size = UDim2.new(0, 250 + safeLeft, 1, 0)
@@ -2715,6 +3236,9 @@ function App.mount(context: any): ScreenGui
 			"Could not reach the server. Reopen the menu to retry, or rejoin if it keeps failing.",
 			"Error"
 		)
+		if audioFeedback then
+			audioFeedback:Error()
+		end
 	end)
 
 	if interfaceMotionEnabled() then

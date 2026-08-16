@@ -19,6 +19,7 @@ function AssetPreloader.new(context: Context)
 	self.criticalAssets = {}
 	self.backgroundAssets = {}
 	self._started = false
+	self._destroyed = false
 	return self
 end
 
@@ -104,17 +105,28 @@ function AssetPreloader:_discoverAssets()
 end
 
 function AssetPreloader:_setPhase(phase: string)
+	if self._destroyed then
+		return
+	end
 	self.phase = phase
 	self.onPhaseChange:Fire(phase)
 end
 
 function AssetPreloader:_preload(assets: { any }, startProgress: number, endProgress: number)
+	if self._destroyed then
+		return
+	end
 	if #assets == 0 then
 		self.progress = endProgress
-		self.onProgress:Fire(self.progress)
+		if not self._destroyed then
+			self.onProgress:Fire(self.progress)
+		end
 		return
 	end
 	for index, asset in assets do
+		if self._destroyed then
+			return
+		end
 		local success, err = pcall(function()
 			ContentProvider:PreloadAsync({ asset })
 		end)
@@ -122,7 +134,9 @@ function AssetPreloader:_preload(assets: { any }, startProgress: number, endProg
 			warn("[AssetPreloader] Failed to preload asset", tostring(asset), err)
 		end
 		self.progress = startProgress + (index / #assets) * (endProgress - startProgress)
-		self.onProgress:Fire(self.progress)
+		if not self._destroyed then
+			self.onProgress:Fire(self.progress)
+		end
 	end
 end
 
@@ -131,20 +145,45 @@ function AssetPreloader:Start()
 		return
 	end
 	self._started = true
-	self:_discoverAssets()
+	if self._destroyed then
+		return
+	end
+	local discovered, discoveryError = pcall(function()
+		self:_discoverAssets()
+	end)
+	if not discovered then
+		warn("[AssetPreloader] Asset discovery failed:", discoveryError)
+	end
 	task.spawn(function()
-		self:_setPhase("critical")
-		self:_preload(self.criticalAssets, 0, 0.8)
-		self:_setPhase("interactive")
-		self:_setPhase("background")
-		self:_preload(self.backgroundAssets, 0.8, 1)
-		self.progress = 1
-		self.onProgress:Fire(1)
-		self:_setPhase("complete")
+		if self._destroyed then
+			return
+		end
+		local loaded, loadError = pcall(function()
+			self:_setPhase("critical")
+			self:_preload(self.criticalAssets, 0, 0.8)
+			self:_setPhase("interactive")
+			self:_setPhase("background")
+			self:_preload(self.backgroundAssets, 0.8, 1)
+		end)
+		if not loaded then
+			warn("[AssetPreloader] Asset preload failed:", loadError)
+			if not self._destroyed and (self.phase == "idle" or self.phase == "critical") then
+				self:_setPhase("interactive")
+			end
+		end
+		if not self._destroyed and self.phase ~= "complete" then
+			self.progress = 1
+			self.onProgress:Fire(1)
+			self:_setPhase("complete")
+		end
 	end)
 end
 
 function AssetPreloader:Destroy()
+	if self._destroyed then
+		return
+	end
+	self._destroyed = true
 	self.onProgress:Destroy()
 	self.onPhaseChange:Destroy()
 end

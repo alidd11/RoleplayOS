@@ -55,12 +55,21 @@ for _, name in
 do
 	controllers[name .. "Controller"] = FeatureController.new(name)
 end
-local context = { Controllers = controllers, Events = events }
+local systemModules = {
+	NotificationSystem = require(script.UI.NotificationSystem),
+	ModalSystem = require(script.UI.ModalSystem),
+	AudioFeedback = require(script.Systems.AudioFeedback),
+}
+local systems = {}
+local context = { Controllers = controllers, Events = events, Systems = systems }
 local initialised = {}
 
 -- One ordered list drives both lifecycle phases. Keeping two copies in sync by
 -- hand risks a controller being initialised but never started, or vice versa.
 local ORDER = {
+	"NotificationSystem",
+	"ModalSystem",
+	"AudioFeedback",
 	"UIOrchestrator",
 	"ControlsController",
 	"NetworkController",
@@ -112,7 +121,11 @@ for _, name in ORDER do
 	-- before the start menu was mounted, so a single bad controller produced a
 	-- blank screen rather than a menu missing one feature.
 	local ok, problem = pcall(function()
-		controllers[name]:Init(context)
+		if systemModules[name] then
+			systems[name] = systemModules[name].new(context)
+		else
+			controllers[name]:Init(context)
+		end
 	end)
 	if not ok then
 		warn(
@@ -136,7 +149,9 @@ for _, name in ORDER do
 	end
 	task.spawn(function()
 		local ok, problem = pcall(function()
-			controllers[name]:Start()
+			if not systemModules[name] then
+				controllers[name]:Start()
+			end
 		end)
 		if not ok then
 			warn(

@@ -10,6 +10,11 @@ local DeveloperProductService = { Critical = true }
 function DeveloperProductService:Init(context: any)
 	self.context = context
 	self.products = {}
+	for _, definition in context.Configuration.DeveloperProducts or {} do
+		if type(definition.ProductId) == "number" and definition.ProductId > 0 then
+			self.products[definition.ProductId] = definition
+		end
+	end
 	for _, definition in context.Configuration.Custody.PublicEarlyRelease.Products do
 		if type(definition.ProductId) == "number" and definition.ProductId > 0 then
 			self.products[definition.ProductId] = definition
@@ -38,6 +43,37 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 	local consumables = session.Profile.Consumables
 	local processed = consumables.ProcessedDeveloperReceipts
 	if processed[receiptId] == nil then
+		if definition.GrantType == "ExtraCharacterSlot" then
+			local amount = math.max(1, math.floor(tonumber(definition.Amount) or 1))
+			local previousSlots = math.max(0, math.floor(tonumber(consumables.ExtraCharacterSlots) or 0))
+			consumables.ExtraCharacterSlots = previousSlots + amount
+			processed[receiptId] = {
+				ProductId = receipt.ProductId,
+				GrantType = definition.GrantType,
+				Amount = amount,
+				GrantedAt = os.time(),
+			}
+			dataService:MarkDirty(player)
+			local saved, reason = dataService:Save(player)
+			if not saved then
+				consumables.ExtraCharacterSlots = previousSlots
+				processed[receiptId] = nil
+				dataService:MarkDirty(player)
+				self.context.Logger:Error("Developer product grant could not be persisted", {
+					PlayerId = receipt.PlayerId,
+					PurchaseId = receiptId,
+					Reason = reason,
+				})
+				return Enum.ProductPurchaseDecision.NotProcessedYet
+			end
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				Action = "DeveloperProduct.ExtraCharacterSlotGranted",
+				Target = tostring(player.UserId),
+				Metadata = { ProductId = receipt.ProductId, Amount = amount },
+			})
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
 		local previousCredits =
 			math.max(0, math.floor(tonumber(consumables.EarlyReleaseCredits) or 0))
 		consumables.EarlyReleaseCredits = previousCredits + definition.Credits

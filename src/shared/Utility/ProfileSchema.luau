@@ -28,6 +28,7 @@ function ProfileSchema.default(userId: number): any
 		},
 		Consumables = {
 			EarlyReleaseCredits = 0,
+			ExtraCharacterSlots = 0,
 			ProcessedDeveloperReceipts = {},
 		},
 		AuditMetadata = {},

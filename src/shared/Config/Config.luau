@@ -110,7 +110,20 @@ local Config = {
 	},
 	AssetPreload = {
 		Critical = {},
-		Background = {},
+		-- The start screen is the first interaction, so its role artwork should
+		-- be ready before the cards are displayed instead of arriving as blank
+		-- panels while Roblox fetches each image.
+		Background = {
+			"rbxassetid://124510305332365", -- Police
+			"rbxassetid://115689835891137", -- Ambulance
+			"rbxassetid://95977486831570", -- Firefighter
+			"rbxassetid://113064266300926", -- Civilian
+			"rbxassetid://133420507327997", -- Highways / council worker
+			"rbxassetid://102874702573163", -- Transport
+			"rbxassetid://88863810610980", -- Royalty Mail
+			"rbxassetid://127971383421481",
+			"rbxassetid://101846745500511",
+		},
 	},
 	ContentQuality = {
 		RequireCertification = true,
@@ -256,22 +269,16 @@ local Config = {
 	-- the menu rather than found from outside.
 	OfficialServers = {
 		Enabled = true,
-		-- The public experience is universe 5710996304, start place 16596652266.
-		-- The whitelisted world is a different experience: universe 6865450179,
-		-- place 85767986923809.
+		-- The one live place is PUBLISHABLE VERSION OF PORTSMOUTH:
+		-- experience 5710996304, place 16596652266. Public matchmaking and the
+		-- official whitelist both use this place; the official entry below is
+		-- distinguished by trusted teleport data into a reserved server.
 		--
-		-- Different experiences do not share data stores, and that is deliberate
-		-- here: nothing a player has in the public tier follows them across, so
-		-- every decision they make in the whitelisted world is their own. Roblox
-		-- gamepasses are owned by the person rather than by the experience, so
-		-- those still apply on both sides.
-		--
-		-- Two consequences fall out of that boundary and are handled below:
-		-- teleport data does not survive the hop, so a server works out which
-		-- entry it is by its own place id; and memory stores are per experience,
-		-- so occupancy cannot be read across it and reserved instances are off.
-		-- An official server is a set of instances rather than one. When the first
-		-- fills, the next join opens another, so nobody is turned away at peak.
+		-- Public and official progression still use separate namespaces, so a
+		-- player's civilian identity cannot silently become their whitelisted
+		-- service identity. Roblox gamepasses remain account-owned as normal.
+		-- An official server is a set of reserved instances. When the first fills,
+		-- the next join opens another, so nobody is turned away at peak.
 		--
 		-- Occupancy is published to a memory store by each instance and read by
 		-- whoever is about to send somebody, because a server cannot see how full
@@ -297,15 +304,14 @@ local Config = {
 			UniversalProjects = {
 				Id = "UniversalProjects",
 				Name = "Whitelist Access",
-				Description = "A separate world. Your progress there is its own.",
+				Description = "Official Portsmouth sessions for Universal Projects members.",
 				Order = 1,
 				Whitelisted = true,
 				RequiredGroupLinkId = "UniversalProjects",
-				PlaceId = 85767986923809,
-				-- Off, and it has to be: reserved instances are chosen by reading
-				-- occupancy from a memory store, and those do not cross an
-				-- experience boundary either. This place uses its own matchmaking.
-				Reserved = false,
+				-- Zero means this same place. The official server route supplies the
+				-- identity through teleport data and reserves the destination instance.
+				PlaceId = 0,
+				Reserved = true,
 			},
 		},
 	},
@@ -486,12 +492,6 @@ local Config = {
 			GamepassId = 1936590544,
 			Name = "Premium Vehicles",
 			Description = "Access a curated collection of premium civilian vehicles at supported dealerships.",
-		},
-		ExtraCharacterSlot = {
-			Id = "ExtraCharacterSlot",
-			GamepassId = 1934044063,
-			Name = "Extra Character Slot",
-			Description = "Create and maintain one additional civilian identity with separate progression and records.",
 		},
 		CustomRegistration = {
 			Id = "CustomRegistration",
@@ -742,6 +742,17 @@ local Config = {
 		CooldownSeconds = 15,
 		MaximumSensors = 128,
 		RoadsRoleId = "RoadsPolicingOfficer",
+	},
+	DeveloperProducts = {
+		ExtraCharacterSlot = {
+			Id = "ExtraCharacterSlot",
+			ProductId = 0,
+			GrantType = "ExtraCharacterSlot",
+			Amount = 1,
+			Name = "Extra Character Slot",
+			Description = "Permanently unlock one additional civilian identity.",
+			PriceRobux = 199,
+		},
 	},
 	Custody = {
 		BookingDeskTag = "RoleplayOSCustodyDesk",
@@ -1578,6 +1589,7 @@ local Config = {
 			Id = "MedicalBag",
 			AssetPath = { "Tools", "Services", "Ambulance", "MedicalBag" },
 			DepartmentId = "Ambulance",
+			BuiltInFallback = "MedicalBag",
 		},
 		PoliceWarrantCard = {
 			Id = "PoliceWarrantCard",
