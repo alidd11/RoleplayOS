@@ -286,7 +286,7 @@ return {
 
 	SurronCivilian = {
 		Certified = true,
-		ReviewVersion = 2,
+		ReviewVersion = 1,
 		Source = "Imported Sur-Ron electric bike kit, civilian trim",
 		RealWorldReference = "Sur-Ron Ultra Bee",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
@@ -414,7 +414,7 @@ return {
 
 	SurronPolice = {
 		Certified = true,
-		ReviewVersion = 2,
+		ReviewVersion = 1,
 		Source = "Imported Sur-Ron electric bike kit, marked police trim with EasyLS",
 		RealWorldReference = "Sur-Ron Ultra Bee, Roads Policing marked",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
@@ -697,7 +697,7 @@ return {
 
 	SurronPoliceUnmarked = {
 		Certified = true,
-		ReviewVersion = 2,
+		ReviewVersion = 1,
 		Source = "Imported Sur-Ron electric bike kit, unmarked police trim with EasyLS",
 		RealWorldReference = "Sur-Ron Ultra Bee, Roads Policing unmarked",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
