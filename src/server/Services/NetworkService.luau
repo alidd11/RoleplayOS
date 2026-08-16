@@ -478,6 +478,35 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("GetAvatarCatalogCategories", function(payload)
+		return type(payload) == "table"
+	end, function(_player, _payload, requestId)
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "",
+			Data = { Categories = self.context.Services:Get("AvatarCatalogService"):Categories() },
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("SearchAvatarCatalog", function(payload)
+		return type(payload) == "table" and type(payload.CategoryId) == "string"
+	end, function(_player, payload, requestId)
+		local results, reason = self.context.Services
+			:Get("AvatarCatalogService")
+			:Search(payload.CategoryId, payload.Keyword)
+		local messages = {
+			UNKNOWN_CATEGORY = "That category is not available.",
+			CATALOGUE_UNAVAILABLE = "The catalogue is unavailable right now. Try again shortly.",
+		}
+		return {
+			Success = results ~= nil,
+			Code = if results then "OK" else reason,
+			Message = if results then "" else (reason and messages[reason]) or "Search failed.",
+			Data = results,
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("GetAppearanceEditState", function(payload)
 		return type(payload) == "table" and type(payload.CharacterId) == "string"
 	end, function(player, payload, requestId)

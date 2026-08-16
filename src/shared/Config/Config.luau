@@ -2161,6 +2161,13 @@ local Config = {
 			SaveCivilianAppearance = { Capacity = 2, RefillPerSecond = 0.1 },
 			-- Read only and cheap, so the menu can ask whenever it repaints.
 			GetAppearanceEditState = { Capacity = 6, RefillPerSecond = 1 },
+			-- Answered from a table on the server, so effectively free.
+			GetAvatarCatalogCategories = { Capacity = 4, RefillPerSecond = 0.5 },
+			-- Reaches Roblox's catalogue when the answer is not already cached, and
+			-- that quota is shared by everyone on the server. Generous enough to
+			-- browse and type comfortably, tight enough that one client cannot
+			-- spend the whole server's allowance.
+			SearchAvatarCatalog = { Capacity = 8, RefillPerSecond = 1 },
 			-- Writing an appearance ends the edit and may spend a purchase, so it
 			-- is deliberately slow: a player has no legitimate reason to submit
 			-- more than a couple in a row.
