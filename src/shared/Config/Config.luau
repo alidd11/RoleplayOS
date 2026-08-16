@@ -746,7 +746,10 @@ local Config = {
 	DeveloperProducts = {
 		ExtraCharacterSlot = {
 			Id = "ExtraCharacterSlot",
-			ProductId = 0,
+			-- Live product on the Portsmouth universe (5710996304). Its name and
+			-- price on Roblox already matched this entry exactly; only the id was
+			-- missing, so purchases could never be granted.
+			ProductId = 3708269661,
 			GrantType = "ExtraCharacterSlot",
 			Amount = 1,
 			Name = "Extra Character Slot",
@@ -759,7 +762,8 @@ local Config = {
 		-- each purchase is one edit.
 		CharacterAppearanceEdit = {
 			Id = "CharacterAppearanceEdit",
-			ProductId = 0,
+			-- Live product on the Portsmouth universe (5710996304).
+			ProductId = 3708388537,
 			GrantType = "CharacterAppearanceEdit",
 			Amount = 1,
 			Name = "Change Character Appearance",
