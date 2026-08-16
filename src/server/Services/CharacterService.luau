@@ -37,6 +37,46 @@ local APPEARANCE_PROPERTIES = {
 	"GraphicTShirt",
 }
 
+-- Skin tone, kept apart from the list above because it is not a string or a
+-- number.
+--
+-- Every colour on a HumanoidDescription is a Color3, so none of them survived
+-- the string/number filter in captureAppearance and none were listed to be
+-- captured in the first place. applyAppearance then built a brand new
+-- HumanoidDescription, whose colours are unset and therefore black, and called
+-- ApplyDescriptionReset with it. The result was that selecting a saved civilian
+-- character painted the player's whole body pure black every single time --
+-- deterministically, not as a race -- and it applied to every extra character
+-- slot a player bought, because each one re-applies its appearance on selection.
+--
+-- Stored as a hex string so it stays a flat, DataStore-safe value alongside the
+-- asset ids rather than becoming a nested table.
+local APPEARANCE_COLOUR_PROPERTIES = {
+	"HeadColor",
+	"LeftArmColor",
+	"LeftLegColor",
+	"RightArmColor",
+	"RightLegColor",
+	"TorsoColor",
+}
+
+local COLOUR_PROPERTY_LOOKUP: { [string]: boolean } = {}
+for _, propertyName in APPEARANCE_COLOUR_PROPERTIES do
+	COLOUR_PROPERTY_LOOKUP[propertyName] = true
+end
+
+-- The colour a limb is actually wearing, for characters saved before skin tone
+-- was captured. Without this their stored appearance still has no colours and
+-- would still reset them to black on every load.
+local COLOUR_FALLBACK_SOURCES: { [string]: string } = {
+	HeadColor = "HeadColor3",
+	LeftArmColor = "LeftArmColor3",
+	LeftLegColor = "LeftLegColor3",
+	RightArmColor = "RightArmColor3",
+	RightLegColor = "RightLegColor3",
+	TorsoColor = "TorsoColor3",
+}
+
 local function captureAppearance(character: Model): ({ [string]: any }?, string?)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if not humanoid then
@@ -57,6 +97,41 @@ local function captureAppearance(character: Model): ({ [string]: any }?, string?
 			appearance[propertyName] = value
 		end
 	end
+	-- Skin tone, read from the body rather than the description.
+	--
+	-- BodyColors carries what the character is visibly wearing, while the
+	-- description can still be reporting unset black if the avatar's appearance
+	-- has not finished loading. Capturing from the description would therefore
+	-- save black as though the player had chosen it, making the reset below
+	-- permanent rather than transient.
+	local bodyColors = character:FindFirstChildOfClass("BodyColors")
+	for _, propertyName in APPEARANCE_COLOUR_PROPERTIES do
+		local colour: Color3? = nil
+		if bodyColors then
+			local sourceOk, sourceValue = pcall(function()
+				return (bodyColors :: any)[COLOUR_FALLBACK_SOURCES[propertyName]]
+			end)
+			if sourceOk and typeof(sourceValue) == "Color3" then
+				colour = sourceValue
+			end
+		end
+		if not colour then
+			local propertyOk, value = pcall(function()
+				return (description :: any)[propertyName]
+			end)
+			if propertyOk and typeof(value) == "Color3" then
+				colour = value
+			end
+		end
+		if colour and not (colour.R == 0 and colour.G == 0 and colour.B == 0) then
+			local hexOk, hex = pcall(function()
+				return colour:ToHex()
+			end)
+			if hexOk and type(hex) == "string" then
+				appearance[propertyName] = hex
+			end
+		end
+	end
 	return appearance, nil
 end
 
@@ -67,9 +142,30 @@ local function applyAppearance(character: Model, appearance: { [string]: any }):
 	end
 	local description = Instance.new("HumanoidDescription")
 	for propertyName, value in appearance do
-		pcall(function()
-			(description :: any)[propertyName] = value
-		end)
+		if COLOUR_PROPERTY_LOOKUP[propertyName] then
+			if type(value) == "string" then
+				pcall(function()
+					(description :: any)[propertyName] = Color3.fromHex(value)
+				end)
+			end
+		else
+			pcall(function()
+				(description :: any)[propertyName] = value
+			end)
+		end
+	end
+	-- Anything the saved appearance did not carry is taken from the body as it
+	-- stands, so a character saved before skin tone was captured keeps the colour
+	-- it is already wearing instead of being reset to black.
+	local bodyColors = character:FindFirstChildOfClass("BodyColors")
+	if bodyColors then
+		for _, propertyName in APPEARANCE_COLOUR_PROPERTIES do
+			if appearance[propertyName] == nil then
+				pcall(function()
+					(description :: any)[propertyName] = (bodyColors :: any)[COLOUR_FALLBACK_SOURCES[propertyName]]
+				end)
+			end
+		end
 	end
 	local ok, reason = pcall(function()
 		humanoid:ApplyDescriptionReset(description)
