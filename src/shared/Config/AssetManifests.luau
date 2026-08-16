@@ -38,6 +38,27 @@ local IMPORTED_KIT_REVIEW = "Imported asset inventory pinned by "
 	.. "generate-asset-certification.studio.luau; not a line-by-line source review"
 
 return {
+	-- Assembled from user-supplied meshes by scripts/assemble-melee-tool.studio.luau
+	-- rather than imported whole, so there is nothing to allowlist: the tool is
+	-- geometry and a Handle and carries no executable at all. Damage, range,
+	-- cooldown, line of sight, death cleanup and police seizure are all owned by
+	-- MeleeWeaponService on the server, which is why putting a damage script in
+	-- the tool would be both duplicated and exploitable.
+	RamboKnife = {
+		Certified = true,
+		ReviewVersion = 1,
+		Source = "User-supplied knife meshes, assembled into a Tool by RoleplayOS tooling",
+		RealWorldReference = "Fixed-blade survival knife",
+		ReviewedBy = "RoleplayOS engineering: tool contains geometry only, no executables",
+	},
+	ZKnife = {
+		Certified = true,
+		ReviewVersion = 1,
+		Source = "User-supplied knife meshes, assembled into a Tool by RoleplayOS tooling",
+		RealWorldReference = "Fixed-blade knife",
+		ReviewedBy = "RoleplayOS engineering: tool contains geometry only, no executables",
+	},
+
 	CorollaTaxi = {
 		Certified = true,
 		ReviewVersion = 1,

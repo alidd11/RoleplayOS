@@ -1555,12 +1555,14 @@ local Config = {
 			Id = "Knife",
 			AssetPath = { "Tools", "Civilian", "Knife" },
 			DepartmentId = "Civilian",
+			BuiltInFallback = "Weapon",
 			Weapon = { Damage = 18, Cooldown = 0.65, Range = 8 },
 		},
 		Machete = {
 			Id = "Machete",
 			AssetPath = { "Tools", "Civilian", "Machete" },
 			DepartmentId = "Civilian",
+			BuiltInFallback = "Weapon",
 			Weapon = { Damage = 24, Cooldown = 0.8, Range = 8 },
 		},
 		RamboKnife = {

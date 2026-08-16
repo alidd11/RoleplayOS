@@ -29,6 +29,21 @@ local forbiddenClasses = {
 	ClickDetector = true,
 }
 
+-- The tools ToolFactory can build without any imported geometry.
+--
+-- Named rather than accepted blindly, so declaring a fallback the factory has no
+-- method for reports as missing instead of quietly passing validation and then
+-- failing to issue anything in game. Keep in step with LoadoutService.
+local BUILT_IN_FALLBACKS = {
+	MDT = true,
+	Radio = true,
+	Handcuffs = true,
+	MedicalBag = true,
+	-- ToolFactory.weapon builds a generic bladed weapon for any id, so one entry
+	-- covers every melee tool that has no mesh of its own yet.
+	Weapon = true,
+}
+
 local function resolve(root: Instance, path: { string }): Instance?
 	local current: Instance? = root
 	for _, segment in path do
@@ -591,7 +606,18 @@ function ContentValidationService:_check(
 	local template = resolve(assets, path)
 	if not template then
 		local issue = kind .. ":" .. id .. ":" .. table.concat(path, "/")
-		if kind == "Tool" and id == "MedicalBag" and definition.BuiltInFallback == "MedicalBag" then
+		-- A tool the framework can build for itself is ready, not missing.
+		--
+		-- LoadoutService falls back to ToolFactory when a tool has no imported
+		-- template, so an asset nobody has supplied geometry for is still issued
+		-- and still works. Declaring that here keeps the audit honest in both
+		-- directions: it stops reporting a working tool as missing, and it still
+		-- reports one whose fallback the factory cannot actually build.
+		--
+		-- This was written for MedicalBag alone and hardcoded to that one id,
+		-- which meant every later tool in the same position had to be added to
+		-- this condition by hand or stay permanently on the missing list.
+		if kind == "Tool" and BUILT_IN_FALLBACKS[definition.BuiltInFallback] then
 			table.insert(self.report.Ready, kind .. ":" .. id .. ":BUILT_IN_FALLBACK")
 			return
 		end
