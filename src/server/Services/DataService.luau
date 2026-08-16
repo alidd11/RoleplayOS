@@ -736,6 +736,29 @@ function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 			task.wait(0.05)
 		end
 		if session.Saving then
+			-- Give the session up rather than abandoning it half-released.
+			--
+			-- This returned without dropping it, which left the player's profile
+			-- in self.sessions for the rest of the server's life: they had already
+			-- gone, so the autosave loop would never revisit them, and every later
+			-- load on this server found the session still present and refused.
+			-- Rejoining was impossible until the server itself died.
+			--
+			-- It is reachable in ordinary conditions. A retry under DataStore
+			-- throttling can wait several seconds per attempt, and four attempts
+			-- can outlast ShutdownSaveSeconds, which is exactly when a busy server
+			-- is saving hardest.
+			--
+			-- Dropping is the same choice the failed-save path below makes, for
+			-- the same reason: holding the profile in memory saves nothing once
+			-- the player has left, and the stored lease expires on its own clock.
+			-- The in-flight save keeps its own reference and still completes.
+			if release then
+				self.sessions[player.UserId] = nil
+				self.context.Logger:Warning("Released a session whose save was still running", {
+					UserId = player.UserId,
+				})
+			end
 			return false, "SAVE_IN_PROGRESS"
 		end
 	end

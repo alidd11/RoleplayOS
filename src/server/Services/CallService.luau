@@ -200,6 +200,41 @@ function CallService:Update(callId: string, data: any): (any?, string?)
 	self.context.Services:Get("DispatchService"):Publish("CallUpdated", callId, self.revision)
 	return call, nil
 end
+-- Takes a unit off every call it was working, without resolving anything.
+--
+-- Assign is the only thing that ever added a unit to a call, and Close was the
+-- only thing that ever removed one. So a unit that simply stopped existing --
+-- went off duty, or disconnected -- left its callsign sitting in call.UnitIds
+-- and the call sitting at Assigned or OnScene forever. On the dispatch board it
+-- read as attended, by a unit no longer in the units list, and it stayed in the
+-- queue until a controller noticed and closed it by hand.
+--
+-- A call that still has other units keeps its status: those officers are still
+-- working it. Only the last unit leaving sends it back to Open, which is the
+-- honest state -- the job still needs doing and nobody is on it.
+function CallService:ReleaseUnit(unitId: string): number
+	local released = 0
+	for _, call in self.calls do
+		if call.Status == "Resolved" then
+			continue
+		end
+		local index = table.find(call.UnitIds, unitId)
+		if index then
+			table.remove(call.UnitIds, index)
+			if #call.UnitIds == 0 and (call.Status == "Assigned" or call.Status == "OnScene") then
+				call.Status = "Open"
+			end
+			call.Revision += 1
+			self.revision += 1
+			self.context.Services
+				:Get("DispatchService")
+				:Publish("CallUpdated", call.CallId, self.revision)
+			released += 1
+		end
+	end
+	return released
+end
+
 function CallService:Close(callId: string, closedByUserId: number?): (boolean, string?)
 	local call = self.calls[callId]
 	if not call or call.Status == "Resolved" then

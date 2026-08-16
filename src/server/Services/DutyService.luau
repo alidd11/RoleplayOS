@@ -1,6 +1,15 @@
 --!strict
 
 local Players = game:GetService("Players")
+-- Whether a player is still in the game.
+--
+-- Parent is the reliable test: a Player instance that has left is removed from
+-- the Players service but the reference held by an in-flight request stays
+-- perfectly valid, so checking the reference alone proves nothing.
+local function playerIsPresent(player: Player): boolean
+	return player.Parent ~= nil
+end
+
 local DutyService = { active = {} }
 
 function DutyService:Init(context: any)
@@ -188,6 +197,21 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 				Reason = loadoutReason,
 			})
 		end
+	end
+	-- Nothing is recorded for a player who has already left.
+	--
+	-- Begin yields repeatedly before reaching this line: a group-rank web call
+	-- inside the access check, LoadCharacterAsync inside the spawn, the loadout,
+	-- and a DataStore write for the shoulder number. The request handler is not
+	-- tied to the connection, so a player who disconnects part-way through leaves
+	-- PlayerRemoving to run its cleanup first and finds nothing to clean, and then
+	-- this line writes a duty record for a UserId that is no longer in the game.
+	--
+	-- Nothing ever clears it afterwards, and the first check in Begin refuses
+	-- anybody already in self.active, so that player could never go on duty again
+	-- for the remaining life of the server -- with no error explaining why.
+	if not playerIsPresent(player) then
+		return false, "PLAYER_LEFT"
 	end
 	self.active[player.UserId] = {
 		DutyProfileId = request.DutyProfileId,

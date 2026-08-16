@@ -46,7 +46,17 @@ function UnitService:SetCallsign(unitId: string, callsign: string): (boolean, st
 	return true, nil
 end
 function UnitService:Unregister(player: Player)
-	self.units[tostring(player.UserId)] = nil
+	local unitId = tostring(player.UserId)
+	-- Hand back any call this unit was working before the unit disappears.
+	--
+	-- Done here rather than at each call site because this is the single point
+	-- every route out passes through: going off duty deliberately, and
+	-- PlayerRemoving when somebody disconnects mid-shift.
+	local calls = self.context.Services:Get("CallService")
+	if calls and calls.ReleaseUnit then
+		calls:ReleaseUnit(unitId)
+	end
+	self.units[unitId] = nil
 end
 function UnitService:Snapshot(): { any }
 	local result = {}
