@@ -463,12 +463,27 @@ function PhoneController:_renderTaxi()
 	end)
 	if self.phoneData and self.phoneData.TaxiDriverRequest then
 		local driverRequest = self.phoneData.TaxiDriverRequest
-		local accept = button(self.content, "ACCEPT DRIVER REQUEST", C.Green)
+		-- Two ways out of an offer, as a driver expects. Declining is local to
+		-- this driver: the booking stays open and the passenger keeps waiting.
+		local accept = button(self.content, "ACCEPT", C.Green)
 		accept.Position = UDim2.fromOffset(0, 306)
-		accept.Size = UDim2.new(1, 0, 0, 44)
+		accept.Size = UDim2.new(0.5, -5, 0, 44)
 		accept.Activated:Connect(function()
 			local response = self.context.Controllers.NetworkController:Request(
 				"TaxiAccept",
+				{ RequestId = driverRequest.RequestId }
+			)
+			self.context.Controllers.NotificationController:Show(response.Message, "Taxi")
+			if response.Success then
+				self:Refresh()
+			end
+		end)
+		local decline = button(self.content, "DECLINE", C.Muted)
+		decline.Position = UDim2.new(0.5, 5, 0, 306)
+		decline.Size = UDim2.new(0.5, -5, 0, 44)
+		decline.Activated:Connect(function()
+			local response = self.context.Controllers.NetworkController:Request(
+				"TaxiDecline",
 				{ RequestId = driverRequest.RequestId }
 			)
 			self.context.Controllers.NotificationController:Show(response.Message, "Taxi")

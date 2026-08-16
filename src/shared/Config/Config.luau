@@ -2213,6 +2213,7 @@ local Config = {
 			PhoneToggleFlashlight = { Capacity = 4, RefillPerSecond = 2 },
 			TaxiRequest = { Capacity = 2, RefillPerSecond = 0.1 },
 			TaxiAccept = { Capacity = 4, RefillPerSecond = 0.5 },
+			TaxiDecline = { Capacity = 6, RefillPerSecond = 0.5 },
 			TaxiComplete = { Capacity = 3, RefillPerSecond = 0.2 },
 			TaxiCancel = { Capacity = 3, RefillPerSecond = 0.2 },
 			TaxiStartShift = { Capacity = 2, RefillPerSecond = 0.1 },

@@ -11,6 +11,10 @@ function TaxiService:Init(context: any)
 	self.phone = context.Services:Get("PhoneService")
 	self.settings = context.Configuration.Taxi
 	self.connections = {}
+	-- Offers a driver has passed on, as [driverUserId] = { [requestId] = true }.
+	-- Declining is per driver and never cancels the booking: the passenger keeps
+	-- waiting and the job stays available to everybody else.
+	self.declined = {}
 end
 
 function TaxiService:_character(player: Player): (any?, string?)
@@ -80,6 +84,11 @@ function TaxiService:StartShift(player: Player): (any?, string?)
 	if not character then
 		return nil, characterId
 	end
+	-- Finish the ride you booked before driving one. Clocking on with a booking
+	-- of your own outstanding is the first half of accepting it yourself.
+	if self.byPassenger[player.UserId] then
+		return nil, "TAXI_REQUEST_ALREADY_ACTIVE"
+	end
 	if self:_isDriver(player) then
 		return self:_statusFor(player) or { State = "OnDuty" }, nil
 	end
@@ -119,6 +128,7 @@ function TaxiService:EndShift(player: Player): (boolean, string?)
 			break
 		end
 	end
+	self.declined[player.UserId] = nil
 	local civilian = self.context.Services:Get("TeamService"):Get("Civilian")
 	if civilian then
 		player.Team = civilian
@@ -135,21 +145,72 @@ function TaxiService:GetDriverRequest(player: Player): any?
 	if not self:_isDriver(player) or self.byDriver[player.UserId] then
 		return nil
 	end
-	for _, request in self.requests do
-		if request.State == "Waiting" then
-			return {
-				RequestId = request.RequestId,
-				State = request.State,
-				Pickup = request.Pickup,
-				Dropoff = request.Dropoff,
-				Fare = request.Fare,
-				Band = request.Band,
-				PassengerName = request.PassengerName,
-				CreatedAt = request.CreatedAt,
-			}
+	local passed = self.declined[player.UserId]
+	-- Oldest waiting booking this driver has not passed on.
+	--
+	-- self.requests is keyed by id, so iterating it hands back an arbitrary
+	-- booking and a different one between polls. A passenger could sit behind
+	-- newer arrivals indefinitely; whoever has waited longest goes first.
+	local oldest = nil
+	for _, candidate in self.requests do
+		local own = candidate.PassengerUserId == player.UserId
+		if
+			candidate.State == "Waiting"
+			and not own
+			and not (passed and passed[candidate.RequestId])
+		then
+			local waiting = tonumber(candidate.CreatedAt) or 0
+			if not oldest or waiting < (tonumber(oldest.CreatedAt) or 0) then
+				oldest = candidate
+			end
 		end
 	end
-	return nil
+	if not oldest then
+		return nil
+	end
+	return {
+		RequestId = oldest.RequestId,
+		State = oldest.State,
+		Pickup = oldest.Pickup,
+		Dropoff = oldest.Dropoff,
+		Fare = oldest.Fare,
+		Band = oldest.Band,
+		PassengerName = oldest.PassengerName,
+		CreatedAt = oldest.CreatedAt,
+	}
+end
+
+-- Passes on one booking, for this driver only.
+--
+-- Without it a driver's only move was to accept: GetDriverRequest kept handing
+-- back the same booking, so a fare they did not want blocked the queue for
+-- them. Declining hides it from this driver and leaves it waiting for the rest
+-- of the fleet, so it can never be used to cancel somebody else's ride.
+function TaxiService:Decline(player: Player, requestId: any): (boolean, string?)
+	if type(requestId) ~= "string" or not self:_isDriver(player) then
+		return false, "TAXI_DRIVER_REQUIRED"
+	end
+	if self.byDriver[player.UserId] then
+		return false, "TAXI_REQUEST_ALREADY_ACTIVE"
+	end
+	local request = self.requests[requestId]
+	if not request or request.State ~= "Waiting" then
+		return false, "TAXI_REQUEST_UNAVAILABLE"
+	end
+	local passed = self.declined[player.UserId]
+	if not passed then
+		passed = {}
+		self.declined[player.UserId] = passed
+	end
+	passed[requestId] = true
+	return true, nil
+end
+
+-- Drops every driver's memory of one booking, once it stops being offered.
+function TaxiService:_forgetDeclines(requestId: string)
+	for _, passed in self.declined do
+		passed[requestId] = nil
+	end
 end
 
 function TaxiService:_activeTaxi(player: Player): Model?
@@ -276,6 +337,13 @@ function TaxiService:Accept(player: Player, requestId: any): (any?, string?)
 	if not request or request.State ~= "Waiting" then
 		return nil, "TAXI_REQUEST_UNAVAILABLE"
 	end
+	-- Both ends of a booking have to be different people. Complete asks whether
+	-- the driver and the passenger are each seated in the taxi, and one player
+	-- in one seat satisfies both, so a self-booked ride would settle as a real
+	-- one: fare out and fare back, and a completed job on the driver's record.
+	if request.PassengerUserId == player.UserId then
+		return nil, "TAXI_OWN_REQUEST"
+	end
 	local driverCharacter = self:_character(player)
 	if not driverCharacter then
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
@@ -285,6 +353,7 @@ function TaxiService:Accept(player: Player, requestId: any): (any?, string?)
 		return nil, "TAXI_VEHICLE_REQUIRED"
 	end
 	request.State = "Accepted"
+	self:_forgetDeclines(requestId)
 	request.DriverUserId = player.UserId
 	request.DriverCharacterId = driverCharacter.CharacterId
 	request.DriverName = driverCharacter.Identity.FirstName
@@ -413,15 +482,20 @@ function TaxiService:Cancel(player: Player, requestId: any): (boolean, string?)
 		return false, "TAXI_REQUEST_UNAVAILABLE"
 	end
 	request.State = "Cancelled"
+	self:_forgetDeclines(requestId)
 	self.byPassenger[request.PassengerUserId] = nil
 	if request.DriverUserId then
 		self.byDriver[request.DriverUserId] = nil
 	end
-	local other = Players:GetPlayerByUserId(
-		if request.PassengerUserId == player.UserId
-			then request.DriverUserId
-			else request.PassengerUserId
-	)
+	-- A booking nobody has accepted yet has no driver to tell, and passing that
+	-- nil to GetPlayerByUserId throws. The cancellation itself is already
+	-- recorded above, so this threw after the work was done: the ride really was
+	-- cancelled and the passenger was told it could not be. That is the ordinary
+	-- case of changing your mind before a driver picks you up.
+	local otherUserId = if request.PassengerUserId == player.UserId
+		then request.DriverUserId
+		else request.PassengerUserId
+	local other = if otherUserId then Players:GetPlayerByUserId(otherUserId) else nil
 	if other then
 		self:_notify(other, {
 			Kind = "TaxiStatus",
@@ -446,6 +520,7 @@ function TaxiService:Start()
 				local timestamp = tonumber(request.CompletedAt or request.CreatedAt) or os.time()
 				if terminal and timestamp < cutoff then
 					self.requests[requestId] = nil
+					self:_forgetDeclines(requestId)
 				end
 			end
 		end
@@ -457,6 +532,7 @@ function TaxiService:Start()
 			if requestId then
 				self:Cancel(player, requestId)
 			end
+			self.declined[player.UserId] = nil
 		end)
 	)
 end
