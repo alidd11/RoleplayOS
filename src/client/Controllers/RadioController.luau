@@ -542,7 +542,7 @@ function RadioController:Start()
 	local editCallsign = button(body, "EDIT")
 	editCallsign.AnchorPoint = Vector2.new(1, 0)
 	editCallsign.Position = UDim2.new(1, -14, 0, 12)
-	editCallsign.Size = UDim2.fromOffset(48, 24)
+	editCallsign.Size = UDim2.fromOffset(56, 32)
 	editCallsign.TextSize = 10
 	editCallsign.Visible = false
 	editCallsign.Activated:Connect(function()

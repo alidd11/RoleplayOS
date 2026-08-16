@@ -90,6 +90,15 @@ end
 
 function VehicleOwnershipService:GrantStarter(player: Player, characterId: string): (any?, string?)
 	local settings = self.context.Configuration.VehicleData
+	-- No starter car configured is a deliberate state, not a failure. The car this
+	-- named was retired and nothing replaces it yet, so Create was being handed a
+	-- nil definition and returning INVALID_VEHICLE_SELECTION. That warned on every
+	-- character creation and left a pending flag which then retried, and warned
+	-- again, on every selection - for work that was never outstanding.
+	local starterId = settings.StarterDefinitionId
+	if type(starterId) ~= "string" or starterId == "" then
+		return nil, "NO_STARTER_CONFIGURED"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not character then

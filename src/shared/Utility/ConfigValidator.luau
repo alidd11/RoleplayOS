@@ -227,6 +227,58 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			end
 		end
 	end
+	-- Application forms, checked against what ApplicationService actually reads.
+	--
+	-- Each of these is a crash rather than a misconfiguration at runtime: a form
+	-- with no Questions iterates nil, a missing CooldownSeconds is subtracted
+	-- from a timestamp once a previous application exists, and a Choice question
+	-- with no Options is handed to table.find as nil. Duplicate question ids do
+	-- not throw, but the later answer silently replaces the earlier one.
+	for formId, form in config.Applications or {} do
+		local label = " in application " .. tostring(formId)
+		if type(form.CooldownSeconds) ~= "number" or form.CooldownSeconds < 0 then
+			table.insert(errors, "Missing or negative CooldownSeconds" .. label)
+		end
+		if type(form.Questions) ~= "table" or #form.Questions == 0 then
+			table.insert(errors, "No questions defined" .. label)
+		else
+			local seenQuestions = {}
+			for _, question in form.Questions do
+				local questionId = question.Id
+				if type(questionId) ~= "string" or questionId == "" then
+					table.insert(errors, "Question with no id" .. label)
+				elseif seenQuestions[questionId] then
+					table.insert(errors, "Duplicate question " .. questionId .. label)
+				else
+					seenQuestions[questionId] = true
+				end
+				if question.Type ~= "Text" and question.Type ~= "Choice" then
+					table.insert(
+						errors,
+						"Question " .. tostring(questionId) .. " has an unknown type" .. label
+					)
+				end
+				if
+					question.Type == "Choice"
+					and (type(question.Options) ~= "table" or #question.Options < 2)
+				then
+					table.insert(
+						errors,
+						"Choice question " .. tostring(questionId) .. " needs two options" .. label
+					)
+				end
+				if
+					question.MaximumLength ~= nil
+					and (type(question.MaximumLength) ~= "number" or question.MaximumLength < 1)
+				then
+					table.insert(
+						errors,
+						"Question " .. tostring(questionId) .. " has a bad length limit" .. label
+					)
+				end
+			end
+		end
+	end
 	local network = config.Network or {}
 	if
 		type(network.MaximumPayloadBytes) ~= "number"

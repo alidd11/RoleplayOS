@@ -135,9 +135,21 @@ end
 -- that changes the draft clears it, so the message only ever describes the
 -- current state.
 function CharacterCreator:_clearStatus()
-	if self.status and self.status.Text ~= "" then
-		self.status.Text = ""
+	self:_setStatus("")
+end
+
+-- Writes the status line and takes ownership of it.
+--
+-- The catalogue load finishes asynchronously and used to write unconditionally,
+-- so a message the player caused while it was in flight was wiped the moment
+-- the items arrived. The token says who wrote last; a load that has been
+-- overtaken renders its tiles but leaves the line alone.
+function CharacterCreator:_setStatus(text: string): number
+	self.statusToken = (self.statusToken or 0) + 1
+	if self.status and self.status.Text ~= text then
+		self.status.Text = text
 	end
+	return self.statusToken
 end
 
 function CharacterCreator:_setField(field: string, value: any)
@@ -212,7 +224,7 @@ function CharacterCreator:_loadCategory(categoryId: string, keyword: string?)
 			child:Destroy()
 		end
 	end
-	self.status.Text = "Loading…"
+	local token = self:_setStatus("Loading…")
 	task.spawn(function()
 		local response = self.context.Controllers.NetworkController:Request("SearchAvatarCatalog", {
 			CategoryId = categoryId,
@@ -221,12 +233,17 @@ function CharacterCreator:_loadCategory(categoryId: string, keyword: string?)
 		if self.activeCategory ~= categoryId then
 			return
 		end
+		local ownsStatus = self.statusToken == token
 		if not response.Success or type(response.Data) ~= "table" then
-			self.status.Text = response.Message ~= "" and response.Message or "Nothing found."
+			if ownsStatus then
+				self:_setStatus(response.Message ~= "" and response.Message or "Nothing found.")
+			end
 			return
 		end
 		local items = response.Data.Items or {}
-		self.status.Text = if #items == 0 then "Nothing found." else ""
+		if ownsStatus then
+			self:_setStatus(if #items == 0 then "Nothing found." else "")
+		end
 		for _, item in items do
 			self:_itemTile(grid, item)
 		end
@@ -538,7 +555,7 @@ function CharacterCreator:_loadCategories()
 			return
 		end
 		if not response.Success or type(response.Data) ~= "table" then
-			self.status.Text = "The catalogue is unavailable. Skin and body still work."
+			self:_setStatus("The catalogue is unavailable. Skin and body still work.")
 			return
 		end
 		self.categories = response.Data.Categories or {}
@@ -588,7 +605,7 @@ function CharacterCreator:_save()
 		return
 	end
 	if next(self.draft) == nil then
-		self.status.Text = "Choose something first."
+		self:_setStatus("Choose something first.")
 		return
 	end
 	self.saving = true
@@ -607,7 +624,7 @@ function CharacterCreator:_save()
 			self:_finish(true)
 			return
 		end
-		self.status.Text = response.Message
+		self:_setStatus(response.Message)
 		self.context.Controllers.NotificationController:Show(response.Message, "Appearance")
 	end)
 end

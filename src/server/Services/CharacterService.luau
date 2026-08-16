@@ -396,10 +396,13 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 	table.insert(session.Profile.CharacterSlots, id)
 	local starter, starterReason =
 		self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, id)
-	if not starter then
+	if not starter and starterReason ~= "NO_STARTER_CONFIGURED" then
 		-- Vehicle registration uses a separate persistent reservation. A transient
 		-- failure there must not erase an otherwise valid character; retry lazily
 		-- when the character is selected instead.
+		--
+		-- A server with no starter car configured is not such a failure and must
+		-- not be marked pending: nothing would ever satisfy it.
 		character.StarterVehiclePending = true
 		self.context.Logger:Warning("Starter vehicle deferred after character creation", {
 			UserId = player.UserId,
@@ -509,9 +512,12 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 	session.ActiveCharacterId = characterId
 	character.LastPlayedAt = os.time()
 	if character.StarterVehiclePending == true then
-		local starter =
+		local starter, starterReason =
 			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
-		if starter then
+		-- Cleared when the grant lands, and equally when there is nothing to
+		-- grant. Characters created before that became a no-op still carry a
+		-- pending flag, and retrying it on every selection can never satisfy it.
+		if starter or starterReason == "NO_STARTER_CONFIGURED" then
 			character.StarterVehiclePending = nil
 		end
 	end

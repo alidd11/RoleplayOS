@@ -1338,6 +1338,8 @@ function App.mount(context: any): ScreenGui
 		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
 		if shortLandscape() then
 			return if width >= 980 then 2 else 1
+		elseif width >= 1600 then
+			return 4
 		elseif width >= 1280 then
 			return 3
 		elseif width >= 720 then

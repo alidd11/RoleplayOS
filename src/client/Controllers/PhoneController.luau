@@ -218,7 +218,7 @@ function PhoneController:_mount()
 	local close = button(screen, "×")
 	close.AnchorPoint = Vector2.new(1, 0)
 	close.Position = UDim2.new(1, -12, 0, 34)
-	close.Size = UDim2.fromOffset(28, 24)
+	close.Size = UDim2.fromOffset(36, 36)
 	close.BackgroundTransparency = 0.35
 	self.close = close
 
@@ -287,11 +287,21 @@ function PhoneController:_mount()
 	-- gesture equivalent available with a cursor.
 	local indicator = button(screen, "")
 	indicator.AnchorPoint = Vector2.new(0.5, 1)
-	indicator.Position = UDim2.new(0.5, 0, 1, -8)
-	indicator.Size = UDim2.fromOffset(124, 5)
-	indicator.BackgroundColor3 = Color3.fromRGB(226, 232, 242)
-	indicator.BackgroundTransparency = 0.25
-	corner(indicator, 3)
+	indicator.Position = UDim2.new(0.5, 0, 1, -2)
+	-- The visible bar is the 5px pill drawn inside; the button around it is what
+	-- a finger actually has to hit. At 124x5 the target was the bar itself, which
+	-- is smaller than any real fingertip.
+	indicator.Size = UDim2.fromOffset(148, 26)
+	indicator.BackgroundTransparency = 1
+	local indicatorBar = Instance.new("Frame")
+	indicatorBar.AnchorPoint = Vector2.new(0.5, 0.5)
+	indicatorBar.Position = UDim2.fromScale(0.5, 0.5)
+	indicatorBar.Size = UDim2.fromOffset(124, 5)
+	indicatorBar.BackgroundColor3 = Color3.fromRGB(226, 232, 242)
+	indicatorBar.BackgroundTransparency = 0.25
+	indicatorBar.BorderSizePixel = 0
+	indicatorBar.Parent = indicator
+	corner(indicatorBar, 3)
 	indicator.Activated:Connect(function()
 		show("Home")
 	end)
