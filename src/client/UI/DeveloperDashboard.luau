@@ -570,8 +570,9 @@ function App.mount(context: any): ScreenGui
 	menuToggle.Selectable = true
 	menuToggle.Parent = menuToggleGui
 	-- Match the final topbar layout from the first frame. Starting at (8, 8)
-	-- caused a visible hop before the responsive binding corrected it.
-	menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, 2)
+	-- caused a visible hop before the responsive binding corrected it, so this
+	-- mirrors the centred position the binding settles on.
+	menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, 11)
 	local menuToggleCorner = Instance.new("UICorner")
 	menuToggleCorner.CornerRadius = UDim.new(0, NATIVE_CONTROL_SIZE / 2)
 	menuToggleCorner.Parent = menuToggle
@@ -3091,17 +3092,27 @@ function App.mount(context: any): ScreenGui
 		-- viewport or a guessed native-cluster width.
 		local reportedBand = math.floor(GuiService.TopbarInset.Height + 0.5)
 		local nativeBand = if reportedBand > 0 then reportedBand else NATIVE_BAND_HEIGHT
-		local controlSize = math.clamp(math.floor(nativeBand * 0.78 + 0.5), 32, 52)
-		local menuWidth = math.floor(controlSize * 1.72 + 0.5)
-		menuToggle.Size = UDim2.fromOffset(math.clamp(menuWidth, 60, 72), controlSize)
+		-- Sized and centred against Roblox's own controls rather than filling the
+		-- band.
+		--
+		-- Measured on a running client: the native band is 58 high, its controls
+		-- end at x=208, and a TopbarSafeInsets origin of (0, 0) already resolves
+		-- to exactly 208 -- so the horizontal position was never the problem and
+		-- adding NativeLeft here would double-count it, which is what the note
+		-- about the 248px cluster guess was warning against.
+		--
+		-- The vertical was wrong. At 0.78 of the band the button came out 45 high
+		-- against Roblox's ~36, and a fixed 2px gutter pinned it to the top of the
+		-- row, so it read as taller than the native controls and sitting above
+		-- them. Matching their proportion and centring it in the band puts the two
+		-- on the same line at the same weight, which is what makes it look native
+		-- rather than bolted on.
+		local controlSize = math.clamp(math.floor(nativeBand * 0.62 + 0.5), 28, 44)
+		local menuWidth = math.floor(controlSize * 1.9 + 0.5)
+		menuToggle.Size = UDim2.fromOffset(math.clamp(menuWidth, 58, 78), controlSize)
 		menuToggleCorner.CornerRadius = UDim.new(0, math.floor(controlSize * 0.34 + 0.5))
-		-- TopbarSafeInsets makes (0, 0) the first safe point after Roblox's
-		-- native controls. Keep a small gap inside that inset instead of adding
-		-- the old desktop-only 248px cluster guess a second time.
-		-- The Whitelisted menu keeps a fixed 2px gutter inside the topbar row.
-		-- The safe-inset origin already tracks the native Roblox controls, so a
-		-- second vertical re-centering pass only creates the startup jump.
-		menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, 2)
+		local bandGap = math.max(0, math.floor((nativeBand - controlSize) / 2 + 0.5))
+		menuToggle.Position = UDim2.fromOffset(NATIVE_CONTROL_GAP, bandGap)
 		-- Compact already accounts for a short landscape phone, so the height is
 		-- not tested again here.
 		-- One navigation language on every device: a top bar mirrors Roblox's
@@ -3120,7 +3131,19 @@ function App.mount(context: any): ScreenGui
 			-- On a landscape phone Roblox's native controls consume the whole first
 			-- row. Give the product identity and tabs their own row below it instead
 			-- of placing the title into the native logo/chat/microphone cluster.
-			local barHeight = safeTop + (if narrow then 54 else if compactLandscape then 44 else 38)
+			-- Tall enough to actually contain the row, and no taller.
+			--
+			-- Measured on a running client at 1365x768: the band ended at y=38
+			-- while the navigation row ran to y=50, so the tabs sat twelve pixels
+			-- over the top of the content beneath them. On a narrow screen it was
+			-- worse -- the title occupied 38..68 and the tabs 44..76, overlapping
+			-- each other as well as the content, because both were positioned from
+			-- the band top with no regard for the other's height.
+			--
+			-- These are now derived from what the row holds rather than picked, so
+			-- the band shrinks and the overlap goes at the same time: the content
+			-- below gains the twelve pixels it was losing plus the reduction.
+			local barHeight = safeTop + (if narrow then 64 else if compactLandscape then 42 else 36)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)
@@ -3137,7 +3160,7 @@ function App.mount(context: any): ScreenGui
 			-- own logo, chat and microphone controls.
 			brand.Position = UDim2.fromOffset(
 				headerLeft,
-				if narrow or compactLandscape then safeTop + 38 else safeTop + 16
+				if narrow then safeTop + 6 elseif compactLandscape then safeTop + 6 else safeTop + 8
 			)
 			brand.Size = UDim2.fromOffset(
 				if compactLandscape
@@ -3169,18 +3192,18 @@ function App.mount(context: any): ScreenGui
 			-- move around the menu, and they were the thing being squeezed.
 			local navLeft = headerLeft + 282
 			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 44)
-				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 38)
-				else UDim2.fromOffset(navLeft, safeTop + 10)
+				then UDim2.fromOffset(safeLeft + 18, safeTop + 32)
+				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 8)
+				else UDim2.fromOffset(navLeft, safeTop + 4)
 			navigation.Size = if narrow
-				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 32)
+				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 28)
 				elseif compactLandscape then UDim2.new(
 					1,
 					-(headerLeft + safeRight + 18),
 					0,
-					32
+					28
 				)
-				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 40)
+				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 28)
 			navLayout.FillDirection = Enum.FillDirection.Horizontal
 			navLayout.Padding = UDim.new(0, 6)
 			for _, item in navigation:GetChildren() do
