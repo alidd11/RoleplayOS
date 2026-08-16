@@ -286,18 +286,23 @@ return {
 
 	SurronCivilian = {
 		Certified = true,
-		ReviewVersion = 1,
+		ReviewVersion = 2,
 		Source = "Imported Sur-Ron electric bike kit, civilian trim",
 		RealWorldReference = "Sur-Ron Ultra Bee",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
 		AllowedUnsafeDescendants = {
-			AnimSetup = {
-				ClassName = "ModuleScript",
-				Path = { "Tuner", "Initialize", "AnimSetup" },
+			AC6_Sound = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound" },
 			},
+			AC6_Sounds = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "AC6_Sounds" } },
 			Anims = {
 				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Anims" } },
 				{ ClassName = "RemoteEvent", Path = { "Tuner", "Plugins", "Anims", "Anims" } },
+			},
+			AnimSetup = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Initialize", "AnimSetup" },
 			},
 			Control = {
 				{ ClassName = "Script", Path = { "Body", "Lights", "Brakes", "Control" } },
@@ -331,9 +336,23 @@ return {
 				ClassName = "Script",
 				Path = { "Tuner", "Plugins", "Anims", "Anims", "FEAnims" },
 			},
+			Gauges_AC6 = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Gauges_AC6" },
+			},
 			GhostBikeFix = {
 				ClassName = "LocalScript",
 				Path = { "Tuner", "Plugins", "GhostBikeFix" },
+			},
+			Handler = {
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound", "Handler" },
+				},
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler", "Handler" },
+				},
 			},
 			Initialize = { ClassName = "Script", Path = { "Tuner", "Initialize" } },
 			["LED Handler"] = {
@@ -368,264 +387,36 @@ return {
 				ClassName = "Script",
 				Path = { "Body", "ELS_Related", "Outfitting", "Plate", "LicensePlateGenerator" },
 			},
+			LightAddon = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "LightAddon" } },
+			LocalScript = {
+				{
+					ClassName = "LocalScript",
+					Path = { "DriveSeat", "SirenControl", "Control", "TextLabel", "LocalScript" },
+				},
+				{
+					ClassName = "LocalScript",
+					Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Clutch", "LocalScript" },
+				},
+			},
+			Pickup = { ClassName = "Script", Path = { "DriveSeat", "Pickup" } },
 			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
+			Script = {
+				ClassName = "Script",
+				Path = { "DriveSeat", "SirenControl", "Control", "MBOV", "Script" },
+			},
+			SmeersLightsHandler = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler" },
+			},
 			Tuner = { ClassName = "ModuleScript", Path = { "Tuner" } },
 		},
 	},
 
 	SurronPolice = {
 		Certified = true,
-		ReviewVersion = 1,
+		ReviewVersion = 2,
 		Source = "Imported Sur-Ron electric bike kit, marked police trim with EasyLS",
 		RealWorldReference = "Sur-Ron Ultra Bee, Roads Policing marked",
-		ReviewedBy = IMPORTED_KIT_REVIEW,
-		AllowedUnsafeDescendants = {
-			AddonsDocumentation = {
-				ClassName = "Script",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Addons",
-					"AddonsDocumentation",
-				},
-			},
-			AnimSetup = {
-				ClassName = "ModuleScript",
-				Path = { "Tuner", "Initialize", "AnimSetup" },
-			},
-			Anims = {
-				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Anims" } },
-				{ ClassName = "RemoteEvent", Path = { "Tuner", "Plugins", "Anims", "Anims" } },
-			},
-			AuthenticatePattern = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"EasyLS_Server",
-					"AuthenticatePattern",
-				},
-			},
-			Connection = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"EasyLS_Server",
-					"Signal",
-					"Connection",
-				},
-			},
-			Control = {
-				{ ClassName = "Script", Path = { "Body", "Lights", "Brakes", "Control" } },
-				{
-					ClassName = "Script",
-					Path = {
-						"FrontSection",
-						"Wheel",
-						"WheelFixed",
-						"Stand",
-						"Lights",
-						"Highlight",
-						"Control",
-					},
-				},
-				{
-					ClassName = "Script",
-					Path = {
-						"FrontSection",
-						"Wheel",
-						"WheelFixed",
-						"Stand",
-						"Lights",
-						"Headlight",
-						"Control",
-					},
-				},
-			},
-			Drive = { ClassName = "LocalScript", Path = { "Tuner", "Interface", "Drive" } },
-			EasyLS_Client = {
-				ClassName = "LocalScript",
-				Path = { "Tuner", "Plugins", "EasyLS_Client" },
-			},
-			EasyLS_Config = {
-				ClassName = "ModuleScript",
-				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote", "EasyLS_Config" },
-			},
-			EasyLS_Remote = {
-				ClassName = "RemoteFunction",
-				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote" },
-			},
-			EasyLS_Server = {
-				ClassName = "Script",
-				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote", "EasyLS_Server" },
-			},
-			F1 = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Patterns",
-					"Stage1",
-					"F1",
-				},
-			},
-			FEAnims = {
-				ClassName = "Script",
-				Path = { "Tuner", "Plugins", "Anims", "Anims", "FEAnims" },
-			},
-			GhostBikeFix = {
-				ClassName = "LocalScript",
-				Path = { "Tuner", "Plugins", "GhostBikeFix" },
-			},
-			Initialize = { ClassName = "Script", Path = { "Tuner", "Initialize" } },
-			["LED Handler"] = {
-				{ ClassName = "Script", Path = { "Body", "Lights", "Right", "LED Handler" } },
-				{ ClassName = "Script", Path = { "Body", "Lights", "Left", "LED Handler" } },
-				{
-					ClassName = "Script",
-					Path = {
-						"FrontSection",
-						"Wheel",
-						"WheelFixed",
-						"Stand",
-						"Lights",
-						"Right",
-						"LED Handler",
-					},
-				},
-				{
-					ClassName = "Script",
-					Path = {
-						"FrontSection",
-						"Wheel",
-						"WheelFixed",
-						"Stand",
-						"Lights",
-						"Left",
-						"LED Handler",
-					},
-				},
-			},
-			LicensePlateGenerator = {
-				ClassName = "Script",
-				Path = { "Body", "ELS_Related", "OutFitting", "Plate", "LicensePlateGenerator" },
-			},
-			R1 = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Patterns",
-					"Stage1",
-					"R1",
-				},
-			},
-			R2 = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Patterns",
-					"Stage1",
-					"R2",
-				},
-			},
-			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
-			Rawcopy = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"EasyLS_Server",
-					"Rawcopy",
-				},
-			},
-			S1 = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Patterns",
-					"Stage1",
-					"S1",
-				},
-			},
-			S2 = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Patterns",
-					"Stage1",
-					"S2",
-				},
-			},
-			Signal = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"EasyLS_Server",
-					"Signal",
-				},
-			},
-			-- The pattern editor emits two spacer modules with the same name and
-			-- depth; both are listed so neither is mistaken for an addition.
-			Spacer = {
-				{
-					ClassName = "ModuleScript",
-					Path = {
-						"Tuner",
-						"Plugins",
-						"EasyLS_Client",
-						"EasyLS_Remote",
-						"Patterns",
-						"Stage1",
-						"Spacer",
-					},
-				},
-			},
-			Template = {
-				ClassName = "ModuleScript",
-				Path = {
-					"Tuner",
-					"Plugins",
-					"EasyLS_Client",
-					"EasyLS_Remote",
-					"Addons",
-					"Template",
-				},
-			},
-			Tuner = { ClassName = "ModuleScript", Path = { "Tuner" } },
-		},
-	},
-
-	SurronPoliceUnmarked = {
-		Certified = true,
-		ReviewVersion = 1,
-		Source = "Imported Sur-Ron electric bike kit, unmarked police trim with EasyLS",
-		RealWorldReference = "Sur-Ron Ultra Bee, Roads Policing unmarked",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
 		AllowedUnsafeDescendants = {
 			AC6_Sound = {
@@ -644,13 +435,13 @@ return {
 					"AddonsDocumentation",
 				},
 			},
-			AnimSetup = {
-				ClassName = "ModuleScript",
-				Path = { "Tuner", "Initialize", "AnimSetup" },
-			},
 			Anims = {
 				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Anims" } },
 				{ ClassName = "RemoteEvent", Path = { "Tuner", "Plugins", "Anims", "Anims" } },
+			},
+			AnimSetup = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Initialize", "AnimSetup" },
 			},
 			AuthenticatePattern = {
 				ClassName = "ModuleScript",
@@ -676,18 +467,7 @@ return {
 				},
 			},
 			Control = {
-				{
-					ClassName = "Script",
-					Path = {
-						"FrontSection",
-						"Wheel",
-						"WheelFixed",
-						"Stand",
-						"Lights",
-						"Highlight",
-						"Control",
-					},
-				},
+				{ ClassName = "Script", Path = { "Body", "Lights", "Brakes", "Control" } },
 				{
 					ClassName = "Script",
 					Path = {
@@ -700,7 +480,18 @@ return {
 						"Control",
 					},
 				},
-				{ ClassName = "Script", Path = { "Body", "Lights", "Brakes", "Control" } },
+				{
+					ClassName = "Script",
+					Path = {
+						"FrontSection",
+						"Wheel",
+						"WheelFixed",
+						"Stand",
+						"Lights",
+						"Highlight",
+						"Control",
+					},
+				},
 			},
 			Drive = { ClassName = "LocalScript", Path = { "Tuner", "Interface", "Drive" } },
 			EasyLS_Client = {
@@ -755,6 +546,8 @@ return {
 			},
 			Initialize = { ClassName = "Script", Path = { "Tuner", "Initialize" } },
 			["LED Handler"] = {
+				{ ClassName = "Script", Path = { "Body", "Lights", "Left", "LED Handler" } },
+				{ ClassName = "Script", Path = { "Body", "Lights", "Right", "LED Handler" } },
 				{
 					ClassName = "Script",
 					Path = {
@@ -779,8 +572,6 @@ return {
 						"LED Handler",
 					},
 				},
-				{ ClassName = "Script", Path = { "Body", "Lights", "Left", "LED Handler" } },
-				{ ClassName = "Script", Path = { "Body", "Lights", "Right", "LED Handler" } },
 			},
 			LicensePlateGenerator = {
 				ClassName = "Script",
@@ -790,11 +581,11 @@ return {
 			LocalScript = {
 				{
 					ClassName = "LocalScript",
-					Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Clutch", "LocalScript" },
+					Path = { "DriveSeat", "SirenControl", "Control", "TextLabel", "LocalScript" },
 				},
 				{
 					ClassName = "LocalScript",
-					Path = { "DriveSeat", "SirenControl", "Control", "TextLabel", "LocalScript" },
+					Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Clutch", "LocalScript" },
 				},
 			},
 			Pickup = { ClassName = "Script", Path = { "DriveSeat", "Pickup" } },
@@ -822,7 +613,6 @@ return {
 					"R2",
 				},
 			},
-			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
 			Rawcopy = {
 				ClassName = "ModuleScript",
 				Path = {
@@ -834,6 +624,7 @@ return {
 					"Rawcopy",
 				},
 			},
+			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
 			S1 = {
 				ClassName = "ModuleScript",
 				Path = {
@@ -878,17 +669,298 @@ return {
 				Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler" },
 			},
 			Spacer = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"Spacer",
+				},
+			},
+			Template = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Addons",
+					"Template",
+				},
+			},
+			Tuner = { ClassName = "ModuleScript", Path = { "Tuner" } },
+		},
+	},
+
+	SurronPoliceUnmarked = {
+		Certified = true,
+		ReviewVersion = 2,
+		Source = "Imported Sur-Ron electric bike kit, unmarked police trim with EasyLS",
+		RealWorldReference = "Sur-Ron Ultra Bee, Roads Policing unmarked",
+		ReviewedBy = IMPORTED_KIT_REVIEW,
+		AllowedUnsafeDescendants = {
+			AC6_Sound = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound" },
+			},
+			AC6_Sounds = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "AC6_Sounds" } },
+			AddonsDocumentation = {
+				ClassName = "Script",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Addons",
+					"AddonsDocumentation",
+				},
+			},
+			Anims = {
+				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Anims" } },
+				{ ClassName = "RemoteEvent", Path = { "Tuner", "Plugins", "Anims", "Anims" } },
+			},
+			AnimSetup = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Initialize", "AnimSetup" },
+			},
+			AuthenticatePattern = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"EasyLS_Server",
+					"AuthenticatePattern",
+				},
+			},
+			Connection = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"EasyLS_Server",
+					"Signal",
+					"Connection",
+				},
+			},
+			Control = {
+				{ ClassName = "Script", Path = { "Body", "Lights", "Brakes", "Control" } },
 				{
-					ClassName = "ModuleScript",
+					ClassName = "Script",
 					Path = {
-						"Tuner",
-						"Plugins",
-						"EasyLS_Client",
-						"EasyLS_Remote",
-						"Patterns",
-						"Stage1",
-						"Spacer",
+						"FrontSection",
+						"Wheel",
+						"WheelFixed",
+						"Stand",
+						"Lights",
+						"Headlight",
+						"Control",
 					},
+				},
+				{
+					ClassName = "Script",
+					Path = {
+						"FrontSection",
+						"Wheel",
+						"WheelFixed",
+						"Stand",
+						"Lights",
+						"Highlight",
+						"Control",
+					},
+				},
+			},
+			Drive = { ClassName = "LocalScript", Path = { "Tuner", "Interface", "Drive" } },
+			EasyLS_Client = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "EasyLS_Client" },
+			},
+			EasyLS_Config = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote", "EasyLS_Config" },
+			},
+			EasyLS_Remote = {
+				ClassName = "RemoteFunction",
+				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote" },
+			},
+			EasyLS_Server = {
+				ClassName = "Script",
+				Path = { "Tuner", "Plugins", "EasyLS_Client", "EasyLS_Remote", "EasyLS_Server" },
+			},
+			F1 = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"F1",
+				},
+			},
+			FEAnims = {
+				ClassName = "Script",
+				Path = { "Tuner", "Plugins", "Anims", "Anims", "FEAnims" },
+			},
+			Gauges_AC6 = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Gauges_AC6" },
+			},
+			GhostBikeFix = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "GhostBikeFix" },
+			},
+			Handler = {
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound", "Handler" },
+				},
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler", "Handler" },
+				},
+			},
+			Initialize = { ClassName = "Script", Path = { "Tuner", "Initialize" } },
+			["LED Handler"] = {
+				{ ClassName = "Script", Path = { "Body", "Lights", "Left", "LED Handler" } },
+				{ ClassName = "Script", Path = { "Body", "Lights", "Right", "LED Handler" } },
+				{
+					ClassName = "Script",
+					Path = {
+						"FrontSection",
+						"Wheel",
+						"WheelFixed",
+						"Stand",
+						"Lights",
+						"Left",
+						"LED Handler",
+					},
+				},
+				{
+					ClassName = "Script",
+					Path = {
+						"FrontSection",
+						"Wheel",
+						"WheelFixed",
+						"Stand",
+						"Lights",
+						"Right",
+						"LED Handler",
+					},
+				},
+			},
+			LicensePlateGenerator = {
+				ClassName = "Script",
+				Path = { "Body", "ELS_Related", "OutFitting", "Plate", "LicensePlateGenerator" },
+			},
+			LightAddon = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "LightAddon" } },
+			LocalScript = {
+				{
+					ClassName = "LocalScript",
+					Path = { "DriveSeat", "SirenControl", "Control", "TextLabel", "LocalScript" },
+				},
+				{
+					ClassName = "LocalScript",
+					Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Clutch", "LocalScript" },
+				},
+			},
+			Pickup = { ClassName = "Script", Path = { "DriveSeat", "Pickup" } },
+			R1 = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"R1",
+				},
+			},
+			R2 = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"R2",
+				},
+			},
+			Rawcopy = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"EasyLS_Server",
+					"Rawcopy",
+				},
+			},
+			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
+			S1 = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"S1",
+				},
+			},
+			S2 = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"S2",
+				},
+			},
+			Script = {
+				ClassName = "Script",
+				Path = { "DriveSeat", "SirenControl", "Control", "MBOV", "Script" },
+			},
+			Signal = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"EasyLS_Server",
+					"Signal",
+				},
+			},
+			SmeersLightsHandler = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler" },
+			},
+			Spacer = {
+				ClassName = "ModuleScript",
+				Path = {
+					"Tuner",
+					"Plugins",
+					"EasyLS_Client",
+					"EasyLS_Remote",
+					"Patterns",
+					"Stage1",
+					"Spacer",
 				},
 			},
 			Template = {
