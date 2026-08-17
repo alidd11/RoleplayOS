@@ -1282,6 +1282,35 @@ local Config = {
 			LoadoutId = "ArmedResponse",
 			UniformId = "PoliceStandard",
 		},
+		-- Whitelisted deployments only.
+		--
+		-- Written as a plain rule rather than through publicPassOr, because that
+		-- helper's whole purpose is to offer a Robux route on the public place and
+		-- this role deliberately has none. DisplayWhenLocked is false for the same
+		-- reason: a card advertising something nobody on that server can ever have
+		-- is worse than no card.
+		--
+		-- No divisional group of its own yet, so membership of the force is the
+		-- bar. Add a DogSupport entry to GroupLinks and a second Group rule here
+		-- when the sub-group exists.
+		DogSupportOfficer = {
+			Id = "DogSupportOfficer",
+			Name = "Dog Support Unit",
+			TeamName = "Police",
+			DepartmentId = "Police",
+			DivisionId = "DogSupport",
+			Access = {
+				AccessType = "Combined",
+				Match = "All",
+				DisplayWhenLocked = false,
+				Rules = {
+					{ AccessType = "ServerKind", Kind = "Whitelisted" },
+					{ AccessType = "Group", GroupLinkId = "Police", MinimumGroupRank = 1 },
+				},
+			},
+			LoadoutId = "DogSupport",
+			UniformId = "PoliceStandard",
+		},
 		RoadsPolicingOfficer = {
 			Id = "RoadsPolicingOfficer",
 			Name = "Roads Policing Unit",
@@ -1419,6 +1448,7 @@ local Config = {
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
 				"RoadsPolicingOfficer",
+				"DogSupportOfficer",
 			},
 			DepartmentIds = { "Police" },
 		},
@@ -1426,7 +1456,12 @@ local Config = {
 			Id = "PoliceVehicleBay",
 			StationId = "CityCentre",
 			TeamName = "Police",
-			RoleIds = { "PoliceFrontline", "ArmedResponseOfficer", "RoadsPolicingOfficer" },
+			RoleIds = {
+				"PoliceFrontline",
+				"ArmedResponseOfficer",
+				"RoadsPolicingOfficer",
+				"DogSupportOfficer",
+			},
 			DepartmentIds = { "Police" },
 		},
 		AmbulanceLockerRoom = {
@@ -1546,6 +1581,7 @@ local Config = {
 		Frontline = { Id = "Frontline", DepartmentId = "Police", Name = "Frontline Policing" },
 		ArmedResponse = { Id = "ArmedResponse", DepartmentId = "Police", Name = "Armed Response" },
 		RoadsPolicing = { Id = "RoadsPolicing", DepartmentId = "Police", Name = "Roads Policing" },
+		DogSupport = { Id = "DogSupport", DepartmentId = "Police", Name = "Dog Support" },
 	},
 	Tools = {
 		-- Grip is set here rather than baked into the model.
@@ -1638,6 +1674,7 @@ local Config = {
 		},
 		ArmedResponse = { Id = "ArmedResponse", ToolIds = { "Handcuffs", "Taser", "PAVA" } },
 		RoadsPolicing = { Id = "RoadsPolicing", ToolIds = { "Handcuffs", "Taser", "PAVA" } },
+		DogSupport = { Id = "DogSupport", ToolIds = { "Handcuffs", "Taser", "PAVA" } },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ToolIds = { "MedicalBag" } },
 		FireStandard = { Id = "FireStandard", ToolIds = {} },
 		ControlStandard = { Id = "ControlStandard", ToolIds = {} },
