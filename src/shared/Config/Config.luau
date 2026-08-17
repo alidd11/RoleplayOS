@@ -1566,6 +1566,7 @@ local Config = {
 			Id = "ZKnife",
 			AssetPath = { "Tools", "Civilian", "ZKnife" },
 			DepartmentId = "Civilian",
+			BuiltInFallback = "Weapon",
 			Weapon = { Damage = 20, Cooldown = 0.7, Range = 8 },
 		},
 		Handcuffs = {
