@@ -10,41 +10,45 @@ local SoundService = game:GetService("SoundService")
 local AudioFeedback = {}
 AudioFeedback.__index = AudioFeedback
 
+-- Roblox's own sounds, which ship inside the client.
+--
+-- The seven ids here before were not audio. They were five Scripts, a
+-- SolidModel and somebody's Place, belonging to seven unrelated creators, and
+-- their numbers climbed in steps of about 230 - they had been arrived at by
+-- counting rather than by finding real sounds. Every one failed to load, so the
+-- interface has been silent the whole time while throwing seven asset errors on
+-- each join.
+--
+-- rbxasset:// paths cannot fail the way an upload can: no permissions to grant,
+-- no owner to fall out with, no network fetch. That matters more here than an
+-- exact sound, because these fire on almost every interaction in the game.
 local SOUNDS = {
 	ButtonClick = {
-		Id = "rbxassetid://9113083740",
+		Id = "rbxasset://sounds/button.wav",
 		Volume = 0.25,
 		Speed = 1.2,
 	},
 	PanelOpen = {
-		Id = "rbxassetid://9113083980",
+		Id = "rbxasset://sounds/switch.wav",
 		Volume = 0.15,
 		Speed = 1.0,
 	},
 	Success = {
-		Id = "rbxassetid://9113084210",
+		Id = "rbxasset://sounds/electronicpingshort.wav",
 		Volume = 0.18,
 		Speed = 1.0,
 	},
 	Error = {
-		Id = "rbxassetid://9113084450",
+		Id = "rbxasset://sounds/bass.wav",
 		Volume = 0.25,
 		Speed = 0.9,
 	},
 	Notification = {
-		Id = "rbxassetid://9113084680",
+		-- pop_mid_up.wav is not in the shipped set despite appearing in lists of
+		-- it. It preloaded once and failed every time after, including in place.
+		Id = "rbxasset://sounds/switch3.wav",
 		Volume = 0.16,
 		Speed = 1.1,
-	},
-	RadioTransmit = {
-		Id = "rbxassetid://9113084910",
-		Volume = 0.18,
-		Speed = 1.0,
-	},
-	PanicAlarm = {
-		Id = "rbxassetid://9113085140",
-		Volume = 0.32,
-		Speed = 1.0,
 	},
 }
 
@@ -122,14 +126,6 @@ end
 
 function AudioFeedback:Notification()
 	self:Play("Notification")
-end
-
-function AudioFeedback:RadioTransmit()
-	self:Play("RadioTransmit")
-end
-
-function AudioFeedback:PanicAlarm()
-	self:Play("PanicAlarm")
 end
 
 function AudioFeedback:SetEnabled(enabled: boolean)
