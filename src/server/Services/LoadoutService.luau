@@ -99,19 +99,12 @@ local function prepareVisibleTool(tool: Tool, toolId: string, definition: any?)
 	if definition and typeof(definition.Grip) == "CFrame" then
 		tool.Grip = definition.Grip
 	else
-		-- Handcuffs are their own case because the assembly is two studs long and
-		-- its origin is the middle of the chain, so hanging it from that origin
-		-- put the upper cuff inside the forearm. Dropping it by the distance to
-		-- that cuff closes the fist around it and lets the other one swing, which
-		-- is how they are actually carried. Everything else takes the angled hold,
-		-- which reads as forward-facing once the equip pose raises the arm.
-		tool.Grip = if toolId == "Handcuffs"
-			then CFrame.new(0, -0.7, -0.62) * CFrame.Angles(math.rad(78), math.rad(4), 0)
-			else CFrame.new(0, -0.08, -0.72) * CFrame.Angles(
-				math.rad(82),
-				math.rad(4),
-				math.rad(90)
-			)
+		-- The angled hold, which reads as forward-facing once the equip pose
+		-- raises the arm. Anything whose model needs something other than this
+		-- says so in configuration; there is deliberately no second table of
+		-- per-tool grips here for that to disagree with.
+		tool.Grip = CFrame.new(0, -0.08, -0.72)
+			* CFrame.Angles(math.rad(82), math.rad(4), math.rad(90))
 	end
 	for _, descendant in tool:GetDescendants() do
 		if descendant:IsA("BasePart") then
