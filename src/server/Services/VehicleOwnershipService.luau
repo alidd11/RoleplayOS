@@ -134,6 +134,68 @@ function VehicleOwnershipService:GrantStarter(player: Player, characterId: strin
 	return vehicle, nil
 end
 
+-- Buys a vehicle from a forecourt.
+--
+-- Everything that makes a vehicle real - allocating a registration, writing the
+-- record, indexing it for the MDT - already lived in Create. What was missing
+-- was the half that takes the money, so the catalogue had prices, the
+-- dealership had a list of what it sells, and there was no way to buy any of
+-- it: the only car anybody could own was the free starter grant.
+--
+-- Charged before the record is created and not after. Create allocates a
+-- registration and touches the search index, and undoing that on a failed
+-- payment is harder than simply not doing it.
+function VehicleOwnershipService:Purchase(
+	player: Player,
+	definitionId: string,
+	colour: string
+): (any?, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local characterId = session and session.ActiveCharacterId
+	local character = characterId and session.Profile.Characters[characterId]
+	if not character then
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+	local definition = self:_vehicleDefinition(definitionId)
+	if not definition or definition.Category ~= "Civilian" then
+		return nil, "VEHICLE_NOT_FOR_SALE"
+	end
+	-- A fleet vehicle is issued by a job rather than owned, and the taxi is the
+	-- one already on the forecourt list, so this is not hypothetical.
+	if definition.Fleet == true then
+		return nil, "VEHICLE_NOT_FOR_SALE"
+	end
+	if type(definition.Colours) ~= "table" or not table.find(definition.Colours, colour) then
+		return nil, "INVALID_VEHICLE_SELECTION"
+	end
+	-- Gamepass vehicles are still bought with cash; the pass is what admits them
+	-- to the forecourt at all. Re-evaluated here rather than trusted from the
+	-- menu, which is a client's view of the world.
+	local access = self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)
+	if not access.Allowed then
+		return nil, access.ReasonCode
+	end
+	local price = definition.Price
+	if type(price) ~= "number" or price < 0 then
+		return nil, "VEHICLE_NOT_FOR_SALE"
+	end
+	local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, {
+		TransactionId = HttpService:GenerateGUID(false),
+		CharacterId = characterId,
+		Amount = price,
+		Direction = "Debit",
+		ReasonCode = "VEHICLE_PURCHASE",
+		Description = "Vehicle purchase: " .. tostring(definition.Name or definitionId),
+		RelatedEntityId = definitionId,
+		Metadata = { Colour = colour },
+	})
+	if not paid then
+		return nil, reason
+	end
+	local garageId = definition.GarageId or self.context.Configuration.VehicleData.StarterGarageId
+	return self:Create(player, characterId, definitionId, colour, garageId)
+end
+
 function VehicleOwnershipService:GetOrCreateTeamRegistration(
 	player: Player,
 	teamName: string,

@@ -779,6 +779,43 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
+		return type(payload) == "table"
+			and type(payload.DefinitionId) == "string"
+			and type(payload.Colour) == "string"
+	end, function(player, payload, requestId)
+		local vehicle, reason = self.context.Services
+			:Get("VehicleOwnershipService")
+			:Purchase(player, payload.DefinitionId, payload.Colour)
+		if not vehicle then
+			local messages = {
+				CHARACTER_NOT_ACTIVE = "Select a character before buying a vehicle.",
+				VEHICLE_NOT_FOR_SALE = "That vehicle is not for sale here.",
+				INVALID_VEHICLE_SELECTION = "That colour is not available for this vehicle.",
+				INSUFFICIENT_FUNDS = "You cannot afford this vehicle.",
+				GAMEPASS_REQUIRED = "This vehicle needs its game pass.",
+				REGISTRATION_UNAVAILABLE = "No registration could be issued. Try again.",
+			}
+			return {
+				Success = false,
+				Code = reason,
+				Message = (reason and messages[reason]) or "The vehicle could not be bought.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Vehicle purchased.",
+			Data = {
+				VehicleId = vehicle.VehicleId,
+				DefinitionId = vehicle.DefinitionId,
+				Registration = vehicle.Registration,
+				Colour = vehicle.Colour,
+			},
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction("SetCustomVehicleRegistration", function(payload)
 		return type(payload) == "table"
 			and type(payload.SpawnerId) == "string"

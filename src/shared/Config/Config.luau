@@ -2235,6 +2235,9 @@ local Config = {
 			GetOwnedVehicles = { Capacity = 4, RefillPerSecond = 0.5 },
 			GetVehicleSpawnerMenu = { Capacity = 4, RefillPerSecond = 0.75 },
 			SpawnVehicle = { Capacity = 2, RefillPerSecond = 0.15 },
+			-- Deliberately tight. A purchase moves money and writes a permanent
+			-- record, so it is the one vehicle call that must not be spammable.
+			PurchaseVehicle = { Capacity = 3, RefillPerSecond = 0.2 },
 			SetCustomVehicleRegistration = { Capacity = 2, RefillPerSecond = 0.08 },
 			CuffPlayer = { Capacity = 3, RefillPerSecond = 0.3 },
 			CustodyAction = { Capacity = 5, RefillPerSecond = 0.75 },

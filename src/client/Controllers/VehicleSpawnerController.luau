@@ -1,9 +1,41 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tokens = require(script.Parent.Parent.UI.DesignTokens)
 local C, R, T, S = Tokens.Colour, Tokens.Radius, Tokens.Text, Tokens.Stroke
+
+-- Thousands separated, because a price is read at a glance and 28000 and 280000
+-- are the same shape until the digits are counted.
+local function formatMoney(amount: number): string
+	local grouped = tostring(math.floor(math.max(amount, 0)))
+	while true do
+		local replaced
+		grouped, replaced = string.gsub(grouped, "^(%d+)(%d%d%d)", "%1,%2")
+		if replaced == 0 then
+			break
+		end
+	end
+	return grouped
+end
+
+-- The swatch colour for a name in a vehicle's Colours list. An unrecognised name
+-- shows as the panel's own grey rather than as black, which would read as a
+-- deliberate choice of paint.
+local PAINT = {
+	Black = Color3.fromRGB(24, 26, 30),
+	White = Color3.fromRGB(233, 236, 241),
+	Silver = Color3.fromRGB(176, 182, 190),
+	Grey = Color3.fromRGB(116, 122, 130),
+	Red = Color3.fromRGB(178, 38, 42),
+	Blue = Color3.fromRGB(38, 82, 178),
+	Yellow = Color3.fromRGB(226, 190, 62),
+	Police = Color3.fromRGB(240, 244, 250),
+}
+local function paintFor(colour: string): Color3
+	return PAINT[colour] or Color3.fromRGB(96, 104, 116)
+end
 
 local VehicleSpawnerController = { connections = {}, promptConnections = {} }
 
@@ -195,7 +227,7 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	subtitle.Position = UDim2.fromOffset(24, 47)
 	subtitle.Size = UDim2.new(1, -92, 0, 24)
 	subtitle.Font = Enum.Font.Gotham
-	subtitle.Text = "Select a vehicle from your available fleet"
+	subtitle.Text = "Buy a vehicle, or take one of yours out"
 	subtitle.TextColor3 = C.muted
 	subtitle.TextSize = T.body
 	subtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -224,9 +256,6 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	list.CanvasSize = UDim2.new()
 	list.ScrollBarThickness = Tokens.Scroll.barThickness
 	list.Parent = panel
-	local layout = Instance.new("UIListLayout")
-	layout.Padding = UDim.new(0, 10)
-	layout.Parent = list
 	local vehicles = response.Data.Vehicles or {}
 	if #vehicles == 0 then
 		local empty = Instance.new("Frame")
@@ -258,83 +287,223 @@ function VehicleSpawnerController:_open(spawnerId: string)
 		emptyBody.TextSize = 13
 		emptyBody.Parent = empty
 	end
-	for _, definition in vehicles do
+	-- Cards rather than rows.
+	--
+	-- This was a list of names with a spawn button, which was all it could be:
+	-- the menu only ever contained cars the player already owned. It is a
+	-- forecourt now, so a card has to answer what the car looks like, what it
+	-- costs and whether you already have one, and the same card is the place you
+	-- buy it and the place you take it out afterwards.
+	local grid = Instance.new("UIGridLayout")
+	grid.CellPadding = UDim2.fromOffset(12, 12)
+	grid.SortOrder = Enum.SortOrder.LayoutOrder
+	grid.Parent = list
+	local function resizeCells()
+		local width = list.AbsoluteSize.X
+		if width <= 0 then
+			return
+		end
+		-- Whole pixels, with the remainder left in the gutter. Fractional cells
+		-- round up past the container and cost a column.
+		local columns = if width >= 860 then 3 elseif width >= 560 then 2 else 1
+		local cell = math.floor((width - 12 * (columns - 1) - 6) / columns)
+		grid.CellSize = UDim2.fromOffset(cell, math.floor(cell * 0.86))
+	end
+	resizeCells()
+	table.insert(
+		self.connections,
+		list:GetPropertyChangedSignal("AbsoluteSize"):Connect(resizeCells)
+	)
+
+	local previews = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
+	for order, definition in vehicles do
+		local owned = definition.Owned == true and definition.VehicleId ~= nil
+		local forSale = definition.ForSale == true
 		local card = Instance.new("Frame")
-		card.Size = UDim2.new(1, -6, 0, 86)
+		card.Name = tostring(definition.Id)
+		card.LayoutOrder = order
 		card.BackgroundColor3 = C.raised
 		card.BorderSizePixel = 0
+		card.ClipsDescendants = true
 		card.Parent = list
-		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, R.card)
-		cardCorner.Parent = card
-		local marker = Instance.new("Frame")
-		marker.Size = UDim2.fromOffset(4, 46)
-		marker.Position = UDim2.new(0, 0, 0.5, -23)
-		marker.BackgroundColor3 = C.accent
-		marker.BorderSizePixel = 0
-		marker.Parent = card
+
+		-- The car itself, rendered live from the showroom copy the server
+		-- publishes. No artwork to upload and it cannot fall out of step with the
+		-- model, which a screenshot would.
+		local stage = Instance.new("ViewportFrame")
+		stage.Size = UDim2.fromScale(1, 0.5)
+		stage.BackgroundColor3 = C.surface
+		stage.BorderSizePixel = 0
+		stage.Ambient = Color3.fromRGB(180, 190, 205)
+		stage.LightColor = Color3.fromRGB(255, 255, 255)
+		stage.Parent = card
+		local model = previews and previews:FindFirstChild(tostring(definition.Id))
+		if model then
+			local shown = model:Clone()
+			shown.Parent = stage
+			local camera = Instance.new("Camera")
+			camera.Parent = stage
+			stage.CurrentCamera = camera
+			local centre, size = shown:GetBoundingBox()
+			-- Framed off the diagonal rather than the longest edge, and viewed
+			-- from a front three quarter. A factor of one and a half put a car in
+			-- the middle distance and made every card look like a thumbnail of a
+			-- thumbnail.
+			local distance = math.sqrt(size.X * size.X + size.Z * size.Z) * 0.62
+			camera.CFrame = CFrame.lookAt(
+				centre.Position + Vector3.new(distance, distance * 0.34, distance),
+				centre.Position - Vector3.new(0, size.Y * 0.08, 0)
+			)
+		else
+			local absent = Instance.new("TextLabel")
+			absent.BackgroundTransparency = 1
+			absent.Size = UDim2.fromScale(1, 1)
+			absent.Font = Tokens.Font.bold
+			absent.Text = string.upper(string.sub(tostring(definition.Name), 1, 2))
+			absent.TextColor3 = C.muted
+			absent.TextSize = 34
+			absent.Parent = stage
+		end
+
 		local name = Instance.new("TextLabel")
 		name.BackgroundTransparency = 1
-		name.Position = UDim2.fromOffset(22, 14)
-		name.Size = UDim2.new(1, if definition.VehicleId then -218 else -178, 0, 28)
-		name.Font = Enum.Font.GothamBold
+		name.Position = UDim2.new(0, 14, 0.5, 8)
+		name.Size = UDim2.new(1, -28, 0, 22)
+		name.Font = Tokens.Font.bold
 		name.Text = tostring(definition.Name)
 		name.TextColor3 = C.text
 		name.TextSize = T.subtitle
 		name.TextXAlignment = Enum.TextXAlignment.Left
 		name.TextTruncate = Enum.TextTruncate.AtEnd
 		name.Parent = card
+
 		local detail = Instance.new("TextLabel")
 		detail.BackgroundTransparency = 1
-		detail.Position = UDim2.fromOffset(22, 43)
-		detail.Size = UDim2.new(1, if definition.VehicleId then -218 else -178, 0, 24)
+		detail.Position = UDim2.new(0, 14, 0.5, 30)
+		detail.Size = UDim2.new(1, -28, 0, 20)
 		detail.Font = Tokens.Font.regular
-		detail.Text = if definition.Registration
-			then "REG  •  " .. tostring(definition.Registration)
-			else string.upper(
-				tostring(definition.DivisionId or definition.Category or "FLEET")
-			)
 		detail.TextColor3 = C.muted
 		detail.TextSize = T.dense
 		detail.TextXAlignment = Enum.TextXAlignment.Left
+		detail.TextTruncate = Enum.TextTruncate.AtEnd
+		if owned then
+			-- What somebody deciding which of their own cars to take actually
+			-- wants: which one it is, and whether it is roadworthy.
+			local parts = { "REG " .. tostring(definition.Registration or "--") }
+			if type(definition.Fuel) == "number" then
+				table.insert(parts, string.format("FUEL %d%%", math.floor(definition.Fuel)))
+			end
+			if type(definition.Condition) == "number" then
+				table.insert(parts, string.format("COND %d%%", math.floor(definition.Condition)))
+			end
+			if definition.Insured ~= nil then
+				table.insert(parts, if definition.Insured then "INSURED" else "UNINSURED")
+			end
+			detail.Text = table.concat(parts, "  •  ")
+		elseif forSale then
+			detail.Text = "£" .. formatMoney(definition.Price or 0)
+			detail.TextColor3 = C.text
+			detail.Font = Tokens.Font.bold
+			detail.TextSize = T.subtitle
+		end
 		detail.Parent = card
+
+		-- Colour is chosen before buying, because the record keeps it and there
+		-- is no respray anywhere in the game to change it afterwards.
+		local chosenColour = (definition.Colours and definition.Colours[1]) or "Default"
+		local swatchButtons = {}
+		if forSale and not owned and type(definition.Colours) == "table" then
+			for index, colour in definition.Colours do
+				local swatch = Instance.new("TextButton")
+				swatch.Name = "Colour_" .. colour
+				swatch.Position = UDim2.new(0, 14 + (index - 1) * 26, 0.5, 54)
+				swatch.Size = UDim2.fromOffset(22, 22)
+				swatch.BackgroundColor3 = paintFor(colour)
+				swatch.BorderSizePixel = 0
+				swatch.Text = ""
+				swatch.AutoButtonColor = false
+				swatch.Parent = card
+				local edge = Instance.new("UIStroke")
+				edge.Color = if colour == chosenColour then C.accent else C.border
+				edge.Thickness = if colour == chosenColour then 2 else 1
+				edge.Parent = swatch
+				swatchButtons[colour] = edge
+				swatch.Activated:Connect(function()
+					chosenColour = colour
+					for other, edging in swatchButtons do
+						edging.Color = if other == colour then C.accent else C.border
+						edging.Thickness = if other == colour then 2 else 1
+					end
+				end)
+			end
+		end
+
 		local button = Instance.new("TextButton")
-		button.AnchorPoint = Vector2.new(1, 0.5)
-		button.Position = UDim2.new(1, -16, 0.5, 0)
-		button.Size = UDim2.fromOffset(if definition.VehicleId then 100 else 126, 44)
-		button.BackgroundColor3 = C.accentFill
+		button.AnchorPoint = Vector2.new(0.5, 1)
+		button.Position = UDim2.new(0.5, 0, 1, -10)
+		button.Size = UDim2.new(1, -28, 0, 34)
+		button.BackgroundColor3 = if definition.Locked then C.raised else C.accentFill
 		button.BorderSizePixel = 0
-		button.Font = Enum.Font.GothamBold
-		button.Text = "SPAWN"
-		button.TextColor3 = C.text
+		button.Font = Tokens.Font.bold
+		button.TextColor3 = if definition.Locked then C.muted else C.text
 		button.TextSize = T.button
+		button.Text = if definition.Locked then "REQUIREMENTS" elseif owned then "SPAWN" else "BUY"
 		button.Parent = card
-		local buttonCorner = Instance.new("UICorner")
-		buttonCorner.CornerRadius = UDim.new(0, R.control)
-		buttonCorner.Parent = button
+
 		button.Activated:Connect(function()
+			if definition.Locked then
+				self.context.Controllers.NotificationController:Show(
+					"This vehicle needs its game pass.",
+					"Vehicles"
+				)
+				return
+			end
 			button.Active = false
-			button.Text = "SPAWNING…"
-			local spawned = self.context.Controllers.NetworkController:Request("SpawnVehicle", {
-				SpawnerId = spawnerId,
-				DefinitionId = definition.Id,
-				VehicleId = definition.VehicleId,
-			})
-			self.context.Controllers.NotificationController:Show(spawned.Message, "Vehicles")
-			if spawned.Success then
-				self:_close()
-			else
+			if owned then
+				button.Text = "SPAWNING…"
+				local spawned = self.context.Controllers.NetworkController:Request("SpawnVehicle", {
+					SpawnerId = spawnerId,
+					DefinitionId = definition.Id,
+					VehicleId = definition.VehicleId,
+				})
+				if spawned.Success then
+					self:_close()
+					return
+				end
+				self.context.Controllers.NotificationController:Show(spawned.Message, "Vehicles")
 				button.Active = true
 				button.Text = "SPAWN"
+				return
+			end
+			button.Text = "BUYING…"
+			local bought = self.context.Controllers.NetworkController:Request("PurchaseVehicle", {
+				DefinitionId = definition.Id,
+				Colour = chosenColour,
+			})
+			self.context.Controllers.NotificationController:Show(bought.Message, "Vehicles")
+			button.Active = true
+			if bought.Success then
+				-- Reopened rather than patched in place, so the new car appears in
+				-- the owned half with its issued registration exactly as the server
+				-- recorded it.
+				self:_open(spawnerId)
+			else
+				button.Text = "BUY"
 			end
 		end)
-		if type(definition.VehicleId) == "string" then
-			local plateButton = button:Clone()
+
+		if owned then
+			local plateButton = Instance.new("TextButton")
 			plateButton.Name = "CustomPlate"
-			plateButton.Position = UDim2.new(1, -124, 0.5, 0)
-			plateButton.Size = UDim2.fromOffset(72, 44)
-			plateButton.BackgroundColor3 = Color3.fromRGB(31, 46, 65)
+			plateButton.AnchorPoint = Vector2.new(1, 0)
+			plateButton.Position = UDim2.new(1, -14, 0.5, 6)
+			plateButton.Size = UDim2.fromOffset(66, 26)
+			plateButton.BackgroundColor3 = C.surface
+			plateButton.BorderSizePixel = 0
+			plateButton.Font = Tokens.Font.bold
 			plateButton.Text = "PLATE"
+			plateButton.TextColor3 = C.muted
+			plateButton.TextSize = T.button
 			plateButton.Parent = card
 			plateButton.Activated:Connect(function()
 				self:_customPlate(
@@ -343,7 +512,7 @@ function VehicleSpawnerController:_open(spawnerId: string)
 					tostring(definition.Registration or ""),
 					function(registration)
 						definition.Registration = registration
-						detail.Text = "REG  •  " .. registration
+						self:_open(spawnerId)
 					end
 				)
 			end)

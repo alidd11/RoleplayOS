@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -353,6 +354,61 @@ function VehicleSpawnerService:_definitionAllowed(
 	return false
 end
 
+-- A showroom copy of a vehicle, for the forecourt's 3D preview.
+--
+-- The templates live in ServerStorage and never reach a client, so a viewport
+-- there has nothing to render. This publishes a stripped copy: geometry and
+-- nothing else, with every script, sound, light, joint and value removed, so
+-- what replicates is the shape of the car rather than a second working vehicle.
+--
+-- Built when somebody first opens a forecourt rather than at startup, so a
+-- server whose players never visit a dealership never pays to replicate them.
+function VehicleSpawnerService:_ensurePreview(definitionId: string, definition: any): Instance?
+	local root = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
+	if not root then
+		root = Instance.new("Folder")
+		root.Name = "RoleplayOSVehiclePreviews"
+		root.Parent = ReplicatedStorage
+	end
+	local existing = root:FindFirstChild(definitionId)
+	if existing then
+		return existing
+	end
+	local template = self:_template(definition)
+	if not template then
+		return nil
+	end
+	local preview = template:Clone()
+	preview.Name = definitionId
+	for _, descendant in preview:GetDescendants() do
+		if
+			descendant:IsA("BaseScript")
+			or descendant:IsA("ModuleScript")
+			or descendant:IsA("Sound")
+			or descendant:IsA("Light")
+			or descendant:IsA("ParticleEmitter")
+			or descendant:IsA("Constraint")
+			or descendant:IsA("JointInstance")
+			or descendant:IsA("ValueBase")
+			or descendant:IsA("ProximityPrompt")
+			or descendant:IsA("LayerCollector")
+			or descendant:IsA("Configuration")
+		then
+			descendant:Destroy()
+		end
+	end
+	for _, descendant in preview:GetDescendants() do
+		if descendant:IsA("BasePart") then
+			descendant.Anchored = true
+			descendant.CanCollide = false
+			descendant.CanQuery = false
+			descendant.CanTouch = false
+		end
+	end
+	preview.Parent = root
+	return preview
+end
+
 function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, string?)
 	local spawner, reason = self:_authorise(player, spawnerId)
 	if not spawner then
@@ -373,21 +429,88 @@ function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, s
 			end
 		end
 	else
-		for _, owned in self.context.Services:Get("VehicleOwnershipService"):List(player) do
-			local definition = self:_vehicleDefinition(owned.DefinitionId)
+		-- A forecourt, not a garage list.
+		--
+		-- This offered only what the player already owned, so the dealership's
+		-- catalogue and every price in it were unreachable: there was no screen
+		-- anywhere that showed a car for sale. Everything the forecourt sells is
+		-- listed now, each entry saying whether this character owns one, and the
+		-- owned copies are listed after it so a second Civic is a separate row
+		-- with its own registration rather than a duplicate of the catalogue.
+		local ownership = self.context.Services:Get("VehicleOwnershipService")
+		local owned = ownership:List(player)
+		local ownedByDefinition: { [string]: boolean } = {}
+		for _, vehicle in owned do
+			ownedByDefinition[vehicle.DefinitionId] = true
+		end
+		-- The forecourt this spawner sells from. Defaults to the only one
+		-- configured rather than to the spawner's own name, which is
+		-- CityDealership in the map and CityMotors in configuration.
+		local dealershipId = spawner:GetAttribute("DealershipId") or "CityMotors"
+		local dealership = self.context.Configuration.Dealerships[dealershipId]
+		local forecourt = dealership and dealership.VehicleIds
+		-- Where a spawner names no dealership, everything civilian is for sale
+		-- rather than nothing, so a new forecourt is useful before it is
+		-- configured rather than empty until somebody notices.
+		if not forecourt then
+			forecourt = {}
+			for id, definition in self:_vehicleDefinitions() do
+				if definition.Category == "Civilian" and definition.Fleet ~= true then
+					table.insert(forecourt, id)
+				end
+			end
+		end
+		for _, definitionId in forecourt do
+			local definition = self:_vehicleDefinition(definitionId)
+			local template = definition and self:_template(definition)
+			if definition and definition.Category == "Civilian" and template then
+				local access =
+					self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)
+				self:_ensurePreview(definitionId, definition)
+				table.insert(vehicles, {
+					Id = definitionId,
+					Name = definition.Name,
+					Category = "Civilian",
+					Price = definition.Price,
+					Colours = definition.Colours,
+					Owned = ownedByDefinition[definitionId] == true,
+					Locked = not access.Allowed,
+					LockReason = if access.Allowed then nil else access.ReasonCode,
+					ForSale = true,
+				})
+			end
+		end
+		for _, vehicle in owned do
+			local definition = self:_vehicleDefinition(vehicle.DefinitionId)
 			local template = definition and self:_template(definition)
 			if definition and definition.Category == "Civilian" and template then
 				table.insert(vehicles, {
-					Id = owned.DefinitionId,
-					VehicleId = owned.VehicleId,
+					Id = vehicle.DefinitionId,
+					VehicleId = vehicle.VehicleId,
 					Name = definition.Name,
 					Category = "Civilian",
-					Registration = owned.Registration,
+					Registration = vehicle.Registration,
+					Colour = vehicle.Colour,
+					Fuel = vehicle.Fuel,
+					Condition = vehicle.Condition,
+					Mileage = vehicle.Mileage,
+					Insured = vehicle.Insured,
+					Taxed = vehicle.Taxed,
+					Owned = true,
 				})
 			end
 		end
 	end
 	table.sort(vehicles, function(a, b)
+		-- What is for sale first, cheapest first, then the cars this character
+		-- already keeps here. Sorting the two together interleaved a showroom
+		-- entry with its own owned copies.
+		if (a.ForSale == true) ~= (b.ForSale == true) then
+			return a.ForSale == true
+		end
+		if a.ForSale == true and a.Price ~= b.Price then
+			return (a.Price or 0) < (b.Price or 0)
+		end
 		if a.Name == b.Name then
 			return tostring(a.Registration or a.VehicleId or "")
 				< tostring(b.Registration or b.VehicleId or "")
