@@ -38,17 +38,61 @@ end
 -- The chassis publishes its live state in a folder of values. Searched under
 -- the seat and then the vehicle model, because forks disagree on where it sits,
 -- and absent entirely on a vehicle without a chassis.
+-- Does this folder hold chassis telemetry, or does it just share the name?
+--
+-- Plugins keep their own state in a folder called Values too. The Honda carries
+-- three: the chassis's, and one each for two halves of a lighting addon. Only
+-- one of them knows how fast the bike is going.
+local function isTelemetry(folder: Instance, settings: any): boolean
+	for _, name in settings.VelocityValueNames or {} do
+		if folder:FindFirstChild(name) then
+			return true
+		end
+	end
+	return folder:FindFirstChild(settings.RpmValueName or "RPM") ~= nil
+		or folder:FindFirstChild(settings.GearValueName or "Gear") ~= nil
+end
+
+-- The chassis's own values folder.
+--
+-- This used to take whatever FindFirstChild returned for the name, and that
+-- walks the tree in its own order and stops at the first hit. On the Honda it
+-- stopped at the lighting addon's folder every time: no Velocity, no RPM, no
+-- Gear, no PBrake. So the cluster fell back to reading the seat's own assembly
+-- velocity, the gear and rev counter had nothing to show, and the handbrake
+-- badge could never light because the value it watches was in a folder nobody
+-- was looking at. The two vehicles that did work only worked because they
+-- happen to carry one Values folder each.
+--
+-- Nearest wins where telemetry is present, so a seat-level folder still beats a
+-- deeper one, but a folder that cannot answer the question is never chosen over
+-- one that can.
 function SpeedometerController:_chassisValues(seat: BasePart): Folder?
-	local name = self.settings.ValuesFolderName
-	local found = seat:FindFirstChild(name)
-	if not found and seat.Parent then
-		found = seat.Parent:FindFirstChild(name)
+	local settings = self.settings
+	local name = settings.ValuesFolderName
+	local nearby = { seat:FindFirstChild(name), seat.Parent and seat.Parent:FindFirstChild(name) }
+	for _, candidate in nearby do
+		if candidate and candidate:IsA("Folder") and isTelemetry(candidate, settings) then
+			return candidate
+		end
 	end
-	if not found then
-		local vehicle = seat:FindFirstAncestorOfClass("Model")
-		found = vehicle and vehicle:FindFirstChild(name, true)
+	local vehicle = seat:FindFirstAncestorOfClass("Model")
+	if not vehicle then
+		return nil
 	end
-	return if found and found:IsA("Folder") then found else nil
+	local fallback: Folder? = nil
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant.Name == name and descendant:IsA("Folder") then
+			if isTelemetry(descendant, settings) then
+				return descendant
+			end
+			fallback = fallback or descendant
+		end
+	end
+	-- Nothing published telemetry. The caller copes: speed falls back to the
+	-- seat's assembly velocity and the rest of the cluster stays blank, which is
+	-- the honest reading for a vehicle that reports nothing.
+	return fallback
 end
 
 local function readValue(folder: Folder?, name: string): any?
