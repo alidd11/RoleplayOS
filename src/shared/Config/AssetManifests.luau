@@ -176,13 +176,18 @@ return {
 		RealWorldReference = "2024 Honda ADV 160",
 		ReviewedBy = IMPORTED_KIT_REVIEW,
 		AllowedUnsafeDescendants = {
-			AnimSetup = {
-				ClassName = "ModuleScript",
-				Path = { "Tuner", "Initialize", "AnimSetup" },
+			AC6_Sound = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound" },
 			},
+			AC6_Sounds = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "AC6_Sounds" } },
 			Anims = {
 				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Anims" } },
 				{ ClassName = "RemoteEvent", Path = { "Tuner", "Plugins", "Anims", "Anims" } },
+			},
+			AnimSetup = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Initialize", "AnimSetup" },
 			},
 			AntiCollide = { ClassName = "Script", Path = { "AntiCollide" } },
 			AntiCollideCar = { ClassName = "Script", Path = { "AntiCollideCar" } },
@@ -196,20 +201,55 @@ return {
 					Path = { "Body", "jok", "Jok", "hood opener", "ClickDetector" },
 				},
 			},
+			Configuration = {
+				ClassName = "ModuleScript",
+				Path = { "Tuner", "Plugins", "EPICLIGHTS_V4", "Configuration" },
+			},
+			Creator = {
+				ClassName = "Script",
+				Path = { "Tuner", "Plugins", "Kickstand", "Creator" },
+			},
 			Drive = { ClassName = "LocalScript", Path = { "Tuner", "Interface", "Drive" } },
 			["Enable Helmet"] = {
 				ClassName = "LocalScript",
 				Path = { "Tuner", "Plugins", "Helmet", "Enable Helmet" },
 			},
+			EpicLights = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "EPICLIGHTS_V4", "EpicLights" },
+			},
 			FEAnims = {
 				ClassName = "Script",
 				Path = { "Tuner", "Plugins", "Anims", "Anims", "FEAnims" },
+			},
+			Gauges_AC6 = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Gauges_AC6" },
+			},
+			Handler = {
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "AC6_Sounds", "AC6_Sound", "Handler" },
+				},
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "EPICLIGHTS_V4", "LIGHTS", "Handler" },
+				},
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "Kickstand", "Kickstand", "Handler" },
+				},
+				{
+					ClassName = "Script",
+					Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler", "Handler" },
+				},
 			},
 			["Helmet FP"] = {
 				ClassName = "LocalScript",
 				Path = { "Tuner", "Plugins", "Helmet FP" },
 			},
 			Horn = { ClassName = "LocalScript", Path = { "DriveSeat", "horn", "G", "Horn" } },
+			horn = { ClassName = "Script", Path = { "DriveSeat", "horn" } },
 			Ignition = {
 				ClassName = "LocalScript",
 				Path = { "Tuner", "Plugins", "AC6C_Ignition", "Ignition" },
@@ -225,7 +265,27 @@ return {
 					Path = { "Body", "jok", "Jok", "hood opener", "Instruction" },
 				},
 			},
+			Kickstand = {
+				{ ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Kickstand" } },
+				{
+					ClassName = "RemoteEvent",
+					Path = { "Tuner", "Plugins", "Kickstand", "Kickstand" },
+				},
+			},
+			LightAddon = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "LightAddon" } },
+			LIGHTS = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "EPICLIGHTS_V4", "LIGHTS" },
+			},
+			LocalScript = {
+				ClassName = "LocalScript",
+				Path = { "Tuner", "Plugins", "AC6C_Style_Gauges", "Clutch", "LocalScript" },
+			},
 			Motors = { ClassName = "Script", Path = { "Body", "Motors" } },
+			Move = {
+				ClassName = "Script",
+				Path = { "Tuner", "Plugins", "EPICLIGHTS_V4", "Configuration", "Move" },
+			},
 			OpenDoorScript = {
 				{
 					ClassName = "Script",
@@ -237,19 +297,16 @@ return {
 				},
 			},
 			README = { ClassName = "ModuleScript", Path = { "Tuner", "README" } },
-			["STK's AntiCollide"] = { ClassName = "Script", Path = { "STK's AntiCollide" } },
-			-- Several lamps ship two children both named `L`, so a couple of these
-			-- paths repeat verbatim. Either entry satisfies either instance, which is
-			-- correct: both are accounted for and nothing unlisted is accepted.
 			Script = {
-				{ ClassName = "Script", Path = { "Body", "Lights", "Rear", "L", "Script" } },
+				{ ClassName = "Script", Path = { "Body", "Lights", "Brake", "L", "Script" } },
+				{ ClassName = "Script", Path = { "Body", "Lights", "Fog", "L", "Script" } },
 				{
 					ClassName = "Script",
-					Path = { "Body", "Lights", "Indicators", "RightInd", "Rear", "L", "Script" },
+					Path = { "Body", "Lights", "Headlights", "High", "L", "Script" },
 				},
 				{
 					ClassName = "Script",
-					Path = { "Body", "Lights", "Indicators", "RightInd", "Front", "L", "Script" },
+					Path = { "Body", "Lights", "Headlights", "Low", "L", "Script" },
 				},
 				{
 					ClassName = "Script",
@@ -259,28 +316,31 @@ return {
 					ClassName = "Script",
 					Path = { "Body", "Lights", "Indicators", "LeftInd", "Rear", "L", "Script" },
 				},
-				{ ClassName = "Script", Path = { "Body", "Lights", "Fog", "L", "Script" } },
 				{
 					ClassName = "Script",
-					Path = { "Body", "Lights", "Headlights", "Low", "L", "Script" },
+					Path = { "Body", "Lights", "Indicators", "RightInd", "Front", "L", "Script" },
 				},
 				{
 					ClassName = "Script",
-					Path = { "Body", "Lights", "Headlights", "High", "L", "Script" },
+					Path = { "Body", "Lights", "Indicators", "RightInd", "Rear", "L", "Script" },
 				},
-				{ ClassName = "Script", Path = { "Body", "Lights", "Brake", "L", "Script" } },
+				{ ClassName = "Script", Path = { "Body", "Lights", "Rear", "L", "Script" } },
+			},
+			SmeersLightsHandler = {
+				ClassName = "RemoteEvent",
+				Path = { "Tuner", "Plugins", "LightAddon", "SmeersLightsHandler" },
 			},
 			Spring = {
 				ClassName = "ModuleScript",
 				Path = { "Tuner", "Plugins", "VGs_Advanced_FP_Cam", "Spring" },
 			},
+			["STK's AntiCollide"] = { ClassName = "Script", Path = { "STK's AntiCollide" } },
 			Tuner = { ClassName = "ModuleScript", Path = { "Tuner" } },
 			VGs_Advanced_FP_Cam = {
 				ClassName = "LocalScript",
 				Path = { "Tuner", "Plugins", "VGs_Advanced_FP_Cam" },
 			},
 			Wheelie = { ClassName = "LocalScript", Path = { "Tuner", "Plugins", "Wheelie" } },
-			horn = { ClassName = "Script", Path = { "DriveSeat", "horn" } },
 		},
 	},
 
