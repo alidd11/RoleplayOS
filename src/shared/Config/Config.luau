@@ -1548,11 +1548,21 @@ local Config = {
 		RoadsPolicing = { Id = "RoadsPolicing", DepartmentId = "Police", Name = "Roads Policing" },
 	},
 	Tools = {
+		-- Grip is set here rather than baked into the model.
+		--
+		-- The assembler gives every blade the same rotation, and these do not all
+		-- run along the same axis of their handle: the knives lie along Z and the
+		-- machete along Y. One rotation therefore cannot be right for all three,
+		-- and it was right for none of them - both knives stood straight up out of
+		-- the fist like a needle, and the machete was held by its blade with the
+		-- lanyard swinging free. Correcting it here means a re-export is not needed
+		-- to change how something is carried.
 		Knife = {
 			Id = "Knife",
 			AssetPath = { "Tools", "Civilian", "Knife" },
 			DepartmentId = "Civilian",
 			BuiltInFallback = "Weapon",
+			Grip = CFrame.new(),
 			Weapon = { Damage = 18, Cooldown = 0.65, Range = 8 },
 		},
 		Machete = {
@@ -1560,6 +1570,11 @@ local Config = {
 			AssetPath = { "Tools", "Civilian", "Machete" },
 			DepartmentId = "Civilian",
 			BuiltInFallback = "Weapon",
+			-- The blade runs along the model's +Y and the wrapped grip along -Y, so
+			-- the half-turn that -90 degrees produced put the fist on the blade and
+			-- left the lanyard swinging below. Verified against an R15 rig posed
+			-- with Roblox's own equip weld.
+			Grip = CFrame.Angles(math.rad(90), 0, 0),
 			Weapon = { Damage = 24, Cooldown = 0.8, Range = 8 },
 		},
 		ZKnife = {
@@ -1567,6 +1582,7 @@ local Config = {
 			AssetPath = { "Tools", "Civilian", "ZKnife" },
 			DepartmentId = "Civilian",
 			BuiltInFallback = "Weapon",
+			Grip = CFrame.new(),
 			Weapon = { Damage = 20, Cooldown = 0.7, Range = 8 },
 		},
 		Handcuffs = {

@@ -49,7 +49,7 @@ local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: 
 	tool.Parent = backpack
 end
 
-local function prepareVisibleTool(tool: Tool, toolId: string)
+local function prepareVisibleTool(tool: Tool, toolId: string, definition: any?)
 	local isWeapon = toolId == "Knife" or toolId == "Machete" or toolId == "ZKnife"
 	if toolId ~= "Handcuffs" and toolId ~= "PAVA" and not isWeapon then
 		return
@@ -84,17 +84,35 @@ local function prepareVisibleTool(tool: Tool, toolId: string)
 	handle.Massless = true
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
-	-- Imported handcuff meshes were being presented edge-on because the generic
-	-- weapon grip applied a 90-degree roll to every tool. Keep the spray angled
-	-- for a natural forward-facing hold, while the cuffs sit flat across the
-	-- palm. The authored model remains intact; only its Tool grip is normalised.
-	tool.Grip = if toolId == "Handcuffs"
-		then CFrame.new(0, -0.12, -0.62) * CFrame.Angles(math.rad(78), math.rad(4), 0)
-		else CFrame.new(0, -0.08, -0.72) * CFrame.Angles(
-			math.rad(82),
-			math.rad(4),
-			math.rad(90)
-		)
+	-- How the tool sits in the hand.
+	--
+	-- A model carries whatever grip it was exported with, which is a property of
+	-- whoever assembled it rather than of how the thing should be held, so the
+	-- grip is named in configuration where one is known. That has to be decided
+	-- here rather than by an earlier caller: this function is where every
+	-- issuance path converges, and setting the grip before this point only to
+	-- have the defaults below overwrite it is how the configured knife grips
+	-- came to have no effect at all.
+	--
+	-- Below is the fallback for a tool configuration says nothing about. The
+	-- authored model is left intact either way; only its Tool grip is set.
+	if definition and typeof(definition.Grip) == "CFrame" then
+		tool.Grip = definition.Grip
+	else
+		-- Handcuffs are their own case because the assembly is two studs long and
+		-- its origin is the middle of the chain, so hanging it from that origin
+		-- put the upper cuff inside the forearm. Dropping it by the distance to
+		-- that cuff closes the fist around it and lets the other one swing, which
+		-- is how they are actually carried. Everything else takes the angled hold,
+		-- which reads as forward-facing once the equip pose raises the arm.
+		tool.Grip = if toolId == "Handcuffs"
+			then CFrame.new(0, -0.7, -0.62) * CFrame.Angles(math.rad(78), math.rad(4), 0)
+			else CFrame.new(0, -0.08, -0.72) * CFrame.Angles(
+				math.rad(82),
+				math.rad(4),
+				math.rad(90)
+			)
+	end
 	for _, descendant in tool:GetDescendants() do
 		if descendant:IsA("BasePart") then
 			descendant.Anchored = false
@@ -169,13 +187,13 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			issue(ToolFactory.medicalBag(), backpack, loadoutId, toolId)
 		elseif not template and toolDefinition and toolDefinition.Weapon then
 			local fallback = ToolFactory.weapon(toolId)
-			prepareVisibleTool(fallback, toolId)
+			prepareVisibleTool(fallback, toolId, toolDefinition)
 			fallback.CanBeDropped = false
 			issue(fallback, backpack, loadoutId, toolId)
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
 			canonicalizeTool(clone, toolId)
-			prepareVisibleTool(clone, toolId)
+			prepareVisibleTool(clone, toolId, toolDefinition)
 			clone.CanBeDropped = false
 			issue(clone, backpack, loadoutId, toolId)
 		else
@@ -219,7 +237,7 @@ function LoadoutService:GiveTool(
 		fallback:SetAttribute("RoleplayOSToolId", toolId)
 		fallback:SetAttribute("RoleplayOSWeaponId", toolId)
 		fallback:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
-		prepareVisibleTool(fallback, toolId)
+		prepareVisibleTool(fallback, toolId, toolDefinition)
 		if source then
 			fallback:SetAttribute("RoleplayOSToolSource", source)
 		end
@@ -239,7 +257,7 @@ function LoadoutService:GiveTool(
 		clone:SetAttribute("RoleplayOSWeaponId", toolId)
 		clone:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
 	end
-	prepareVisibleTool(clone, toolId)
+	prepareVisibleTool(clone, toolId, toolDefinition)
 	if source then
 		clone:SetAttribute("RoleplayOSToolSource", source)
 	end
@@ -306,7 +324,7 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 				fallback:SetAttribute("RoleplayOSWeaponId", toolId)
 				fallback:SetAttribute("RoleplayOSWeaponPurchase", false)
 				fallback:SetAttribute("RoleplayOSEquipmentPassId", passId)
-				prepareVisibleTool(fallback, toolId)
+				prepareVisibleTool(fallback, toolId, toolDefinition)
 				fallback.Parent = backpack
 			elseif template and template:IsA("Tool") then
 				local clone = template:Clone()
@@ -316,7 +334,7 @@ function LoadoutService:ApplyEquipmentPasses(player: Player): (boolean, string?)
 					clone:SetAttribute("RoleplayOSWeaponPurchase", false)
 				end
 				clone:SetAttribute("RoleplayOSEquipmentPassId", passId)
-				prepareVisibleTool(clone, toolId)
+				prepareVisibleTool(clone, toolId, toolDefinition)
 				clone.Parent = backpack
 			else
 				self.context.Logger:Warning("Gamepass equipment is unavailable", {
