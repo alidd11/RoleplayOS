@@ -2,6 +2,9 @@
 
 local Players = game:GetService("Players")
 
+local Tokens = require(script.Parent.Parent.UI.DesignTokens)
+local C, R, T, S = Tokens.Colour, Tokens.Radius, Tokens.Text, Tokens.Stroke
+
 local VehicleSpawnerController = { connections = {}, promptConnections = {} }
 
 function VehicleSpawnerController:Init(context: any)
@@ -38,11 +41,12 @@ function VehicleSpawnerController:_customPlate(
 	constraint.MaxSize = Vector2.new(360, 220)
 	constraint.Parent = dialog
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 16)
+	corner.CornerRadius = UDim.new(0, R.panel)
 	corner.Parent = dialog
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(67, 94, 128)
-	stroke.Transparency = 0.25
+	stroke.Color = C.border
+	stroke.Transparency = S.transparency
+	stroke.Thickness = S.thickness
 	stroke.Parent = dialog
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
@@ -50,46 +54,46 @@ function VehicleSpawnerController:_customPlate(
 	title.Size = UDim2.new(1, -40, 0, 28)
 	title.Font = Enum.Font.GothamBold
 	title.Text = "CUSTOM REGISTRATION"
-	title.TextColor3 = Color3.fromRGB(245, 248, 252)
-	title.TextSize = 16
+	title.TextColor3 = C.text
+	title.TextSize = T.title
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.ZIndex = 21
 	title.Parent = dialog
 	local input = Instance.new("TextBox")
 	input.Position = UDim2.fromOffset(20, 61)
 	input.Size = UDim2.new(1, -40, 0, 54)
-	input.BackgroundColor3 = Color3.fromRGB(233, 189, 54)
+	input.BackgroundColor3 = C.raised
 	input.BorderSizePixel = 0
 	input.ClearTextOnFocus = false
-	input.Font = Enum.Font.RobotoMono
+	input.Font = Tokens.Font.bold
 	input.PlaceholderText = "AB12 CDE"
 	input.Text = current
-	input.TextColor3 = Color3.fromRGB(12, 15, 18)
-	input.PlaceholderColor3 = Color3.fromRGB(82, 73, 43)
-	input.TextSize = 22
+	input.TextColor3 = C.text
+	input.PlaceholderColor3 = C.muted
+	input.TextSize = 18
 	input.TextYAlignment = Enum.TextYAlignment.Center
 	input.ZIndex = 21
 	input.Parent = dialog
 	local inputCorner = Instance.new("UICorner")
-	inputCorner.CornerRadius = UDim.new(0, 8)
+	inputCorner.CornerRadius = UDim.new(0, R.control)
 	inputCorner.Parent = input
 	local cancel = Instance.new("TextButton")
 	cancel.Position = UDim2.new(0, 20, 1, -64)
 	cancel.Size = UDim2.new(0.5, -25, 0, 44)
-	cancel.BackgroundColor3 = Color3.fromRGB(31, 44, 61)
+	cancel.BackgroundColor3 = C.raised
 	cancel.BorderSizePixel = 0
-	cancel.Font = Enum.Font.GothamBold
+	cancel.Font = Tokens.Font.bold
 	cancel.Text = "CANCEL"
-	cancel.TextColor3 = Color3.fromRGB(220, 228, 238)
-	cancel.TextSize = 12
+	cancel.TextColor3 = C.text
+	cancel.TextSize = T.button
 	cancel.ZIndex = 21
 	cancel.Parent = dialog
 	local cancelCorner = Instance.new("UICorner")
-	cancelCorner.CornerRadius = UDim.new(0, 9)
+	cancelCorner.CornerRadius = UDim.new(0, R.control)
 	cancelCorner.Parent = cancel
 	local save = cancel:Clone()
 	save.Position = UDim2.new(0.5, 5, 1, -64)
-	save.BackgroundColor3 = Color3.fromRGB(42, 121, 224)
+	save.BackgroundColor3 = C.accentFill
 	save.Text = "SAVE"
 	save.Parent = dialog
 	cancel.Activated:Connect(function()
@@ -147,7 +151,7 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.5)
 	panel.Size = UDim2.fromScale(0.72, 0.72)
-	panel.BackgroundColor3 = Color3.fromRGB(9, 16, 26)
+	panel.BackgroundColor3 = C.surface
 	panel.BorderSizePixel = 0
 	panel.Parent = gui
 	local sizeConstraint = Instance.new("UISizeConstraint")
@@ -155,25 +159,25 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	sizeConstraint.MaxSize = Vector2.new(920, 650)
 	sizeConstraint.Parent = panel
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 18)
+	corner.CornerRadius = UDim.new(0, R.shell)
 	corner.Parent = panel
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(58, 81, 112)
-	stroke.Transparency = 0.35
-	stroke.Thickness = 1
+	stroke.Color = C.border
+	stroke.Transparency = S.transparency
+	stroke.Thickness = S.thickness
 	stroke.Parent = panel
 	local header = Instance.new("Frame")
 	header.Size = UDim2.new(1, 0, 0, 92)
-	header.BackgroundColor3 = Color3.fromRGB(14, 26, 41)
+	header.BackgroundColor3 = C.raised
 	header.BorderSizePixel = 0
 	header.Parent = panel
 	local headerCorner = Instance.new("UICorner")
-	headerCorner.CornerRadius = UDim.new(0, 18)
+	headerCorner.CornerRadius = UDim.new(0, R.shell)
 	headerCorner.Parent = header
 	local accent = Instance.new("Frame")
 	accent.Position = UDim2.fromOffset(0, 90)
 	accent.Size = UDim2.new(1, 0, 0, 2)
-	accent.BackgroundColor3 = Color3.fromRGB(57, 153, 255)
+	accent.BackgroundColor3 = C.accent
 	accent.BorderSizePixel = 0
 	accent.Parent = header
 	local title = Instance.new("TextLabel")
@@ -182,8 +186,8 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	title.Size = UDim2.new(1, -92, 0, 34)
 	title.Font = Enum.Font.GothamBold
 	title.Text = tostring(response.Data.Name or "Vehicles")
-	title.TextColor3 = Color3.fromRGB(245, 248, 252)
-	title.TextSize = 23
+	title.TextColor3 = C.text
+	title.TextSize = T.title
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = header
 	local subtitle = Instance.new("TextLabel")
@@ -192,20 +196,21 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	subtitle.Size = UDim2.new(1, -92, 0, 24)
 	subtitle.Font = Enum.Font.Gotham
 	subtitle.Text = "Select a vehicle from your available fleet"
-	subtitle.TextColor3 = Color3.fromRGB(151, 169, 192)
-	subtitle.TextSize = 13
+	subtitle.TextColor3 = C.muted
+	subtitle.TextSize = T.body
 	subtitle.TextXAlignment = Enum.TextXAlignment.Left
 	subtitle.Parent = header
 	local close = Instance.new("TextButton")
-	close.Position = UDim2.new(1, -58, 0, 20)
-	close.Size = UDim2.fromOffset(38, 38)
-	close.BackgroundColor3 = Color3.fromRGB(31, 46, 65)
+	close.AnchorPoint = Vector2.new(1, 0)
+	close.Position = UDim2.new(1, -16, 0, 16)
+	close.Size = UDim2.fromOffset(36, 36)
+	close.BackgroundColor3 = C.raised
 	close.Text = "×"
-	close.TextColor3 = Color3.fromRGB(245, 248, 252)
-	close.TextSize = 22
+	close.TextColor3 = C.text
+	close.TextSize = T.title
 	close.Parent = header
 	local closeCorner = Instance.new("UICorner")
-	closeCorner.CornerRadius = UDim.new(0, 10)
+	closeCorner.CornerRadius = UDim.new(0, R.control)
 	closeCorner.Parent = close
 	close.Activated:Connect(function()
 		self:_close()
@@ -217,7 +222,7 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	list.BorderSizePixel = 0
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	list.CanvasSize = UDim2.new()
-	list.ScrollBarThickness = 4
+	list.ScrollBarThickness = Tokens.Scroll.barThickness
 	list.Parent = panel
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 10)
@@ -226,11 +231,11 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	if #vehicles == 0 then
 		local empty = Instance.new("Frame")
 		empty.Size = UDim2.new(1, -6, 0, 180)
-		empty.BackgroundColor3 = Color3.fromRGB(14, 24, 37)
+		empty.BackgroundColor3 = C.raised
 		empty.BorderSizePixel = 0
 		empty.Parent = list
 		local emptyCorner = Instance.new("UICorner")
-		emptyCorner.CornerRadius = UDim.new(0, 14)
+		emptyCorner.CornerRadius = UDim.new(0, R.card)
 		emptyCorner.Parent = empty
 		local emptyTitle = Instance.new("TextLabel")
 		emptyTitle.BackgroundTransparency = 1
@@ -256,16 +261,16 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	for _, definition in vehicles do
 		local card = Instance.new("Frame")
 		card.Size = UDim2.new(1, -6, 0, 86)
-		card.BackgroundColor3 = Color3.fromRGB(18, 30, 45)
+		card.BackgroundColor3 = C.raised
 		card.BorderSizePixel = 0
 		card.Parent = list
 		local cardCorner = Instance.new("UICorner")
-		cardCorner.CornerRadius = UDim.new(0, 13)
+		cardCorner.CornerRadius = UDim.new(0, R.card)
 		cardCorner.Parent = card
 		local marker = Instance.new("Frame")
 		marker.Size = UDim2.fromOffset(4, 46)
 		marker.Position = UDim2.new(0, 0, 0.5, -23)
-		marker.BackgroundColor3 = Color3.fromRGB(57, 153, 255)
+		marker.BackgroundColor3 = C.accent
 		marker.BorderSizePixel = 0
 		marker.Parent = card
 		local name = Instance.new("TextLabel")
@@ -274,8 +279,8 @@ function VehicleSpawnerController:_open(spawnerId: string)
 		name.Size = UDim2.new(1, if definition.VehicleId then -218 else -178, 0, 28)
 		name.Font = Enum.Font.GothamBold
 		name.Text = tostring(definition.Name)
-		name.TextColor3 = Color3.fromRGB(240, 245, 251)
-		name.TextSize = 16
+		name.TextColor3 = C.text
+		name.TextSize = T.subtitle
 		name.TextXAlignment = Enum.TextXAlignment.Left
 		name.TextTruncate = Enum.TextTruncate.AtEnd
 		name.Parent = card
@@ -283,29 +288,29 @@ function VehicleSpawnerController:_open(spawnerId: string)
 		detail.BackgroundTransparency = 1
 		detail.Position = UDim2.fromOffset(22, 43)
 		detail.Size = UDim2.new(1, if definition.VehicleId then -218 else -178, 0, 24)
-		detail.Font = Enum.Font.GothamMedium
+		detail.Font = Tokens.Font.regular
 		detail.Text = if definition.Registration
 			then "REG  •  " .. tostring(definition.Registration)
 			else string.upper(
 				tostring(definition.DivisionId or definition.Category or "FLEET")
 			)
-		detail.TextColor3 = Color3.fromRGB(125, 166, 211)
-		detail.TextSize = 11
+		detail.TextColor3 = C.muted
+		detail.TextSize = T.dense
 		detail.TextXAlignment = Enum.TextXAlignment.Left
 		detail.Parent = card
 		local button = Instance.new("TextButton")
 		button.AnchorPoint = Vector2.new(1, 0.5)
 		button.Position = UDim2.new(1, -16, 0.5, 0)
 		button.Size = UDim2.fromOffset(if definition.VehicleId then 100 else 126, 44)
-		button.BackgroundColor3 = Color3.fromRGB(42, 121, 224)
+		button.BackgroundColor3 = C.accentFill
 		button.BorderSizePixel = 0
 		button.Font = Enum.Font.GothamBold
 		button.Text = "SPAWN"
-		button.TextColor3 = Color3.fromRGB(255, 255, 255)
-		button.TextSize = 13
+		button.TextColor3 = C.text
+		button.TextSize = T.button
 		button.Parent = card
 		local buttonCorner = Instance.new("UICorner")
-		buttonCorner.CornerRadius = UDim.new(0, 10)
+		buttonCorner.CornerRadius = UDim.new(0, R.control)
 		buttonCorner.Parent = button
 		button.Activated:Connect(function()
 			button.Active = false

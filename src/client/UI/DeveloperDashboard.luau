@@ -90,11 +90,16 @@ local function roleTileImageUri(role: any): string?
 	if not assetId then
 		return nil
 	end
-	-- ImageLabels are more reliable with the rendered asset thumbnail than with
-	-- a Decal URI directly. This keeps the same approved artwork IDs while
-	-- avoiding the Studio/runtime fetch failure shown as a blank tile.
-	local numericId = string.match(assetId, "%d+")
-	return if numericId then "rbxthumb://type=Asset&id=" .. numericId .. "&w=768&h=768" else assetId
+	-- Used directly, because these are Image ids now.
+	--
+	-- This used to wrap them in rbxthumb://type=Asset, which was a sound
+	-- workaround while the ids above were Decals: an ImageLabel cannot render a
+	-- Decal id, and asking for its thumbnail at least produced a picture. The ids
+	-- are the underlying Images now, and the wrapper became the thing breaking
+	-- them - a thumbnail of an Image is not a thing Roblox serves, so every tile
+	-- fetched, failed and drew its background colour. Two fixes for one bug, each
+	-- undoing the other.
+	return assetId
 end
 
 local function rolePresentation(role: any): any
