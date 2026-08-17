@@ -149,11 +149,20 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			})
 		end
 	end
+	-- Sorted on values that may not be there. EDIT_HERE can introduce a pass that
+	-- Config.luau has no entry for, and such a pass arrives with whatever keys
+	-- the editor supplied and no others. A missing Name then compared against a
+	-- present one is a nil comparison, which threw out of the whole handler and
+	-- left the client on its loading screen with no menu at all - a far worse
+	-- outcome than one row sorting oddly. Falling back to the id keeps the order
+	-- stable and the menu up.
 	table.sort(gamepasses, function(a, b)
-		if a.Category == b.Category then
-			return a.Name < b.Name
+		local aCategory = a.Category or ""
+		local bCategory = b.Category or ""
+		if aCategory == bCategory then
+			return (a.Name or a.Id or "") < (b.Name or b.Id or "")
 		end
-		return a.Category < b.Category
+		return aCategory < bCategory
 	end)
 	return {
 		Framework = {

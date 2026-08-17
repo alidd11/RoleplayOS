@@ -1499,14 +1499,15 @@ function App.mount(context: any): ScreenGui
 				artwork.Name = "RoleArtwork"
 				artwork.BackgroundColor3 = Color3.fromRGB(28, 38, 68)
 				artwork.BorderSizePixel = 0
-				artwork.Position = UDim2.fromOffset(8, 8)
-				artwork.Size = UDim2.new(1, -16, 1, -16)
+				artwork.Position = UDim2.fromScale(0, 0)
+				artwork.Size = UDim2.fromScale(1, 1)
 				artwork.Image = roleTileImageUri(role) or ""
 				artwork.ImageColor3 = Color3.new(1, 1, 1)
 				artwork.ScaleType = Enum.ScaleType.Crop
 				artwork.ZIndex = 3
 				artwork.Parent = roleTile
-				corner(artwork, 10)
+				-- Matches the card's own radius so the crop follows its corners.
+				corner(artwork, 9)
 				local artworkShade = Instance.new("Frame")
 				artworkShade.Name = "ArtworkShade"
 				artworkShade.BackgroundColor3 = Color3.fromRGB(10, 16, 34)
@@ -1516,7 +1517,7 @@ function App.mount(context: any): ScreenGui
 				artworkShade.Size = artwork.Size
 				artworkShade.ZIndex = 4
 				artworkShade.Parent = roleTile
-				corner(artworkShade, 10)
+				corner(artworkShade, 9)
 				local shadeGradient = Instance.new("UIGradient")
 				shadeGradient.Color = ColorSequence.new(Color3.fromRGB(8, 14, 32))
 				shadeGradient.Transparency = NumberSequence.new({
@@ -1531,15 +1532,15 @@ function App.mount(context: any): ScreenGui
 				footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
 				footer.BackgroundTransparency = 0.12
 				footer.BorderSizePixel = 0
-				footer.Position = UDim2.new(0, 8, 1, -92)
-				footer.Size = UDim2.new(1, -16, 0, 84)
+				footer.Position = UDim2.new(0, 0, 1, -84)
+				footer.Size = UDim2.new(1, 0, 0, 84)
 				footer.ZIndex = 10
 				footer.Parent = roleTile
-				corner(footer, 10)
+				corner(footer, 9)
 				local isCivilianRole = role.Id == "Civilian" or role.DepartmentId == "Civilian"
 				local actionWidth = if isCivilianRole then 116 else 92
 				local roleName = text(footer, role.Name, 20, COLOURS.Text, true)
-				roleName.Position = UDim2.fromOffset(12, 18)
+				roleName.Position = UDim2.fromOffset(20, 18)
 				roleName.Size = UDim2.new(1, -(actionWidth + 30), 0, 34)
 				roleName.TextTruncate = Enum.TextTruncate.AtEnd
 				roleName.ZIndex = 11
@@ -1553,7 +1554,7 @@ function App.mount(context: any): ScreenGui
 				)
 				open.ZIndex = 12
 				open.AnchorPoint = Vector2.new(1, 1)
-				open.Position = UDim2.new(1, -10, 1, -10)
+				open.Position = UDim2.new(1, -20, 1, -18)
 				open.Size = UDim2.fromOffset(actionWidth, 34)
 				open.TextSize = 12
 				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour

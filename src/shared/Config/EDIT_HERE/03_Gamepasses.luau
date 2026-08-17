@@ -15,7 +15,17 @@ return {
 		-- kept and repointed at the Machete rather than retired, so anybody who
 		-- already bought it keeps a blade for their money. Rename it in Creator
 		-- Hub to match.
-		CivilianMachete = { GamepassId = 1949228959, PriceInRobux = 149 },
+		-- Defined in full, not just overridden. Config.luau has no CivilianMachete
+		-- to merge onto, so a partial entry arrives with no Name and the start
+		-- menu sorts passes by name -- which is a nil comparison and takes the
+		-- whole menu down rather than hiding one row.
+		CivilianMachete = {
+			Id = "CivilianMachete",
+			GamepassId = 1949228959,
+			PriceInRobux = 149,
+			Name = "Civilian Machete Access",
+			Description = "Carry the machete as a civilian where server rules permit it.",
+		},
 		ZKnife = { GamepassId = 1949486956, PriceInRobux = 149 },
 		CivilianHandgun = { GamepassId = 1937822271, PriceInRobux = 125 },
 		CivilianShotgun = { GamepassId = 1934518052, PriceInRobux = 175 },
