@@ -234,7 +234,14 @@ function EmergencyLightsService:GetState(player: Player): any
 		Stage = model:GetAttribute(settings.StageAttribute) or 0,
 		Lights = model:GetAttribute(settings.StateAttribute) == true,
 		Siren = model:GetAttribute(settings.SirenAttribute) or "",
-		Tones = settings.Sirens,
+		-- What this vehicle can actually sound.
+		--
+		-- This was settings.Sirens, a table of ids nothing plays: the client
+		-- sounds the vehicle's own Sound instances by name. Two of the four ids
+		-- are empty strings, and the panel skips a tone whose entry is empty, so
+		-- Phaser and Horn were absent from the cycle on every vehicle - including
+		-- the bikes, which carry Priority and Airhorn and can sound both.
+		Tones = VehicleLights.availableTones(model),
 		Circuits = circuits,
 		RunLock = model:GetAttribute(settings.RunLockAttribute) == true,
 		LowPower = model:GetAttribute(settings.LowPowerAttribute) == true,

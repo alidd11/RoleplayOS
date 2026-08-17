@@ -28,13 +28,6 @@ local COMPACT_PANEL = Vector2.new(420, 188)
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
-local SIREN_SOUND_ALIASES = {
-	Wail = { "Wail" },
-	Yelp = { "Yelp" },
-	Phaser = { "Phaser", "Priority" },
-	Horn = { "Horn", "Airhorn" },
-}
-
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
 	{ Id = "FrontBlue", Label = "FRONT\nBLUE" },
@@ -127,7 +120,7 @@ function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone:
 			sounds[string.lower(descendant.Name)] = descendant
 		end
 	end
-	for _, aliases in SIREN_SOUND_ALIASES do
+	for _, aliases in VehicleLights.SirenAliases do
 		for _, name in aliases do
 			local sound = sounds[string.lower(name)]
 			if sound then
@@ -140,7 +133,7 @@ function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone:
 		return
 	end
 	local selected: Sound? = nil
-	for _, name in SIREN_SOUND_ALIASES[tone] or {} do
+	for _, name in VehicleLights.SirenAliases[tone] or {} do
 		selected = sounds[string.lower(name)]
 		if selected then
 			break

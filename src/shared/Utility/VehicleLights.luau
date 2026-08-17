@@ -173,4 +173,52 @@ function VehicleLights.circuitFor(settings: any, part: BasePart, root: Instance)
 	return if front then "FrontBlue" else "RearBlue"
 end
 
+-- Which Sound in a vehicle answers to which siren tone.
+--
+-- Imported ELS kits name their tones differently and inconsistently in case, so
+-- a tone is a list of names to try rather than one. This lived only on the
+-- client, which played the sounds, while the server decided which tones to
+-- offer from a table of ids it never used - so a vehicle could be offered a
+-- tone it had no sound for, and denied one it did. Both sides read this now.
+VehicleLights.SirenAliases = {
+	Wail = { "Wail" },
+	Yelp = { "Yelp" },
+	Phaser = { "Phaser", "Priority" },
+	Horn = { "Horn", "Airhorn" },
+}
+
+-- The Sound in this vehicle for a tone, if it has one.
+function VehicleLights.sirenSound(model: Instance, tone: string): Sound?
+	local aliases = VehicleLights.SirenAliases[tone]
+	if not aliases then
+		return nil
+	end
+	local sounds: { [string]: Sound } = {}
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("Sound") then
+			sounds[string.lower(descendant.Name)] = descendant
+		end
+	end
+	for _, name in aliases do
+		local sound = sounds[string.lower(name)]
+		if sound then
+			return sound
+		end
+	end
+	return nil
+end
+
+-- The tones this vehicle can actually sound.
+--
+-- Offering a tone the vehicle cannot play is a button that does nothing, and
+-- withholding one it can is a siren nobody can reach. Asking the vehicle is the
+-- only answer that is right for every kit.
+function VehicleLights.availableTones(model: Instance): { [string]: boolean }
+	local available = {}
+	for tone in VehicleLights.SirenAliases do
+		available[tone] = VehicleLights.sirenSound(model, tone) ~= nil
+	end
+	return available
+end
+
 return table.freeze(VehicleLights)
