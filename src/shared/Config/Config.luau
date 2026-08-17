@@ -1591,8 +1591,10 @@ local Config = {
 			DepartmentId = "Police",
 			-- Carried across the palm rather than dangling from one cuff. Posed by
 			-- hand against an R15 rig and read back off the placement, so the
-			-- numbers are a transcription of how it was set rather than a guess.
-			Grip = CFrame.new(0.57, -0.07, -0.74)
+			-- rotation is a transcription of how it was set rather than a guess.
+			-- The translation is that pose closed up against the hand: as posed it
+			-- stood a third of a stud clear of the fist, which reads as floating.
+			Grip = CFrame.new(0.36, -0.06, -0.55)
 				* CFrame.fromEulerAnglesYXZ(math.rad(3), math.rad(88), math.rad(90)),
 		},
 		Taser = {
