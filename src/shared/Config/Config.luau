@@ -1418,7 +1418,6 @@ local Config = {
 			SpawnIds = {
 				"CityCivilian",
 				"PoliceLockerRoom",
-				"PoliceVehicleBay",
 				"AmbulanceLockerRoom",
 				"FireLockerRoom",
 				"ControlRoom",
@@ -1438,6 +1437,14 @@ local Config = {
 			-- has no restricted emergency-service department membership.
 			DepartmentIds = { "Civilian" },
 		},
+		-- One spawn point per service, as Fire and Ambulance already had.
+		--
+		-- Police used to offer a second at the vehicle bay, which existed only
+		-- because there were cars parked there. That put "where I come on duty"
+		-- and "where I collect a car" in the same list and gave police roles a
+		-- choice no other service had. The bays are still separate, one per
+		-- division, so nothing spawns on top of anything else; they are simply
+		-- not places to arrive.
 		PoliceLockerRoom = {
 			Id = "PoliceLockerRoom",
 			StationId = "CityCentre",
@@ -1445,18 +1452,6 @@ local Config = {
 			RoleIds = {
 				"PCSO",
 				"PoliceOfficer",
-				"PoliceFrontline",
-				"ArmedResponseOfficer",
-				"RoadsPolicingOfficer",
-				"DogSupportOfficer",
-			},
-			DepartmentIds = { "Police" },
-		},
-		PoliceVehicleBay = {
-			Id = "PoliceVehicleBay",
-			StationId = "CityCentre",
-			TeamName = "Police",
-			RoleIds = {
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
 				"RoadsPolicingOfficer",

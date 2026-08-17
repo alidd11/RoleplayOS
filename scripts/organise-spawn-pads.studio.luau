@@ -15,7 +15,6 @@ end
 local definitions = {
 	CityCivilian = { Department = "Civilian", Name = "CityCivilian" },
 	PoliceLockerRoom = { Department = "Police", Name = "PoliceLockerRoom" },
-	PoliceVehicleBay = { Department = "Police", Name = "PoliceVehicleBay" },
 	AmbulanceLockerRoom = { Department = "Ambulance", Name = "AmbulanceLockerRoom" },
 	FireLockerRoom = { Department = "Fire", Name = "FireLockerRoom" },
 	ControlRoom = { Department = "Control", Name = "ControlRoom" },

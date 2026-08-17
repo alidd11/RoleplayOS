@@ -31,32 +31,48 @@ local definitions = {
 		nil,
 		Vector3.new(18, 0, 0),
 	},
+	-- Anchored on the locker room, because the vehicle bay is no longer a spawn
+	-- point and there is nothing there to measure from. Offsets are the bays'
+	-- existing positions relative to it, so rerunning this places a missing bay
+	-- back where its neighbours already are rather than somewhere new.
+	--
+	-- One bay per division, eighteen studs apart down the same row, so two units
+	-- can never be handed the same patch of ground to spawn a car on.
 	{
 		"Police",
 		"PoliceFrontline",
 		"Frontline fleet",
-		"PoliceVehicleBay",
+		"PoliceLockerRoom",
 		"Police",
 		"Frontline",
-		Vector3.new(18, 0, -24),
+		Vector3.new(35, 2, -19.25),
 	},
 	{
 		"Police",
 		"PoliceArmedResponse",
 		"Armed response fleet",
-		"PoliceVehicleBay",
+		"PoliceLockerRoom",
 		"Police",
 		"ArmedResponse",
-		Vector3.new(18, 0, 0),
+		Vector3.new(53, 2, -19.25),
 	},
 	{
 		"Police",
 		"PoliceRoadsPolicing",
 		"Roads policing fleet",
-		"PoliceVehicleBay",
+		"PoliceLockerRoom",
 		"Police",
 		"RoadsPolicing",
-		Vector3.new(18, 0, 24),
+		Vector3.new(71, 2, -19.25),
+	},
+	{
+		"Police",
+		"PoliceDogSupport",
+		"Dog support fleet",
+		"PoliceLockerRoom",
+		"Police",
+		"DogSupport",
+		Vector3.new(89, 2, -19.25),
 	},
 	{
 		"Ambulance",
