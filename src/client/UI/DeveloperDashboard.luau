@@ -73,6 +73,13 @@ local ROLE_PRESENTATION = {
 --
 -- To add one: insert the decal in Studio, read its Texture property, and put
 -- that id here. The decal id from the Creator Dashboard will not work.
+-- Roles that are civilian work rather than an emergency service. They keep every
+-- bit of their machinery - team, uniform, loadout, access - and only move which
+-- page offers them.
+local CIVILIAN_JOB_ROLE_IDS = {
+	TransportOperator = true,
+}
+
 local ROLE_TILE_ASSET_IDS = {
 	Police = "rbxassetid://108952619314292",
 	Ambulance = "rbxassetid://82458182331259",
@@ -1463,11 +1470,14 @@ function App.mount(context: any): ScreenGui
 		for _, role in menuData.Roles or {} do
 			if
 				role.Visible
-				and (
-					selectedTeamId == nil
-					or role.Id == selectedTeamId
-					or role.DepartmentId == selectedTeamId
-				)
+				and (selectedTeamId == nil or role.Id == selectedTeamId or role.DepartmentId == selectedTeamId)
+				-- Driving a bus is a job somebody does, not a service that answers
+				-- calls. It sat between Armed Response and the Prison Service on the
+				-- strength of having a team and a uniform, which is how it is built
+				-- rather than what it is. Jobs offers it instead, and nothing about
+				-- joining it changes. Still reachable here if the player has drilled
+				-- into Transport directly.
+				and not (selectedTeamId == nil and CIVILIAN_JOB_ROLE_IDS[role.Id])
 			then
 				if role.Id == "Civilian" or role.DepartmentId == "Civilian" then
 					table.insert(civilianRoles, role)
@@ -2207,6 +2217,55 @@ function App.mount(context: any): ScreenGui
 		pageTitle.Text = "Civilian jobs"
 		pageDescription.Text = "Pick up work that is available in the city today."
 		sectionHeading("Available work", "Only fully connected civilian jobs appear here.")
+		-- Civilian work that is built as a role rather than as a Job entry.
+		--
+		-- These join through the same duty flow as any service, so they are drawn
+		-- from menuData.Roles and handed to activateRole exactly as the Play page
+		-- would have. Listing them here is a statement about what they are, not a
+		-- second way of joining them.
+		local jobRoles = {}
+		for _, role in menuData and menuData.Roles or {} do
+			if role.Visible and CIVILIAN_JOB_ROLE_IDS[role.Id] then
+				table.insert(jobRoles, role)
+			end
+		end
+		for _, role in jobRoles do
+			local presentation = rolePresentation(role)
+			local item = card(scroll, if shortLandscape() then 110 else 132)
+			local mark = Instance.new("Frame")
+			mark.BackgroundColor3 = presentation.Colour
+			mark.BorderSizePixel = 0
+			mark.Size = UDim2.new(0, 4, 1, 0)
+			mark.Parent = item
+			local roleName = text(item, role.Name, 20, COLOURS.Text, true)
+			roleName.Position = UDim2.fromOffset(20, 18)
+			roleName.Size = UDim2.new(1, -180, 0, 30)
+			roleName.TextTruncate = Enum.TextTruncate.AtEnd
+			local roleDetail = text(
+				item,
+				if role.Locked
+					then role.LockMessage or "Requirements not met"
+					else presentation.Label,
+				13,
+				COLOURS.Muted
+			)
+			roleDetail.Position = UDim2.fromOffset(20, 50)
+			roleDetail.Size = UDim2.new(1, -180, 0, 24)
+			roleDetail.TextWrapped = true
+			local join = button(item, if role.Locked then "REQUIREMENTS" else "JOIN", false)
+			join.AnchorPoint = Vector2.new(1, 0.5)
+			join.Position = UDim2.new(1, -20, 0.5, 0)
+			join.Size = UDim2.fromOffset(120, 40)
+			join.TextSize = 13
+			join.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
+			local joinStroke = join:FindFirstChildOfClass("UIStroke")
+			if joinStroke then
+				joinStroke.Color = presentation.Colour
+			end
+			join.Activated:Connect(function()
+				activateRole(role)
+			end)
+		end
 		local jobs = {}
 		for _, job in pairs(menuData and menuData.Jobs or {}) do
 			-- A catalogue entry is a promise: it must have a working join path.
