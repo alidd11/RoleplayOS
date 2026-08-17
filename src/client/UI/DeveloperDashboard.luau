@@ -63,16 +63,26 @@ local ROLE_PRESENTATION = {
 
 -- Uploaded through the Roblox Creator Dashboard. Keep these IDs in one small
 -- presentation map so replacing artwork never touches role-access logic.
+-- Image ids, not decal ids.
+--
+-- Uploading a picture to Roblox creates a Decal wrapping an Image, and the id
+-- shown in the dashboard is the Decal's. An ImageLabel cannot render that, so
+-- every tile fetched its artwork, failed, and drew the empty background colour
+-- behind it: nine blank cards from nine perfectly good uploads. These are the
+-- Texture ids read out of each Decal, which is what the label actually wants.
+--
+-- To add one: insert the decal in Studio, read its Texture property, and put
+-- that id here. The decal id from the Creator Dashboard will not work.
 local ROLE_TILE_ASSET_IDS = {
-	Police = "rbxassetid://124510305332365",
-	Ambulance = "rbxassetid://115689835891137",
-	Fire = "rbxassetid://95977486831570",
-	Civilian = "rbxassetid://113064266300926",
-	Highways = "rbxassetid://133420507327997",
-	Transport = "rbxassetid://102874702573163",
-	RoyaltyMail = "rbxassetid://88863810610980",
-	Cashier = "rbxassetid://127971383421481",
-	ComingSoon = "rbxassetid://101846745500511",
+	Police = "rbxassetid://108952619314292",
+	Ambulance = "rbxassetid://82458182331259",
+	Fire = "rbxassetid://129231885538259",
+	Civilian = "rbxassetid://90347985847798",
+	Highways = "rbxassetid://113273816836442",
+	Transport = "rbxassetid://123377791263414",
+	RoyaltyMail = "rbxassetid://132576980521526",
+	Cashier = "rbxassetid://104308905863825",
+	ComingSoon = "rbxassetid://112525022208467",
 }
 
 local function roleTileImageUri(role: any): string?
