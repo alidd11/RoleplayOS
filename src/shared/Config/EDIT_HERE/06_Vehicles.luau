@@ -103,6 +103,73 @@ return {
 			},
 			Category = "Civilian",
 		},
+		-- Priced against the wage rates in Config.luau rather than against real
+		-- money. Police pay is 2600 an hour, and the note beside it sets the
+		-- yardstick: a first car at fifteen thousand is about six hours of
+		-- shifts, a premium saloon about eighteen. These keep the same order
+		-- among themselves that the real cars have, so a Civic sits below an S90
+		-- and an X5 above both, and land on that curve rather than on a number
+		-- that sounded expensive.
+		--
+		-- Every one of these is discovered from its model rather than declared,
+		-- and discovery refuses a civilian vehicle with no price. All seven were
+		-- therefore being dropped on load, which is why none of them reached a
+		-- forecourt. Stating the price here is what admits them.
+		CivicTypeR = {
+			Id = "CivicTypeR",
+			Name = "Honda Civic Type R",
+			Price = 28000,
+			ModelName = "20' Honda Civic Type R",
+			WorkspaceModelName = "20' Honda Civic Type R",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "20' Honda Civic Type R" },
+			Colours = { "Red", "White", "Black" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		VolvoS90 = {
+			Id = "VolvoS90",
+			Name = "Volvo S90",
+			Price = 42000,
+			ModelName = "20' Volvo S90",
+			WorkspaceModelName = "20' Volvo S90",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "20' Volvo S90" },
+			Colours = { "Black", "Silver", "White" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		VolvoXC90 = {
+			Id = "VolvoXC90",
+			Name = "Volvo XC90",
+			Price = 55000,
+			ModelName = "22' Volvo XC90",
+			WorkspaceModelName = "22' Volvo XC90",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "22' Volvo XC90" },
+			Colours = { "Black", "Grey", "White" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		AudiRS3 = {
+			Id = "AudiRS3",
+			Name = "Audi RS3",
+			Price = 62000,
+			ModelName = "22' Audi RS3",
+			WorkspaceModelName = "22' Audi RS3",
+			AssetPath = { "Vehicles", "Civilian", "Premium", "22' Audi RS3" },
+			Colours = { "Grey", "Blue", "Black" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		BmwX5 = {
+			Id = "BmwX5",
+			Name = "BMW X5",
+			Price = 68000,
+			ModelName = "21' BMW X5 GO5",
+			WorkspaceModelName = "21' BMW X5 GO5",
+			AssetPath = { "Vehicles", "Civilian", "Premium", "21' BMW X5 GO5" },
+			Colours = { "Black", "White", "Blue" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
 	},
 	Dealerships = {
 		CityMotors = {
@@ -110,6 +177,11 @@ return {
 			Name = "City Motors",
 			VehicleIds = {
 				"HondaADV160",
+				"CivicTypeR",
+				"VolvoS90",
+				"VolvoXC90",
+				"AudiRS3",
+				"BmwX5",
 				"SurronCivilian",
 			},
 		},
