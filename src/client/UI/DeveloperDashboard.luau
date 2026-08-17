@@ -1492,14 +1492,34 @@ function App.mount(context: any): ScreenGui
 			-- Match the old Portsmouth Play screen: portrait tiles with artwork,
 			-- a dark lower label band and a large, consistent visual rhythm.
 			local roleWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
+			-- Sized so the whole service list is on screen at once.
+			--
+			-- Eleven roles over five columns is three rows, and three rows of the
+			-- old 340 poster is about a thousand pixels of a seven hundred pixel
+			-- page: two thirds of the departments were below the fold on a desktop
+			-- monitor. Six columns makes it two rows, and the shorter poster brings
+			-- those two rows inside the page.
+			-- Eleven roles, so six columns is the first count that makes two rows.
+			-- The threshold is 1280 rather than something wider because that is
+			-- where an ordinary laptop sits, and a laptop is where most of this is
+			-- played.
 			local roleColumns = if shortLandscape()
 				then 5
-				else if roleWidth >= 1100
-					then 5
-					else if roleWidth >= 900 then 4 else portraitCardColumns()
-			local roleTileHeight = if shortLandscape()
-				then 240
-				else if roleWidth >= 1100 then 340 else 380
+				else if roleWidth >= 1280
+					then 6
+					else if roleWidth >= 1100
+						then 5
+						else if roleWidth >= 900 then 4 else portraitCardColumns()
+			-- Poster only. The action sits below it and is added on top of this.
+			--
+			-- Two rows have to clear the page, so the six-column poster is squarer
+			-- than the others. That is the cost of showing every department at once,
+			-- and the artwork crops rather than distorts.
+			local rolePosterHeight = if shortLandscape()
+				then 168
+				else if roleWidth >= 1280 then 196 else if roleWidth >= 1100 then 236 else 270
+			local roleActionHeight = if shortLandscape() then 30 else 34
+			local roleTileHeight = rolePosterHeight + roleActionHeight + 8
 			local roleGrid = tileGrid(scroll, #availableRoles, roleTileHeight, roleColumns)
 			-- Characters are the first decision on Play. Keep the role posters below
 			-- them so a new player never has to scroll past every department to create
@@ -1507,8 +1527,17 @@ function App.mount(context: any): ScreenGui
 			roleGrid.LayoutOrder = 50
 			for _, role in availableRoles do
 				local presentation = rolePresentation(role)
-				local roleTile = card(roleGrid, roleTileHeight)
+				-- The cell holds two things now rather than one. The poster keeps
+				-- the card styling; the cell itself is only a column, so the action
+				-- below sits outside the artwork instead of on top of it.
+				local roleCell = Instance.new("Frame")
+				roleCell.Name = "RoleCell_" .. tostring(role.Id)
+				roleCell.BackgroundTransparency = 1
+				roleCell.BorderSizePixel = 0
+				roleCell.Parent = roleGrid
+				local roleTile = card(roleCell, rolePosterHeight)
 				roleTile.Name = "RoleTile_" .. tostring(role.Id)
+				roleTile.Size = UDim2.new(1, 0, 0, rolePosterHeight)
 				roleTile.ClipsDescendants = true
 				local artwork = Instance.new("ImageLabel")
 				artwork.Name = "RoleArtwork"
@@ -1547,30 +1576,32 @@ function App.mount(context: any): ScreenGui
 				footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
 				footer.BackgroundTransparency = 0.12
 				footer.BorderSizePixel = 0
-				footer.Position = UDim2.new(0, 0, 1, -84)
-				footer.Size = UDim2.new(1, 0, 0, 84)
+				footer.Position = UDim2.new(0, 0, 1, -52)
+				footer.Size = UDim2.new(1, 0, 0, 52)
 				footer.ZIndex = 10
 				footer.Parent = roleTile
 				corner(footer, 9)
 				local isCivilianRole = role.Id == "Civilian" or role.DepartmentId == "Civilian"
-				local actionWidth = if isCivilianRole then 116 else 92
-				local roleName = text(footer, role.Name, 20, COLOURS.Text, true)
-				roleName.Position = UDim2.fromOffset(20, 18)
-				roleName.Size = UDim2.new(1, -(actionWidth + 30), 0, 34)
+				-- The whole band, because nothing shares it now. "Frontline
+				-- Policing" and "Police Community Support Officer" were both losing
+				-- their ends to a button parked on the same line.
+				local roleName = text(footer, role.Name, 16, COLOURS.Text, true)
+				roleName.Position = UDim2.fromOffset(14, 0)
+				roleName.Size = UDim2.new(1, -28, 1, 0)
+				roleName.TextWrapped = true
 				roleName.TextTruncate = Enum.TextTruncate.AtEnd
 				roleName.ZIndex = 11
 				local open = button(
-					footer,
+					roleCell,
 					if role.Locked
 						then "REQUIREMENTS"
 						elseif isCivilianRole then "CHARACTERS"
 						else "JOIN",
 					false
 				)
-				open.ZIndex = 12
-				open.AnchorPoint = Vector2.new(1, 1)
-				open.Position = UDim2.new(1, -20, 1, -18)
-				open.Size = UDim2.fromOffset(actionWidth, 34)
+				open.AnchorPoint = Vector2.new(0, 1)
+				open.Position = UDim2.fromScale(0, 1)
+				open.Size = UDim2.new(1, 0, 0, roleActionHeight)
 				open.TextSize = 12
 				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
 				local openStroke = open:FindFirstChildOfClass("UIStroke")
