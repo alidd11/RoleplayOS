@@ -319,7 +319,21 @@ function VehicleSpawnerService:_definitionAllowed(
 		if definition.Category ~= "Service" or definition.DepartmentId ~= departmentId then
 			return false
 		end
+		-- Which unit's fleet this terminal is showing.
+		--
+		-- A terminal may name a division, in which case it is that unit's bay and
+		-- only that unit's vehicles belong on it. Where it names none it serves
+		-- the whole department from one place, and then the division that matters
+		-- is the one the officer came on duty as - otherwise a single shared
+		-- terminal hands every officer the keys to every unit's fleet.
+		--
+		-- Vehicles with no division of their own are the department's general
+		-- stock and stay available either way.
 		local divisionId = spawner:GetAttribute("DivisionId")
+		if type(divisionId) ~= "string" or divisionId == "" then
+			local duty = self.context.Services:Get("DutyService"):Get(player)
+			divisionId = duty and duty.DivisionId
+		end
 		return type(divisionId) ~= "string"
 			or divisionId == ""
 			or definition.DivisionId == nil

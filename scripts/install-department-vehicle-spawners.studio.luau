@@ -31,48 +31,22 @@ local definitions = {
 		nil,
 		Vector3.new(18, 0, 0),
 	},
-	-- Anchored on the locker room, because the vehicle bay is no longer a spawn
-	-- point and there is nothing there to measure from. Offsets are the bays'
-	-- existing positions relative to it, so rerunning this places a missing bay
-	-- back where its neighbours already are rather than somewhere new.
+	-- One terminal for the whole force rather than one per unit.
 	--
-	-- One bay per division, eighteen studs apart down the same row, so two units
-	-- can never be handed the same patch of ground to spawn a car on.
+	-- Splitting it by division meant four prompts standing in a row doing the
+	-- same job, and a vehicle tagged for one unit was invisible at the others'.
+	-- Leaving DivisionId unset here offers every police vehicle at the single
+	-- terminal, and the eight bays below are what stops two cars being handed
+	-- the same patch of ground.
 	{
 		"Police",
-		"PoliceFrontline",
-		"Frontline fleet",
+		"PoliceFleet",
+		"Police fleet",
 		"PoliceLockerRoom",
 		"Police",
-		"Frontline",
-		Vector3.new(35, 2, -19.25),
-	},
-	{
-		"Police",
-		"PoliceArmedResponse",
-		"Armed response fleet",
-		"PoliceLockerRoom",
-		"Police",
-		"ArmedResponse",
-		Vector3.new(53, 2, -19.25),
-	},
-	{
-		"Police",
-		"PoliceRoadsPolicing",
-		"Roads policing fleet",
-		"PoliceLockerRoom",
-		"Police",
-		"RoadsPolicing",
-		Vector3.new(71, 2, -19.25),
-	},
-	{
-		"Police",
-		"PoliceDogSupport",
-		"Dog support fleet",
-		"PoliceLockerRoom",
-		"Police",
-		"DogSupport",
-		Vector3.new(89, 2, -19.25),
+		nil,
+		Vector3.new(62, 0, 0),
+		8,
 	},
 	{
 		"Ambulance",
@@ -125,8 +99,9 @@ if legacyTaxi then
 end
 
 for _, definition in definitions do
-	local departmentName, spawnerId, displayName, anchorId, departmentId, divisionId, offset =
+	local departmentName, spawnerId, displayName, anchorId, departmentId, divisionId, offset, bayCount =
 		table.unpack(definition)
+	bayCount = bayCount or 1
 	local department = root:FindFirstChild(departmentName)
 	if not department then
 		department = Instance.new("Folder")
@@ -176,24 +151,36 @@ for _, definition in definitions do
 		points.Name = "SpawnPoints"
 		points.Parent = spawner
 	end
-	local bay = points:FindFirstChild("Bay01")
-	if not bay then
-		bay = Instance.new("Part")
-		bay.Name = "Bay01"
-		bay.Size = Vector3.new(12, 0.4, 24)
-		bay.Anchored = true
-		bay.CanCollide = false
-		bay.Transparency = 0.72
-		bay.Color = Color3.fromRGB(71, 167, 255)
-		bay.Parent = points
-	end
-
 	local anchor = anchors[anchorId]
-	if anchor then
-		interaction.CFrame = anchor.CFrame * CFrame.new(offset + Vector3.new(0, 2, 0))
-		bay.CFrame = anchor.CFrame * CFrame.new(offset + Vector3.new(0, 0.3, -28))
-	else
+	if not anchor then
 		warn("Vehicle spawner has no matching anchor", spawnerId, anchorId)
+		continue
+	end
+	interaction.CFrame = anchor.CFrame * CFrame.new(offset + Vector3.new(0, 2, 0))
+
+	-- Four across on a fourteen stud pitch and two deep on a twenty eight stud
+	-- pitch. A bay is twelve by twenty four, so those pitches leave a margin on
+	-- both axes and a car on one bay stays outside the clearance box of the
+	-- next. Anything past eight simply continues the pattern.
+	for index = 1, bayCount do
+		local column = (index - 1) % 4
+		local row = math.floor((index - 1) / 4)
+		local bayId = string.format("Bay%02d", index)
+		local bay = points:FindFirstChild(bayId)
+		if not bay then
+			bay = Instance.new("Part")
+			bay.Name = bayId
+			bay.Size = Vector3.new(12, 0.4, 24)
+			bay.Anchored = true
+			bay.CanCollide = false
+			bay.Transparency = 0.72
+			bay.Color = Color3.fromRGB(71, 167, 255)
+			bay.Parent = points
+		end
+		local spread = if bayCount > 1
+			then Vector3.new(column * 14 - 21, 0, row * -28)
+			else Vector3.zero
+		bay.CFrame = anchor.CFrame * CFrame.new(offset + Vector3.new(0, 0.3, -28) + spread)
 	end
 end
 
