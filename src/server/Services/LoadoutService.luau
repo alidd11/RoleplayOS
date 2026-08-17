@@ -77,6 +77,27 @@ local function prepareVisibleTool(tool: Tool, toolId: string, definition: any?)
 		end
 	end
 	handle.Name = "Handle"
+	-- Authored size is whoever modelled it's business, and it is not always a
+	-- size a person could hold. The cuffs arrive two studs long against a five
+	-- stud character, which is a scaffolding pole. Scaling here rather than in
+	-- the model means the authored asset is untouched and the number is visible
+	-- next to the grip it was chosen with.
+	if definition and type(definition.Scale) == "number" and definition.Scale ~= 1 then
+		local scaler = Instance.new("Model")
+		local moved = {}
+		for _, descendant in tool:GetDescendants() do
+			if descendant:IsA("BasePart") then
+				moved[descendant] = descendant.Parent
+				descendant.Parent = scaler
+			end
+		end
+		scaler.PrimaryPart = handle
+		scaler:ScaleTo(definition.Scale)
+		for descendant, parent in moved do
+			descendant.Parent = parent
+		end
+		scaler:Destroy()
+	end
 	handle.Anchored = false
 	handle.CanCollide = false
 	handle.CanTouch = false

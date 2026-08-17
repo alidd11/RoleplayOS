@@ -1589,13 +1589,18 @@ local Config = {
 			Id = "Handcuffs",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Handcuffs" },
 			DepartmentId = "Police",
-			-- Carried across the palm rather than dangling from one cuff. Posed by
-			-- hand against an R15 rig and read back off the placement, so the
-			-- rotation is a transcription of how it was set rather than a guess.
-			-- The translation is that pose closed up against the hand: as posed it
-			-- stood a third of a stud clear of the fist, which reads as floating.
-			Grip = CFrame.new(0.36, -0.06, -0.55)
-				* CFrame.fromEulerAnglesYXZ(math.rad(3), math.rad(88), math.rad(90)),
+			-- Both numbers were settled in a running game with the tool equipped,
+			-- not against a posed rig. A rig stands with its arms down; the game
+			-- holds a tool with the forearm raised, so a grip tuned to hang from a
+			-- resting hand comes out level, and the cuffs were carried across the
+			-- chest like a bar.
+			--
+			-- Scaled because the authored model is two studs long against a five
+			-- stud character. Hung from the hand rather than laid across the palm,
+			-- since at a believable size the palm is not big enough to lay them on.
+			Scale = 0.42,
+			Grip = CFrame.new(-0.01, -0.3, 0.15)
+				* CFrame.fromEulerAnglesYXZ(math.rad(-1), math.rad(177), math.rad(179)),
 		},
 		Taser = {
 			Id = "Taser",
