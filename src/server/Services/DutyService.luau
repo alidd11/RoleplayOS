@@ -145,6 +145,22 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if not session then
 		return false, "PROFILE_UNAVAILABLE"
 	end
+	-- A shift belongs to a character, not to an account.
+	--
+	-- Nothing used to require one, so a player could take a police role straight
+	-- from the menu without ever making a character. That mostly looked like it
+	-- worked: they got the team, the spawn and the loadout. What they did not get
+	-- was a warrant card, because the card prints a name and there was no name to
+	-- print, and the attempt to issue it treated the missing character as "not
+	-- ready yet" and gave up without a word. Selecting a character afterwards
+	-- cannot repair it either, since that deliberately ends the shift.
+	--
+	-- Refusing here is the only point where the player can still be told.
+	if
+		not session.ActiveCharacterId or not session.Profile.Characters[session.ActiveCharacterId]
+	then
+		return false, "NO_ACTIVE_CHARACTER"
+	end
 	-- StartMenuService normally provisions one profile for every department the
 	-- player can access. Duty must remain safe when a client submits a valid role
 	-- request before that menu refresh finishes, or when an older profile has no

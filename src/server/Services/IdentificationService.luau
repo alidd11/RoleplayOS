@@ -181,6 +181,16 @@ function IdentificationService:Refresh(player: Player)
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
 	if not duty or duty.DepartmentId ~= "Police" then
+		-- Refusing to issue a card is also the moment to take back the last one.
+		--
+		-- Ending a shift destroys duty-issued tools in the backpack, but not the
+		-- recovery copy in StarterGear, and this early return used to leave that
+		-- copy behind. Roblox hands StarterGear back on the next respawn, so an
+		-- officer who came off duty was carrying a valid warrant card again a
+		-- moment later, off duty and out of uniform.
+		removeCredential(backpack)
+		removeCredential(player.Character)
+		removeCredential(player:FindFirstChild("StarterGear"))
 		return false, "POLICE_DUTY_REQUIRED"
 	end
 	local role = self.context.Configuration.Roles[duty.RoleId]

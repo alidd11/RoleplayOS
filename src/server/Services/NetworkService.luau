@@ -213,6 +213,7 @@ function NetworkService:Start()
 				DUTY_PROFILE_NOT_FOUND = "Your duty profile is not ready. Reopen the menu and try again.",
 				TEAM_NOT_CONFIGURED = "That Roblox Team is not configured.",
 				ACTIVE_CUSTODY_SENTENCE = "You cannot report for duty during an active custody sentence.",
+				NO_ACTIVE_CHARACTER = "Create and select a character before reporting for duty.",
 			}
 			return {
 				Success = false,
