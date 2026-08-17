@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local MeleeWeaponController = { connections = {}, watched = setmetatable({}, { __mode = "k" }) }
@@ -29,6 +30,66 @@ local function targetFromAim(mouse: Mouse?): Player?
 	return if hitPlayer and hitPlayer ~= Players.LocalPlayer then hitPlayer else nil
 end
 
+-- The joint that swings, on either rig.
+--
+-- R15 keeps the shoulder inside the upper arm; R6 keeps it on the torso and
+-- spells it with a space. Returning whichever exists means the swing does not
+-- care which rig a player is on, and returns nothing for a character that has
+-- neither rather than guessing.
+local function swingJoint(character: Model): Motor6D?
+	local r15 = character:FindFirstChild("RightUpperArm")
+	local joint = r15 and r15:FindFirstChild("RightShoulder")
+	if not joint then
+		local torso = character:FindFirstChild("Torso")
+		joint = torso and torso:FindFirstChild("Right Shoulder")
+	end
+	return if joint and joint:IsA("Motor6D") then joint else nil
+end
+
+-- A swing built from the arm rather than from an uploaded animation.
+--
+-- Roblox's animator writes every joint's Transform each frame, so setting one
+-- and walking away is overwritten before it draws. Writing it every frame at a
+-- render step bound after the animator is what makes it stick, and unbinding at
+-- the end hands the arm straight back to whatever was playing.
+--
+-- This is deliberately a fallback. A hand-authored animation looks better than
+-- anything derived from a sine curve, and the loop above will prefer one the
+-- moment a tool carries it: drop an Animation named Swing inside the tool with
+-- a real AnimationId and this code stops running. Until then a knife that does
+-- damage should at least look like it was used.
+local SWING_SECONDS = 0.26
+local SWING_RADIANS = math.rad(115)
+
+local function proceduralSwing(character: Model)
+	local joint = swingJoint(character)
+	if not joint then
+		return
+	end
+	local existing = character:FindFirstChild("RoleplayOSSwing")
+	if existing then
+		return
+	end
+	local marker = Instance.new("BoolValue")
+	marker.Name = "RoleplayOSSwing"
+	marker.Parent = character
+
+	local started = os.clock()
+	local binding = "RoleplayOSMeleeSwing"
+	RunService:BindToRenderStep(binding, Enum.RenderPriority.Character.Value + 1, function()
+		local elapsed = os.clock() - started
+		if elapsed >= SWING_SECONDS or not joint.Parent or not marker.Parent then
+			RunService:UnbindFromRenderStep(binding)
+			marker:Destroy()
+			return
+		end
+		-- Out fast and back slower, which is how a blade is actually swung.
+		local progress = elapsed / SWING_SECONDS
+		local curve = math.sin(progress * math.pi)
+		joint.Transform = joint.Transform * CFrame.Angles(-SWING_RADIANS * curve, 0, 0)
+	end)
+end
+
 local function attackAnimation(tool: Tool, character: Model)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local animator = humanoid
@@ -50,6 +111,7 @@ local function attackAnimation(tool: Tool, character: Model)
 			end
 		end
 	end
+	proceduralSwing(character)
 end
 
 function MeleeWeaponController:Init(context: any)
