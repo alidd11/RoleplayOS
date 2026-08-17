@@ -41,11 +41,31 @@ end
 
 -- What the player is shown. Prices are resolved here rather than on the client,
 -- so a stall cannot be made to display a price the server would not honour.
+-- True while the player is in the uniform of a service that would not be
+-- buying from this stall.
+--
+-- Teams carry the Emergency flag rather than this reading a hardcoded list,
+-- because which services count is a game decision and belongs with the roster.
+function VendorService:_isEmergency(player: Player): boolean
+	local team = player.Team
+	if not team then
+		return false
+	end
+	local definition = self.context.Configuration.Teams[team.Name]
+	return type(definition) == "table" and definition.Emergency == true
+end
+
 function VendorService:_catalogue(player: Player, definition: any): { any }
 	local rows = {}
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local cache = session and session.Profile and session.Profile.GamepassCache or {}
+	local emergency = self:_isEmergency(player)
 	for _, item in definition.Items do
+		-- Hidden rather than shown-and-refused. A row that cannot be bought reads
+		-- as a broken stall, and an officer has no business being offered one.
+		if item.EmergencyRestricted and emergency then
+			continue
+		end
 		local price, owned = item.Price, nil
 		if item.Kind == "Food" then
 			local food = self.context.Configuration.Needs.Foods[item.FoodId]
@@ -177,6 +197,11 @@ function VendorService:Purchase(player: Player, payload: any): (any?, string?)
 	end
 	if not item then
 		return nil, "ITEM_NOT_FOUND"
+	end
+	-- Rechecked here because the catalogue only decides what is drawn, and the
+	-- request names the item directly.
+	if item.EmergencyRestricted and self:_isEmergency(player) then
+		return nil, "EMERGENCY_SERVICE_RESTRICTED"
 	end
 
 	if item.Kind == "Food" then

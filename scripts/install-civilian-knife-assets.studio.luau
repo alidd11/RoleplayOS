@@ -40,7 +40,7 @@ local function findCandidates(toolName: string): { Tool }
 end
 
 local installed = 0
-for _, toolName in { "Knife", "Machete", "RamboKnife", "ZKnife" } do
+for _, toolName in { "Knife", "Machete", "ZKnife" } do
 	local candidates = findCandidates(toolName)
 	if #candidates == 0 then
 		warn("No Studio Tool found for " .. toolName)

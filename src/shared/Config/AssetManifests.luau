@@ -44,13 +44,6 @@ return {
 	-- cooldown, line of sight, death cleanup and police seizure are all owned by
 	-- MeleeWeaponService on the server, which is why putting a damage script in
 	-- the tool would be both duplicated and exploitable.
-	RamboKnife = {
-		Certified = true,
-		ReviewVersion = 1,
-		Source = "User-supplied knife meshes, assembled into a Tool by RoleplayOS tooling",
-		RealWorldReference = "Fixed-blade survival knife",
-		ReviewedBy = "RoleplayOS engineering: tool contains geometry only, no executables",
-	},
 	ZKnife = {
 		Certified = true,
 		ReviewVersion = 1,

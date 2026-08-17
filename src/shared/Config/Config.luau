@@ -505,12 +505,6 @@ local Config = {
 			Name = "Civilian Knife Access",
 			Description = "Access approved civilian knife equipment where server rules permit it.",
 		},
-		RamboKnife = {
-			Id = "RamboKnife",
-			GamepassId = 0,
-			Name = "Rambo Knife Access",
-			Description = "Access the approved Rambo knife equipment.",
-		},
 		ZKnife = {
 			Id = "ZKnife",
 			GamepassId = 0,
@@ -600,11 +594,7 @@ local Config = {
 	},
 	EquipmentPasses = {
 		Knife = { GamepassId = 1937446295, TeamName = "Civilian", ToolNames = { "Knife" } },
-		RamboKnife = { GamepassId = 0, TeamName = "Civilian", ToolNames = { "RamboKnife" } },
 		ZKnife = { GamepassId = 0, TeamName = "Civilian", ToolNames = { "ZKnife" } },
-		Handgun = { GamepassId = 1937822271, TeamName = "Civilian", ToolNames = { "Handgun" } },
-		Shotgun = { GamepassId = 1934518052, TeamName = "Civilian", ToolNames = { "Shotgun" } },
-		Rifle = { GamepassId = 1934955986, TeamName = "Civilian", ToolNames = { "Rifle" } },
 	},
 	-- People standing around the map who sell things.
 	--
@@ -641,59 +631,35 @@ local Config = {
 				Name = "Dealer",
 				Subtitle = "No questions asked",
 				Items = {
-					{ Id = "Knife", Kind = "Tool", ToolId = "Knife", Name = "Knife", Price = 900 },
+					-- Cash or the pass. Owning CivilianKnife hands it over for
+					-- nothing; everybody else pays, which is what the price is for.
+					{
+						Id = "Knife",
+						Kind = "Tool",
+						ToolId = "Knife",
+						Name = "Knife",
+						Price = 900,
+						GamepassId = 1937446295,
+						EmergencyRestricted = true,
+					},
+					-- Pass only. No Price, so the stall offers the purchase rather
+					-- than refusing, which is what VendorService does with a passed
+					-- item nobody owns yet.
 					{
 						Id = "Machete",
 						Kind = "Tool",
 						ToolId = "Machete",
 						Name = "Machete",
-						Price = 200,
-					},
-					{
-						Id = "RamboKnife",
-						Kind = "Tool",
-						ToolId = "RamboKnife",
-						Name = "Rambo Knife",
-						Price = 350,
+						GamepassId = 1949228959,
+						EmergencyRestricted = true,
 					},
 					{
 						Id = "ZKnife",
 						Kind = "Tool",
 						ToolId = "ZKnife",
 						Name = "Z Knife",
-						Price = 500,
-					},
-					{
-						Id = "Handgun",
-						Kind = "Tool",
-						ToolId = "Handgun",
-						Name = "Handgun",
-						Price = 7500,
-					},
-				},
-			},
-			-- Items carrying both a pass and a price. Owning the pass hands it over
-			-- for nothing; everybody else can still buy it with cash. Cash prices
-			-- are set high enough that the pass remains worth having.
-			LicensedDealer = {
-				Name = "Licensed Firearms",
-				Subtitle = "Permit holders only",
-				Items = {
-					{
-						Id = "PassShotgun",
-						Kind = "Tool",
-						ToolId = "Shotgun",
-						Name = "Shotgun",
-						GamepassId = 1934518052,
-						Price = 26000,
-					},
-					{
-						Id = "PassRifle",
-						Kind = "Tool",
-						ToolId = "Rifle",
-						Name = "Rifle",
-						GamepassId = 1934955986,
-						Price = 42000,
+						GamepassId = 1949486956,
+						EmergencyRestricted = true,
 					},
 				},
 			},
@@ -1114,24 +1080,37 @@ local Config = {
 			BrickColor = "Medium stone grey",
 			AutoAssignable = true,
 		},
+		-- Emergency marks a team whose members are on the public payroll and in
+		-- uniform. Nothing about the roster says that on its own, and it decides
+		-- who the street dealer will serve, so it is stated here rather than
+		-- inferred from a name.
 		Police = {
 			Id = "Police",
 			Name = "Police",
 			BrickColor = "Navy blue",
 			AutoAssignable = false,
+			Emergency = true,
 		},
 		Ambulance = {
 			Id = "Ambulance",
 			Name = "Ambulance",
 			BrickColor = "Earth green",
 			AutoAssignable = false,
+			Emergency = true,
 		},
-		Fire = { Id = "Fire", Name = "Fire", BrickColor = "Bright red", AutoAssignable = false },
+		Fire = {
+			Id = "Fire",
+			Name = "Fire",
+			BrickColor = "Bright red",
+			AutoAssignable = false,
+			Emergency = true,
+		},
 		Control = {
 			Id = "Control",
 			Name = "Control",
 			BrickColor = "Really black",
 			AutoAssignable = false,
+			Emergency = true,
 		},
 		Transport = {
 			Id = "Transport",
@@ -1156,6 +1135,7 @@ local Config = {
 			Name = "Prison Service",
 			BrickColor = "Dark orange",
 			AutoAssignable = false,
+			Emergency = true,
 		},
 	},
 	GroupLinks = {
@@ -1581,12 +1561,6 @@ local Config = {
 			DepartmentId = "Civilian",
 			BuiltInFallback = "Weapon",
 			Weapon = { Damage = 24, Cooldown = 0.8, Range = 8 },
-		},
-		RamboKnife = {
-			Id = "RamboKnife",
-			AssetPath = { "Tools", "Civilian", "RamboKnife" },
-			DepartmentId = "Civilian",
-			Weapon = { Damage = 20, Cooldown = 0.7, Range = 8 },
 		},
 		ZKnife = {
 			Id = "ZKnife",

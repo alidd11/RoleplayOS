@@ -34,11 +34,24 @@ function MeleeWeaponService:IsWeapon(tool: Instance?): boolean
 	return tool ~= nil and tool:IsA("Tool") and self:_definition(tool) ~= nil
 end
 
+-- Everything bought from a stall goes on death, not only what carries a Weapon
+-- block in Config.Tools.
+--
+-- IsWeapon asks for that block, and the firearms do not have one - they exist as
+-- passes and vendor rows only - so a gun used to survive a death that took a
+-- knife away. Weapons are bought at a dealer and lost when you die, and that has
+-- to mean all of them, including any added later that nobody remembers to
+-- define here.
+local function isDealerIssued(tool: Instance): boolean
+	return tool:GetAttribute("RoleplayOSToolSource") == "Vendor"
+		or tool:GetAttribute("RoleplayOSWeaponPurchase") == true
+end
+
 function MeleeWeaponService:_clear(player: Player)
 	for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
 		if container then
 			for _, child in container:GetChildren() do
-				if self:IsWeapon(child) then
+				if child:IsA("Tool") and (self:IsWeapon(child) or isDealerIssued(child)) then
 					child:Destroy()
 				end
 			end

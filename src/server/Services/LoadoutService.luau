@@ -50,10 +50,7 @@ local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: 
 end
 
 local function prepareVisibleTool(tool: Tool, toolId: string)
-	local isWeapon = toolId == "Knife"
-		or toolId == "Machete"
-		or toolId == "RamboKnife"
-		or toolId == "ZKnife"
+	local isWeapon = toolId == "Knife" or toolId == "Machete" or toolId == "ZKnife"
 	if toolId ~= "Handcuffs" and toolId ~= "PAVA" and not isWeapon then
 		return
 	end

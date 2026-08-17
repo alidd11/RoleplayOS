@@ -11,7 +11,11 @@ return {
 		PremiumVehicles = { GamepassId = 1936590544, PriceInRobux = 199 },
 		CustomRegistration = { GamepassId = 1937140343, PriceInRobux = 49 },
 		CivilianKnife = { GamepassId = 1937446295, PriceInRobux = 75 },
-		RamboKnife = { GamepassId = 1949228959, PriceInRobux = 149 },
+		-- Was the Rambo knife, which is no longer in the project. The pass is
+		-- kept and repointed at the Machete rather than retired, so anybody who
+		-- already bought it keeps a blade for their money. Rename it in Creator
+		-- Hub to match.
+		CivilianMachete = { GamepassId = 1949228959, PriceInRobux = 149 },
 		ZKnife = { GamepassId = 1949486956, PriceInRobux = 149 },
 		CivilianHandgun = { GamepassId = 1937822271, PriceInRobux = 125 },
 		CivilianShotgun = { GamepassId = 1934518052, PriceInRobux = 175 },
