@@ -106,6 +106,12 @@ function EmergencyLightsController:_adopt(model: Instance)
 						then self.settings.CircuitAttributePrefix .. circuit
 						else nil,
 					Brightness = if light then light.Brightness else nil,
+					-- Lightbar lenses are authored almost invisible, and the flash
+					-- only ever set colour and material. Every lamp on the Peugeot
+					-- is more than half transparent, so the bar was painted the
+					-- right blue and stayed dark: correct in the properties and
+					-- absent from the screen.
+					Transparency = descendant.Transparency,
 					-- Alternates the two sides of the bar, which is what makes it
 					-- read as a lightbar rather than as a lamp switching on and off.
 					Side = #parts % 2,
@@ -193,6 +199,7 @@ function EmergencyLightsController:_restore(entry: any, model: Instance?)
 		if record.Part.Parent then
 			record.Part.Color = record.Colour
 			record.Part.Material = record.Material
+			record.Part.Transparency = record.Transparency
 			if record.Light then
 				record.Light.Enabled = false
 				if record.Brightness then
@@ -206,6 +213,7 @@ function EmergencyLightsController:_restore(entry: any, model: Instance?)
 		-- lights it again.
 		record.LastMaterial = nil
 		record.LastColour = nil
+		record.LastTransparency = nil
 		record.LastOn = nil
 		record.LastBrightness = nil
 	end
@@ -290,6 +298,14 @@ function EmergencyLightsController:_step()
 			if record.LastColour ~= colour then
 				record.LastColour = colour
 				record.Part.Color = colour
+			end
+			-- A lit lens has to be visible as well as the right colour. Restored
+			-- to whatever it was authored as when the lamp goes out, so a bar that
+			-- is meant to be near invisible at rest still is.
+			local transparency = if on then 0 else record.Transparency
+			if record.LastTransparency ~= transparency then
+				record.LastTransparency = transparency
+				record.Part.Transparency = transparency
 			end
 			if record.Light then
 				if record.LastOn ~= on then

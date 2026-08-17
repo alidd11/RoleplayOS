@@ -917,6 +917,13 @@ local Config = {
 			"map",
 			"tail",
 			"number",
+			-- Roadwheels. A wheel called FR or RL sits at the front or the rear
+			-- and has no name of its own to go on, so the positional fallback
+			-- that resolves an unnamed bulb was claiming all four of them and
+			-- the vehicle strobed its tyres.
+			"wheel",
+			"tyre",
+			"tire",
 		},
 		-- A cap rather than a target. A lightbar modelled as two hundred separate
 		-- parts would otherwise be two hundred parts changing colour twice a
