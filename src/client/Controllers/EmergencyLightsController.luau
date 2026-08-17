@@ -41,6 +41,18 @@ local CIRCUIT_CONTROLS = {
 	{ Id = "LeftAlley", Label = "LEFT\nALLEY" },
 	{ Id = "Spots", Label = "SPOTS" },
 	{ Id = "RightAlley", Label = "RIGHT\nALLEY" },
+	-- The kit's second pattern. Shown only on a vehicle that has one, like every
+	-- other control here.
+	{ Id = "Director", Label = "DIRECTOR" },
+}
+
+-- Controls that are always worth showing, whatever lamps the vehicle turns out
+-- to have. Master is the vehicle's main lights and the rest are framework state
+-- rather than circuits, so none of them depends on a particular bulb existing.
+local ALWAYS_AVAILABLE = {
+	Master = true,
+	LowPower = true,
+	RunLock = true,
 }
 
 local function corner(parent: Instance, radius: number)
@@ -436,11 +448,41 @@ function EmergencyLightsController:_reshape(compact: boolean)
 	end
 end
 
+-- Hides the controls this vehicle cannot carry out.
+--
+-- A button that records a state against a lamp the vehicle does not have is
+-- indistinguishable, to the person pressing it, from a broken button. The
+-- server reports which circuits resolved to real lamps and whether the vehicle
+-- brought its own kit, and everything else is taken off the panel rather than
+-- shown greyed out: there is nothing the player can do to earn it.
+function EmergencyLightsController:_applyAvailability()
+	local state = self.state
+	local available = state.AvailableCircuits or {}
+	local hasKit = state.Kit ~= nil
+	local shown = 0
+	for _, control in CIRCUIT_CONTROLS do
+		local item = self.buttons[control.Id]
+		if item then
+			local visible = if control.Id == "Director"
+				then hasKit
+				elseif ALWAYS_AVAILABLE[control.Id] then true
+				else available[control.Id] == true
+			item.Visible = visible
+			if visible then
+				shown += 1
+				item.LayoutOrder = shown
+			end
+		end
+	end
+end
+
 function EmergencyLightsController:_paint()
 	local state = self.state
+	self:_applyAvailability()
 	for _, control in CIRCUIT_CONTROLS do
-		local active = if control.Id == "Master"
-			then state.Stage == self.settings.Stages
+		local active = if control.Id == "Director"
+			then false
+			elseif control.Id == "Master" then state.Stage == self.settings.Stages
 			elseif control.Id == "LowPower" then state.LowPower == true
 			elseif control.Id == "RunLock" then state.RunLock == true
 			else state.Circuits and state.Circuits[control.Id] == true
@@ -469,8 +511,44 @@ function EmergencyLightsController:_request(payload: any)
 	end
 end
 
+-- The lighting kit inside the vehicle currently being driven.
+--
+-- These vehicles light themselves. EasyLS runs its own server script over its
+-- own lamps and answers to one RemoteFunction, and the framework's circuit
+-- attributes reach none of it. Asking the kit is what actually makes a light
+-- come on; the framework request beside it is what keeps the server's idea of
+-- the vehicle - the blue light exemption, what dispatch sees - in step.
+function EmergencyLightsController:_kitRemote(): RemoteFunction?
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
+	if not vehicle then
+		return nil
+	end
+	local remote = vehicle:FindFirstChild("EasyLS_Remote", true)
+	return if remote and remote:IsA("RemoteFunction") then remote else nil
+end
+
+function EmergencyLightsController:_cycleKit(action: string)
+	local remote = self:_kitRemote()
+	if not remote then
+		return
+	end
+	-- The kit refuses anybody who is not in its drive seat, and a failure here
+	-- must not take the panel down with it.
+	pcall(function()
+		remote:InvokeServer(action)
+	end)
+end
+
 function EmergencyLightsController:_activate(id: string)
-	if id == "Master" then
+	if id == "Director" then
+		self:_cycleKit("DirectorELS")
+	elseif id == "Master" then
+		-- Cycles the kit's pattern and tells the server the lights are on, so the
+		-- two agree about a vehicle that is now visibly lit.
+		self:_cycleKit("MainELS")
 		self:_request({
 			Stage = if self.state.Stage == self.settings.Stages then 0 else self.settings.Stages,
 		})

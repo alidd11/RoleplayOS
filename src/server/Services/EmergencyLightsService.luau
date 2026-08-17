@@ -229,8 +229,38 @@ function EmergencyLightsService:GetState(player: Player): any
 	for circuit in settings.Circuits do
 		circuits[circuit] = model:GetAttribute(settings.CircuitAttributePrefix .. circuit) == true
 	end
+	-- Which circuits this vehicle owns a lamp for.
+	--
+	-- Front and rear blues resolve from where a lamp sits and what colour its
+	-- lens is, so they work on any model. The specialised circuits cannot be
+	-- guessed that way and are only found by an explicit attribute or a
+	-- recognisable part name, which the imported kits do not use: their bulbs
+	-- are called things like F1 and R2. Offering all nine regardless meant seven
+	-- buttons that recorded a state against no lamp at all - the click worked,
+	-- the server agreed, and nothing lit. The panel now shows what the vehicle
+	-- in front of the player can actually do.
+	local available = {}
+	for _, descendant in model:GetDescendants() do
+		if
+			descendant:IsA("BasePart") and VehicleLights.isLightPart(settings, descendant, model)
+		then
+			local circuit = VehicleLights.circuitFor(settings, descendant, model)
+			if circuit then
+				available[circuit] = true
+			end
+		end
+	end
 	return {
 		Available = true,
+		AvailableCircuits = available,
+		-- Whether the vehicle carries its own lighting kit.
+		--
+		-- These vehicles run EasyLS, which owns their lamps and offers exactly two
+		-- operations: cycle the main pattern and cycle the director pattern. It
+		-- publishes no per-circuit control and no way to read its state back, so
+		-- the panel drives it as the two cycles it is rather than pretending it is
+		-- nine switches.
+		Kit = if model:FindFirstChild("EasyLS_Remote", true) then "EasyLS" else nil,
 		Stage = model:GetAttribute(settings.StageAttribute) or 0,
 		Lights = model:GetAttribute(settings.StateAttribute) == true,
 		Siren = model:GetAttribute(settings.SirenAttribute) or "",
