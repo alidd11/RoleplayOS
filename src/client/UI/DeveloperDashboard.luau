@@ -260,9 +260,21 @@ local function tileGrid(
 	return grid
 end
 
+-- Square corners, by choice.
+--
+-- Every surface asked for its own radius and got one, which is how the menu came
+-- to hold eight of them. Rather than pick a winner, the panels are square: it
+-- suits a police interface better than rounded cards do, it removes the question
+-- entirely, and it means the artwork on a role poster reaches the corner instead
+-- of being clipped away from it.
+--
+-- The radius argument is kept so callers do not all have to change, and so this
+-- is one line to reverse.
+local SQUARE_SURFACES = true
+
 corner = function(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
-	value.CornerRadius = UDim.new(0, radius)
+	value.CornerRadius = UDim.new(0, if SQUARE_SURFACES then 0 else radius)
 	value.Parent = parent
 end
 
@@ -1003,27 +1015,37 @@ function App.mount(context: any): ScreenGui
 	content.Size = UDim2.new(1, -250, 1, 0)
 	content.Parent = root
 
+	-- A thin status strip where a title block used to be.
+	--
+	-- The block spent 76 pixels restating the tab the player had just pressed -
+	-- "Play. Choose who you want to be today." - and on a phone it was already
+	-- hidden, so the space was dead on the device with least of it. The one thing
+	-- in it worth keeping is whether the server is actually up, which is now the
+	-- whole strip. pageTitle and pageDescription stay as instances because every
+	-- render function sets them; they are simply never shown.
 	local header = Instance.new("Frame")
 	header.BackgroundTransparency = 1
-	header.Position = UDim2.fromOffset(44, 30)
-	header.Size = UDim2.new(1, -88, 0, 76)
+	header.Position = UDim2.fromOffset(44, 16)
+	header.Size = UDim2.new(1, -88, 0, 24)
 	header.Parent = content
 	local pageTitle = text(header, "Play", 30, COLOURS.Text, true)
 	pageTitle.Size = UDim2.new(1, -220, 0, 40)
+	pageTitle.Visible = false
 	local pageDescription = text(header, "Choose who you want to be today.", 14, COLOURS.Muted)
 	pageDescription.Position = UDim2.fromOffset(0, 41)
 	pageDescription.Size = UDim2.new(1, -220, 0, 24)
+	pageDescription.Visible = false
 	local status = text(header, "●  CONNECTING", 11, COLOURS.Warning, true)
 	status.AnchorPoint = Vector2.new(1, 0)
-	status.Position = UDim2.new(1, 0, 0, 9)
-	status.Size = UDim2.fromOffset(190, 28)
+	status.Position = UDim2.fromScale(1, 0)
+	status.Size = UDim2.fromOffset(190, 24)
 	status.TextXAlignment = Enum.TextXAlignment.Right
 
 	local scroll = Instance.new("ScrollingFrame")
 	scroll.BackgroundTransparency = 1
 	scroll.BorderSizePixel = 0
-	scroll.Position = UDim2.fromOffset(44, 118)
-	scroll.Size = UDim2.new(1, -88, 1, -146)
+	scroll.Position = UDim2.fromOffset(44, 48)
+	scroll.Size = UDim2.new(1, -88, 1, -76)
 	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	scroll.CanvasSize = UDim2.new()
 	scroll.ScrollBarThickness = 8
@@ -3496,14 +3518,16 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 			profile.Visible = true
-			pageTitle.Visible = true
-			header.Position = UDim2.fromOffset(44, safeTop + 30)
-			header.Size = UDim2.new(1, -(88 + safeRight), 0, 76)
-			pageTitle.TextSize = 30
-			pageDescription.Visible = true
-			status.Position = UDim2.new(1, -safeRight, 0, 9)
-			scroll.Position = UDim2.fromOffset(44, safeTop + 118)
-			scroll.Size = UDim2.new(1, -(88 + safeRight), 1, -(safeTop + 146 + layout.SafeBottom))
+			-- Desktop used to restore the title block that compact hides. Both now
+			-- show the same status strip, so a page looks like itself whatever it
+			-- is opened on, and the seventy pixels go to the content instead.
+			pageTitle.Visible = false
+			pageDescription.Visible = false
+			header.Position = UDim2.fromOffset(44, safeTop + 16)
+			header.Size = UDim2.new(1, -(88 + safeRight), 0, 24)
+			status.Position = UDim2.new(1, -safeRight, 0, 0)
+			scroll.Position = UDim2.fromOffset(44, safeTop + 48)
+			scroll.Size = UDim2.new(1, -(88 + safeRight), 1, -(safeTop + 76 + layout.SafeBottom))
 		end
 		-- Cards have genuinely different compositions at these breakpoints, not
 		-- merely different widths. Repaint only when a breakpoint changes so a
