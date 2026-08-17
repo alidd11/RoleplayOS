@@ -67,6 +67,10 @@ function EmergencyLightsController:Init(context: any)
 	-- Weak keyed, so a vehicle that is destroyed or streams out drops out of
 	-- here on its own rather than being leaked until the player leaves.
 	self.tracked = setmetatable({}, { __mode = "k" })
+	-- Vehicles that were tagged before their geometry arrived. Weak for the same
+	-- reason as tracked: a model that streams out or is destroyed leaves on its
+	-- own.
+	self.pending = setmetatable({}, { __mode = "k" })
 	self.buttons = {}
 	self.secondary = {}
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
@@ -113,8 +117,22 @@ function EmergencyLightsController:_adopt(model: Instance)
 		end
 	end
 	if #parts == 0 then
+		-- Not "this vehicle has no lights" - "not yet".
+		--
+		-- The tag is added by the server the moment the vehicle is created, and
+		-- with streaming on it reaches this client before the body does. Adoption
+		-- ran against a model that was still only a few parts, found nothing that
+		-- looked like a lamp, and gave up permanently. The vehicle then sat there
+		-- fully loaded, correctly tagged, at stage two, with thirty seven lamps
+		-- the painter had already decided did not exist - which is every blue
+		-- light in the game silently never coming on.
+		--
+		-- Kept as pending and retried by the step loop instead, which is already
+		-- running and already knows how to do nothing cheaply.
+		self.pending[model] = true
 		return
 	end
+	self.pending[model] = nil
 	self.tracked[model] = { Parts = parts, Lit = false, Siren = "", MissingSiren = {} }
 end
 
@@ -200,6 +218,15 @@ end
 function EmergencyLightsController:_step()
 	local settings = self.settings
 	local phase = math.floor(os.clock() * settings.FlashesPerSecond * 2) % 2
+
+	-- Vehicles whose lamps had not arrived when the tag did.
+	for model in self.pending do
+		if model.Parent then
+			self:_adopt(model)
+		else
+			self.pending[model] = nil
+		end
+	end
 
 	for model, entry in self.tracked do
 		if not model.Parent then
