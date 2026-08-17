@@ -80,6 +80,27 @@ local CIVILIAN_JOB_ROLE_IDS = {
 	TransportOperator = true,
 }
 
+-- The order services appear in on Play.
+--
+-- Config.Roles is a hash, so the server sends them in whatever order Luau
+-- happens to walk it, and that order is not stable between runs. The grid was
+-- therefore shuffling the emergency services around for no reason a player
+-- could see. This lists the ones whose position is a deliberate decision;
+-- anything absent sorts after them by name, so a new role lands somewhere
+-- predictable without having to be named here first.
+local ROLE_DISPLAY_ORDER = {
+	PoliceFrontline = 1,
+	RoadsPolicingOfficer = 2,
+	ArmedResponseOfficer = 3,
+	Paramedic = 4,
+	Firefighter = 5,
+	DogSupportOfficer = 6,
+	Controller = 7,
+	HighwayPatrolOfficer = 8,
+	PrisonOfficer = 9,
+	PCSO = 10,
+}
+
 local ROLE_TILE_ASSET_IDS = {
 	Police = "rbxassetid://108952619314292",
 	Ambulance = "rbxassetid://82458182331259",
@@ -230,19 +251,54 @@ local function portraitPreview(
 	return viewport
 end
 
-local function tileGrid(
-	parent: Instance,
-	itemCount: number,
-	itemHeight: number,
-	columns: number
-): Frame
-	local safeWidth = if parent:IsA("GuiObject") then parent.AbsoluteSize.X else 0
-	local gap = if safeWidth > 0 and safeWidth < 720 then 10 else 14
-	local rows = math.max(1, math.ceil(itemCount / columns))
+local TILE_GAP = 14
+local TILE_GAP_COMPACT = 10
+-- A tile that has grown to fill a tall page still has to look like a poster
+-- rather than a column, so height is capped against the width it was given as
+-- well as in absolute terms.
+local TILE_MAX_ASPECT = 1.6
+local TILE_MAX_HEIGHT = 520
+local TILE_MIN_HEIGHT = 168
+
+type TileGridOptions = {
+	Name: string?,
+	Count: number,
+	-- Preferred column count. The grid balances it against how many tiles there
+	-- actually are, so this is a ceiling rather than the answer.
+	Columns: number,
+	-- Fixed tile height. Omitted, the grid divides the page up instead.
+	Height: number?,
+	MinHeight: number?,
+}
+
+-- Eleven roles over six columns is a row of six and a row of five, which reads
+-- as a row that ran out rather than as a grid. Rows are counted from the
+-- preferred width first and the columns are then spread back over them, so the
+-- last row is never short by more than one tile.
+local function balancedColumns(count: number, preferred: number): number
+	local columns = math.clamp(preferred, 1, math.max(1, count))
+	local rows = math.max(1, math.ceil(count / columns))
+	return math.max(1, math.ceil(count / rows))
+end
+
+-- Cells are measured in whole pixels taken from the grid, not in fractions of
+-- it.
+--
+-- The scale form - one column wide with the gutters subtracted back off - adds
+-- up to exactly the container in exact arithmetic and to fractionally more than
+-- it once each cell has been rounded to a whole pixel. UIGridLayout then fits
+-- one fewer cell per row than FillDirectionMaxCells allows, which is what left
+-- the last column's width as a black strip down the right of the Play page
+-- while the row above it ran edge to edge.
+--
+-- AbsoluteSize is zero for the frame the grid is built in, and changes again on
+-- every resize and whenever a scrollbar appears, so the split is recomputed
+-- from the signal rather than read once at build time.
+local function tileGrid(parent: Instance, options: TileGridOptions): Frame
 	local grid = Instance.new("Frame")
-	grid.Name = "PortraitGrid"
+	grid.Name = options.Name or "PortraitGrid"
 	grid.BackgroundTransparency = 1
-	grid.Size = UDim2.new(1, 0, 0, rows * itemHeight + (rows - 1) * gap)
+	grid.Size = UDim2.new(1, 0, 0, options.Height or TILE_MIN_HEIGHT)
 	grid.Parent = parent
 	if parent:IsA("ScrollingFrame") then
 		local nextOrder = (parent:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
@@ -253,10 +309,53 @@ local function tileGrid(
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
 	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.FillDirectionMaxCells = columns
-	layout.CellPadding = UDim2.fromOffset(gap, gap)
-	layout.CellSize = UDim2.new(1 / columns, -gap * (columns - 1) / columns, 0, itemHeight)
 	layout.Parent = grid
+
+	local minimumHeight = options.MinHeight or TILE_MIN_HEIGHT
+	local function apply()
+		-- Width from the grid, height from the page it sits in: the grid is as
+		-- wide as the cells may actually be, which is the parent minus whatever
+		-- a visible scrollbar has taken, while only the parent knows how much
+		-- page there is to divide up.
+		local width = grid.AbsoluteSize.X
+		local page = if parent:IsA("GuiObject") then parent.AbsoluteSize.Y else 0
+		if width <= 0 then
+			return
+		end
+		local gap = if width < 720 then TILE_GAP_COMPACT else TILE_GAP
+		local columns = balancedColumns(options.Count, options.Columns)
+		local rows = math.max(1, math.ceil(options.Count / columns))
+		local cellWidth = math.max(1, math.floor((width - gap * (columns - 1)) / columns))
+		-- Whole pixels that do not divide evenly go into the gutters, so the row
+		-- reaches both edges instead of ending in a sliver of empty page.
+		local slack = width - cellWidth * columns - gap * (columns - 1)
+		local gutter = gap + (if columns > 1 then math.floor(slack / (columns - 1)) else 0)
+		local cellHeight = options.Height
+		if not cellHeight then
+			local usable = page - gap * (rows - 1)
+			local ceiling = math.max(
+				minimumHeight,
+				math.min(TILE_MAX_HEIGHT, math.floor(cellWidth * TILE_MAX_ASPECT))
+			)
+			cellHeight = math.clamp(math.floor(usable / rows), minimumHeight, ceiling)
+		end
+		layout.FillDirectionMaxCells = columns
+		layout.CellPadding = UDim2.fromOffset(gutter, gap)
+		layout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+		grid.Size = UDim2.new(1, 0, 0, rows * cellHeight + (rows - 1) * gap)
+	end
+
+	apply()
+	local sizeChanged = grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(apply)
+	grid.Destroying:Connect(function()
+		sizeChanged:Disconnect()
+	end)
+	if parent:IsA("GuiObject") then
+		local pageChanged = parent:GetPropertyChangedSignal("AbsoluteSize"):Connect(apply)
+		grid.Destroying:Connect(function()
+			pageChanged:Disconnect()
+		end)
+	end
 	return grid
 end
 
@@ -440,6 +539,140 @@ local function card(parent: Instance, height: number): Frame
 	surfaceGradient.Rotation = 90
 	surfaceGradient.Parent = item
 	return item
+end
+
+-- Height of the name band across the bottom of a poster, and of the same band
+-- when it also carries a line of detail under the name.
+local POSTER_FOOTER_HEIGHT = 52
+local POSTER_FOOTER_HEIGHT_DETAILED = 66
+-- Between the poster and the action beneath it.
+local POSTER_ACTION_GAP = 8
+
+type PosterTileOptions = {
+	Id: string,
+	Image: string?,
+	-- Shown in place of artwork that does not exist. A department mark reads as
+	-- a card waiting for its picture; an empty rectangle reads as a card that
+	-- failed to load one.
+	Monogram: string?,
+	Title: string,
+	Detail: string?,
+	Accent: Color3,
+	ActionLabel: string,
+	ActionMuted: boolean?,
+	ActionHeight: number,
+}
+
+-- One tile for every poster grid in the menu.
+--
+-- Play and Civilian Jobs offer the same thing - somewhere to go and be - and
+-- were two independent piles of layout code that had already drifted into a
+-- wall of posters on one page and a list of rows on the other. Building both
+-- from here is what stops that happening again.
+--
+-- Everything inside the cell is sized against the cell rather than in pixels,
+-- so the grid can resize its cells on a viewport change without any of this
+-- being rebuilt.
+local function posterTile(parent: Instance, options: PosterTileOptions): (Frame, TextButton)
+	local cell = Instance.new("Frame")
+	cell.Name = "RoleCell_" .. options.Id
+	cell.BackgroundTransparency = 1
+	cell.BorderSizePixel = 0
+	cell.Parent = parent
+	-- The cell holds two things rather than one. The poster keeps the card
+	-- styling; the cell itself is only a column, so the action below sits
+	-- outside the artwork instead of on top of it.
+	local poster = card(cell, 0)
+	poster.Name = "RoleTile_" .. options.Id
+	poster.Size = UDim2.new(1, 0, 1, -(options.ActionHeight + POSTER_ACTION_GAP))
+	poster.ClipsDescendants = true
+	local artwork = Instance.new("ImageLabel")
+	artwork.Name = "RoleArtwork"
+	artwork.BackgroundColor3 = Color3.fromRGB(28, 38, 68)
+	artwork.BorderSizePixel = 0
+	artwork.Position = UDim2.fromScale(0, 0)
+	artwork.Size = UDim2.fromScale(1, 1)
+	artwork.Image = options.Image or ""
+	artwork.ImageColor3 = Color3.new(1, 1, 1)
+	artwork.ScaleType = Enum.ScaleType.Crop
+	artwork.ZIndex = 3
+	artwork.Parent = poster
+	-- Matches the card's own radius so the crop follows its corners.
+	corner(artwork, 9)
+	if not options.Image and options.Monogram then
+		local monogram = text(artwork, options.Monogram, 34, options.Accent, true)
+		monogram.AnchorPoint = Vector2.new(0.5, 0.5)
+		monogram.Position = UDim2.fromScale(0.5, 0.4)
+		monogram.Size = UDim2.fromScale(0.76, 0.34)
+		monogram.TextXAlignment = Enum.TextXAlignment.Center
+		monogram.TextScaled = true
+		monogram.TextTransparency = 0.42
+		monogram.ZIndex = 4
+		local monogramBounds = Instance.new("UITextSizeConstraint")
+		monogramBounds.MinTextSize = 14
+		monogramBounds.MaxTextSize = 42
+		monogramBounds.Parent = monogram
+	end
+	local artworkShade = Instance.new("Frame")
+	artworkShade.Name = "ArtworkShade"
+	artworkShade.BackgroundColor3 = Color3.fromRGB(10, 16, 34)
+	artworkShade.BackgroundTransparency = 0.36
+	artworkShade.BorderSizePixel = 0
+	artworkShade.Position = artwork.Position
+	artworkShade.Size = artwork.Size
+	artworkShade.ZIndex = 5
+	artworkShade.Parent = poster
+	corner(artworkShade, 9)
+	local shadeGradient = Instance.new("UIGradient")
+	shadeGradient.Color = ColorSequence.new(Color3.fromRGB(8, 14, 32))
+	shadeGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.95),
+		NumberSequenceKeypoint.new(0.58, 0.7),
+		NumberSequenceKeypoint.new(1, 0.08),
+	})
+	shadeGradient.Rotation = 90
+	shadeGradient.Parent = artworkShade
+	local footerHeight = if options.Detail
+		then POSTER_FOOTER_HEIGHT_DETAILED
+		else POSTER_FOOTER_HEIGHT
+	local footer = Instance.new("Frame")
+	footer.Name = "RoleFooter"
+	footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
+	footer.BackgroundTransparency = 0.12
+	footer.BorderSizePixel = 0
+	footer.Position = UDim2.new(0, 0, 1, -footerHeight)
+	footer.Size = UDim2.new(1, 0, 0, footerHeight)
+	footer.ZIndex = 10
+	footer.Parent = poster
+	corner(footer, 9)
+	-- The whole band, because nothing shares it now. "Frontline Policing" and
+	-- "Police Community Support Officer" were both losing their ends to a button
+	-- parked on the same line.
+	local title = text(footer, options.Title, 16, COLOURS.Text, true)
+	title.Position = if options.Detail then UDim2.fromOffset(14, 6) else UDim2.fromOffset(14, 0)
+	title.Size = if options.Detail then UDim2.new(1, -28, 0, 34) else UDim2.new(1, -28, 1, 0)
+	title.TextWrapped = true
+	title.TextTruncate = Enum.TextTruncate.AtEnd
+	title.ZIndex = 11
+	if options.Detail then
+		local detail = text(footer, options.Detail, 12, COLOURS.Muted)
+		detail.Position = UDim2.fromOffset(14, 38)
+		detail.Size = UDim2.new(1, -28, 0, 20)
+		detail.TextTruncate = Enum.TextTruncate.AtEnd
+		detail.ZIndex = 11
+	end
+	local action = button(cell, options.ActionLabel, false)
+	action.Name = "RoleAction_" .. options.Id
+	action.AnchorPoint = Vector2.new(0, 1)
+	action.Position = UDim2.fromScale(0, 1)
+	action.Size = UDim2.new(1, 0, 0, options.ActionHeight)
+	action.TextSize = 12
+	action.TextColor3 = if options.ActionMuted then COLOURS.Muted else options.Accent
+	local actionStroke = action:FindFirstChildOfClass("UIStroke")
+	if actionStroke then
+		actionStroke.Color = options.Accent
+	end
+	return cell, action
 end
 
 local function input(parent: Instance, placeholder: string): TextBox
@@ -1391,6 +1624,36 @@ function App.mount(context: any): ScreenGui
 		end
 		return 1
 	end
+	-- Play and Civilian Jobs are the same grid of the same tile, so they ask one
+	-- place how wide a poster should be. Two copies of this is how the two pages
+	-- came to look like different products in the first place.
+	--
+	-- This is a preference rather than the column count: the grid divides it back
+	-- over however many tiles the server actually offers, so a row is never left
+	-- short.
+	local function posterColumns(): number
+		local width = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
+		if shortLandscape() then
+			return 5
+		elseif width >= 1280 then
+			-- 1280 rather than something wider because that is where an ordinary
+			-- laptop sits, and a laptop is where most of this is played.
+			return 6
+		elseif width >= 1100 then
+			return 5
+		elseif width >= 900 then
+			return 4
+		end
+		return portraitCardColumns()
+	end
+	local function posterActionHeight(): number
+		return if shortLandscape() then 30 else 34
+	end
+	-- Below this a poster stops being readable, so a page too short to hold the
+	-- grid scrolls rather than shrinking its tiles any further.
+	local function posterMinimumHeight(): number
+		return if shortLandscape() then 176 else 208
+	end
 	-- Bumped by every render. A page that asks the server for anything yields,
 	-- and clearing the container before the yield does not help: two renders both
 	-- clear, both wait, and then both append, so the page appears twice. After a
@@ -1486,6 +1749,34 @@ function App.mount(context: any): ScreenGui
 			loadingDetail.Size = UDim2.new(1, -40, 0, 20)
 			return
 		end
+		if selectedTeamId ~= nil then
+			-- The way back out of a department, on the page the player is stuck
+			-- on. The Play tab clears the same filter, but a player who has
+			-- drilled into a service is looking at this page rather than at the
+			-- dock, and a filtered list with no visible way back reads as the
+			-- menu having broken rather than as a filter having been applied.
+			--
+			-- First in the page, so it is above the tiles that are being filtered
+			-- rather than below them.
+			local back = button(scroll, "←  ALL TEAMS", false)
+			back.Size = UDim2.new(
+				0,
+				if shortLandscape() then 148 else 180,
+				0,
+				if shortLandscape() then 32 else 38
+			)
+			back.TextSize = 12
+			back.TextColor3 = COLOURS.Accent
+			local backStroke = back:FindFirstChildOfClass("UIStroke")
+			if backStroke then
+				backStroke.Color = COLOURS.Accent
+			end
+			back.Activated:Connect(function()
+				selectedTeamId = nil
+				renderPlay()
+				scroll.CanvasPosition = Vector2.zero
+			end)
+		end
 		local availableRoles = {}
 		local civilianRoles = {}
 		local serviceRoles = {}
@@ -1508,138 +1799,84 @@ function App.mount(context: any): ScreenGui
 				end
 			end
 		end
+		-- Civilian stays at the front: it is where a player without a character
+		-- has to go, and burying it under the services is how somebody ends up
+		-- trying to join a team they have no identity for.
+		table.sort(serviceRoles, function(a, b)
+			local orderA = ROLE_DISPLAY_ORDER[a.Id] or math.huge
+			local orderB = ROLE_DISPLAY_ORDER[b.Id] or math.huge
+			if orderA == orderB then
+				return tostring(a.Name or a.Id) < tostring(b.Name or b.Id)
+			end
+			return orderA < orderB
+		end)
 		for _, role in civilianRoles do
 			table.insert(availableRoles, role)
 		end
 		for _, role in serviceRoles do
 			table.insert(availableRoles, role)
 		end
+		-- Says which of the two lists is on screen. Filtered down to one service
+		-- the page had gone on calling itself "Start playing" over three policing
+		-- roles, which is what made the filter look like a fault rather than a
+		-- filter.
 		sectionHeading(
-			if selectedTeamId == "Civilian" then "Civilian" else "Start playing",
+			if selectedTeamId == "Civilian"
+				then "Civilian"
+				elseif selectedTeamId ~= nil then "Selected service"
+				else "Start playing",
 			if selectedTeamId == "Civilian"
 				then "Your character and civilian identity."
+				elseif selectedTeamId ~= nil then "Use All teams for the full list."
 				else "Choose a service or step into civilian life."
 		)
 		if #availableRoles > 0 then
-			-- Match the old Portsmouth Play screen: portrait tiles with artwork,
-			-- a dark lower label band and a large, consistent visual rhythm.
-			local roleWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
-			-- Sized so the whole service list is on screen at once.
+			-- Portrait tiles with artwork, a dark lower label band and a full
+			-- width action beneath, as the old Portsmouth Play screen had.
+			local roleActionHeight = posterActionHeight()
+			-- Height comes from the page rather than from a table of pixel
+			-- heights per breakpoint.
 			--
-			-- Eleven roles over five columns is three rows, and three rows of the
-			-- old 340 poster is about a thousand pixels of a seven hundred pixel
-			-- page: two thirds of the departments were below the fold on a desktop
-			-- monitor. Six columns makes it two rows, and the shorter poster brings
-			-- those two rows inside the page.
-			-- Eleven roles, so six columns is the first count that makes two rows.
-			-- The threshold is 1280 rather than something wider because that is
-			-- where an ordinary laptop sits, and a laptop is where most of this is
-			-- played.
-			local roleColumns = if shortLandscape()
-				then 5
-				else if roleWidth >= 1280
-					then 6
-					else if roleWidth >= 1100
-						then 5
-						else if roleWidth >= 900 then 4 else portraitCardColumns()
-			-- Poster only. The action sits below it and is added on top of this.
+			-- Those heights were chosen against one window and were wrong in
+			-- every other one: on a desktop monitor the two rows finished about
+			-- three fifths of the way down and left a band of empty canvas
+			-- between the last poster and the navigation dock. Dividing up what
+			-- the scrolling frame actually measures puts the whole section on one
+			-- page at any size, and where the page is too short to hold it - a
+			-- phone, mostly - the minimum keeps the posters legible and the
+			-- section scrolls instead.
 			--
-			-- Two rows have to clear the page, so the six-column poster is squarer
-			-- than the others. That is the cost of showing every department at once,
-			-- and the artwork crops rather than distorts.
-			local rolePosterHeight = if shortLandscape()
-				then 168
-				else if roleWidth >= 1280 then 196 else if roleWidth >= 1100 then 236 else 270
-			local roleActionHeight = if shortLandscape() then 30 else 34
-			local roleTileHeight = rolePosterHeight + roleActionHeight + 8
-			local roleGrid = tileGrid(scroll, #availableRoles, roleTileHeight, roleColumns)
+			-- Drilled into a team the grid shares the page with the character
+			-- list, so there it takes a poster's worth of height and leaves the
+			-- rest to the characters.
+			local focusedTeam = selectedTeamId ~= nil
+			local roleGrid = tileGrid(scroll, {
+				Name = "RoleGrid",
+				Count = #availableRoles,
+				Columns = posterColumns(),
+				Height = if focusedTeam then (if shortLandscape() then 214 else 312) else nil,
+				MinHeight = posterMinimumHeight(),
+			})
 			-- Characters are the first decision on Play. Keep the role posters below
 			-- them so a new player never has to scroll past every department to create
 			-- their identity.
 			roleGrid.LayoutOrder = 50
 			for _, role in availableRoles do
 				local presentation = rolePresentation(role)
-				-- The cell holds two things now rather than one. The poster keeps
-				-- the card styling; the cell itself is only a column, so the action
-				-- below sits outside the artwork instead of on top of it.
-				local roleCell = Instance.new("Frame")
-				roleCell.Name = "RoleCell_" .. tostring(role.Id)
-				roleCell.BackgroundTransparency = 1
-				roleCell.BorderSizePixel = 0
-				roleCell.Parent = roleGrid
-				local roleTile = card(roleCell, rolePosterHeight)
-				roleTile.Name = "RoleTile_" .. tostring(role.Id)
-				roleTile.Size = UDim2.new(1, 0, 0, rolePosterHeight)
-				roleTile.ClipsDescendants = true
-				local artwork = Instance.new("ImageLabel")
-				artwork.Name = "RoleArtwork"
-				artwork.BackgroundColor3 = Color3.fromRGB(28, 38, 68)
-				artwork.BorderSizePixel = 0
-				artwork.Position = UDim2.fromScale(0, 0)
-				artwork.Size = UDim2.fromScale(1, 1)
-				artwork.Image = roleTileImageUri(role) or ""
-				artwork.ImageColor3 = Color3.new(1, 1, 1)
-				artwork.ScaleType = Enum.ScaleType.Crop
-				artwork.ZIndex = 3
-				artwork.Parent = roleTile
-				-- Matches the card's own radius so the crop follows its corners.
-				corner(artwork, 9)
-				local artworkShade = Instance.new("Frame")
-				artworkShade.Name = "ArtworkShade"
-				artworkShade.BackgroundColor3 = Color3.fromRGB(10, 16, 34)
-				artworkShade.BackgroundTransparency = 0.36
-				artworkShade.BorderSizePixel = 0
-				artworkShade.Position = artwork.Position
-				artworkShade.Size = artwork.Size
-				artworkShade.ZIndex = 4
-				artworkShade.Parent = roleTile
-				corner(artworkShade, 9)
-				local shadeGradient = Instance.new("UIGradient")
-				shadeGradient.Color = ColorSequence.new(Color3.fromRGB(8, 14, 32))
-				shadeGradient.Transparency = NumberSequence.new({
-					NumberSequenceKeypoint.new(0, 0.95),
-					NumberSequenceKeypoint.new(0.58, 0.7),
-					NumberSequenceKeypoint.new(1, 0.08),
-				})
-				shadeGradient.Rotation = 90
-				shadeGradient.Parent = artworkShade
-				local footer = Instance.new("Frame")
-				footer.Name = "RoleFooter"
-				footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
-				footer.BackgroundTransparency = 0.12
-				footer.BorderSizePixel = 0
-				footer.Position = UDim2.new(0, 0, 1, -52)
-				footer.Size = UDim2.new(1, 0, 0, 52)
-				footer.ZIndex = 10
-				footer.Parent = roleTile
-				corner(footer, 9)
 				local isCivilianRole = role.Id == "Civilian" or role.DepartmentId == "Civilian"
-				-- The whole band, because nothing shares it now. "Frontline
-				-- Policing" and "Police Community Support Officer" were both losing
-				-- their ends to a button parked on the same line.
-				local roleName = text(footer, role.Name, 16, COLOURS.Text, true)
-				roleName.Position = UDim2.fromOffset(14, 0)
-				roleName.Size = UDim2.new(1, -28, 1, 0)
-				roleName.TextWrapped = true
-				roleName.TextTruncate = Enum.TextTruncate.AtEnd
-				roleName.ZIndex = 11
-				local open = button(
-					roleCell,
-					if role.Locked
+				local _, open = posterTile(roleGrid, {
+					Id = tostring(role.Id),
+					Image = roleTileImageUri(role),
+					Monogram = presentation.Icon,
+					Title = tostring(role.Name),
+					Accent = presentation.Colour,
+					ActionLabel = if role.Locked
 						then "REQUIREMENTS"
 						elseif isCivilianRole then "CHARACTERS"
 						else "JOIN",
-					false
-				)
-				open.AnchorPoint = Vector2.new(0, 1)
-				open.Position = UDim2.fromScale(0, 1)
-				open.Size = UDim2.new(1, 0, 0, roleActionHeight)
-				open.TextSize = 12
-				open.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
-				local openStroke = open:FindFirstChildOfClass("UIStroke")
-				if openStroke then
-					openStroke.Color = presentation.Colour
-				end
+					ActionMuted = role.Locked,
+					ActionHeight = roleActionHeight,
+				})
 				open.Activated:Connect(function()
 					activateRole(role)
 				end)
@@ -1754,12 +1991,12 @@ function App.mount(context: any): ScreenGui
 			local canOfferExtraSlot = not canCreate
 				and extraSlotPass ~= nil
 				and extraSlotPass.Owned ~= true
-			local characterGrid = tileGrid(
-				scroll,
-				#menuData.Characters + (if canCreate or canOfferExtraSlot then 1 else 0),
-				tileHeight,
-				columns
-			)
+			local characterGrid = tileGrid(scroll, {
+				Name = "CharacterGrid",
+				Count = #menuData.Characters + (if canCreate or canOfferExtraSlot then 1 else 0),
+				Columns = columns,
+				Height = tileHeight,
+			})
 			for _, character in menuData.Characters do
 				local item = card(characterGrid, tileHeight)
 				item.ClipsDescendants = true
@@ -2238,7 +2475,7 @@ function App.mount(context: any): ScreenGui
 		clear(scroll)
 		pageTitle.Text = "Civilian jobs"
 		pageDescription.Text = "Pick up work that is available in the city today."
-		sectionHeading("Available work", "Only fully connected civilian jobs appear here.")
+		sectionHeading("Civilian jobs", "Only fully connected civilian jobs appear here.")
 		-- Civilian work that is built as a role rather than as a Job entry.
 		--
 		-- These join through the same duty flow as any service, so they are drawn
@@ -2251,43 +2488,6 @@ function App.mount(context: any): ScreenGui
 				table.insert(jobRoles, role)
 			end
 		end
-		for _, role in jobRoles do
-			local presentation = rolePresentation(role)
-			local item = card(scroll, if shortLandscape() then 110 else 132)
-			local mark = Instance.new("Frame")
-			mark.BackgroundColor3 = presentation.Colour
-			mark.BorderSizePixel = 0
-			mark.Size = UDim2.new(0, 4, 1, 0)
-			mark.Parent = item
-			local roleName = text(item, role.Name, 20, COLOURS.Text, true)
-			roleName.Position = UDim2.fromOffset(20, 18)
-			roleName.Size = UDim2.new(1, -180, 0, 30)
-			roleName.TextTruncate = Enum.TextTruncate.AtEnd
-			local roleDetail = text(
-				item,
-				if role.Locked
-					then role.LockMessage or "Requirements not met"
-					else presentation.Label,
-				13,
-				COLOURS.Muted
-			)
-			roleDetail.Position = UDim2.fromOffset(20, 50)
-			roleDetail.Size = UDim2.new(1, -180, 0, 24)
-			roleDetail.TextWrapped = true
-			local join = button(item, if role.Locked then "REQUIREMENTS" else "JOIN", false)
-			join.AnchorPoint = Vector2.new(1, 0.5)
-			join.Position = UDim2.new(1, -20, 0.5, 0)
-			join.Size = UDim2.fromOffset(120, 40)
-			join.TextSize = 13
-			join.TextColor3 = if role.Locked then COLOURS.Muted else presentation.Colour
-			local joinStroke = join:FindFirstChildOfClass("UIStroke")
-			if joinStroke then
-				joinStroke.Color = presentation.Colour
-			end
-			join.Activated:Connect(function()
-				activateRole(role)
-			end)
-		end
 		local jobs = {}
 		for _, job in pairs(menuData and menuData.Jobs or {}) do
 			-- A catalogue entry is a promise: it must have a working join path.
@@ -2296,7 +2496,16 @@ function App.mount(context: any): ScreenGui
 				table.insert(jobs, job)
 			end
 		end
-		if #jobs == 0 then
+		-- One grid of one tile, whichever of the two payloads the work arrived in.
+		--
+		-- A player weighing up driving a bus against driving a taxi is choosing
+		-- between two jobs. That one is configured as a role with a team and the
+		-- other as a catalogue entry is a fact about the configuration, and
+		-- letting it show had turned this page into a card followed by a list of
+		-- rows, sharing nothing with each other or with the Play grid the same
+		-- player had just come from.
+		local entryCount = #jobRoles + #jobs
+		if entryCount == 0 then
 			local empty = card(scroll, if shortLandscape() then 110 else 132)
 			local title = text(empty, "No work is available yet", 17, COLOURS.Text, true)
 			title.Position = UDim2.fromOffset(20, 18)
@@ -2312,106 +2521,58 @@ function App.mount(context: any): ScreenGui
 			copy.TextWrapped = true
 			return
 		end
-		local compact = narrowViewport()
-		local tileHeight = if compact then 94 else 116
-		local grid = Instance.new("Frame")
-		grid.Name = "CivilianJobRoster"
-		grid.BackgroundTransparency = 1
-		grid.Size = UDim2.new(1, 0, 0, 1)
-		grid.AutomaticSize = Enum.AutomaticSize.Y
-		grid.Parent = scroll
-		local list = Instance.new("UIListLayout")
-		list.SortOrder = Enum.SortOrder.LayoutOrder
-		list.Padding = UDim.new(0, 4)
-		list.Parent = grid
-		for _, job in ipairs(jobs) do
-			local item = Instance.new("Frame")
-			item.Name = "Job_" .. tostring(job.Id)
-			item.Size = UDim2.new(1, 0, 0, tileHeight)
-			item.BackgroundColor3 = COLOURS.Surface
-			item.BackgroundTransparency = 0.06
-			item.BorderSizePixel = 0
-			item.ClipsDescendants = true
-			item.Parent = grid
-			item.ClipsDescendants = true
-			local rail = Instance.new("Frame")
-			rail.BackgroundColor3 = COLOURS.Success
-			rail.BorderSizePixel = 0
-			rail.Size = UDim2.new(0, 4, 1, 0)
-			rail.Parent = item
-			local mark = Instance.new("Frame")
-			mark.BackgroundColor3 = COLOURS.Success
-			mark.BackgroundTransparency = 0.82
-			mark.BorderSizePixel = 0
-			mark.Position = UDim2.fromOffset(18, if compact then 23 else 30)
-			mark.Size = UDim2.fromOffset(if compact then 48 else 56, if compact then 48 else 56)
-			mark.Parent = item
-			corner(mark, 10)
-			stroke(mark, COLOURS.Success, 0.32)
-			local markText = text(mark, "TAXI", if compact then 9 else 10, COLOURS.Success, true)
-			markText.Size = UDim2.fromScale(1, 1)
-			markText.TextXAlignment = Enum.TextXAlignment.Center
-			markText.TextYAlignment = Enum.TextYAlignment.Center
-			local textLeft = if compact then 70 else 78
-			local actionReserve = if compact then 144 else 160
-			local textInset = -textLeft - actionReserve
-			local title =
-				text(item, tostring(job.Name), if compact then 17 else 20, COLOURS.Text, true)
-			title.Position = UDim2.fromOffset(textLeft, if compact then 17 else 23)
-			title.Size = UDim2.new(1, textInset, 0, 28)
-			title.TextTruncate = Enum.TextTruncate.None
-			local access = tostring(job.Class) == "Public" and "PUBLIC EMPLOYMENT"
-				or "APPLICATION ROLE"
-			local detail = text(
-				item,
-				access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
-				13,
-				COLOURS.Muted
-			)
-			detail.Position = UDim2.fromOffset(textLeft, if compact then 46 else 58)
-			detail.Size = UDim2.new(1, textInset, 0, 20)
-			detail.TextColor3 = if access == "PUBLIC EMPLOYMENT"
-				then COLOURS.Success
-				else COLOURS.Warning
+		local actionHeight = posterActionHeight()
+		local jobGrid = tileGrid(scroll, {
+			Name = "CivilianJobGrid",
+			Count = entryCount,
+			Columns = posterColumns(),
+			MinHeight = posterMinimumHeight(),
+		})
+		for _, role in jobRoles do
+			local presentation = rolePresentation(role)
+			local _, join = posterTile(jobGrid, {
+				Id = tostring(role.Id),
+				Image = roleTileImageUri(role),
+				Monogram = presentation.Icon,
+				Title = tostring(role.Name),
+				Detail = if role.Locked
+					then tostring(role.LockMessage or "Requirements not met")
+					else presentation.Label,
+				Accent = presentation.Colour,
+				ActionLabel = if role.Locked then "REQUIREMENTS" else "JOIN",
+				ActionMuted = role.Locked,
+				ActionHeight = actionHeight,
+			})
+			join.Activated:Connect(function()
+				activateRole(role)
+			end)
+		end
+		for _, job in jobs do
 			local isTaxi = tostring(job.Id) == "TaxiDriver"
-			local jobStatus = text(
-				item,
-				if isTaxi
-					then "Live service · accept bookings through your phone"
-					else "Job system not installed",
-				13,
-				if isTaxi then COLOURS.Success else COLOURS.Muted
-			)
-			jobStatus.Position = UDim2.fromOffset(textLeft, if compact then 67 else 82)
-			jobStatus.Size = UDim2.new(1, textInset, 0, 20)
+			local access = if tostring(job.Class) == "Public"
+				then "PUBLIC EMPLOYMENT"
+				else "APPLICATION ROLE"
 			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
 				and menuData.ActiveCharacterId ~= ""
-			local initialActionText = if hasActiveCharacter
-				then "START SHIFT"
-				else "ENTER CITY & START SHIFT"
-			local action = button(item, initialActionText, true)
-			action.AnchorPoint = Vector2.new(1, 0.5)
-			action.Position = UDim2.new(1, -14, 0.5, 0)
-			action.Size = UDim2.fromOffset(actionReserve - 14, if compact then 28 else 32)
-			action.TextSize = if compact then 12 else 14
-			action.TextColor3 = COLOURS.Text
+			-- What the button says when it is not mid-flight. Every path that
+			-- gives up puts this back, so a refused shift never leaves the tile
+			-- offering a different action from the one it opened with.
+			local idleActionText = if hasActiveCharacter then "START SHIFT" else "ENTER CITY"
+			local _, action = posterTile(jobGrid, {
+				Id = tostring(job.Id),
+				Image = roleTileImageUri(job),
+				-- Catalogue work has no uploaded artwork, so the tile carries the
+				-- opening of the job's own name where a department mark would sit.
+				Monogram = string.upper(string.sub(tostring(job.Name), 1, 4)),
+				Title = tostring(job.Name),
+				Detail = access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
+				Accent = COLOURS.Success,
+				ActionLabel = idleActionText,
+				ActionMuted = not isTaxi,
+				ActionHeight = actionHeight,
+			})
 			action.Selectable = isTaxi
-			action.BackgroundTransparency = 1
-			action.TextColor3 = COLOURS.Success
-			local actionStroke = action:FindFirstChildOfClass("UIStroke")
-			if actionStroke then
-				actionStroke.Transparency = 1
-			end
-			action.Text = if hasActiveCharacter then "START SHIFT  →" else "ENTER CITY  →"
-			local divider = Instance.new("Frame")
-			divider.BackgroundColor3 = COLOURS.Border
-			divider.BackgroundTransparency = 0.68
-			divider.BorderSizePixel = 0
-			divider.Position = UDim2.new(0, 18, 1, -1)
-			divider.Size = UDim2.new(1, -36, 0, 1)
-			divider.Parent = item
 			if isTaxi then
-				action.BackgroundColor3 = COLOURS.Success
 				action.Activated:Connect(function()
 					action.Active = false
 					action.Text = if hasActiveCharacter then "STARTING…" else "ENTERING CITY…"
@@ -2435,7 +2596,7 @@ function App.mount(context: any): ScreenGui
 								audioFeedback:Error()
 							end
 							action.Active = true
-							action.Text = "ENTER CITY & START SHIFT"
+							action.Text = idleActionText
 							return
 						end
 						local selected = context.Controllers.CharacterController:Select(characterId)
@@ -2476,7 +2637,7 @@ function App.mount(context: any): ScreenGui
 								audioFeedback:Error()
 							end
 							action.Active = true
-							action.Text = "ENTER CITY & START SHIFT"
+							action.Text = idleActionText
 							return
 						end
 					end
@@ -2487,7 +2648,7 @@ function App.mount(context: any): ScreenGui
 						dismissToWorld()
 					else
 						action.Active = true
-						action.Text = initialActionText
+						action.Text = idleActionText
 						if audioFeedback then
 							audioFeedback:Error()
 						end
@@ -3177,9 +3338,11 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local playNav = addNav("Play", renderPlay)
-	-- Jobs sits beside Play because it is somewhere to go and be, not something
-	-- to buy. Without it the taxi shift has no entry point anywhere in the client.
-	addNav("Jobs", renderJobs)
+	-- Civilian Jobs sits beside Play because it is somewhere to go and be, not
+	-- something to buy. Without it the taxi shift has no entry point anywhere in
+	-- the client. It is named for who the work is for: next to five emergency
+	-- services, "Jobs" read as the place a player would look for a police job.
+	addNav("Civilian Jobs", renderJobs)
 	addNav("Store", renderStore)
 	addNav("Servers", renderCommunity)
 	addNav("Help", renderTutorials)
@@ -3202,6 +3365,11 @@ function App.mount(context: any): ScreenGui
 
 	local bottomNavItems: { [string]: TextButton } = {}
 	local bottomNavRenders: { [string]: () -> () } = {}
+	-- Run when the tab is pressed, and deliberately not stored as part of the
+	-- render: currentRender is replayed on every server refresh and on every
+	-- breakpoint change, so anything that resets what the player is looking at
+	-- has to hang off the press instead of off the page.
+	local bottomNavEnters: { [string]: () -> () } = {}
 	local bottomNavOrder = 0
 	-- Play is the single role-selection route. The dock only exposes the four
 	-- destinations players need during a session; departments are filtered and
@@ -3219,10 +3387,19 @@ function App.mount(context: any): ScreenGui
 		end
 		item.BackgroundColor3 = Color3.fromRGB(82, 53, 142)
 		item.TextColor3 = COLOURS.Text
+		local enter = bottomNavEnters[key]
+		if enter then
+			enter()
+		end
 		currentRender = render
 		render()
 	end
-	local function addBottomNav(labelValue: string, render: () -> (), key: string)
+	local function addBottomNav(
+		labelValue: string,
+		render: () -> (),
+		key: string,
+		onEnter: (() -> ())?
+	)
 		bottomNavOrder += 1
 		local item = Instance.new("TextButton")
 		item.Name = key .. "Tab"
@@ -3233,6 +3410,12 @@ function App.mount(context: any): ScreenGui
 		item.Text = labelValue
 		item.TextColor3 = COLOURS.Muted
 		item.TextSize = 13
+		-- Every tab gets an equal fifth of the dock, and the words are not of
+		-- equal length: "Civilian Jobs" wants about ninety pixels and its share on
+		-- a phone is nearer sixty. The dock is two lines tall, so the label uses
+		-- the second one rather than running out over the tab beside it.
+		item.TextWrapped = true
+		item.TextTruncate = Enum.TextTruncate.AtEnd
 		item.LayoutOrder = bottomNavOrder
 		item.Size = UDim2.new(1 / bottomNavCount, -10, 1, 0)
 		item.Selectable = true
@@ -3243,6 +3426,9 @@ function App.mount(context: any): ScreenGui
 		pressable(item)
 		bottomNavItems[key] = item
 		bottomNavRenders[key] = render
+		if onEnter then
+			bottomNavEnters[key] = onEnter
+		end
 		item.Activated:Connect(function()
 			if selectBottomNav then
 				selectBottomNav(key)
@@ -3252,8 +3438,21 @@ function App.mount(context: any): ScreenGui
 	-- The same route names and callbacks are used by the compact dock and the
 	-- desktop fallback sidebar, so changing page selection never leaves one of
 	-- them highlighting a different destination.
-	addBottomNav("Play", renderPlay, "Play")
-	addBottomNav("Jobs", renderJobs, "Jobs")
+	-- Pressing Play always lands on the full team list.
+	--
+	-- Joining a department leaves the page filtered to that department's own
+	-- roles, and nothing was clearing that: a player who pressed JOIN on the
+	-- Roads Policing Unit and then cancelled the station picker was left on a
+	-- Play page offering the three policing roles and no route back to Civilian
+	-- or to any other service. Rejoining the game was the only way out. The tab
+	-- is the escape hatch a player reaches for first, so it clears the filter
+	-- before rendering; the back control on the page itself is the other half.
+	addBottomNav("Play", renderPlay, "Play", function()
+		selectedTeamId = nil
+	end)
+	-- The label changes; the key does not. It is what the dock highlights by and
+	-- what the desktop fallback matches on.
+	addBottomNav("Civilian Jobs", renderJobs, "Jobs")
 	addBottomNav("Store", renderStore, "Store")
 	addBottomNav("Servers", renderCommunity, "Servers")
 	addBottomNav("Help", renderTutorials, "Help")
