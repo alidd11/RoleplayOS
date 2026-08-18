@@ -25,6 +25,18 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 local FULL_PANEL = Vector2.new(238, 402)
 local COMPACT_PANEL = Vector2.new(420, 188)
 
+-- The cap your panel already used, kept. Only the indicator above it is new.
+local CAP = Color3.fromRGB(220, 220, 154)
+local LEGEND = Color3.fromRGB(15, 17, 18)
+-- Barely there when off. A dark bar against the pale cap looked like damage to
+-- the button rather than like a lamp that is not lit, and nine of them at once
+-- made the panel look broken on a vehicle sitting at rest.
+local LAMP_DARK = Color3.fromRGB(198, 198, 138)
+local LAMP_ON = Color3.fromRGB(255, 214, 64)
+local LAMP_BLUE = Color3.fromRGB(64, 148, 255)
+local LAMP_RED = Color3.fromRGB(240, 78, 68)
+local LAMP_GREEN = Color3.fromRGB(104, 216, 146)
+
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
@@ -32,17 +44,12 @@ local ACTION_SIREN = "RoleplayOSEmergencySiren"
 -- brighter rather than a different colour, so a panel with one mode running
 -- still reads as one panel.
 local RESPONSE_BASE = Color3.fromRGB(42, 83, 184)
-local RESPONSE_LIT = Color3.fromRGB(86, 140, 255)
 local SCENE_BASE = Color3.fromRGB(174, 169, 93)
-local SCENE_LIT = Color3.fromRGB(240, 226, 120)
 local RESET_BASE = Color3.fromRGB(77, 139, 91)
-local RESET_LIT = Color3.fromRGB(118, 200, 138)
 local SIREN_BASE = Color3.fromRGB(204, 61, 51)
-local SIREN_LIT = Color3.fromRGB(255, 108, 96)
 -- Deeper than the tone button, because it is a different kind of control: one is
 -- a selection that stays, the other only sounds while it is held.
 local HORN_BASE = Color3.fromRGB(150, 46, 40)
-local HORN_LIT = Color3.fromRGB(238, 96, 84)
 
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
@@ -88,6 +95,7 @@ function EmergencyLightsController:Init(context: any)
 	-- own.
 	self.pending = setmetatable({}, { __mode = "k" })
 	self.buttons = {}
+	self.lamps = {}
 	self.secondary = {}
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 end
@@ -417,6 +425,18 @@ function EmergencyLightsController:_step()
 	end
 end
 
+-- One key on the panel: your cap, with an indicator above the legend.
+--
+-- The cap keeps the colour it always had. What is new is the lamp strip along
+-- the top of it, which is the only thing that changes when the function comes
+-- on. Swapping the whole cap to a brighter shade said "something happened" but
+-- not "this is on", and on a panel where nine controls can be on at once that is
+-- the difference between reading the panel and counting it.
+--
+-- The legend is set in medium rather than bold. Bold at twelve pixels, then
+-- carried through the panel's UIScale on a phone, is the smearing that made
+-- these hard to read: the weight closes the counters before the size does.
+-- Medium at thirteen survives the same scale with the letterforms still open.
 function EmergencyLightsController:_button(
 	parent: Instance,
 	id: string,
@@ -426,19 +446,46 @@ function EmergencyLightsController:_button(
 	local item = Instance.new("TextButton")
 	item.Name = id
 	item.AutoButtonColor = false
-	item.BackgroundColor3 = colour or Color3.fromRGB(220, 220, 154)
+	item.BackgroundColor3 = colour or CAP
 	item.BorderSizePixel = 0
-	item.Font = Enum.Font.GothamBold
+	item.Font = Enum.Font.GothamMedium
 	item.Text = text
-	item.TextColor3 = Color3.fromRGB(15, 17, 18)
-	item.TextSize = 12
+	item.TextColor3 = LEGEND
+	item.TextSize = 13
 	item.TextWrapped = true
+	item.LineHeight = 1.05
 	item.Parent = parent
 	corner(item, 9)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(63, 67, 66)
 	stroke.Thickness = 2
 	stroke.Parent = item
+	-- The legend sits below the lamp rather than under it. Without this the
+	-- indicator lies across the first line of any two-line label.
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 3)
+	padding.PaddingRight = UDim.new(0, 3)
+	padding.Parent = item
+
+	local lamp = Instance.new("Frame")
+	lamp.Name = "Lamp"
+	lamp.AnchorPoint = Vector2.new(0.5, 0)
+	lamp.Position = UDim2.new(0.5, 0, 0, 5)
+	-- A third of the cap, not all of it. Full width read as a progress bar across
+	-- the top of the button rather than as an indicator on it.
+	lamp.Size = UDim2.new(0.34, 0, 0, 4)
+	lamp.BackgroundColor3 = LAMP_DARK
+	lamp.BorderSizePixel = 0
+	lamp.ZIndex = 2
+	lamp.Parent = item
+	corner(lamp, 2)
+	local glow = Instance.new("UIStroke")
+	glow.Color = LAMP_ON
+	glow.Thickness = 3
+	glow.Transparency = 1
+	glow.Parent = lamp
+
 	local scale = Instance.new("UIScale")
 	scale.Parent = item
 	table.insert(
@@ -459,7 +506,21 @@ function EmergencyLightsController:_button(
 		end)
 	)
 	self.buttons[id] = item
+	self.lamps[id] = { Frame = lamp, Glow = glow }
 	return item
+end
+
+-- Lights or darkens a key's indicator. The halo is what reads as a lamp rather
+-- than a coloured strip, and it is only paid for while something is lit.
+function EmergencyLightsController:_lamp(id: string, on: boolean, colour: Color3?)
+	local record = self.lamps[id]
+	if not record then
+		return
+	end
+	local shade = colour or LAMP_ON
+	record.Frame.BackgroundColor3 = if on then shade else LAMP_DARK
+	record.Glow.Color = shade
+	record.Glow.Transparency = if on then 0.55 else 1
 end
 
 function EmergencyLightsController:_mount()
@@ -526,7 +587,7 @@ function EmergencyLightsController:_mount()
 		end)
 	end
 
-	local sirens = self:_button(panel, "Sirens", "SIRENS", Color3.fromRGB(204, 61, 51))
+	local sirens = self:_button(panel, "Sirens", "SIRENS", SIREN_BASE)
 	sirens.Position = UDim2.fromOffset(12, 288)
 	sirens.Size = UDim2.fromOffset(102, 47)
 	self.secondary[#self.secondary + 1] = sirens
@@ -547,16 +608,16 @@ function EmergencyLightsController:_mount()
 		self.connections,
 		horn.MouseButton1Down:Connect(function()
 			self:_setHorn(true)
-			horn.BackgroundColor3 = HORN_LIT
+			self:_lamp("Airhorn", true, LAMP_RED)
 		end)
 	)
 	local function hornUp()
 		self:_setHorn(false)
-		horn.BackgroundColor3 = HORN_BASE
+		self:_lamp("Airhorn", false)
 	end
 	table.insert(self.connections, horn.MouseButton1Up:Connect(hornUp))
 	table.insert(self.connections, horn.MouseLeave:Connect(hornUp))
-	local response = self:_button(panel, "Response", "999", Color3.fromRGB(42, 83, 184))
+	local response = self:_button(panel, "Response", "999", RESPONSE_BASE)
 	response.Position = UDim2.fromOffset(124, 288)
 	response.Size = UDim2.fromOffset(102, 47)
 	self.secondary[#self.secondary + 1] = response
@@ -572,7 +633,7 @@ function EmergencyLightsController:_mount()
 		self:_setTone("Wail")
 		self:_paint()
 	end)
-	local scene = self:_button(panel, "AtScene", "AT SCENE", Color3.fromRGB(174, 169, 93))
+	local scene = self:_button(panel, "AtScene", "AT SCENE", SCENE_BASE)
 	scene.Position = UDim2.fromOffset(12, 345)
 	scene.Size = UDim2.fromOffset(102, 45)
 	self.secondary[#self.secondary + 1] = scene
@@ -580,7 +641,7 @@ function EmergencyLightsController:_mount()
 		self:_setTone("")
 		self:_request({ Stage = 1 })
 	end)
-	local reset = self:_button(panel, "Reset", "RESET", Color3.fromRGB(77, 139, 91))
+	local reset = self:_button(panel, "Reset", "RESET", RESET_BASE)
 	reset.Position = UDim2.fromOffset(124, 345)
 	reset.Size = UDim2.fromOffset(102, 45)
 	self.secondary[#self.secondary + 1] = reset
@@ -709,6 +770,10 @@ end
 function EmergencyLightsController:_paint()
 	local state = self.state
 	self:_applyAvailability()
+
+	-- A circuit's lamp is the colour that circuit actually lights, so the panel
+	-- and the street agree: rear reds read red on the panel, scene and alley
+	-- lamps read white, the blues read blue.
 	for _, control in CIRCUIT_CONTROLS do
 		local active = if control.Id == "Director"
 			then (self.directorStep or 0) > 0
@@ -716,38 +781,26 @@ function EmergencyLightsController:_paint()
 			elseif control.Id == "LowPower" then state.LowPower == true
 			elseif control.Id == "RunLock" then state.RunLock == true
 			else state.Circuits and state.Circuits[control.Id] == true
-		local item = self.buttons[control.Id]
-		if item then
-			item.BackgroundColor3 = if active
-				then Color3.fromRGB(255, 220, 78)
-				else Color3.fromRGB(220, 220, 154)
-		end
+		local fitted = self.settings.CircuitColours[control.Id]
+		local shade = if fitted
+			then fitted
+			elseif control.Id == "LowPower" or control.Id == "RunLock" then LAMP_ON
+			else LAMP_BLUE
+		self:_lamp(control.Id, active, shade)
 	end
-	-- The mode buttons say which mode you are in.
-	--
-	-- 999, AT SCENE and RESET all looked the same whichever was in force, so the
-	-- only way to tell a car running a full response from one sitting at a scene
-	-- was to look out of the window. They are the three states of one switch, so
-	-- they are painted like one: the one in force is lit and the others are not.
-	local stage = state.Stage or 0
-	local function mode(id: string, on: boolean, base: Color3, lit: Color3)
-		local item = self.buttons[id]
-		if item then
-			item.BackgroundColor3 = if on then lit else base
-		end
-	end
-	mode("Response", stage >= self.settings.Stages, RESPONSE_BASE, RESPONSE_LIT)
-	mode("AtScene", stage == 1, SCENE_BASE, SCENE_LIT)
-	mode("Reset", stage == 0, RESET_BASE, RESET_LIT)
 
+	-- The three modes are one switch, so exactly one of them is lit.
+	local stage = state.Stage or 0
+	self:_lamp("Response", stage >= self.settings.Stages, LAMP_BLUE)
+	self:_lamp("AtScene", stage == 1, LAMP_ON)
+	self:_lamp("Reset", stage == 0, LAMP_GREEN)
+
+	-- Read from the vehicle rather than from the record, because the driver can
+	-- change tone with the vehicle's own keys without this panel being touched.
+	local tone = self:_playingTone()
 	if self.buttons.Sirens then
-		local tone = state.Siren
-		local sounding = type(tone) == "string" and tone ~= ""
-		-- Named for what pressing it does next, and for what it is doing now. A
-		-- button that only ever reads SIRENS gives no way to tell a silent car
-		-- from one whose tone the driver changed from the keyboard.
-		self.buttons.Sirens.Text = if sounding then string.upper(tone) else "SIREN OFF"
-		self.buttons.Sirens.BackgroundColor3 = if sounding then SIREN_LIT else SIREN_BASE
+		self.buttons.Sirens.Text = if tone ~= "" then string.upper(tone) else "SIRENS"
+		self:_lamp("Sirens", tone ~= "", LAMP_RED)
 	end
 end
 

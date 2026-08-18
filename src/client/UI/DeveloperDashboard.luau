@@ -1634,6 +1634,11 @@ function App.mount(context: any): ScreenGui
 	end
 
 	local renderCommunity: () -> ()
+	-- Assigned below and never called: there is no addNav entry for it, unlike
+	-- every other page here. It draws an "Emergency services" list of departments
+	-- to join, which is what the Play page now does, so it is superseded rather
+	-- than broken. Left in place rather than deleted mid-way through unrelated
+	-- work; removing it is a change worth making on its own.
 	local renderCareers: () -> ()
 	local renderJobs: () -> ()
 	local renderStore: () -> ()
