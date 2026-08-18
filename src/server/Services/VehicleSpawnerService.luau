@@ -130,20 +130,33 @@ local function vehicleOf(seat: BasePart): Instance
 	return root
 end
 
--- Puts back accessory welds a vehicle destroyed when it posed the rider.
+-- Brings accessories back onto the rider when a vehicle kept hold of them.
 --
--- The counterpart to detachRider below, for the other end of the ride. Bike kits
--- pose their rider by welding limbs to the machine, and several of them clear
--- the character's joints first so their own welds are the only ones left.
--- BreakJoints does not distinguish: it takes the accessory welds with it, so
--- hats, hair and anything else on the head come off the moment the rider mounts
--- and never come back, because the kit only rebuilds the joints it cares about.
+-- Written first against the wrong theory. The guess was that kits clear the
+-- character's joints and take the accessory welds with them, so this rebuilt any
+-- weld that had gone missing. Reading the Sur-Ron's own FEAnims script showed
+-- that is not what happens: it never destroys the weld, it repoints it.
 --
--- Roblox attaches an accessory by matching an Attachment on the handle to one of
--- the same name on a body part, so rebuilding is the same match. Anything still
--- welded is left alone, which means this does nothing at all on a vehicle that
--- behaved.
-local function reattachAccessories(character: Model): number
+--     -- mounting
+--     Accessory.Part1 = bike.Misc.Anims.R6.Head.Parts.NewHead
+--     -- dismounting
+--     Accessory.Part1 = C.Head
+--
+-- The bike hides the rider and shows its own dummy rig, and hangs the rider's
+-- hats on the dummy's head so they still appear. The weld survives; only its far
+-- end moves. So a hunt for missing welds finds none and does nothing.
+--
+-- What does go wrong is the return trip. If the restore branch does not run -
+-- the character respawning, the bike being removed underneath them, the player
+-- leaving the seat by any path the kit did not anticipate - the accessory is
+-- still welded to a dummy head on a bike the rider has walked away from, which
+-- is the hat left hovering over the machine.
+--
+-- So this looks for accessories anchored into the vehicle rather than for
+-- accessories anchored into nothing, and puts them back on the body part whose
+-- attachment matches. Rebuilding a genuinely missing weld is kept as well, since
+-- it costs nothing and another kit may yet do what the first theory described.
+local function reattachAccessories(character: Model, vehicle: Instance?): number
 	local attachments: { [string]: Attachment } = {}
 	for _, descendant in character:GetDescendants() do
 		if descendant:IsA("Attachment") and descendant.Parent:IsA("BasePart") then
@@ -164,15 +177,29 @@ local function reattachAccessories(character: Model): number
 		if not handle or not handle:IsA("BasePart") then
 			continue
 		end
+		-- Held by the vehicle, or held by nothing. Either needs putting back;
+		-- anything still joined to the rider is already correct and left alone.
+		local stray: Instance? = nil
 		local attached = false
 		for _, joint in handle:GetChildren() do
 			if joint:IsA("Weld") or joint:IsA("WeldConstraint") or joint:IsA("Motor6D") then
 				attached = true
+				local far = (joint :: any).Part0
+				if far == handle then
+					far = (joint :: any).Part1
+				end
+				if vehicle ~= nil and far ~= nil and far:IsDescendantOf(vehicle) then
+					stray = joint
+					attached = false
+				end
 				break
 			end
 		end
 		if attached then
 			continue
+		end
+		if stray then
+			stray:Destroy()
 		end
 		local handleAttachment: Attachment? = nil
 		for _, child in handle:GetChildren() do
@@ -884,23 +911,6 @@ function VehicleSpawnerService:_watchSeat(player: Player)
 			local seat = humanoid.SeatPart
 			if seat then
 				lastVehicle = vehicleOf(seat)
-				-- Given a moment for the vehicle to finish posing the rider, then
-				-- checked. A kit that cleared the character's joints to make room for
-				-- its own has taken the accessory welds with them.
-				task.delay(0.35, function()
-					local body = player.Character
-					if not body or humanoid.SeatPart ~= seat then
-						return
-					end
-					local restored = reattachAccessories(body)
-					if restored > 0 then
-						self.context.Logger:Info("Accessories reattached after mounting", {
-							UserId = player.UserId,
-							Vehicle = if lastVehicle then lastVehicle.Name else "unknown",
-							AccessoriesRestored = restored,
-						})
-					end
-				end)
 				return
 			end
 			-- Just got off. Deferred by a frame so Roblox has finished removing
@@ -915,12 +925,20 @@ function VehicleSpawnerService:_watchSeat(player: Player)
 				if not body or not vehicle.Parent then
 					return
 				end
+				-- Accessories first, then the rest of the joints.
+				--
+				-- Order matters: detachRider destroys every joint spanning the rider
+				-- and the vehicle, and an accessory the kit left welded to its dummy
+				-- head is one of those. Cutting first would leave the hat attached to
+				-- nothing, which is a different way of losing it.
+				local restored = reattachAccessories(body, vehicle)
 				local removed = detachRider(body, vehicle)
-				if removed > 0 then
-					self.context.Logger:Info("Rider detached from a vehicle that kept hold", {
+				if removed > 0 or restored > 0 then
+					self.context.Logger:Info("Rider released from a vehicle that kept hold", {
 						UserId = player.UserId,
 						Vehicle = vehicle.Name,
 						JointsRemoved = removed,
+						AccessoriesRestored = restored,
 					})
 				end
 			end)
