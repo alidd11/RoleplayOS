@@ -20,6 +20,32 @@ function VehiclePlateService:Init(context: any)
 	for _, name in self.settings.PlateTextNames or {} do
 		self.textNames[compact(name)] = true
 	end
+	self.generatorNames = {}
+	for _, name in self.settings.PlateGeneratorNames or {} do
+		self.generatorNames[compact(name)] = true
+	end
+end
+
+-- Takes out a vehicle's own plate issuer before writing the real registration.
+--
+-- Imported vehicles ship a script that invents a plate, writes it to the front
+-- and rear, and deletes itself. It runs when the model reaches Workspace, which
+-- is after the framework has already written the number it allocated, so it
+-- always won: the plate on the car matched nothing in the MDT, nothing on ANPR
+-- and nothing on the owner's record, and there was no script left afterwards to
+-- explain why.
+--
+-- The plate itself is the vehicle's own - its model, its surface, its font. Only
+-- the number is ours.
+function VehiclePlateService:_removeGenerators(vehicle: Model): number
+	local removed = 0
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA("BaseScript") and self.generatorNames[compact(descendant.Name)] then
+			descendant:Destroy()
+			removed += 1
+		end
+	end
+	return removed
 end
 
 function VehiclePlateService:Start() end
@@ -108,6 +134,7 @@ end
 
 function VehiclePlateService:Apply(vehicle: Model, registration: string): number
 	vehicle:SetAttribute("RoleplayOSRegistration", registration)
+	self:_removeGenerators(vehicle)
 	if self:_usesNativePlateSystem(vehicle) then
 		local taxiPerm = vehicle:FindFirstChild("TAXIPERM", true)
 		local nativePlate = taxiPerm and taxiPerm:FindFirstChild("Plate", true)

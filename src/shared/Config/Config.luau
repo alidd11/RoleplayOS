@@ -701,8 +701,35 @@ local Config = {
 	VehicleIdentity = {
 		MinimumRegistrationLength = 2,
 		MaximumRegistrationLength = 8,
-		PlatePartNames = { "RegistrationPlate", "NumberPlate", "LicencePlate", "LicensePlate" },
-		PlateTextNames = { "PlateText", "RegistrationText", "Registration", "NumberPlateText" },
+		-- What a plate is called inside an imported vehicle.
+		--
+		-- None of these matched anything the fleet actually uses. Every vehicle in
+		-- this game keeps its plate in a model called Plate holding a TextBox
+		-- called Identifier, so the registration the server allocated was never
+		-- written to a car and the plate on screen was whatever the vehicle's own
+		-- script had randomised. Front and rear are separate models with the same
+		-- shape, so naming them here covers both.
+		PlatePartNames = {
+			"RegistrationPlate",
+			"NumberPlate",
+			"LicencePlate",
+			"LicensePlate",
+			"Plate",
+		},
+		PlateTextNames = {
+			"PlateText",
+			"RegistrationText",
+			"Registration",
+			"NumberPlateText",
+			"Identifier",
+		},
+		-- Scripts inside a plate that issue their own registration. They run when
+		-- the vehicle reaches Workspace, which is after the framework has written
+		-- its own, so they always won and then deleted themselves - leaving a car
+		-- whose plate matched nothing in the MDT, on ANPR, or on the owner's
+		-- record. Removed on spawn so the vehicle keeps its plate and the server
+		-- keeps the number.
+		PlateGeneratorNames = { "LicensePlateGenerator", "LicencePlateGenerator", "PlateGenerator" },
 	},
 	CCTV = {
 		CameraTag = "RoleplayOSCCTV",
