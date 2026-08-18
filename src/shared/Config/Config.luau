@@ -2123,12 +2123,20 @@ local Config = {
 		-- empty tank therefore had no effect at all on the cars this game
 		-- actually uses. Cutting the engine is the one lever that reaches them.
 		EngineValueName = "IsOn",
-		-- Engine speed the sweep treats as full. Used only for the display.
-		Redline = 8000,
-		-- Road speed the sweep treats as full where no engine speed is reported.
-		TopSpeedMph = 150,
-		-- Segments in the cluster sweep. Roblox has no arc primitive, so the
-		-- sweep is a bar of discrete segments.
+		-- Redline lived here, scaling the sweep when the chassis reported engine
+		-- speed. The dial now carries printed mph numerals and follows road speed
+		-- only, so nothing read it: a tachometer needs its own dial, and a key no
+		-- code reads is a setting that lies about being adjustable.
+		--
+		-- Road speed the sweep treats as full, and the number printed against the
+		-- last major tick on the dial face.
+		--
+		-- 140 rather than 150 so the eight majors land on 0, 20, 40 ... 140. The
+		-- numerals are derived from this and the segment count, so any other pair
+		-- prints a dial reading 21.4, 42.9, 64.3, which is not a speedometer face.
+		TopSpeedMph = 140,
+		-- Segments in the cluster sweep, every third one a labelled major. Roblox
+		-- has no arc primitive, so the dial's arc is built from discrete ticks.
 		SweepSegments = 22,
 		RpmValueName = "RPM",
 		-- A-Chassis publishes a Vector3 velocity in Values. Prefer it over the

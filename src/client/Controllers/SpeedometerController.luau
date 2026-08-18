@@ -8,37 +8,56 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 
 -- The cluster's geometry, in one place.
 --
--- The size was written twice, once when the panel was built and again in the
--- layout binding, and the two disagreed the moment the dial needed a taller
--- panel: the binding reset it to the old height, so the dial centre sat below
--- the panel and the hub and the bottom of the needle rendered outside it.
--- Narrowed from three hundred and sixty.
---
--- The badges are pinned to the cluster's own edges, so its width was setting how
--- far apart they sat. At 360 the gear and the handbrake were the better part of
--- three hundred pixels apart with nothing between them, and the tell-tales hung
--- off each side of a dial they had no visible relationship to. It did not read
--- as an instrument, it read as five separate things that happened to be near
--- each other, which is what "amateurish" was describing.
---
--- Everything here is positioned from this width and the dial centre below it, so
--- pulling the two in together tightens the whole group at once.
-local CLUSTER_SIZE = Vector2.new(262, 182)
+-- The size was written twice once, here and again in the layout binding, and the
+-- two disagreed the moment the dial needed a taller panel: the binding reset it
+-- to the old height, so the dial centre sat below the panel and the bottom of the
+-- needle rendered outside it. Everything is placed from this size and the dial
+-- centre below, so the ticks, the numerals, the needle, the readout and the
+-- tell-tales cannot drift apart when one of them is adjusted.
+local CLUSTER_SIZE = Vector2.new(300, 222)
 
--- A half dial rather than a full round one.
+-- A car's speedometer, not a half-circle progress meter.
 --
--- A car's rev counter sweeps past the horizontal and dips below its own centre,
--- which needs height this panel does not have without pushing the readout into
--- the hotbar. A semicircle spends all of its arc above the pivot, so the whole
--- gauge fits the space and every tick stays inside the panel.
+-- The previous dial swept a flat 180 degrees, due left to due right through the
+-- top, with the readout in the middle. Two things were wrong with it, and both
+-- are what "cartoonish" was pointing at.
 --
--- Zero is straight up, so the sweep runs from due left to due right through the
--- top. Every part of the dial is placed from this centre and radius, so the
--- ticks, the needle and the hub cannot drift apart when one is adjusted.
-local DIAL_CENTRE = Vector2.new(131, 140)
-local DIAL_RADIUS = 74
-local SWEEP_START = -90
-local SWEEP_ARC = 180
+-- The first is the sweep. No car draws a semicircle: a real dial opens at the
+-- bottom and wraps around past the horizontal, roughly 250 degrees, which is why
+-- zero sits at the lower left rather than due west. The second is that the arc
+-- carried no numbers at all. A speedometer with unlabelled ticks is a decoration
+-- of a speedometer -- you cannot read a speed off it, which is the entire job.
+--
+-- Zero degrees is straight up, so the sweep runs from the lower left, up over the
+-- top, and down to the lower right, leaving the bottom open for the tell-tales.
+local DIAL_CENTRE = Vector2.new(150, 112)
+local DIAL_RADIUS = 92
+local SWEEP_START = -125
+local SWEEP_ARC = 250
+
+-- The needle is an outer band rather than a spoke from the hub.
+--
+-- A full-length needle sweeps straight through the middle of the dial, and the
+-- middle of the dial is where the digital readout lives: at 58 mph the needle
+-- was drawn through the "58". Every modern cluster that puts a number inside its
+-- dial solves this the same way, by starting the needle outside the readout, so
+-- the two occupy rings that never meet.
+local NEEDLE_INNER = 50
+local NEEDLE_OUTER = 88
+
+-- Majors every third tick. With the sweep divided into 22, that lands them on 0,
+-- 20, 40 ... 140, which is a UK speedometer's face rather than an arbitrary
+-- division of whatever top speed the chassis claims.
+local MAJOR_EVERY = 3
+local NUMERAL_RADIUS = DIAL_RADIUS - 30
+
+-- Places a point on the dial by its position along the sweep. Roblox rotates
+-- about an object's centre, so anything that must stay upright -- a numeral --
+-- has to be positioned by trigonometry rather than by rotating a frame.
+local function dialPoint(t: number, radius: number): (number, number)
+	local radians = math.rad(SWEEP_START + SWEEP_ARC * t)
+	return DIAL_CENTRE.X + radius * math.sin(radians), DIAL_CENTRE.Y - radius * math.cos(radians)
+end
 
 local SpeedometerController = { connections = {}, seat = nil, accumulator = 0 }
 function SpeedometerController:Init(context: any)
@@ -185,15 +204,34 @@ local function speedMph(seat: VehicleSeat, values: Folder?): number
 	return seatStuds * Config.VehicleData.StudsPerSecondToMph
 end
 
+-- An instrument palette, not a HUD one.
+--
+-- The cluster read as cartoonish and the colour was most of why. A saturated
+-- blue needle, a bright green fuel bar and coloured pills behind every tell-tale
+-- is the palette of a game overlay. A car's cluster is monochrome until
+-- something needs attention: white numerals, grey ticks, and colour reserved for
+-- amber when a system intervenes and red when something is wrong. Restraint is
+-- what makes the two colours that remain mean anything.
 local C = {
 	Panel = Color3.fromRGB(8, 12, 19),
-	Track = Color3.fromRGB(28, 36, 48),
-	Live = Color3.fromRGB(96, 178, 255),
-	Warn = Color3.fromRGB(245, 176, 66),
-	Danger = Color3.fromRGB(247, 92, 96),
-	Text = Color3.fromRGB(244, 248, 252),
-	Muted = Color3.fromRGB(138, 152, 172),
-	Fuel = Color3.fromRGB(104, 205, 148),
+	-- The dark end of the scale: a driver aid the vehicle does not have.
+	Track = Color3.fromRGB(58, 64, 74),
+	-- Unlit ticks and the empty part of the fuel strip, one step lighter than
+	-- Track. These were the same colour, and at noon the unswept half of the dial
+	-- vanished into a bright road: dark grey on dark tarmac is fine, dark grey on
+	-- a sunlit pavement is nothing at all. Lifting them and giving every tick a
+	-- black halo below is what makes the arc hold on both grounds.
+	Unlit = Color3.fromRGB(104, 113, 128),
+	-- Swept ticks and the needle. Near-white rather than blue: a needle is a
+	-- pointer, and a coloured pointer reads as a progress bar.
+	Live = Color3.fromRGB(232, 238, 246),
+	Warn = Color3.fromRGB(232, 162, 42),
+	Danger = Color3.fromRGB(214, 68, 62),
+	Text = Color3.fromRGB(246, 249, 253),
+	Muted = Color3.fromRGB(126, 138, 156),
+	-- Fuel is only interesting when it is low, so it is the same grey as
+	-- everything else until the existing low-fuel logic turns it amber.
+	Fuel = Color3.fromRGB(176, 186, 200),
 }
 
 local function label(parent: Instance, font: Enum.Font, size: number, colour: Color3): TextLabel
@@ -206,7 +244,10 @@ local function label(parent: Instance, font: Enum.Font, size: number, colour: Co
 	-- Carried by every label, because there is no panel behind them any more and
 	-- a readout has to survive both a bright sky and a dark road.
 	item.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-	item.TextStrokeTransparency = 0.45
+	-- 0.45 was not enough at noon: the muted labels sat on a sunlit road with
+	-- almost no separation. This is a halo rather than an outline, so it darkens
+	-- the pixel behind the glyph without thickening the glyph itself.
+	item.TextStrokeTransparency = 0.25
 	item.TextYAlignment = Enum.TextYAlignment.Center
 	item.Parent = parent
 	return item
@@ -242,19 +283,16 @@ function SpeedometerController:_mount()
 
 	-- A round dial with a needle, built out of rotated frames.
 	--
-	-- Roblox has no arc primitive, so the arc is a ring of thin frames anchored
-	-- at their base to the dial centre and rotated into place: rotation happens
-	-- about the anchor point, so a frame as tall as the radius puts its far end
-	-- exactly where the tick belongs. The needle is the same trick with one long
-	-- frame.
-	--
-	-- This replaced a straight bar of segments. The bar was honest about the
-	-- engine's limits and read as a progress bar rather than an instrument, and
-	-- an instrument is the thing a driving game wants: you should be able to take
-	-- the speed in from the needle's angle without reading the number.
+	-- Roblox has no arc primitive, so the arc is a ring of thin frames anchored at
+	-- their centre on the dial's centre and rotated into place, each drawing only a
+	-- short mark at its far end. The needle is the same trick with one long frame.
 	self.segments = {}
 	local count = self.settings.SweepSegments
+	local topSpeed = self.settings.TopSpeedMph
 	for index = 1, count do
+		local t = (index - 1) / math.max(count - 1, 1)
+		local major = (index - 1) % MAJOR_EVERY == 0
+
 		local spoke = Instance.new("Frame")
 		spoke.Name = "Tick" .. index
 		-- Twice the radius tall and anchored at its middle, so the frame's centre
@@ -268,27 +306,55 @@ function SpeedometerController:_mount()
 		spoke.AnchorPoint = Vector2.new(0.5, 0.5)
 		spoke.BackgroundTransparency = 1
 		spoke.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-		spoke.Size = UDim2.fromOffset(3, DIAL_RADIUS * 2)
-		spoke.Rotation = SWEEP_START + SWEEP_ARC * ((index - 1) / math.max(count - 1, 1))
+		-- Hairlines. Three pixels wide with rounded ends is a dash; a tick is a
+		-- line. Majors are longer and a touch heavier, which is what lets the eye
+		-- read a speed off the arc without counting.
+		spoke.Size = UDim2.fromOffset(if major then 2 else 1, DIAL_RADIUS * 2)
+		spoke.Rotation = SWEEP_START + SWEEP_ARC * t
 		spoke.Parent = frame
 		local mark = Instance.new("Frame")
-		mark.BackgroundColor3 = C.Track
+		mark.BackgroundColor3 = C.Unlit
 		mark.BorderSizePixel = 0
-		mark.Size = UDim2.new(1, 0, 0, if index % 5 == 1 then 14 else 8)
+		mark.Size = UDim2.new(1, 0, 0, if major then 12 else 6)
 		mark.Parent = spoke
-		Instance.new("UICorner", mark).CornerRadius = UDim.new(1, 0)
+		-- Frames take no text stroke, so the halo that keeps the labels readable on
+		-- a bright road has to be a UIStroke here. Thin and mostly transparent: it
+		-- is a shadow under the tick, not an outline around it.
+		local halo = Instance.new("UIStroke")
+		halo.Color = Color3.fromRGB(0, 0, 0)
+		halo.Thickness = 1
+		halo.Transparency = 0.55
+		halo.Parent = mark
+		-- No corner radius. A rounded tick is a lozenge, and a cluster does not
+		-- have lozenges on it.
 		self.segments[index] = mark
+
+		-- The number against the major tick, inboard of the arc and upright.
+		if major then
+			-- White, not the muted grey the rest of the furniture uses. These are the
+			-- dial's face rather than a caption, and grey numerals on a bright road
+			-- were unreadable at noon.
+			local numeral = label(frame, Enum.Font.GothamMedium, 11, C.Text)
+			numeral.Name = "Mark" .. index
+			numeral.AnchorPoint = Vector2.new(0.5, 0.5)
+			local x, y = dialPoint(t, NUMERAL_RADIUS)
+			numeral.Position = UDim2.fromOffset(x, y)
+			numeral.Size = UDim2.fromOffset(34, 13)
+			numeral.TextXAlignment = Enum.TextXAlignment.Center
+			numeral.Text = tostring(math.floor(topSpeed * t + 0.5))
+		end
 	end
 
-	-- Same construction as the ticks: a frame centred on the pivot, twice as long
-	-- as the needle, with only its upper half drawn. Rotating it therefore swings
-	-- the visible half out from the centre rather than about some other point.
+	-- Same construction as the ticks: a frame centred on the pivot, twice the
+	-- needle's reach, with only the band between NEEDLE_INNER and NEEDLE_OUTER
+	-- drawn. Rotating it swings that band round the dial without it ever crossing
+	-- the readout in the middle.
 	local needle = Instance.new("Frame")
 	needle.Name = "Needle"
 	needle.AnchorPoint = Vector2.new(0.5, 0.5)
 	needle.BackgroundTransparency = 1
 	needle.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	needle.Size = UDim2.fromOffset(4, (DIAL_RADIUS - 14) * 2)
+	needle.Size = UDim2.fromOffset(2, NEEDLE_OUTER * 2)
 	needle.Rotation = SWEEP_START
 	needle.ZIndex = 3
 	needle.Parent = frame
@@ -296,139 +362,119 @@ function SpeedometerController:_mount()
 	needleArm.Name = "Arm"
 	needleArm.BackgroundColor3 = C.Live
 	needleArm.BorderSizePixel = 0
-	needleArm.Size = UDim2.fromScale(1, 0.5)
+	needleArm.Size = UDim2.fromScale(1, (NEEDLE_OUTER - NEEDLE_INNER) / (NEEDLE_OUTER * 2))
 	needleArm.ZIndex = 3
 	needleArm.Parent = needle
-	Instance.new("UICorner", needleArm).CornerRadius = UDim.new(1, 0)
 	self.needle, self.needleArm = needle, needleArm
 
-	local hub = Instance.new("Frame")
-	hub.Name = "Hub"
-	hub.AnchorPoint = Vector2.new(0.5, 0.5)
-	hub.BackgroundColor3 = C.Track
-	hub.BorderSizePixel = 0
-	hub.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
-	hub.Size = UDim2.fromOffset(14, 14)
-	hub.ZIndex = 4
-	hub.Parent = frame
-	Instance.new("UICorner", hub).CornerRadius = UDim.new(1, 0)
+	-- No hub. A hub is the cap over the spindle a full-length needle turns on, and
+	-- this needle does not reach the centre, so a disc there is a dot in the middle
+	-- of the number for no reason.
 
-	local speed = label(frame, Enum.Font.RobotoMono, 40, C.Text)
+	local speed = label(frame, Enum.Font.RobotoMono, 38, C.Text)
 	speed.Name = "Speed"
 	speed.Text = "0"
-	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X - 66, DIAL_CENTRE.Y - 62)
-	speed.Size = UDim2.fromOffset(132, 42)
+	speed.AnchorPoint = Vector2.new(0.5, 0.5)
+	speed.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y - 14)
+	speed.Size = UDim2.fromOffset(120, 44)
 	speed.TextXAlignment = Enum.TextXAlignment.Center
 	self.speed = speed
 
-	local unit = label(frame, Enum.Font.GothamBold, 12, C.Muted)
+	local unit = label(frame, Enum.Font.GothamBold, 11, C.Muted)
 	unit.Text = "MPH"
-	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X - 45, DIAL_CENTRE.Y - 17)
-	unit.Size = UDim2.fromOffset(90, 14)
+	unit.AnchorPoint = Vector2.new(0.5, 0.5)
+	unit.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y + 16)
+	unit.Size = UDim2.fromOffset(70, 13)
 	unit.TextXAlignment = Enum.TextXAlignment.Center
 
-	-- Gear badge, as a cluster shows the selected gear rather than spelling it.
-	local gearBadge = Instance.new("Frame")
-	gearBadge.Name = "Gear"
-	gearBadge.AnchorPoint = Vector2.new(0.5, 0)
-	gearBadge.Position = UDim2.fromOffset(42, 24)
-	gearBadge.Size = UDim2.fromOffset(50, 50)
-	gearBadge.BackgroundColor3 = C.Track
-	gearBadge.BackgroundTransparency = 0.25
-	gearBadge.BorderSizePixel = 0
-	gearBadge.Parent = frame
-	Instance.new("UICorner", gearBadge).CornerRadius = UDim.new(0, 11)
-	local gear = label(gearBadge, Enum.Font.GothamBold, 22, C.Text)
+	-- Selected gear, stacked under the readout the way a cluster stacks it, as a
+	-- bare numeral. It had a rounded plate behind it, and a rounded box around a
+	-- number is the thing that reads as a mobile game rather than a dashboard.
+	local gear = label(frame, Enum.Font.GothamBold, 19, C.Text)
+	gear.Name = "Gear"
 	gear.Text = "N"
-	gear.Size = UDim2.fromScale(1, 1)
+	gear.AnchorPoint = Vector2.new(0.5, 0.5)
+	gear.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y + 42)
+	gear.Size = UDim2.fromOffset(60, 22)
 	gear.TextXAlignment = Enum.TextXAlignment.Center
 	self.gear = gear
 
 	local plate = label(frame, Enum.Font.GothamMedium, 10, C.Muted)
 	plate.Name = "Registration"
 	plate.AnchorPoint = Vector2.new(0.5, 0)
-	plate.Position = UDim2.new(0.5, 0, 0, 5)
-	plate.Size = UDim2.fromOffset(210, 15)
+	plate.Position = UDim2.fromScale(0.5, 0)
+	plate.Size = UDim2.fromOffset(240, 13)
 	plate.TextXAlignment = Enum.TextXAlignment.Center
 	self.plate = plate
 
-	local handbrakeBadge = Instance.new("Frame")
-	handbrakeBadge.Name = "Handbrake"
-	handbrakeBadge.AnchorPoint = Vector2.new(0.5, 0)
-	handbrakeBadge.Position = UDim2.fromOffset(CLUSTER_SIZE.X - 42, 24)
-	handbrakeBadge.Size = UDim2.fromOffset(50, 50)
-	handbrakeBadge.BackgroundColor3 = C.Track
-	handbrakeBadge.BackgroundTransparency = 0.25
-	handbrakeBadge.BorderSizePixel = 0
-	handbrakeBadge.Parent = frame
-	Instance.new("UICorner", handbrakeBadge).CornerRadius = UDim.new(1, 0)
-	local handbrake = label(handbrakeBadge, Enum.Font.GothamBold, 21, C.Muted)
-	handbrake.Text = "P"
-	handbrake.Size = UDim2.fromScale(1, 1)
-	handbrake.TextXAlignment = Enum.TextXAlignment.Center
+	-- Driver aid tell-tales, in the open bottom of the dial, which is the row a
+	-- real cluster keeps them in.
+	--
+	-- A-Chassis has published ABS and TCS from the start - whether the system is
+	-- fitted, and whether it is intervening right now - and none of it was on
+	-- screen. Three states, because two would lose the distinction that matters: a
+	-- dark lamp means not fitted, dim means fitted and watching, lit amber means it
+	-- is working this instant. Amber rather than the cluster's white because amber
+	-- is what a car uses for "a system is intervening".
+	local TELLTALE_Y = DIAL_CENTRE.Y + 64
+	local function telltale(name: string, text: string, offsetX: number, size: number): TextLabel
+		local mark = label(frame, Enum.Font.GothamBold, size, C.Muted)
+		mark.Name = name
+		mark.Text = text
+		mark.AnchorPoint = Vector2.new(0.5, 0.5)
+		mark.Position = UDim2.fromOffset(offsetX, TELLTALE_Y)
+		mark.Size = UDim2.fromOffset(42, 22)
+		mark.TextXAlignment = Enum.TextXAlignment.Center
+		return mark
+	end
+	self.abs = telltale("ABS", "ABS", DIAL_CENTRE.X - 52, 12)
+	self.tcs = telltale("TCS", "TC", DIAL_CENTRE.X + 52, 12)
+
+	-- The parking brake lamp, drawn the way a car draws it: a P inside a ring. It
+	-- was a filled disc that turned solid red, which reads as a button rather than
+	-- a warning lamp. The ring stays and only its colour changes, which is what a
+	-- real lamp does when it lights.
+	local handbrake = telltale("Handbrake", "P", DIAL_CENTRE.X, 13)
+	handbrake.Size = UDim2.fromOffset(22, 22)
 	local handbrakeStroke = Instance.new("UIStroke")
 	handbrakeStroke.Color = C.Muted
-	handbrakeStroke.Thickness = 2
-	handbrakeStroke.Transparency = 0.25
-	handbrakeStroke.Parent = handbrakeBadge
-	self.handbrakeBadge = handbrakeBadge
-	self.handbrake = handbrake
-	self.handbrakeStroke = handbrakeStroke
+	handbrakeStroke.Thickness = 1.5
+	handbrakeStroke.Transparency = 0.35
+	handbrakeStroke.Parent = handbrake
+	-- Restores the ring. Stripping the badge frames took this corner radius with
+	-- them and left the lamp as a red rectangle.
+	Instance.new("UICorner", handbrake).CornerRadius = UDim.new(1, 0)
+	self.handbrake, self.handbrakeStroke = handbrake, handbrakeStroke
 
-	-- Driver aid tell-tales, in the row a real cluster keeps them in.
-	--
-	-- A-Chassis has published all four of these from the start - ABS and TCS say
-	-- whether the system is fitted and armed, ABSActive and TCSActive say whether
-	-- it is intervening right now - and none of it was on screen. The cluster
-	-- showed a gear, a handbrake and a speed, which is less than the chassis knew.
-	--
-	-- Three states, because two would lose the distinction that matters. A lamp
-	-- that is dark means the system is not fitted. Dim means fitted and watching.
-	-- Lit amber means it is working this instant, which is the only one a driver
-	-- reacts to, and the reason these are amber rather than the cluster's blue:
-	-- amber is what a car uses for "a system is intervening".
-	local function telltale(name: string, text: string, offsetX: number): (Frame, TextLabel)
-		local badge = Instance.new("Frame")
-		badge.Name = name
-		badge.AnchorPoint = Vector2.new(0.5, 0)
-		badge.Position = UDim2.fromOffset(offsetX, 82)
-		badge.Size = UDim2.fromOffset(44, 26)
-		badge.BackgroundColor3 = C.Track
-		badge.BackgroundTransparency = 0.35
-		badge.BorderSizePixel = 0
-		badge.Parent = frame
-		Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 7)
-		local mark = label(badge, Enum.Font.GothamBold, 13, C.Muted)
-		mark.Text = text
-		mark.Size = UDim2.fromScale(1, 1)
-		mark.TextXAlignment = Enum.TextXAlignment.Center
-		return badge, mark
-	end
-	self.absBadge, self.abs = telltale("ABS", "ABS", 42)
-	self.tcsBadge, self.tcs = telltale("TCS", "TC", CLUSTER_SIZE.X - 42)
-
+	-- Fuel, as a strip under the dial. Short, square-ended and grey: a wide bright
+	-- green pill is a health bar, and a car's fuel gauge is neither wide nor green
+	-- until it is nearly empty.
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
-	fuelTrack.AnchorPoint = Vector2.new(0.5, 0)
-	fuelTrack.Position = UDim2.new(0.5, 0, 0, 160)
-	fuelTrack.Size = UDim2.fromOffset(170, 9)
-	fuelTrack.BackgroundColor3 = C.Track
+	fuelTrack.AnchorPoint = Vector2.new(0.5, 0.5)
+	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 196)
+	fuelTrack.Size = UDim2.fromOffset(132, 5)
+	fuelTrack.BackgroundColor3 = C.Unlit
 	fuelTrack.BorderSizePixel = 0
 	fuelTrack.Parent = frame
-	Instance.new("UICorner", fuelTrack).CornerRadius = UDim.new(1, 0)
 	local fuelFill = Instance.new("Frame")
 	fuelFill.Name = "Fill"
 	fuelFill.BackgroundColor3 = C.Fuel
 	fuelFill.BorderSizePixel = 0
 	fuelFill.Size = UDim2.fromScale(1, 1)
 	fuelFill.Parent = fuelTrack
-	Instance.new("UICorner", fuelFill).CornerRadius = UDim.new(1, 0)
+	local fuelHalo = Instance.new("UIStroke")
+	fuelHalo.Color = Color3.fromRGB(0, 0, 0)
+	fuelHalo.Thickness = 1
+	fuelHalo.Transparency = 0.5
+	fuelHalo.Parent = fuelTrack
 	self.fuelFill = fuelFill
 	local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
+	fuelMark.Name = "FuelMark"
 	fuelMark.Text = "FUEL"
-	fuelMark.AnchorPoint = Vector2.new(0.5, 0)
-	fuelMark.Position = UDim2.new(0.5, 0, 0, 144)
-	fuelMark.Size = UDim2.fromOffset(170, 13)
+	fuelMark.AnchorPoint = Vector2.new(0.5, 0.5)
+	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 210)
+	fuelMark.Size = UDim2.fromOffset(170, 12)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Center
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
 
@@ -628,14 +674,21 @@ function SpeedometerController:Start()
 				)
 			end
 
-			-- The sweep follows engine speed where the chassis reports it, since
-			-- that is what a cluster shows, and road speed otherwise.
-			local rpm = readValue(values, self.settings.RpmValueName)
-			self:_paintSweep(
-				if type(rpm) == "number" and rpm > 0
-					then rpm / math.max(self.settings.Redline, 1)
-					else mph / math.max(self.settings.TopSpeedMph, 1)
-			)
+			-- Road speed, always.
+			--
+			-- This used to prefer engine speed wherever the chassis published it,
+			-- falling back to road speed only on a vehicle that reported no RPM. That
+			-- was defensible while the arc was an unlabelled sweep, because an
+			-- unlabelled arc means whatever you say it means.
+			--
+			-- It is not defensible now. The dial's face is printed 0, 20, 40 ... 140
+			-- and those numerals are generated from TopSpeedMph, so a needle driven by
+			-- rpm/Redline points at "80" while the van is doing thirty. A gauge that
+			-- disagrees with its own numbers is worse than no gauge, and every vehicle
+			-- in this game is A-Chassis, which does publish RPM -- so that was the
+			-- normal case, not the edge case. The tachometer this used to be belongs
+			-- on a second dial, not on the one labelled MPH.
+			self:_paintSweep(mph / math.max(self.settings.TopSpeedMph, 1))
 
 			-- RoleplayOS fuel is authoritative. Existing authoring vehicles can
 			-- still expose a chassis value for display; if neither exists the gauge
@@ -688,36 +741,25 @@ function SpeedometerController:Start()
 			local handbrakeColour = if handbrakeOn then C.Danger else C.Muted
 			self.handbrake.TextColor3 = handbrakeColour
 			self.handbrakeStroke.Color = handbrakeColour
-			self.handbrakeBadge.BackgroundColor3 = if handbrakeOn
-				then Color3.fromRGB(73, 20, 25)
-				else C.Track
 
 			-- Fitted, and intervening. Read straight from the chassis, so a vehicle
 			-- that publishes neither leaves both lamps dark rather than pretending.
+			-- Takes only the glyph now. The badge frame it used to fill is a bare
+			-- container with nothing to paint.
 			local function telltaleState(
-				badge: Frame,
 				mark: TextLabel,
 				fittedNames: { string },
 				activeNames: { string }
 			)
 				local fitted = readsOn(readFirstValue(values, fittedNames))
 				local active = readsOn(readFirstValue(values, activeNames))
+				-- Only the glyph changes. Filling the box behind it was what made an
+				-- intervening system look like a pressed button.
 				mark.TextColor3 = if active then C.Warn elseif fitted then C.Muted else C.Track
-				badge.BackgroundColor3 = if active then Color3.fromRGB(66, 47, 12) else C.Track
-				badge.BackgroundTransparency = if fitted or active then 0.35 else 0.7
+				mark.TextTransparency = if active then 0 elseif fitted then 0.15 else 0.55
 			end
-			telltaleState(
-				self.absBadge,
-				self.abs,
-				self.settings.AbsValueNames,
-				self.settings.AbsActiveValueNames
-			)
-			telltaleState(
-				self.tcsBadge,
-				self.tcs,
-				self.settings.TcsValueNames,
-				self.settings.TcsActiveValueNames
-			)
+			telltaleState(self.abs, self.settings.AbsValueNames, self.settings.AbsActiveValueNames)
+			telltaleState(self.tcs, self.settings.TcsValueNames, self.settings.TcsActiveValueNames)
 		end)
 	)
 end
