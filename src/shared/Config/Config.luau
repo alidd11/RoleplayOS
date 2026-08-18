@@ -2550,6 +2550,10 @@ local Config = {
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
 			SetEmergencyLights = { Capacity = 8, RefillPerSecond = 3 },
+			-- Indicators and headlights. A driver signalling at a junction taps
+			-- these in quick succession, so the bucket is a little deeper than the
+			-- ELS one, but a held key still cannot flood the server.
+			SetVehicleLights = { Capacity = 10, RefillPerSecond = 4 },
 			GetEmergencyLights = { Capacity = 5, RefillPerSecond = 1 },
 			-- Reads every loaded profile in the server, so it is deliberately
 			-- slower to refill than a lookup a player would repeat.

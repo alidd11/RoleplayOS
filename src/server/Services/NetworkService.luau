@@ -149,6 +149,23 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("SetVehicleLights", function(payload)
+		return type(payload) == "table" and type(payload.Action) == "string"
+	end, function(player, payload, requestId)
+		local ok, reason = self.context.Services:Get("VehicleLightingService"):Set(player, payload)
+		if not ok then
+			return {
+				Success = false,
+				Code = reason,
+				Message = if reason == "NOT_DRIVING"
+					then "You are not driving a vehicle."
+					else "That control does not exist.",
+				RequestId = requestId,
+			}
+		end
+		return { Success = true, Code = "OK", Message = "", RequestId = requestId }
+	end)
+
 	self.context.Network:RegisterFunction("SetEmergencyLights", function(payload)
 		return type(payload) == "table"
 			and (payload.Stage == nil or type(payload.Stage) == "number")

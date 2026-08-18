@@ -1026,6 +1026,8 @@ function VehicleSpawnerService:Spawn(
 	if type(definition.DepartmentId) == "string" then
 		self.context.Services:Get("EmergencyLightsService"):Adopt(vehicle, definition.DepartmentId)
 	end
+	-- Road lighting, which every vehicle has whether or not it is a service one.
+	self.context.Services:Get("VehicleLightingService"):Adopt(vehicle)
 	self.context.Services:Get("WorldBudgetService"):Normalise(vehicle)
 	-- A-Chassis templates are intentionally authored anchored. Their Initialize
 	-- script creates the runtime joints and unanchors the correct assemblies.
