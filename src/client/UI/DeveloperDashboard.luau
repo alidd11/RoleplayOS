@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
+local Tokens = require(script.Parent.DesignTokens)
 local TooltipSystem = require(script.Parent.TooltipSystem)
 local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
 local AudioFeedback = require(script.Parent.Parent.Systems.AudioFeedback)
@@ -30,28 +31,40 @@ local MAXIMUM_CONTENT_WIDTH = 1680
 local App = {}
 local activeAudioFeedback: any = nil
 local activeMountGui: ScreenGui? = nil
+-- The menu's palette, taken from the shared token set rather than restated.
+--
+-- These were sixteen literals that happened to be a lighter blue than every
+-- other surface in the game, which is why the start menu and the terminals have
+-- never looked like the same product. DesignTokens is the one place a colour is
+-- decided; this table stays only because the names here read better at the call
+-- sites than the token names would, and because two of them are derived rather
+-- than taken.
 local COLOURS = {
-	Canvas = Color3.fromRGB(17, 22, 40),
-	Sidebar = Color3.fromRGB(19, 25, 43),
-	Surface = Color3.fromRGB(25, 32, 52),
-	SurfaceRaised = Color3.fromRGB(34, 43, 69),
-	Border = Color3.fromRGB(65, 78, 112),
-	Text = Color3.fromRGB(240, 244, 251),
-	Muted = Color3.fromRGB(174, 184, 201),
-	Accent = Color3.fromRGB(91, 156, 255),
+	Canvas = Tokens.Colour.canvas,
+	-- One step between canvas and surface, for a rail that has to separate from
+	-- both. Derived because the token set has no such step: its three panels
+	-- never needed one.
+	Sidebar = Tokens.Colour.surface:Lerp(Tokens.Colour.canvas, 0.5),
+	Surface = Tokens.Colour.surface,
+	SurfaceRaised = Tokens.Colour.raised,
+	Border = Tokens.Colour.border,
+	Text = Tokens.Colour.text,
+	Muted = Tokens.Colour.muted,
+	Accent = Tokens.Colour.accent,
 	-- Fill for primary buttons. The accent is a good colour for text, strokes and
 	-- indicators against the dark canvas, and a poor one behind white label text:
 	-- that pairing measures about two and a half to one, well under the four and
 	-- a half a body label needs. This is the same hue, dark enough to carry it.
-	AccentFill = Color3.fromRGB(31, 95, 208),
-	AccentSoft = Color3.fromRGB(25, 51, 88),
-	Success = Color3.fromRGB(84, 211, 142),
-	Warning = Color3.fromRGB(245, 188, 78),
-	Danger = Color3.fromRGB(244, 104, 112),
+	AccentFill = Tokens.Colour.accentFill,
+	-- A tinted surface for a selected row, between raised and the filled accent.
+	AccentSoft = Tokens.Colour.raised:Lerp(Tokens.Colour.accentFill, 0.45),
+	Success = Tokens.Colour.success,
+	Warning = Tokens.Colour.warning,
+	Danger = Tokens.Colour.danger,
 }
 
 local ROLE_PRESENTATION = {
-	Civilian = { Icon = "CIV", Colour = Color3.fromRGB(91, 156, 255), Label = "PUBLIC LIFE" },
+	Civilian = { Icon = "CIV", Colour = COLOURS.Accent, Label = "PUBLIC LIFE" },
 	Police = { Icon = "POL", Colour = Color3.fromRGB(72, 132, 224), Label = "POLICING" },
 	Ambulance = { Icon = "AMB", Colour = Color3.fromRGB(80, 190, 133), Label = "AMBULANCE" },
 	Fire = { Icon = "FIRE", Colour = Color3.fromRGB(231, 92, 82), Label = "FIRE & RESCUE" },
@@ -163,7 +176,7 @@ local function portraitPreview(
 ): ViewportFrame
 	local viewport = Instance.new("ViewportFrame")
 	viewport.Name = "AvatarPreview"
-	viewport.BackgroundColor3 = Color3.fromRGB(28, 36, 49)
+	viewport.BackgroundColor3 = COLOURS.SurfaceRaised
 	viewport.BorderSizePixel = 0
 	viewport.Ambient = Color3.fromRGB(255, 255, 255)
 	viewport.LightColor = Color3.fromRGB(255, 255, 255)
@@ -174,8 +187,8 @@ local function portraitPreview(
 
 	local wash = Instance.new("UIGradient")
 	wash.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(58, 75, 99)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(27, 35, 48)),
+		ColorSequenceKeypoint.new(0, COLOURS.Border),
+		ColorSequenceKeypoint.new(1, COLOURS.SurfaceRaised),
 	})
 	wash.Rotation = 90
 	wash.Parent = viewport
@@ -529,7 +542,7 @@ local function card(parent: Instance, height: number): Frame
 	stroke(item, COLOURS.Border, 0.18)
 	local surfaceGradient = Instance.new("UIGradient")
 	surfaceGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 35, 48)),
+		ColorSequenceKeypoint.new(0, COLOURS.SurfaceRaised),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(21, 27, 38)),
 	})
 	surfaceGradient.Transparency = NumberSequence.new({
@@ -588,7 +601,7 @@ local function posterTile(parent: Instance, options: PosterTileOptions): (Frame,
 	poster.ClipsDescendants = true
 	local artwork = Instance.new("ImageLabel")
 	artwork.Name = "RoleArtwork"
-	artwork.BackgroundColor3 = Color3.fromRGB(28, 38, 68)
+	artwork.BackgroundColor3 = COLOURS.SurfaceRaised
 	artwork.BorderSizePixel = 0
 	artwork.Position = UDim2.fromScale(0, 0)
 	artwork.Size = UDim2.fromScale(1, 1)
@@ -615,7 +628,7 @@ local function posterTile(parent: Instance, options: PosterTileOptions): (Frame,
 	end
 	local artworkShade = Instance.new("Frame")
 	artworkShade.Name = "ArtworkShade"
-	artworkShade.BackgroundColor3 = Color3.fromRGB(10, 16, 34)
+	artworkShade.BackgroundColor3 = COLOURS.Canvas
 	artworkShade.BackgroundTransparency = 0.36
 	artworkShade.BorderSizePixel = 0
 	artworkShade.Position = artwork.Position
@@ -624,7 +637,7 @@ local function posterTile(parent: Instance, options: PosterTileOptions): (Frame,
 	artworkShade.Parent = poster
 	corner(artworkShade, 9)
 	local shadeGradient = Instance.new("UIGradient")
-	shadeGradient.Color = ColorSequence.new(Color3.fromRGB(8, 14, 32))
+	shadeGradient.Color = ColorSequence.new(COLOURS.Canvas)
 	shadeGradient.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.95),
 		NumberSequenceKeypoint.new(0.58, 0.7),
@@ -637,7 +650,7 @@ local function posterTile(parent: Instance, options: PosterTileOptions): (Frame,
 		else POSTER_FOOTER_HEIGHT
 	local footer = Instance.new("Frame")
 	footer.Name = "RoleFooter"
-	footer.BackgroundColor3 = Color3.fromRGB(13, 20, 43)
+	footer.BackgroundColor3 = COLOURS.Surface
 	footer.BackgroundTransparency = 0.12
 	footer.BorderSizePixel = 0
 	footer.Position = UDim2.new(0, 0, 1, -footerHeight)
@@ -825,7 +838,7 @@ function App.mount(context: any): ScreenGui
 	local menuToggle = Instance.new("TextButton")
 	menuToggle.Name = "OpenMenu"
 	menuToggle.Size = UDim2.fromOffset(64, NATIVE_CONTROL_SIZE)
-	menuToggle.BackgroundColor3 = Color3.fromRGB(27, 31, 58)
+	menuToggle.BackgroundColor3 = COLOURS.SurfaceRaised
 	menuToggle.BackgroundTransparency = 0.06
 	menuToggle.BorderSizePixel = 0
 	menuToggle.AutoButtonColor = true
@@ -873,7 +886,7 @@ function App.mount(context: any): ScreenGui
 	root.Parent = gui
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(31, 48, 96)),
+		ColorSequenceKeypoint.new(0, COLOURS.AccentSoft),
 		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(35, 32, 78)),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(22, 29, 58)),
 	})
@@ -1190,7 +1203,7 @@ function App.mount(context: any): ScreenGui
 	local bottomDock = Instance.new("Frame")
 	bottomDock.Name = "BottomNavigation"
 	bottomDock.AnchorPoint = Vector2.new(0.5, 1)
-	bottomDock.BackgroundColor3 = Color3.fromRGB(20, 25, 49)
+	bottomDock.BackgroundColor3 = COLOURS.Surface
 	bottomDock.BackgroundTransparency = 0.08
 	bottomDock.BorderSizePixel = 0
 	bottomDock.ZIndex = 20
@@ -2782,9 +2795,10 @@ function App.mount(context: any): ScreenGui
 				local artwork = Instance.new("Frame")
 				artwork.Position = UDim2.fromOffset(12, 12)
 				artwork.Size = UDim2.new(1, -24, 0, 78)
+				-- Owned reads green, unowned reads as an ordinary raised surface.
 				artwork.BackgroundColor3 = if pass.Owned
-					then Color3.fromRGB(22, 60, 50)
-					else Color3.fromRGB(27, 43, 68)
+					then COLOURS.Success:Lerp(COLOURS.Surface, 0.72)
+					else COLOURS.SurfaceRaised
 				artwork.BorderSizePixel = 0
 				artwork.Parent = item
 				corner(artwork, 10)
@@ -3382,10 +3396,10 @@ function App.mount(context: any): ScreenGui
 			return
 		end
 		for _, other in bottomNavItems do
-			other.BackgroundColor3 = Color3.fromRGB(24, 31, 43)
+			other.BackgroundColor3 = COLOURS.Surface
 			other.TextColor3 = COLOURS.Muted
 		end
-		item.BackgroundColor3 = Color3.fromRGB(82, 53, 142)
+		item.BackgroundColor3 = COLOURS.AccentFill
 		item.TextColor3 = COLOURS.Text
 		local enter = bottomNavEnters[key]
 		if enter then
@@ -3404,7 +3418,7 @@ function App.mount(context: any): ScreenGui
 		local item = Instance.new("TextButton")
 		item.Name = key .. "Tab"
 		item.AutoButtonColor = false
-		item.BackgroundColor3 = Color3.fromRGB(24, 31, 43)
+		item.BackgroundColor3 = COLOURS.Surface
 		item.BorderSizePixel = 0
 		item.Font = Enum.Font.GothamBold
 		item.Text = labelValue
@@ -3458,7 +3472,7 @@ function App.mount(context: any): ScreenGui
 	addBottomNav("Help", renderTutorials, "Help")
 	local defaultDockItem = bottomNavItems.Play
 	if defaultDockItem then
-		defaultDockItem.BackgroundColor3 = Color3.fromRGB(82, 53, 142)
+		defaultDockItem.BackgroundColor3 = COLOURS.AccentFill
 		defaultDockItem.TextColor3 = COLOURS.Text
 	end
 
@@ -3662,29 +3676,39 @@ function App.mount(context: any): ScreenGui
 			announcement.Size = UDim2.fromOffset(if narrow then 260 else 420, 28)
 			pageTitle.Visible = false
 			pageDescription.Visible = false
-			status.Position = UDim2.fromScale(1, 0)
+			-- The strip moves into the bar rather than sitting in a row of its own.
+			--
+			-- On desktop that bar held nothing: the tabs are in the dock at the
+			-- bottom and the toggle is up in Roblox's own band, so the page paid
+			-- thirty eight pixels for one line of text with an empty strip above
+			-- it. Putting the text in the empty bar buys the grid both back.
+			status.Parent = sidebar
+			status.AnchorPoint = Vector2.new(1, 0.5)
+			status.Position = UDim2.new(1, -(marginRight > 0 and marginRight or 24), 0.5, 0)
+			status.Size = UDim2.fromOffset(190, 20)
+			header.Visible = false
 			if available > MAXIMUM_CONTENT_WIDTH then
 				-- On a display wide enough for it, a centred column reads better than
 				-- one line of text stretched across a metre of monitor.
 				local centred = math.floor((layout.Viewport.X - MAXIMUM_CONTENT_WIDTH) / 2)
 				header.Position = UDim2.fromOffset(centred, 6)
-				header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 28)
-				scroll.Position = UDim2.fromOffset(centred, 38)
+				header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 0)
+				scroll.Position = UDim2.fromOffset(centred, 8)
 				scroll.Size = UDim2.new(
 					0,
 					MAXIMUM_CONTENT_WIDTH,
 					1,
-					-(46 + layout.SafeBottom + dockHeight + 12)
+					-(16 + layout.SafeBottom + dockHeight + 12)
 				)
 			else
 				header.Position = UDim2.fromOffset(marginLeft, 6)
-				header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 28)
-				scroll.Position = UDim2.fromOffset(marginLeft, 38)
+				header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 0)
+				scroll.Position = UDim2.fromOffset(marginLeft, 8)
 				scroll.Size = UDim2.new(
 					1,
 					-(marginLeft + marginRight),
 					1,
-					-(46 + layout.SafeBottom + dockHeight + 12)
+					-(16 + layout.SafeBottom + dockHeight + 12)
 				)
 			end
 		else
