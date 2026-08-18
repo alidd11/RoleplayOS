@@ -12,7 +12,18 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- layout binding, and the two disagreed the moment the dial needed a taller
 -- panel: the binding reset it to the old height, so the dial centre sat below
 -- the panel and the hub and the bottom of the needle rendered outside it.
-local CLUSTER_SIZE = Vector2.new(360, 176)
+-- Narrowed from three hundred and sixty.
+--
+-- The badges are pinned to the cluster's own edges, so its width was setting how
+-- far apart they sat. At 360 the gear and the handbrake were the better part of
+-- three hundred pixels apart with nothing between them, and the tell-tales hung
+-- off each side of a dial they had no visible relationship to. It did not read
+-- as an instrument, it read as five separate things that happened to be near
+-- each other, which is what "amateurish" was describing.
+--
+-- Everything here is positioned from this width and the dial centre below it, so
+-- pulling the two in together tightens the whole group at once.
+local CLUSTER_SIZE = Vector2.new(262, 182)
 
 -- A half dial rather than a full round one.
 --
@@ -24,7 +35,7 @@ local CLUSTER_SIZE = Vector2.new(360, 176)
 -- Zero is straight up, so the sweep runs from due left to due right through the
 -- top. Every part of the dial is placed from this centre and radius, so the
 -- ticks, the needle and the hub cannot drift apart when one is adjusted.
-local DIAL_CENTRE = Vector2.new(180, 138)
+local DIAL_CENTRE = Vector2.new(131, 140)
 local DIAL_RADIUS = 74
 local SWEEP_START = -90
 local SWEEP_ARC = 180
