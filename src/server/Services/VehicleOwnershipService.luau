@@ -88,6 +88,44 @@ function VehicleOwnershipService:List(player: Player): { any }
 	return result
 end
 
+-- Writes a running vehicle's fuel and odometer back onto the owner's profile.
+--
+-- Both fields already existed in the persisted record and in List, and nothing
+-- ever set either of them: a car came back from the garage with the fuel it was
+-- created with, however far it had been driven. Called from the spawner's burn
+-- loop rather than on every tick of it, so the profile is only marked dirty when
+-- a figure actually moved.
+--
+-- Silent where the vehicle is not owned by anybody, which is the normal case for
+-- a service vehicle: those are issued rather than owned, so there is no record to
+-- update and no fault in that.
+function VehicleOwnershipService:RecordTelemetry(
+	player: Player,
+	vehicleId: string,
+	fuel: number?,
+	mileage: number?
+): boolean
+	local vehicle = self:_find(player, vehicleId)
+	if not vehicle then
+		return false
+	end
+	local changed = false
+	if type(fuel) == "number" and vehicle.Fuel ~= fuel then
+		vehicle.Fuel = math.clamp(fuel, 0, 100)
+		changed = true
+	end
+	if type(mileage) == "number" and vehicle.Mileage ~= mileage then
+		-- Never decreases. An odometer that can be wound back is a data fault, and
+		-- a bad reading from a physics glitch should not permanently reduce it.
+		vehicle.Mileage = math.max(vehicle.Mileage or 0, mileage)
+		changed = true
+	end
+	if changed then
+		self.context.Services:Get("DataService"):MarkDirty(player)
+	end
+	return changed
+end
+
 function VehicleOwnershipService:GrantStarter(player: Player, characterId: string): (any?, string?)
 	local settings = self.context.Configuration.VehicleData
 	-- No starter car configured is a deliberate state, not a failure. The car this

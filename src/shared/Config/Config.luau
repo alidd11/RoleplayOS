@@ -2164,6 +2164,38 @@ local Config = {
 		-- Retained for speed enforcement and the replacement spawner integration;
 		-- RoleplayOS no longer contains a vehicle spawning implementation.
 		StudsPerSecondToMph = 0.626,
+		-- Fuel burn, and the odometer that shares its measurement.
+		--
+		-- RoleplayOSFuel was written once at spawn and never touched again, so the
+		-- cluster's fuel gauge showed the same figure for an entire session -- a
+		-- readout that cannot change is decoration, not an instrument. Mileage was
+		-- worse: the cluster read the attribute, the persisted profile carried the
+		-- field, and nothing anywhere wrote either of them.
+		--
+		-- Both are now driven from distance travelled, measured server-side.
+		--
+		-- A mile is a real distance here, derived from StudsPerSecondToMph rather
+		-- than invented: at K mph per stud/second, a mile is 3600/K studs, about
+		-- 5750. A real car managing 400 miles to a tank would burn 0.25% per mile,
+		-- which no player would ever notice inside one session, so this is
+		-- compressed to roughly a 55 mile range.
+		FuelPercentPerMile = 1.8,
+		-- Burn while sitting still with the engine running. Real cars do this, and
+		-- without it an idling car is a free generator.
+		FuelPercentPerIdleMinute = 0.35,
+		-- How often the burn loop runs. Distance is integrated between ticks from
+		-- the vehicle's own velocity, so a slower tick costs accuracy rather than
+		-- correctness, and this is a server loop over every occupied vehicle.
+		ConsumptionIntervalSeconds = 2,
+		-- Below this the engine will not run. Not zero, because a tank that reaches
+		-- exactly zero and stops is harsher than one that splutters near empty.
+		EmptyFuelPercent = 0.5,
+		-- The fastest a vehicle is believed to go, used only to tell driving apart
+		-- from teleporting in the burn loop. Matches the speedometer's dial range;
+		-- kept separate from Chassis.TopSpeedMph because that one also decides what
+		-- is printed on the dial face, and a guard should not move when a numeral
+		-- does.
+		TopSpeedMphCeiling = 140,
 		-- Was "Compact", a car that is no longer in the project. Left empty
 		-- rather than pointed at a bike: this is meant to be a free first car
 		-- and nothing in the catalogue is that today. Name a definition here

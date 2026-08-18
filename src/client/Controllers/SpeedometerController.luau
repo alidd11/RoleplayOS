@@ -702,7 +702,11 @@ function SpeedometerController:_paintSweep(fraction: number)
 	self.lit = lit
 	for index, segment in self.segments do
 		if index > lit then
-			segment.BackgroundColor3 = C.Track
+			-- Unlit, not Track. Track is the darker "system not fitted" grey, and
+			-- painting the unswept half of the dial with it undid the daylight
+			-- legibility fix the moment the first sample arrived: the ticks were
+			-- built light and then immediately repainted dark here.
+			segment.BackgroundColor3 = C.Unlit
 		elseif index > count * 0.86 then
 			segment.BackgroundColor3 = C.Danger
 		elseif index > count * 0.68 then
@@ -870,10 +874,11 @@ function SpeedometerController:Start()
 			-- "NO PLATE" reads as a fault the driver ought to do something about,
 			-- when it only means this car was not spawned through the framework.
 			local registration = seat:GetAttribute("RoleplayOSRegistration")
-			local mileage = seat:GetAttribute("RoleplayOSMileage")
-			if type(mileage) ~= "number" and seat.Parent then
-				mileage = seat.Parent:GetAttribute("RoleplayOSMileage")
-			end
+			-- Walked all the way up, like the fuel reading beneath. The odometer is
+			-- written on the vehicle model and a seat is often two or three levels
+			-- inside it, so checking only the seat and its immediate parent found
+			-- nothing on exactly the vehicles that keep their seat in a subassembly.
+			local mileage = ancestorAttribute(seat, "RoleplayOSMileage")
 			local plated = type(registration) == "string" and registration ~= ""
 			self.plate.Visible = plated
 			if plated then

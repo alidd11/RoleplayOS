@@ -23,6 +23,7 @@ local PhoneValidator = require(Shared.PhoneValidator)
 local PayloadInspector = require(Shared.PayloadInspector)
 local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Coalescer = require(Shared.Coalescer)
+local Fuel = require(Shared.FuelConsumption)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("cash drops require bounded whole pound amounts", function()
@@ -484,6 +485,80 @@ H.test("a burst of refresh requests collapses into one trailing run", function()
 	coalescer:Cancel()
 	task.wait(0.25)
 	H.expect(runs == 3, "a cancelled coalescer still fired its trailing run")
+end)
+
+H.test("a mile is derived from the speed conversion, not invented", function()
+	local K = Config.VehicleData.StudsPerSecondToMph
+	-- A vehicle at K mph covers one stud a second, so an hour covers 3600 studs.
+	H.expect(
+		math.abs(Fuel.studsPerMile(K) - 3600 / K) < 1e-9,
+		"studs per mile does not follow from K"
+	)
+	H.expect(
+		math.abs(Fuel.miles(Fuel.studsPerMile(K), K) - 1) < 1e-9,
+		"one mile of studs is not one mile"
+	)
+	H.expect(Fuel.miles(0, K) == 0, "standing still covered distance")
+	H.expect(Fuel.miles(-500, K) == 0, "negative displacement covered distance")
+end)
+
+H.test("the teleport guard allows a vehicle driven at the top of the dial", function()
+	local settings = Config.VehicleData
+	local K = settings.StudsPerSecondToMph
+	local dt = settings.ConsumptionIntervalSeconds
+	-- The distance a vehicle actually covers in one tick at the dial's top speed.
+	local atTopSpeed = (settings.TopSpeedMphCeiling / K) * dt
+	local limit = Fuel.implausibleStuds(dt, settings.TopSpeedMphCeiling, K)
+	H.expect(limit > atTopSpeed, "a vehicle at top speed is treated as a teleport")
+	-- This is the regression: the guard was a flat 400 studs and top speed for one
+	-- two-second tick is about 448, so fast driving was silently billed nothing.
+	H.expect(
+		atTopSpeed > 400,
+		"the old flat guard would not have been exceeded, so this test proves nothing"
+	)
+	local miles = Fuel.tick(atTopSpeed, dt, settings)
+	H.expect(miles > 0, "distance driven at top speed was discarded")
+end)
+
+H.test("a teleport is billed as nothing rather than as a long drive", function()
+	local settings = Config.VehicleData
+	local dt = settings.ConsumptionIntervalSeconds
+	local limit =
+		Fuel.implausibleStuds(dt, settings.TopSpeedMphCeiling, settings.StudsPerSecondToMph)
+	local miles, burnt = Fuel.tick(limit * 10, dt, settings)
+	H.expect(miles == 0, "a teleport added mileage")
+	-- Idle burn still applies: the engine was running through the tick either way.
+	local idleOnly = (dt / 60) * settings.FuelPercentPerIdleMinute
+	H.expect(math.abs(burnt - idleOnly) < 1e-9, "a teleport was charged for distance")
+end)
+
+H.test("fuel burn has a distance term and an idle term", function()
+	local settings = Config.VehicleData
+	-- Distance alone.
+	local moving = Fuel.burn(1, 0, settings.FuelPercentPerMile, settings.FuelPercentPerIdleMinute)
+	H.expect(
+		math.abs(moving - settings.FuelPercentPerMile) < 1e-9,
+		"a mile did not cost its configured share"
+	)
+	-- Idle alone. A vehicle running for a minute burns the idle rate.
+	local idling = Fuel.burn(0, 60, settings.FuelPercentPerMile, settings.FuelPercentPerIdleMinute)
+	H.expect(math.abs(idling - settings.FuelPercentPerIdleMinute) < 1e-9, "idling was free")
+	H.expect(idling > 0, "a parked engine is a free generator")
+end)
+
+H.test("a tank lasts a sensible distance rather than a session or a lifetime", function()
+	local settings = Config.VehicleData
+	local range = 100 / settings.FuelPercentPerMile
+	-- A real car does about 400 miles to a tank, which nobody would notice inside
+	-- one session; a range of a few miles would be unplayable.
+	H.expect(range > 20, "a full tank does not last twenty miles")
+	H.expect(range < 200, "a full tank lasts so long the gauge never moves")
+end)
+
+H.test("the empty threshold stops the engine before the tank reads zero", function()
+	local settings = Config.VehicleData
+	H.expect(settings.EmptyFuelPercent > 0, "the engine only cuts at exactly zero")
+	H.expect(settings.EmptyFuelPercent < 5, "the engine cuts while the gauge still shows fuel")
 end)
 
 H.finish()

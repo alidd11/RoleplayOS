@@ -5,6 +5,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
+local FuelConsumption = require(ReplicatedStorage.RoleplayOS.Shared.FuelConsumption)
+
 local VehicleSpawnerService = {
 	-- A broken or absent vehicle facility degrades that feature only. It must
 	-- never prevent character, data, access, MDT, phone or custody startup.
@@ -19,6 +21,11 @@ local VehicleSpawnerService = {
 	deathConnections = {},
 	spawnConnections = {},
 	seatConnections = {},
+	-- Per-vehicle odometer and tank state, keyed by owner user id. Held here
+	-- rather than only on the model's attributes because the burn loop needs the
+	-- previous position to integrate distance, and that is working state rather
+	-- than something a client should be able to read.
+	telemetry = {},
 }
 
 function VehicleSpawnerService:_vehicleDefinitions(): { [string]: any }
@@ -971,26 +978,35 @@ function VehicleSpawnerService:Spawn(
 		vehicle:SetAttribute("RoleplayOSVehicleId", vehicleId)
 	end
 	self.context.Services:Get("VehiclePlateService"):Apply(vehicle, registration or "")
-	-- Publish what the record says the tank holds.
+	-- A vehicle leaves the facility with a full tank, and carries its own
+	-- odometer reading with it.
 	--
-	-- Two client gauges read this attribute and nothing on the server had ever
-	-- written it, so every vehicle in the game showed its fuel as "--". The
-	-- number is real - it is the figure kept on the vehicle's own record - but it
-	-- is a figure nothing yet moves: there is no consumption anywhere and nowhere
-	-- in the map to refuel, so building one without the other would stop cars
-	-- with no way to start them again. Showing the stored value is honest; the
-	-- gauge stops claiming to be broken and starts meaning something the day a
-	-- filling station exists.
-	local fuel = 100
+	-- Fuel is burnt while driving now, which raises the question the previous
+	-- comment here flagged: consumption with no way to refuel strands people. The
+	-- map has no filling station, and building one blind -- against objects that
+	-- do not exist to test against -- would be shipping something unverifiable.
+	--
+	-- Collecting the vehicle is the refuel instead. You are taking a car out of a
+	-- depot or a garage, and it is fuelled when you do, which makes running dry a
+	-- reason to go back for it rather than a dead end. The stored figure is still
+	-- written throughout the drive, so the record and the MDT show the tank as it
+	-- was last seen; it is simply topped up on the next collection.
+	--
+	-- Mileage is the opposite: it must survive the garage, because that is the
+	-- entire point of an odometer.
+	local mileage = 0
 	if definition.Category == "Civilian" and type(vehicleId) == "string" then
 		for _, owned in ownership:List(player) do
-			if owned.VehicleId == vehicleId and type(owned.Fuel) == "number" then
-				fuel = owned.Fuel
+			if owned.VehicleId == vehicleId then
+				if type(owned.Mileage) == "number" then
+					mileage = owned.Mileage
+				end
 				break
 			end
 		end
 	end
-	vehicle:SetAttribute("RoleplayOSFuel", fuel)
+	vehicle:SetAttribute("RoleplayOSFuel", 100)
+	vehicle:SetAttribute("RoleplayOSMileage", mileage)
 	local vehicleSeat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
 	if vehicleSeat then
 		vehicleSeat:SetAttribute("RoleplayOSRegistration", registration or "")
@@ -1015,11 +1031,15 @@ function VehicleSpawnerService:Spawn(
 	-- tore down the newly-created chassis and was a primary disappearance cause.
 	self:_guardInitialSpawn(vehicle, bay)
 	self.active[player.UserId] = vehicle
+	self:_beginTelemetry(player, vehicle, vehicleId, mileage)
 	self.cooldowns[player.UserId] = os.clock()
 	self.spawning[player.UserId] = nil
 	vehicle.Destroying:Once(function()
 		if self.active[player.UserId] == vehicle then
 			self.active[player.UserId] = nil
+			-- Last chance to bank the drive before the model goes.
+			self:_persistTelemetry(player.UserId, true)
+			self.telemetry[player.UserId] = nil
 		end
 	end)
 	return {
@@ -1028,6 +1048,131 @@ function VehicleSpawnerService:Spawn(
 		Registration = registration,
 	},
 		nil
+end
+
+-- Fuel burn and the odometer.
+--
+-- Both readouts on the driver's cluster were decoration before this. Fuel was
+-- written once at spawn and never touched, so the gauge showed one figure for a
+-- whole session; mileage was read by the cluster and stored in the profile but
+-- written by nothing at all, anywhere.
+--
+-- Distance is integrated server-side from the vehicle's own position between
+-- ticks rather than trusted from the client, because fuel is an economic
+-- quantity and mileage ends up on a record the MDT reads.
+
+-- The chassis's own values folder, for the engine cut. Same problem the cluster
+-- solves: plugins keep folders called Values too, so a folder is only accepted
+-- when it can actually answer for the engine.
+local function chassisValues(vehicle: Model, settings: any): Folder?
+	local name = settings.ValuesFolderName
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant.Name == name and descendant:IsA("Folder") then
+			if descendant:FindFirstChild(settings.EngineValueName) then
+				return descendant
+			end
+		end
+	end
+	return nil
+end
+
+function VehicleSpawnerService:_beginTelemetry(
+	player: Player,
+	vehicle: Model,
+	vehicleId: string?,
+	mileage: number
+)
+	local pivot = vehicle:GetPivot().Position
+	self.telemetry[player.UserId] = {
+		Vehicle = vehicle,
+		VehicleId = vehicleId,
+		Fuel = 100,
+		Mileage = mileage,
+		LastPosition = pivot,
+		-- What was last written to the profile, so a tick that moved nothing does
+		-- not mark the session dirty.
+		PersistedFuel = nil,
+		PersistedMileage = nil,
+	}
+end
+
+-- Banks the current reading onto the owner's profile.
+--
+-- Rate limited by the caller except on the final call, which happens as the
+-- vehicle is destroyed and must not be skipped.
+function VehicleSpawnerService:_persistTelemetry(userId: number, force: boolean): boolean
+	local state = self.telemetry[userId]
+	if not state or type(state.VehicleId) ~= "string" then
+		return false
+	end
+	if
+		not force
+		and state.PersistedFuel == state.Fuel
+		and state.PersistedMileage == state.Mileage
+	then
+		return false
+	end
+	local player = Players:GetPlayerByUserId(userId)
+	if not player then
+		return false
+	end
+	local ownership = self.context.Services:Get("VehicleOwnershipService")
+	local wrote = ownership:RecordTelemetry(player, state.VehicleId, state.Fuel, state.Mileage)
+	state.PersistedFuel = state.Fuel
+	state.PersistedMileage = state.Mileage
+	return wrote
+end
+
+-- Stops the engine when the tank is empty, and lets it run again once it is not.
+--
+-- Config.Chassis.EngineValueName has named this value since the config was
+-- written and nothing had ever read it. A-Chassis makes its own torque from that
+-- folder and never consults MaxSpeed, so cutting the engine is the only lever
+-- that reaches these vehicles at all.
+function VehicleSpawnerService:_setEngine(vehicle: Model, running: boolean)
+	local settings = self.context.Configuration.Chassis
+	local values = chassisValues(vehicle, settings)
+	local engine = values and values:FindFirstChild(settings.EngineValueName)
+	if engine and engine:IsA("ValueBase") and (engine :: any).Value ~= running then
+		(engine :: any).Value = running
+	end
+end
+
+function VehicleSpawnerService:_consumeTick(dt: number)
+	local settings = self.context.Configuration.VehicleData
+	for _, state in self.telemetry do
+		local vehicle = state.Vehicle
+		if not vehicle or not vehicle.Parent then
+			continue
+		end
+		local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+		local position = vehicle:GetPivot().Position
+		local previous = state.LastPosition or position
+		state.LastPosition = position
+
+		-- Only bills a vehicle somebody is sitting in. A car abandoned in the road
+		-- is not burning anything, and this is also what stops the loop charging for
+		-- the shove a spawner gives a vehicle as it sets it down.
+		if not seat or seat.Occupant == nil then
+			continue
+		end
+
+		-- Horizontal only. A vehicle dropped by the spawner, or bounced by a kerb,
+		-- travels vertically without going anywhere, and neither the odometer nor
+		-- the tank should record that as distance.
+		local moved = (Vector3.new(position.X, 0, position.Z) - Vector3.new(
+			previous.X,
+			0,
+			previous.Z
+		)).Magnitude
+
+		local miles, burnt = FuelConsumption.tick(moved, dt, settings)
+		state.Mileage += miles
+		state.Fuel = math.max(state.Fuel - burnt, 0)
+		vehicle:SetAttribute("RoleplayOSFuel", state.Fuel)
+		vehicle:SetAttribute("RoleplayOSMileage", state.Mileage)
+		self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
+	end
 end
 
 -- Watches one player's seat, and cleans up after whatever they were riding.
@@ -1172,9 +1317,49 @@ function VehicleSpawnerService:Start()
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
+
+	-- The burn loop. One timer for every occupied vehicle rather than a connection
+	-- per car, since the work is proportional to the number of drivers and there
+	-- are never many.
+	local interval = self.context.Configuration.VehicleData.ConsumptionIntervalSeconds
+	self.consuming = true
+	task.spawn(function()
+		local lastPersist = os.clock()
+		while self.consuming do
+			task.wait(interval)
+			if not self.consuming then
+				break
+			end
+			local ok, err = pcall(function()
+				self:_consumeTick(interval)
+			end)
+			if not ok then
+				warn("[RoleplayOS] fuel tick failed: " .. tostring(err))
+			end
+			-- Written back far less often than it is calculated. The attributes on
+			-- the model are what the cluster reads and they update every tick; the
+			-- profile only needs the figure often enough to survive a disconnect.
+			if os.clock() - lastPersist >= 15 then
+				lastPersist = os.clock()
+				for userId in self.telemetry do
+					pcall(function()
+						self:_persistTelemetry(userId, false)
+					end)
+				end
+			end
+		end
+	end)
 end
 
 function VehicleSpawnerService:Destroy()
+	self.consuming = false
+	-- Bank every drive in progress before the server goes.
+	for userId in self.telemetry do
+		pcall(function()
+			self:_persistTelemetry(userId, true)
+		end)
+	end
+	table.clear(self.telemetry)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
