@@ -962,21 +962,20 @@ local Config = {
 		-- parts would otherwise be two hundred parts changing colour twice a
 		-- second on every client that can see it.
 		MaximumLightParts = 64,
-		-- The tones a vehicle may be recorded as sounding. Names only.
+		-- Deliberately empty.
 		--
-		-- These were asset ids, under a comment claiming they were owned by the
-		-- group and verified in its inventory. Neither id is in the group's audio
-		-- inventory, and nothing has ever played them: every emergency vehicle in
-		-- the fleet ships its own siren sounds and its own script to play them,
-		-- and that script is what the officer actually hears. The framework's part
-		-- is to record which tone is running so dispatch and the speed cameras
-		-- agree with the street, which needs a name and not an id.
+		-- Most of the sound errors in this place are free model audio that Roblox
+		-- stopped allowing, and putting a guessed asset id here would fail the same
+		-- way while looking configured. Upload the tones under the group and put
+		-- their ids in EDIT_HERE.
 		Sirens = {
-			Wail = true,
-			Yelp = true,
-			Priority = true,
-			Airhorn = true,
+			-- Owned by Universal Projects. and verified in the group inventory.
+			Wail = "18707739719",
+			Yelp = "16312459952",
+			Phaser = "",
+			Horn = "",
 		},
+		SirenVolume = 0.5,
 		SirenRangeStuds = 320,
 	},
 	-- Rank ladders. A profile stores its rank as an index into this list, so

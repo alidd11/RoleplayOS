@@ -22,41 +22,8 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 
 -- The two shapes the panel takes. Tall on a desktop, wide on a phone, because a
 -- landscape phone has height to spare in neither direction but width in one.
-local FULL_PANEL = Vector2.new(244, 406)
-local COMPACT_PANEL = Vector2.new(448, 206)
-
--- The control head's materials. A siren box is a dark moulding with a slightly
--- lighter faceplate, screened legends and indicator lamps: three greys and two
--- lamp colours is the whole palette, and keeping it that short is what stops it
--- drifting back towards looking like a phone app.
-local CHASSIS = Color3.fromRGB(13, 15, 17)
-local FACEPLATE = Color3.fromRGB(26, 30, 34)
-local BEZEL = Color3.fromRGB(48, 55, 60)
-local KEY_CAP = Color3.fromRGB(34, 39, 44)
-local KEY_SEAM = Color3.fromRGB(10, 12, 14)
-local LEGEND = Color3.fromRGB(200, 207, 212)
-local ENGRAVED = Color3.fromRGB(118, 128, 136)
-local LAMP_DARK = Color3.fromRGB(38, 44, 50)
-local LAMP_AMBER = Color3.fromRGB(255, 176, 46)
-local LAMP_BLUE = Color3.fromRGB(74, 150, 255)
-local LAMP_RED = Color3.fromRGB(232, 74, 66)
-local LAMP_GREEN = Color3.fromRGB(96, 214, 140)
-
--- The siren keys, in the order a control head carries them: the continuous
--- tones together, then the horn, which is held rather than selected.
-local TONE_CONTROLS = {
-	{ Id = "Wail", Label = "WAIL" },
-	{ Id = "Yelp", Label = "YELP" },
-	{ Id = "Priority", Label = "PRIO" },
-}
-
--- The three states an officer actually works in, which is what the old 999 / AT
--- SCENE / RESET row was reaching for without saying so.
-local STAGE_CONTROLS = {
-	{ Id = "StageOff", Label = "OFF", Lamp = LAMP_GREEN },
-	{ Id = "StageScene", Label = "SCENE", Lamp = LAMP_AMBER },
-	{ Id = "StageResponse", Label = "999", Lamp = LAMP_BLUE },
-}
+local FULL_PANEL = Vector2.new(238, 402)
+local COMPACT_PANEL = Vector2.new(420, 188)
 
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
@@ -105,7 +72,7 @@ function EmergencyLightsController:Init(context: any)
 	-- own.
 	self.pending = setmetatable({}, { __mode = "k" })
 	self.buttons = {}
-	self.lamps = {}
+	self.secondary = {}
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 end
 
@@ -118,19 +85,6 @@ end
 -- lightbar in the city the same grey after its first run.
 function EmergencyLightsController:_adopt(model: Instance)
 	if self.tracked[model] then
-		return
-	end
-	-- The vehicle lights itself.
-	--
-	-- Every emergency vehicle in this fleet ships EasyLS, which runs its own
-	-- patterns over its own lamps from its own script. Painting them from here
-	-- as well is two owners of one lightbar, and whichever wrote last wins: the
-	-- kit's pattern and this one cancel into a bar that flashes wrong, or does
-	-- not flash at all. Recorded as tracked so the tag is not reconsidered every
-	-- step, and then left entirely alone.
-	if VehicleLights.ownKit(model) then
-		self.pending[model] = nil
-		self.tracked[model] = { Parts = {}, Lit = false, Kit = true }
 		return
 	end
 	local parts = {}
@@ -188,146 +142,59 @@ function EmergencyLightsController:_adopt(model: Instance)
 	self.tracked[model] = { Parts = parts, Lit = false, Siren = "", MissingSiren = {} }
 end
 
--- The siren sounds belonging to the vehicle being driven.
---
--- There used to be a _syncSiren here that stopped every tone in the vehicle and
--- played the one the server's attribute named, at this framework's volume, on a
--- loop. The vehicles already have a script that does exactly that from the
--- driver's keyboard, over the same four Sound objects, with its own volumes and
--- its own idea of which tone is on. Two owners of one Sound is a siren that
--- stops whenever the other one spoke last, which is precisely what a panel
--- button that appears to do nothing looks like.
---
--- The panel drives the vehicle's own sounds directly now, the same way the
--- vehicle's own keys do, and reads what is playing rather than what the server
--- last recorded. One owner, one truth, and the kit's keys keep working
--- untouched.
-function EmergencyLightsController:_drivenVehicle(): Model?
-	local character = Players.LocalPlayer.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local seat = humanoid and humanoid.SeatPart
-	return if seat then seat:FindFirstAncestorOfClass("Model") else nil
-end
-
-function EmergencyLightsController:_sirenRack(): Instance?
-	local vehicle = self:_drivenVehicle()
-	return if vehicle then VehicleLights.sirenRack(vehicle) else nil
-end
-
-function EmergencyLightsController:_toneSound(rack: Instance, tone: string): Sound?
-	for _, name in VehicleLights.SirenAliases[tone] or {} do
-		for _, child in rack:GetChildren() do
-			-- Kits vary in casing, AirHorn against Airhorn among them.
-			if child:IsA("Sound") and string.lower(child.Name) == string.lower(name) then
-				return child
-			end
-		end
-	end
-	return nil
-end
-
--- Keeps the framework's record in step with the vehicle's own lights key.
---
--- Pressing J goes straight to the kit, which lights the bar and tells nobody:
--- its stage lives in a local variable and its remote answers only GetBinds. The
--- panel would sit at OFF with the bar flashing above the bonnet, and worse, the
--- blue light exemption and what dispatch sees both hang off this framework's
--- stage attribute, so an officer who used the vehicle's own key was running a
--- blue light response the speed cameras still ticketed.
---
--- What the kit does expose is the flashing itself. A running pattern rewrites
--- lamp transparency several times a second and a stopped one rewrites nothing,
--- so a sample of a few lamps two polls apart answers the question the remote
--- will not. The grace window covers the gap between two steps of a slow pattern.
-local KIT_FLASH_GRACE = 1.5
-
-function EmergencyLightsController:_followKit()
-	local watch = self.kitWatch
-	if not watch then
+function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone: string)
+	if entry.Siren == tone then
 		return
 	end
-	local signature = 0
-	for index, lamp in watch.Lamps do
-		if lamp.Parent then
-			signature += lamp.Transparency * index
+	entry.Siren = tone
+	local sounds = {}
+	for _, descendant in model:GetDescendants() do
+		if descendant:IsA("Sound") then
+			-- Imported ELS kits vary in casing (for example AirHorn/Airhorn).
+			-- Resolve the vehicle's native sounds case-insensitively so a visible
+			-- siren button cannot silently produce no audio.
+			sounds[string.lower(descendant.Name)] = descendant
 		end
 	end
-	local now = os.clock()
-	if signature ~= watch.Signature then
-		watch.Signature = signature
-		watch.LastChange = now
-	end
-	local lit = now - watch.LastChange < KIT_FLASH_GRACE
-	local recorded = (self.state.Stage or 0) > 0
-	if lit == recorded then
-		return
-	end
-	-- Recorded, never driven. This never asks the kit to change anything; it only
-	-- writes down what the kit already did.
-	self:_request({ Stage = if lit then self.settings.Stages else 0 })
-end
-
--- Which continuous tone the vehicle is actually sounding, by asking it.
-function EmergencyLightsController:_playingTone(): string
-	local rack = self:_sirenRack()
-	if not rack then
-		return ""
-	end
-	for _, tone in VehicleLights.SirenCycle do
-		local sound = self:_toneSound(rack, tone)
-		if sound and sound.IsPlaying then
-			return tone
-		end
-	end
-	return ""
-end
-
--- Selects one continuous tone, or silence, exactly as the vehicle's own keys do:
--- the tones are mutually exclusive and looped, and the volume the kit was
--- authored with is left alone.
-function EmergencyLightsController:_setTone(tone: string)
-	local rack = self:_sirenRack()
-	if not rack then
-		return
-	end
-	for _, other in VehicleLights.SirenCycle do
-		local sound = self:_toneSound(rack, other)
-		if sound then
-			sound.Looped = true
-			sound.RollOffMaxDistance = self.settings.SirenRangeStuds
-			if other == tone then
-				if not sound.IsPlaying then
-					sound:Play()
-				end
-			elseif sound.IsPlaying then
+	for _, aliases in VehicleLights.SirenAliases do
+		for _, name in aliases do
+			local sound = sounds[string.lower(name)]
+			if sound then
+				sound.Looped = true
 				sound:Stop()
 			end
 		end
 	end
-	-- Recorded, not obeyed. Dispatch and the speed cameras need to know a unit is
-	-- running a siren; the sound itself is the vehicle's business.
-	self:_request({ Siren = tone, Stage = if tone ~= "" then self.settings.Stages else nil })
-end
-
--- The airhorn, which is held rather than selected.
-function EmergencyLightsController:_setHorn(down: boolean)
-	local rack = self:_sirenRack()
-	if not rack then
+	if tone == "" then
 		return
 	end
-	local horn = self:_toneSound(rack, VehicleLights.MomentaryTone)
-	if not horn then
+	local selected: Sound? = nil
+	for _, name in VehicleLights.SirenAliases[tone] or {} do
+		selected = sounds[string.lower(name)]
+		if selected then
+			break
+		end
+	end
+	if not selected then
+		if not entry.MissingSiren[tone] then
+			entry.MissingSiren[tone] = true
+			warn(
+				"[RoleplayOS] Vehicle has no native siren sound for "
+					.. tone
+					.. ": "
+					.. model:GetFullName()
+			)
+		end
 		return
 	end
-	horn.Looped = false
-	if down then
-		horn:Play()
-	else
-		horn:Stop()
-	end
+	selected.Looped = true
+	selected.Volume = self.settings.SirenVolume
+	selected.RollOffMaxDistance = self.settings.SirenRangeStuds
+	selected.RollOffMode = Enum.RollOffMode.InverseTapered
+	selected:Play()
 end
 
-function EmergencyLightsController:_restore(entry: any)
+function EmergencyLightsController:_restore(entry: any, model: Instance?)
 	for _, record in entry.Parts do
 		if record.Part.Parent then
 			record.Part.Color = record.Colour
@@ -351,26 +218,14 @@ function EmergencyLightsController:_restore(entry: any)
 		record.LastBrightness = nil
 	end
 	entry.Lit = false
+	if model then
+		self:_syncSiren(model, entry, "")
+	end
 end
 
 function EmergencyLightsController:_step()
 	local settings = self.settings
 	local phase = math.floor(os.clock() * settings.FlashesPerSecond * 2) % 2
-
-	-- The head follows the vehicle's own keys.
-	--
-	-- The driver can change tone with R, T or G and light the bar with J without
-	-- this panel being touched, and a lit key for a tone that stopped ten seconds
-	-- ago is worse than no key at all. Compared rather than repainted, so the
-	-- usual answer costs one string comparison on a loop that is already running.
-	if self.panel and self.panel.Visible then
-		self:_followKit()
-		local tone = self:_playingTone()
-		if tone ~= self.paintedTone then
-			self.paintedTone = tone
-			self:_paint()
-		end
-	end
 
 	-- Vehicles whose lamps had not arrived when the tag did.
 	for model in self.pending do
@@ -382,9 +237,11 @@ function EmergencyLightsController:_step()
 	end
 
 	for model, entry in self.tracked do
-		if not model.Parent or entry.Kit then
+		if not model.Parent then
 			continue
 		end
+		local siren = model:GetAttribute(settings.SirenAttribute)
+		self:_syncSiren(model, entry, if type(siren) == "string" then siren else "")
 		local stage = model:GetAttribute(settings.StageAttribute)
 		local lightsActive = model:GetAttribute(settings.StateAttribute) == true
 		if type(stage) ~= "number" then
@@ -392,7 +249,7 @@ function EmergencyLightsController:_step()
 		end
 		if not lightsActive then
 			if entry.Lit then
-				self:_restore(entry)
+				self:_restore(entry, model)
 			end
 			continue
 		end
@@ -467,57 +324,28 @@ function EmergencyLightsController:_step()
 	end
 end
 
--- One key on the control head.
---
--- These were rounded pastel tiles with black text, which is what an app looks
--- like. A siren controller is a moulded box of dark caps with the legend
--- screened onto them and an indicator lamp above each: the cap does not change
--- colour when the function is on, the lamp beside it lights. That distinction is
--- most of why the panel now reads as equipment bolted to a dashboard rather than
--- as a page of buttons floating over the windscreen.
-function EmergencyLightsController:_key(
+function EmergencyLightsController:_button(
 	parent: Instance,
 	id: string,
 	text: string,
-	lamp: Color3?
+	colour: Color3?
 ): TextButton
 	local item = Instance.new("TextButton")
 	item.Name = id
 	item.AutoButtonColor = false
-	item.BackgroundColor3 = KEY_CAP
+	item.BackgroundColor3 = colour or Color3.fromRGB(220, 220, 154)
 	item.BorderSizePixel = 0
-	item.Font = Enum.Font.RobotoMono
+	item.Font = Enum.Font.GothamBold
 	item.Text = text
-	item.TextColor3 = LEGEND
-	item.TextSize = 10
+	item.TextColor3 = Color3.fromRGB(15, 17, 18)
+	item.TextSize = 12
 	item.TextWrapped = true
 	item.Parent = parent
-	corner(item, 4)
-	-- Two strokes would be truer to a moulded cap, but one dark seam against the
-	-- lighter faceplate is enough to separate them and costs one instance.
+	corner(item, 9)
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = KEY_SEAM
-	stroke.Thickness = 1
+	stroke.Color = Color3.fromRGB(63, 67, 66)
+	stroke.Thickness = 2
 	stroke.Parent = item
-	local padding = Instance.new("UIPadding")
-	padding.PaddingTop = UDim.new(0, 9)
-	padding.Parent = item
-
-	local led = Instance.new("Frame")
-	led.Name = "Lamp"
-	led.AnchorPoint = Vector2.new(0.5, 0)
-	led.Position = UDim2.new(0.5, 0, 0, 4)
-	led.Size = UDim2.new(1, -16, 0, 3)
-	led.BackgroundColor3 = LAMP_DARK
-	led.BorderSizePixel = 0
-	led.Parent = item
-	corner(led, 2)
-	local glow = Instance.new("UIStroke")
-	glow.Color = lamp or LAMP_AMBER
-	glow.Thickness = 3
-	glow.Transparency = 1
-	glow.Parent = led
-
 	local scale = Instance.new("UIScale")
 	scale.Parent = item
 	table.insert(
@@ -538,20 +366,7 @@ function EmergencyLightsController:_key(
 		end)
 	)
 	self.buttons[id] = item
-	self.lamps[id] = { Led = led, Glow = glow, Colour = lamp or LAMP_AMBER }
 	return item
-end
-
--- Lights or darkens a key's indicator.
-function EmergencyLightsController:_lamp(id: string, on: boolean)
-	local record = self.lamps[id]
-	if not record then
-		return
-	end
-	record.Led.BackgroundColor3 = if on then record.Colour else LAMP_DARK
-	-- The halo is what sells it as a lamp rather than a coloured strip, and it is
-	-- only paid for while something is actually lit.
-	record.Glow.Transparency = if on then 0.55 else 1
 end
 
 function EmergencyLightsController:_mount()
@@ -568,21 +383,18 @@ function EmergencyLightsController:_mount()
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
-	-- The moulding, and the faceplate recessed inside it. Two frames rather than
-	-- one is what gives the box an edge to catch light on, which is the whole
-	-- difference between a panel and a rectangle.
 	local panel = Instance.new("Frame")
 	panel.Name = "Controller"
 	panel.AnchorPoint = Vector2.new(1, 0.5)
 	panel.Size = UDim2.fromOffset(FULL_PANEL.X, FULL_PANEL.Y)
-	panel.BackgroundColor3 = CHASSIS
+	panel.BackgroundColor3 = Color3.fromRGB(16, 19, 21)
 	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.SelectionGroup = true
 	panel.Parent = gui
-	corner(panel, 10)
+	corner(panel, 14)
 	local panelStroke = Instance.new("UIStroke")
-	panelStroke.Color = BEZEL
+	panelStroke.Color = Color3.fromRGB(57, 62, 65)
 	panelStroke.Thickness = 2
 	panelStroke.Parent = panel
 	self.panel = panel
@@ -590,110 +402,65 @@ function EmergencyLightsController:_mount()
 	panelScale.Parent = panel
 	self.panelScale = panelScale
 
-	local face = Instance.new("Frame")
-	face.Name = "Faceplate"
-	face.Position = UDim2.fromOffset(6, 6)
-	face.Size = UDim2.new(1, -12, 1, -12)
-	face.BackgroundColor3 = FACEPLATE
-	face.BorderSizePixel = 0
-	face.Parent = panel
-	corner(face, 7)
-	self.face = face
-
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(10, 7)
-	title.Size = UDim2.new(1, -20, 0, 12)
-	title.Font = Enum.Font.RobotoMono
-	title.Text = "SIREN / LIGHT CONTROL"
-	title.TextColor3 = ENGRAVED
-	title.TextSize = 9
+	title.Position = UDim2.fromOffset(12, 8)
+	title.Size = UDim2.new(1, -24, 0, 20)
+	title.Font = Enum.Font.GothamBold
+	title.Text = "EMERGENCY CONTROLS"
+	title.TextColor3 = Color3.fromRGB(205, 211, 213)
+	title.TextSize = 10
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = face
-
-	-- Reads out what the vehicle is doing, which on a real head is a small backlit
-	-- window rather than a label that changes colour.
-	local readout = Instance.new("TextLabel")
-	readout.Name = "Readout"
-	readout.AnchorPoint = Vector2.new(1, 0)
-	readout.Position = UDim2.new(1, -10, 0, 5)
-	readout.Size = UDim2.fromOffset(74, 15)
-	readout.BackgroundColor3 = CHASSIS
-	readout.BorderSizePixel = 0
-	readout.Font = Enum.Font.RobotoMono
-	readout.Text = "STANDBY"
-	readout.TextColor3 = LAMP_GREEN
-	readout.TextSize = 9
-	readout.Parent = face
-	corner(readout, 3)
-	self.readout = readout
-
-	-- Rows are positioned by _reshape, which is the only place that knows how
-	-- wide the head currently is.
-	local function row(name: string): Frame
-		local item = Instance.new("Frame")
-		item.Name = name
-		item.BackgroundTransparency = 1
-		item.Parent = face
-		return item
-	end
-	self.toneRow = row("Tones")
-	self.hornRow = row("Horn")
-	self.stageRow = row("Stages")
-
-	for _, control in TONE_CONTROLS do
-		local item = self:_key(self.toneRow, control.Id, control.Label, LAMP_RED)
-		item.Activated:Connect(function()
-			-- Pressing the tone that is already running silences it, the way the
-			-- vehicle's own keys do.
-			self:_setTone(if self:_playingTone() == control.Id then "" else control.Id)
-			self:_paint()
-		end)
-	end
-
-	-- Held, not selected. Down on press and up on release, including when the
-	-- pointer leaves the key still held, which otherwise leaves the horn stuck on.
-	local horn = self:_key(self.hornRow, "Airhorn", "AIR HORN", LAMP_RED)
-	horn.BackgroundColor3 = Color3.fromRGB(58, 32, 30)
-	table.insert(
-		self.connections,
-		horn.MouseButton1Down:Connect(function()
-			self:_setHorn(true)
-			self:_lamp("Airhorn", true)
-		end)
-	)
-	local function hornUp()
-		self:_setHorn(false)
-		self:_lamp("Airhorn", false)
-	end
-	table.insert(self.connections, horn.MouseButton1Up:Connect(hornUp))
-	table.insert(self.connections, horn.MouseLeave:Connect(hornUp))
-
-	for _, control in STAGE_CONTROLS do
-		local item = self:_key(self.stageRow, control.Id, control.Label, control.Lamp)
-		item.Activated:Connect(function()
-			self:_activate(control.Id)
-		end)
-	end
+	title.Parent = panel
 
 	local grid = Instance.new("Frame")
-	grid.Name = "Circuits"
 	grid.BackgroundTransparency = 1
-	grid.Parent = face
+	grid.Position = UDim2.fromOffset(12, 34)
+	grid.Size = UDim2.new(1, -24, 0, 244)
+	grid.Parent = panel
 	self.grid = grid
 	local layout = Instance.new("UIGridLayout")
 	self.gridLayout = layout
-	layout.CellSize = UDim2.fromOffset(68, 38)
-	layout.CellPadding = UDim2.fromOffset(6, 6)
+	layout.CellSize = UDim2.fromOffset(66, 55)
+	layout.CellPadding = UDim2.fromOffset(8, 8)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 	for order, control in CIRCUIT_CONTROLS do
-		local item = self:_key(grid, control.Id, control.Label, LAMP_BLUE)
+		local item = self:_button(grid, control.Id, control.Label)
 		item.LayoutOrder = order
 		item.Activated:Connect(function()
 			self:_activate(control.Id)
 		end)
 	end
+
+	local sirens = self:_button(panel, "Sirens", "SIRENS", Color3.fromRGB(204, 61, 51))
+	sirens.Position = UDim2.fromOffset(12, 288)
+	sirens.Size = UDim2.fromOffset(102, 47)
+	self.secondary[#self.secondary + 1] = sirens
+	sirens.Activated:Connect(function()
+		self:CycleSiren()
+	end)
+	local response = self:_button(panel, "Response", "999", Color3.fromRGB(42, 83, 184))
+	response.Position = UDim2.fromOffset(124, 288)
+	response.Size = UDim2.fromOffset(102, 47)
+	self.secondary[#self.secondary + 1] = response
+	response.Activated:Connect(function()
+		self:_request({ Stage = self.settings.Stages, Siren = "Wail" })
+	end)
+	local scene = self:_button(panel, "AtScene", "AT SCENE", Color3.fromRGB(174, 169, 93))
+	scene.Position = UDim2.fromOffset(12, 345)
+	scene.Size = UDim2.fromOffset(102, 45)
+	self.secondary[#self.secondary + 1] = scene
+	scene.Activated:Connect(function()
+		self:_request({ Stage = 1, Siren = "" })
+	end)
+	local reset = self:_button(panel, "Reset", "RESET", Color3.fromRGB(77, 139, 91))
+	reset.Position = UDim2.fromOffset(124, 345)
+	reset.Size = UDim2.fromOffset(102, 45)
+	self.secondary[#self.secondary + 1] = reset
+	reset.Activated:Connect(function()
+		self:_request({ Reset = true, Siren = "" })
+	end)
 end
 
 -- Switches the panel between its tall shape and its wide one.
@@ -707,83 +474,21 @@ function EmergencyLightsController:_reshape(compact: boolean)
 	end
 	self.compactShape = compact
 	local size = if compact then COMPACT_PANEL else FULL_PANEL
-	self.panel.Size = UDim2.fromOffset(size.X, size.Y)
-
-	local inset = 10
-	local gap = 6
-	local width = size.X - 12 - inset * 2
-	local top = 24
-
-	-- Keys are laid out by count rather than by fraction, so a row of three and a
-	-- row of one still produce caps of the same width. A control head whose keys
-	-- are different sizes for no reason is the first thing that gives it away.
-	local function spread(frame: Frame, height: number, cell: number)
-		local index = 0
-		for _, child in frame:GetChildren() do
-			if child:IsA("TextButton") then
-				child.Position = UDim2.fromOffset(index * (cell + gap), 0)
-				child.Size = UDim2.fromOffset(cell, height)
-				index += 1
-			end
-		end
-	end
-
-	local keys = #TONE_CONTROLS + 1 + #STAGE_CONTROLS
-	if compact then
-		-- One bank across the top on a landscape phone.
-		--
-		-- Stacked, the three rows left twenty eight pixels for the circuit grid,
-		-- which is under one row of a grid that can need three: the lighting half
-		-- of the head simply had nowhere to draw. The screen's width is the
-		-- dimension there is any of, so the siren keys spend it in a single row and
-		-- give their height back to the circuits.
-		local cell = math.floor((width - (keys - 1) * gap) / keys)
-		local height = 32
-		local left = inset
-		local function bank(frame: Frame, count: number)
-			frame.Position = UDim2.fromOffset(left, top)
-			frame.Size = UDim2.fromOffset(count * cell + (count - 1) * gap, height)
-			spread(frame, height, cell)
-			left += count * (cell + gap)
-		end
-		bank(self.toneRow, #TONE_CONTROLS)
-		bank(self.hornRow, 1)
-		bank(self.stageRow, #STAGE_CONTROLS)
-		top += height + gap
-	else
-		local function place(frame: Frame, count: number, height: number)
-			local cell = math.floor((width - (count - 1) * gap) / count)
-			frame.Position = UDim2.fromOffset(inset, top)
-			frame.Size = UDim2.fromOffset(width, height)
-			spread(frame, height, cell)
-			top += height + gap
-		end
-		place(self.toneRow, #TONE_CONTROLS, 40)
-		place(self.hornRow, 1, 34)
-		place(self.stageRow, #STAGE_CONTROLS, 40)
-	end
-
-	-- A moulded seam between the siren half of the head and the lighting half,
-	-- which is how these boxes are actually divided.
-	if not self.divider then
-		local divider = Instance.new("Frame")
-		divider.Name = "Seam"
-		divider.BackgroundColor3 = KEY_SEAM
-		divider.BorderSizePixel = 0
-		divider.Parent = self.face
-		self.divider = divider
-	end
-	self.divider.Position = UDim2.fromOffset(inset, top + 1)
-	self.divider.Size = UDim2.fromOffset(width, 1)
-	top += gap + 2
-
 	local columns = if compact then 6 else 3
-	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
-	local cellHeight = if compact then 32 else 38
-	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
-	self.grid.Position = UDim2.fromOffset(inset, top)
-	self.grid.Size = UDim2.new(0, width, 1, -top - inset)
-	self.gridColumns = columns
+	local cell = if compact then Vector2.new(60, 48) else Vector2.new(66, 55)
+	self.panel.Size = UDim2.fromOffset(size.X, size.Y)
+	self.gridLayout.CellSize = UDim2.fromOffset(cell.X, cell.Y)
+	local rows = math.ceil(#CIRCUIT_CONTROLS / columns)
+	self.grid.Size = UDim2.new(1, -24, 0, rows * cell.Y + (rows - 1) * 8)
+	local top = 34 + rows * cell.Y + (rows - 1) * 8 + 10
+	local across = if compact then 4 else 2
+	local width = math.floor((size.X - 24 - (across - 1) * 8) / across)
+	for index, item in self.secondary do
+		local column = (index - 1) % across
+		local row = math.floor((index - 1) / across)
+		item.Position = UDim2.fromOffset(12 + column * (width + 8), top + row * 53)
+		item.Size = UDim2.fromOffset(width, 46)
+	end
 end
 
 -- Hides the controls this vehicle cannot carry out.
@@ -812,19 +517,6 @@ function EmergencyLightsController:_applyAvailability()
 			end
 		end
 	end
-	-- A tone key for a sound the vehicle does not carry is a key that cannot
-	-- work, so it comes off the head rather than sitting there dark.
-	local rack = self:_sirenRack()
-	for _, control in TONE_CONTROLS do
-		local item = self.buttons[control.Id]
-		if item then
-			item.Visible = rack ~= nil and self:_toneSound(rack, control.Id) ~= nil
-		end
-	end
-	if self.buttons.Airhorn then
-		local horn = rack and self:_toneSound(rack, VehicleLights.MomentaryTone)
-		self.hornRow.Visible = horn ~= nil
-	end
 end
 
 function EmergencyLightsController:_paint()
@@ -837,32 +529,17 @@ function EmergencyLightsController:_paint()
 			elseif control.Id == "LowPower" then state.LowPower == true
 			elseif control.Id == "RunLock" then state.RunLock == true
 			else state.Circuits and state.Circuits[control.Id] == true
-		self:_lamp(control.Id, active)
-	end
-
-	-- Asked of the vehicle, not of the server. The driver can change the tone
-	-- with the vehicle's own keys at any moment, and a head that reports the
-	-- framework's last recorded value instead is a head that lies.
-	local tone = self:_playingTone()
-	for _, control in TONE_CONTROLS do
-		self:_lamp(control.Id, tone == control.Id)
-	end
-
-	local stage = state.Stage or 0
-	self:_lamp("StageOff", stage == 0)
-	self:_lamp("StageScene", stage == 1)
-	self:_lamp("StageResponse", stage >= self.settings.Stages)
-
-	if self.readout then
-		local text = if stage == 0 then "STANDBY" elseif stage == 1 then "AT SCENE" else "RESPONSE"
-		if tone ~= "" then
-			text = string.upper(tone)
+		local item = self.buttons[control.Id]
+		if item then
+			item.BackgroundColor3 = if active
+				then Color3.fromRGB(255, 220, 78)
+				else Color3.fromRGB(220, 220, 154)
 		end
-		self.readout.Text = text
-		self.readout.TextColor3 = if tone ~= ""
-			then LAMP_RED
-			elseif stage > 0 then LAMP_BLUE
-			else LAMP_GREEN
+	end
+	if self.buttons.Sirens then
+		self.buttons.Sirens.Text = if state.Siren and state.Siren ~= ""
+			then string.upper(state.Siren)
+			else "SIRENS"
 	end
 end
 
@@ -885,8 +562,15 @@ end
 -- come on; the framework request beside it is what keeps the server's idea of
 -- the vehicle - the blue light exemption, what dispatch sees - in step.
 function EmergencyLightsController:_kitRemote(): RemoteFunction?
-	local vehicle = self:_drivenVehicle()
-	return if vehicle then VehicleLights.ownKit(vehicle) else nil
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
+	if not vehicle then
+		return nil
+	end
+	local remote = vehicle:FindFirstChild("EasyLS_Remote", true)
+	return if remote and remote:IsA("RemoteFunction") then remote else nil
 end
 
 function EmergencyLightsController:_cycleKit(action: string)
@@ -902,25 +586,7 @@ function EmergencyLightsController:_cycleKit(action: string)
 end
 
 function EmergencyLightsController:_activate(id: string)
-	if id == "StageOff" then
-		-- Everything down: the kit's pattern, the tone, and this framework's
-		-- record of both.
-		if self.state.Stage and self.state.Stage > 0 then
-			self:_cycleKit("MainELS")
-		end
-		self:_setTone("")
-		self:_request({ Reset = true, Siren = "" })
-	elseif id == "StageScene" then
-		self:_setTone("")
-		self:_request({ Stage = 1, Siren = "" })
-	elseif id == "StageResponse" then
-		if not self.state.Stage or self.state.Stage < self.settings.Stages then
-			self:_cycleKit("MainELS")
-		end
-		self:_request({ Stage = self.settings.Stages })
-		self:_setTone("Wail")
-		self:_paint()
-	elseif id == "Director" then
+	if id == "Director" then
 		self:_cycleKit("DirectorELS")
 	elseif id == "Master" then
 		-- Cycles the kit's pattern and tells the server the lights are on, so the
@@ -942,19 +608,10 @@ end
 function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	if not driver then
 		self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
-		self.kitControls = false
-		self.kitWatch = nil
 		self.panel.Visible = false
 		self:_bindControls(false)
 		return
 	end
-	-- Whether this vehicle came with its own keyboard controls, which decides
-	-- whether this framework binds any of its own. Read from the vehicle rather
-	-- than from the server's reply, because it is a fact about the model.
-	self.kitControls = self:_sirenRack() ~= nil
-	local vehicle = self:_drivenVehicle()
-	local lamps = if vehicle then VehicleLights.kitLamps(vehicle, 8) else {}
-	self.kitWatch = if #lamps > 0 then { Lamps = lamps, Signature = -1, LastChange = 0 } else nil
 	-- Asked more than once.
 	--
 	-- This ran only on the transition into driving, and the server does not
@@ -988,8 +645,8 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	end
 end
 
--- Bound only while there is a panel to control, on a vehicle that has not
--- brought its own keys.
+-- Bound only while there is a panel to control, and unbound the moment there is
+-- not.
 --
 -- These used to be bound for everybody, all the time. A civilian pressing F sent
 -- a request that failed NOT_DRIVING and was deliberately swallowed, so the key
@@ -997,22 +654,15 @@ end
 -- the phone also binds, and this handler passed the input on: one press of Y
 -- toggled the lightbar and opened the phone.
 --
--- Then the d-pad and F and G turned out to be the kit's keys too. Every
--- emergency vehicle in this fleet carries a siren box that binds R, T, G and F
--- through UserInputService, and sinking an input in ContextActionService does
--- not stop UserInputService from seeing it: both handlers ran. Pressing F
--- toggled this framework's lights and sounded the vehicle's airhorn; pressing G
--- cycled this panel's tone and switched the vehicle to priority underneath it.
---
--- A vehicle that brought its own controls keeps them, and this binds nothing.
--- The panel is the only thing this framework adds, and it does not need a key.
+-- The gamepad now uses the d-pad, which nothing else claims, and the handler
+-- sinks rather than passes, which is safe precisely because it is only bound
+-- while the player is driving a vehicle that has lights.
 function EmergencyLightsController:_bindControls(available: boolean)
-	local wanted = available and not self.kitControls
-	if wanted == self.bound then
+	if available == self.bound then
 		return
 	end
-	self.bound = wanted
-	if not wanted then
+	self.bound = available
+	if not available then
 		ContextActionService:UnbindAction(ACTION_LIGHTS)
 		ContextActionService:UnbindAction(ACTION_SIREN)
 		return
@@ -1039,25 +689,23 @@ function EmergencyLightsController:Toggle()
 end
 
 function EmergencyLightsController:CycleSiren()
-	local rack = self:_sirenRack()
-	if not rack then
-		return
-	end
 	local tones = { "" }
-	for _, tone in VehicleLights.SirenCycle do
-		if self:_toneSound(rack, tone) then
-			table.insert(tones, tone)
+	if self.state.Tones then
+		for _, tone in { "Wail", "Yelp", "Phaser", "Horn" } do
+			if self.state.Tones[tone] and self.state.Tones[tone] ~= "" then
+				table.insert(tones, tone)
+			end
 		end
 	end
 	if #tones == 1 then
 		return
 	end
-	-- Stepped from what the vehicle is sounding, not from what the server last
-	-- recorded. The two can differ the moment the driver uses the vehicle's own
-	-- keys, and stepping from the stale one skips a tone or repeats one.
-	local current = table.find(tones, self:_playingTone()) or 1
-	self:_setTone(tones[current % #tones + 1])
-	self:_paint()
+	local current = table.find(tones, self.state.Siren or "") or 1
+	local nextIndex = current % #tones + 1
+	-- One request. The follow-up that used to be here read self.state, which the
+	-- reply above had already replaced, so it tested the answer rather than the
+	-- question and never fired. The server raises the stage itself now.
+	self:_request({ Siren = tones[nextIndex] })
 end
 
 function EmergencyLightsController:Start()
@@ -1145,7 +793,7 @@ function EmergencyLightsController:Start()
 		CollectionService:GetInstanceRemovedSignal(self.settings.Tag):Connect(function(model)
 			local entry = self.tracked[model]
 			if entry then
-				self:_restore(entry)
+				self:_restore(entry, model)
 				self.tracked[model] = nil
 			end
 		end)
