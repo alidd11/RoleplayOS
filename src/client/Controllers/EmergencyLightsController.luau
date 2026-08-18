@@ -25,6 +25,27 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 local FULL_PANEL = Vector2.new(238, 402)
 local COMPACT_PANEL = Vector2.new(420, 188)
 
+-- The moulding the keys are set into. Three greys, so the caps carry the colour.
+local CHASSIS = Color3.fromRGB(13, 15, 17)
+local FACEPLATE = Color3.fromRGB(26, 30, 34)
+local BEZEL = Color3.fromRGB(48, 55, 60)
+local SEAM = Color3.fromRGB(10, 12, 14)
+local ENGRAVED = Color3.fromRGB(118, 128, 136)
+
+-- The three tones a control head carries on their own keys, and the three states
+-- an officer works in. Discrete keys rather than one that cycles: an officer
+-- reaching for yelp should press yelp.
+local TONE_CONTROLS = {
+	{ Id = "Wail", Label = "WAIL" },
+	{ Id = "Yelp", Label = "YELP" },
+	{ Id = "Priority", Label = "PRIO" },
+}
+local MODE_CONTROLS = {
+	{ Id = "Reset", Label = "OFF" },
+	{ Id = "AtScene", Label = "AT SCENE" },
+	{ Id = "Response", Label = "999" },
+}
+
 -- The cap your panel already used, kept. Only the indicator above it is new.
 local CAP = Color3.fromRGB(220, 220, 154)
 local LEGEND = Color3.fromRGB(15, 17, 18)
@@ -39,17 +60,6 @@ local LAMP_GREEN = Color3.fromRGB(104, 216, 146)
 
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
-
--- Each mode button at rest and in force. The lit value is the same hue carried
--- brighter rather than a different colour, so a panel with one mode running
--- still reads as one panel.
-local RESPONSE_BASE = Color3.fromRGB(42, 83, 184)
-local SCENE_BASE = Color3.fromRGB(174, 169, 93)
-local RESET_BASE = Color3.fromRGB(77, 139, 91)
-local SIREN_BASE = Color3.fromRGB(204, 61, 51)
--- Deeper than the tone button, because it is a different kind of control: one is
--- a selection that stays, the other only sounds while it is held.
-local HORN_BASE = Color3.fromRGB(150, 46, 40)
 
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
@@ -96,7 +106,6 @@ function EmergencyLightsController:Init(context: any)
 	self.pending = setmetatable({}, { __mode = "k" })
 	self.buttons = {}
 	self.lamps = {}
-	self.secondary = {}
 	self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 end
 
@@ -451,7 +460,7 @@ function EmergencyLightsController:_button(
 	item.Font = Enum.Font.GothamMedium
 	item.Text = text
 	item.TextColor3 = LEGEND
-	item.TextSize = 13
+	item.TextSize = 12
 	item.TextWrapped = true
 	item.LineHeight = 1.05
 	item.Parent = parent
@@ -463,9 +472,10 @@ function EmergencyLightsController:_button(
 	-- The legend sits below the lamp rather than under it. Without this the
 	-- indicator lies across the first line of any two-line label.
 	local padding = Instance.new("UIPadding")
-	padding.PaddingTop = UDim.new(0, 10)
-	padding.PaddingLeft = UDim.new(0, 3)
-	padding.PaddingRight = UDim.new(0, 3)
+	padding.PaddingTop = UDim.new(0, 13)
+	padding.PaddingBottom = UDim.new(0, 3)
+	padding.PaddingLeft = UDim.new(0, 2)
+	padding.PaddingRight = UDim.new(0, 2)
 	padding.Parent = item
 
 	local lamp = Instance.new("Frame")
@@ -537,18 +547,21 @@ function EmergencyLightsController:_mount()
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
+	-- The moulding, and the faceplate recessed inside it. Two frames rather than
+	-- one is what gives the box an edge to catch light on, which is most of the
+	-- difference between a control head and a rectangle.
 	local panel = Instance.new("Frame")
 	panel.Name = "Controller"
-	panel.AnchorPoint = Vector2.new(1, 0.5)
+	panel.AnchorPoint = Vector2.new(1, 1)
 	panel.Size = UDim2.fromOffset(FULL_PANEL.X, FULL_PANEL.Y)
-	panel.BackgroundColor3 = Color3.fromRGB(16, 19, 21)
+	panel.BackgroundColor3 = CHASSIS
 	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.SelectionGroup = true
 	panel.Parent = gui
-	corner(panel, 14)
+	corner(panel, 10)
 	local panelStroke = Instance.new("UIStroke")
-	panelStroke.Color = Color3.fromRGB(57, 62, 65)
+	panelStroke.Color = BEZEL
 	panelStroke.Thickness = 2
 	panelStroke.Parent = panel
 	self.panel = panel
@@ -556,54 +569,73 @@ function EmergencyLightsController:_mount()
 	panelScale.Parent = panel
 	self.panelScale = panelScale
 
+	local face = Instance.new("Frame")
+	face.Name = "Faceplate"
+	face.Position = UDim2.fromOffset(6, 6)
+	face.Size = UDim2.new(1, -12, 1, -12)
+	face.BackgroundColor3 = FACEPLATE
+	face.BorderSizePixel = 0
+	face.Parent = panel
+	corner(face, 7)
+	self.face = face
+
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(12, 8)
-	title.Size = UDim2.new(1, -24, 0, 20)
-	title.Font = Enum.Font.GothamBold
-	title.Text = "EMERGENCY CONTROLS"
-	title.TextColor3 = Color3.fromRGB(205, 211, 213)
+	title.Position = UDim2.fromOffset(11, 7)
+	title.Size = UDim2.new(1, -22, 0, 13)
+	title.Font = Enum.Font.GothamMedium
+	title.Text = "SIREN / LIGHT CONTROL"
+	title.TextColor3 = ENGRAVED
 	title.TextSize = 10
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = panel
+	title.Parent = face
 
-	local grid = Instance.new("Frame")
-	grid.BackgroundTransparency = 1
-	grid.Position = UDim2.fromOffset(12, 34)
-	grid.Size = UDim2.new(1, -24, 0, 244)
-	grid.Parent = panel
-	self.grid = grid
-	local layout = Instance.new("UIGridLayout")
-	self.gridLayout = layout
-	layout.CellSize = UDim2.fromOffset(66, 55)
-	layout.CellPadding = UDim2.fromOffset(8, 8)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = grid
-	for order, control in CIRCUIT_CONTROLS do
-		local item = self:_button(grid, control.Id, control.Label)
-		item.LayoutOrder = order
+	-- What the unit is doing, in a backlit window rather than as a label that
+	-- changes colour. A real head tells you the state without you reading the keys.
+	local readout = Instance.new("TextLabel")
+	readout.Name = "Readout"
+	readout.AnchorPoint = Vector2.new(1, 0)
+	readout.Position = UDim2.new(1, -11, 0, 5)
+	readout.Size = UDim2.fromOffset(80, 16)
+	readout.BackgroundColor3 = CHASSIS
+	readout.BorderSizePixel = 0
+	readout.Font = Enum.Font.GothamMedium
+	readout.Text = "STANDBY"
+	readout.TextColor3 = LAMP_GREEN
+	readout.TextSize = 10
+	readout.Parent = face
+	corner(readout, 3)
+	self.readout = readout
+
+	local function row(name: string): Frame
+		local item = Instance.new("Frame")
+		item.Name = name
+		item.BackgroundTransparency = 1
+		item.Parent = face
+		return item
+	end
+	self.toneRow = row("Tones")
+	self.hornRow = row("Horn")
+	self.modeRow = row("Modes")
+
+	-- Discrete tone keys rather than one key that cycles.
+	--
+	-- A cycling button makes the officer press three times to reach the tone they
+	-- want and gives no way to see what the others are. Every control head, and
+	-- the EVL panel these vehicles ship with, puts each tone on its own key with
+	-- its own indicator. Pressing the tone that is running silences it, which is
+	-- what the vehicle's own keys do.
+	for _, control in TONE_CONTROLS do
+		local item = self:_button(self.toneRow, control.Id, control.Label)
 		item.Activated:Connect(function()
-			self:_activate(control.Id)
+			self:_setTone(if self:_playingTone() == control.Id then "" else control.Id)
+			self:_paint()
 		end)
 	end
 
-	local sirens = self:_button(panel, "Sirens", "SIRENS", SIREN_BASE)
-	sirens.Position = UDim2.fromOffset(12, 288)
-	sirens.Size = UDim2.fromOffset(102, 47)
-	self.secondary[#self.secondary + 1] = sirens
-	sirens.Activated:Connect(function()
-		self:CycleSiren()
-	end)
-
-	-- Held, not selected.
-	--
-	-- Every kit sounds its airhorn while the key is down and stops on release, so
-	-- this is the one control on the panel that is not a toggle. Down on press and
-	-- up on release, and also on the pointer leaving the button while still held,
-	-- which is otherwise how a horn gets stuck on: the button never sees the
-	-- release because it happened somewhere else.
-	local horn = self:_button(panel, "Airhorn", "AIR HORN", HORN_BASE)
-	self.secondary[#self.secondary + 1] = horn
+	-- Held, not selected. Down on press and up on release, and also when the
+	-- pointer leaves while still held, which is otherwise how a horn sticks on.
+	local horn = self:_button(self.hornRow, "Airhorn", "AIR HORN")
 	table.insert(
 		self.connections,
 		horn.MouseButton1Down:Connect(function()
@@ -617,45 +649,43 @@ function EmergencyLightsController:_mount()
 	end
 	table.insert(self.connections, horn.MouseButton1Up:Connect(hornUp))
 	table.insert(self.connections, horn.MouseLeave:Connect(hornUp))
-	local response = self:_button(panel, "Response", "999", RESPONSE_BASE)
-	response.Position = UDim2.fromOffset(124, 288)
-	response.Size = UDim2.fromOffset(102, 47)
-	self.secondary[#self.secondary + 1] = response
-	response.Activated:Connect(function()
-		-- Through _setTone, not through the request.
-		--
-		-- These three used to pass a Siren field and stop there, which was enough
-		-- when a client-side player watched that attribute and made the noise.
-		-- Nothing watches it now: the panel drives the vehicle's own sounds. Left
-		-- as it was, 999 recorded a wail it never sounded and AT SCENE and RESET
-		-- recorded silence over a siren that kept running.
-		self:_request({ Stage = self.settings.Stages })
-		self:_setTone("Wail")
-		self:_paint()
-	end)
-	local scene = self:_button(panel, "AtScene", "AT SCENE", SCENE_BASE)
-	scene.Position = UDim2.fromOffset(12, 345)
-	scene.Size = UDim2.fromOffset(102, 45)
-	self.secondary[#self.secondary + 1] = scene
-	scene.Activated:Connect(function()
-		self:_setTone("")
-		self:_request({ Stage = 1 })
-	end)
-	local reset = self:_button(panel, "Reset", "RESET", RESET_BASE)
-	reset.Position = UDim2.fromOffset(124, 345)
-	reset.Size = UDim2.fromOffset(102, 45)
-	self.secondary[#self.secondary + 1] = reset
-	reset.Activated:Connect(function()
-		self:_setTone("")
-		self:_request({ Reset = true })
-	end)
+
+	for _, control in MODE_CONTROLS do
+		local item = self:_button(self.modeRow, control.Id, control.Label)
+		item.Activated:Connect(function()
+			self:_activate(control.Id)
+		end)
+	end
+
+	-- The moulded seam between the audio half of the head and the lighting half,
+	-- which is how these boxes are actually divided.
+	local seam = Instance.new("Frame")
+	seam.Name = "Seam"
+	seam.BackgroundColor3 = SEAM
+	seam.BorderSizePixel = 0
+	seam.Parent = face
+	self.seam = seam
+
+	local grid = Instance.new("Frame")
+	grid.Name = "Circuits"
+	grid.BackgroundTransparency = 1
+	grid.Parent = face
+	self.grid = grid
+	local layout = Instance.new("UIGridLayout")
+	self.gridLayout = layout
+	layout.CellSize = UDim2.fromOffset(66, 52)
+	layout.CellPadding = UDim2.fromOffset(6, 6)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = grid
+	for order, control in CIRCUIT_CONTROLS do
+		local item = self:_button(grid, control.Id, control.Label)
+		item.LayoutOrder = order
+		item.Activated:Connect(function()
+			self:_activate(control.Id)
+		end)
+	end
 end
 
--- Switches the panel between its tall shape and its wide one.
---
--- Both hold the same sixteen controls; only the number of columns and the row
--- of secondary buttons differ, so nothing has to be rebuilt and no state is
--- lost when a phone is rotated.
 function EmergencyLightsController:_reshape(compact: boolean)
 	if self.compactShape == compact then
 		return
@@ -664,53 +694,100 @@ function EmergencyLightsController:_reshape(compact: boolean)
 	self:_layout()
 end
 
--- Positions everything and sizes the panel to what it is actually holding.
+-- Positions every row and sizes the moulding to what it is actually holding.
 --
--- The height was a constant that assumed all thirteen circuits. A marked car
--- reports nine or ten, an unmarked one fewer, and the rows that were not drawn
--- kept their space anyway: the panel stood as tall as the tallest vehicle in the
--- fleet with a third of it empty, floating in the middle of the screen with
--- nothing under it. Measured from the visible controls instead, so the box is
--- the size of its contents on every vehicle.
+-- Rows that are hidden take no space and a vehicle reporting nine circuits gets
+-- a shorter box than one reporting thirteen. A control head with gaps in it
+-- reads as a broken one.
 function EmergencyLightsController:_layout()
+	if not self.face then
+		return
+	end
 	local compact = self.compactShape == true
 	local size = if compact then COMPACT_PANEL else FULL_PANEL
+	local inset, gap = 10, 6
+	local width = size.X - 12 - inset * 2
+	local top = 25
+
+	local function visibleIn(frame: Frame): { TextButton }
+		local list = {}
+		for _, child in frame:GetChildren() do
+			if child:IsA("TextButton") and child.Visible then
+				table.insert(list, child)
+			end
+		end
+		return list
+	end
+
+	-- Keys are sized by count, so a row of three and a row of one still produce
+	-- caps of the same width. Different-sized keys for no reason is the first
+	-- thing that gives a panel away as drawn rather than moulded.
+	local keyHeight = if compact then 34 else 40
+	local function bandCell(count: number): number
+		return math.floor((width - (count - 1) * gap) / math.max(count, 1))
+	end
+
+	if compact then
+		-- One bank across the top on a landscape phone. Stacked, the three rows
+		-- leave the circuit grid almost nothing, and width is the dimension a
+		-- landscape screen actually has.
+		local tones, horn, modes =
+			visibleIn(self.toneRow), visibleIn(self.hornRow), visibleIn(self.modeRow)
+		local total = math.max(#tones + #horn + #modes, 1)
+		local cell = bandCell(total)
+		local left = inset
+		local function bank(frame: Frame, keys: { TextButton })
+			frame.Visible = #keys > 0
+			if #keys == 0 then
+				return
+			end
+			frame.Position = UDim2.fromOffset(left, top)
+			frame.Size = UDim2.fromOffset(#keys * cell + (#keys - 1) * gap, keyHeight)
+			for i, key in keys do
+				key.Position = UDim2.fromOffset((i - 1) * (cell + gap), 0)
+				key.Size = UDim2.fromOffset(cell, keyHeight)
+			end
+			left += #keys * (cell + gap)
+		end
+		bank(self.toneRow, tones)
+		bank(self.hornRow, horn)
+		bank(self.modeRow, modes)
+		top += keyHeight + gap
+	else
+		local function place(frame: Frame, height: number)
+			local keys = visibleIn(frame)
+			frame.Visible = #keys > 0
+			if #keys == 0 then
+				return
+			end
+			local cell = bandCell(#keys)
+			frame.Position = UDim2.fromOffset(inset, top)
+			frame.Size = UDim2.fromOffset(width, height)
+			for i, key in keys do
+				key.Position = UDim2.fromOffset((i - 1) * (cell + gap), 0)
+				key.Size = UDim2.fromOffset(cell, height)
+			end
+			top += height + gap
+		end
+		place(self.toneRow, keyHeight)
+		place(self.hornRow, if compact then 28 else 32)
+		place(self.modeRow, keyHeight)
+	end
+
+	self.seam.Position = UDim2.fromOffset(inset, top + 1)
+	self.seam.Size = UDim2.fromOffset(width, 1)
+	top += gap + 2
+
 	local columns = if compact then 6 else 3
-	local cell = if compact then Vector2.new(60, 48) else Vector2.new(66, 55)
-	self.gridLayout.CellSize = UDim2.fromOffset(cell.X, cell.Y)
-
-	local visible = 0
-	for _, control in CIRCUIT_CONTROLS do
-		local item = self.buttons[control.Id]
-		if item and item.Visible then
-			visible += 1
-		end
-	end
-	local rows = math.max(math.ceil(visible / columns), 1)
-	local gridHeight = rows * cell.Y + (rows - 1) * 8
-	self.grid.Size = UDim2.new(1, -24, 0, gridHeight)
-
-	local top = 34 + gridHeight + 10
-	local across = if compact then 4 else 2
-	local width = math.floor((size.X - 24 - (across - 1) * 8) / across)
-	local shown = {}
-	for _, item in self.secondary do
-		if item.Visible then
-			table.insert(shown, item)
-		end
-	end
-	local secondaryRows = math.max(math.ceil(#shown / across), 1)
-	for index, item in shown do
-		local column = (index - 1) % across
-		local row = math.floor((index - 1) / across)
-		-- A button left alone on the last row takes the whole width rather than
-		-- sitting half-empty beside a gap. With five controls and two columns that
-		-- is RESET, and an odd count is the normal case now the horn is here.
-		local alone = index == #shown and column == 0
-		item.Position = UDim2.fromOffset(12 + column * (width + 8), top + row * 53)
-		item.Size = UDim2.fromOffset(if alone then size.X - 24 else width, 46)
-	end
-	self.panel.Size = UDim2.fromOffset(size.X, top + secondaryRows * 53 - 7 + 12)
+	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
+	local cellHeight = if compact then 40 else 52
+	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+	self.grid.Position = UDim2.fromOffset(inset, top)
+	local circuits = #visibleIn(self.grid)
+	local rows = math.max(math.ceil(circuits / columns), 1)
+	local gridHeight = rows * cellHeight + (rows - 1) * gap
+	self.grid.Size = UDim2.fromOffset(width, gridHeight)
+	self.panel.Size = UDim2.fromOffset(size.X, top + gridHeight + inset + 12)
 end
 
 -- Hides the controls this vehicle cannot carry out.
@@ -743,22 +820,20 @@ function EmergencyLightsController:_applyAvailability()
 	-- for the same reason a circuit does: a button that records a state against a
 	-- speaker the vehicle does not have is indistinguishable, to the person
 	-- pressing it, from a broken button.
+	-- A key for a sound the vehicle does not carry comes off the head, for the
+	-- same reason a circuit does: a control that records a state against
+	-- equipment the vehicle does not have is indistinguishable, to the person
+	-- pressing it, from a broken one.
 	local rack = self:_sirenRack()
+	for _, control in TONE_CONTROLS do
+		local key = self.buttons[control.Id]
+		if key then
+			key.Visible = rack ~= nil and self:_toneSound(rack, control.Id) ~= nil
+		end
+	end
 	if self.buttons.Airhorn then
 		self.buttons.Airhorn.Visible = rack ~= nil
 			and self:_toneSound(rack, VehicleLights.MomentaryTone) ~= nil
-	end
-	if self.buttons.Sirens then
-		local anyTone = false
-		if rack then
-			for _, tone in VehicleLights.SirenCycle do
-				if self:_toneSound(rack, tone) then
-					anyTone = true
-					break
-				end
-			end
-		end
-		self.buttons.Sirens.Visible = anyTone
 	end
 	-- Measured again, because what was just hidden is what the panel has to close
 	-- up around. Skipped before the panel exists, which is every call during Init.
@@ -771,9 +846,6 @@ function EmergencyLightsController:_paint()
 	local state = self.state
 	self:_applyAvailability()
 
-	-- A circuit's lamp is the colour that circuit actually lights, so the panel
-	-- and the street agree: rear reds read red on the panel, scene and alley
-	-- lamps read white, the blues read blue.
 	for _, control in CIRCUIT_CONTROLS do
 		local active = if control.Id == "Director"
 			then (self.directorStep or 0) > 0
@@ -789,18 +861,29 @@ function EmergencyLightsController:_paint()
 		self:_lamp(control.Id, active, shade)
 	end
 
-	-- The three modes are one switch, so exactly one of them is lit.
-	local stage = state.Stage or 0
-	self:_lamp("Response", stage >= self.settings.Stages, LAMP_BLUE)
-	self:_lamp("AtScene", stage == 1, LAMP_ON)
-	self:_lamp("Reset", stage == 0, LAMP_GREEN)
-
-	-- Read from the vehicle rather than from the record, because the driver can
-	-- change tone with the vehicle's own keys without this panel being touched.
+	-- Asked of the vehicle, not of the record. The driver can change tone with
+	-- the vehicle's own keys at any moment, and a head reporting the framework's
+	-- last recorded value instead is a head that lies.
 	local tone = self:_playingTone()
-	if self.buttons.Sirens then
-		self.buttons.Sirens.Text = if tone ~= "" then string.upper(tone) else "SIRENS"
-		self:_lamp("Sirens", tone ~= "", LAMP_RED)
+	for _, control in TONE_CONTROLS do
+		self:_lamp(control.Id, tone == control.Id, LAMP_RED)
+	end
+
+	local stage = state.Stage or 0
+	self:_lamp("Reset", stage == 0, LAMP_GREEN)
+	self:_lamp("AtScene", stage == 1, LAMP_ON)
+	self:_lamp("Response", stage >= self.settings.Stages, LAMP_BLUE)
+
+	if self.readout then
+		local text = if stage == 0 then "STANDBY" elseif stage == 1 then "AT SCENE" else "RESPONSE"
+		if tone ~= "" then
+			text = string.upper(tone)
+		end
+		self.readout.Text = text
+		self.readout.TextColor3 = if tone ~= ""
+			then LAMP_RED
+			elseif stage > 0 then LAMP_BLUE
+			else LAMP_GREEN
 	end
 end
 
