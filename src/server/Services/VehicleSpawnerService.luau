@@ -130,6 +130,63 @@ local function vehicleOf(seat: BasePart): Instance
 	return root
 end
 
+-- Hangs the rider's accessories on the bike's proxy head, which its own script
+-- fails to do on an R15 avatar.
+--
+-- These kits hide the rider and show a dummy in the riding pose, then move each
+-- accessory's weld onto the dummy's head so hats and hair still appear. The
+-- dummy head is an invisible two by one by one proxy, one per rig:
+--
+--     R6   Misc.Anims.R6.Head.Parts.NewHead
+--     R15  Misc.Anims.R15.Torso.Head.NewHead
+--
+-- The kit reaches for Misc.Anims.R15.NewHead, which is two levels short of where
+-- that part actually lives. On an R6 rider the path is right and everything
+-- works; on an R15 rider - which is every modern avatar - indexing nil throws,
+-- and because the throw happens inside the loop over accessories, it takes the
+-- whole loop with it on the first one. Nothing is repointed, so every accessory
+-- stays welded to a head the kit has just hidden, and the rider's hat vanishes
+-- with it.
+--
+-- Doing it here rather than correcting the script means the model is untouched
+-- and needs no re-export, it survives the kit being re-imported, and it covers
+-- the other two vehicles carrying the same script.
+local function anchorAccessoriesToProxy(character: Model, vehicle: Instance): number
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local misc = vehicle:FindFirstChild("Misc")
+	local anims = misc and misc:FindFirstChild("Anims")
+	if not humanoid or not anims then
+		return 0
+	end
+	local rig =
+		anims:FindFirstChild(if humanoid.RigType == Enum.HumanoidRigType.R15 then "R15" else "R6")
+	-- Found by name rather than by path, because the two rigs bury it at
+	-- different depths and a third kit may bury it somewhere else again.
+	local proxy = rig and rig:FindFirstChild("NewHead", true)
+	if not proxy or not proxy:IsA("BasePart") then
+		return 0
+	end
+	local head = character:FindFirstChild("Head")
+	local moved = 0
+	for _, accessory in character:GetChildren() do
+		if not accessory:IsA("Accessory") then
+			continue
+		end
+		local handle = accessory:FindFirstChild("Handle")
+		local weld = handle and handle:FindFirstChild("AccessoryWeld")
+		if not weld or not weld:IsA("Weld") then
+			continue
+		end
+		-- Only the ones still on the rider's real head. Anything the kit already
+		-- moved, or that hangs off a limb it does not pose, is left alone.
+		if weld.Part1 == head then
+			weld.Part1 = proxy
+			moved += 1
+		end
+	end
+	return moved
+end
+
 -- Brings accessories back onto the rider when a vehicle kept hold of them.
 --
 -- Written first against the wrong theory. The guess was that kits clear the
@@ -910,7 +967,24 @@ function VehicleSpawnerService:_watchSeat(player: Player)
 		:Connect(function()
 			local seat = humanoid.SeatPart
 			if seat then
-				lastVehicle = vehicleOf(seat)
+				local mounted = vehicleOf(seat)
+				lastVehicle = mounted
+				-- After the kit has had its go, so this picks up only what its broken
+				-- R15 path left behind rather than racing it.
+				task.delay(0.4, function()
+					local body = player.Character
+					if not body or humanoid.SeatPart ~= seat or not mounted.Parent then
+						return
+					end
+					local moved = anchorAccessoriesToProxy(body, mounted)
+					if moved > 0 then
+						self.context.Logger:Info("Accessories hung on the vehicle's proxy head", {
+							UserId = player.UserId,
+							Vehicle = mounted.Name,
+							AccessoriesMoved = moved,
+						})
+					end
+				end)
 				return
 			end
 			-- Just got off. Deferred by a frame so Roblox has finished removing
