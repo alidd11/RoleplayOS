@@ -121,6 +121,87 @@ local function detachRider(character: Model, vehicle: Instance): number
 	return removed
 end
 
+-- The joints an R6 rig is built from, and what each one holds.
+local R6_JOINTS = {
+	{ Holder = "HumanoidRootPart", Joint = "RootJoint", Held = "Torso" },
+	{ Holder = "Torso", Joint = "Neck", Held = "Head" },
+	{ Holder = "Torso", Joint = "Left Shoulder", Held = "Left Arm" },
+	{ Holder = "Torso", Joint = "Right Shoulder", Held = "Right Arm" },
+	{ Holder = "Torso", Joint = "Left Hip", Held = "Left Leg" },
+	{ Holder = "Torso", Joint = "Right Hip", Held = "Right Leg" },
+}
+
+local R6_BODY_PARTS = {
+	HumanoidRootPart = true,
+	Torso = true,
+	Head = true,
+	["Left Arm"] = true,
+	["Right Arm"] = true,
+	["Left Leg"] = true,
+	["Right Leg"] = true,
+}
+
+-- Puts an R6 rig back together after a vehicle took it apart.
+--
+-- detachRider cannot help with this one, and correctly so. The moped does not
+-- weld the rider to itself: it dismantles the rider. On mounting it severs each
+-- joint of an R6 character and replaces it with a rigid weld between the same
+-- two body parts --
+--
+--     C.HumanoidRootPart.RootJoint.Part1 = nil
+--     MW(C.HumanoidRootPart, C.Torso)
+--
+-- and does the same to the neck, both shoulders and both hips, keeping the
+-- originals in a table to undo when the seat weld goes. Every one of those welds
+-- has both ends inside the character, so the rule detachRider works by - one end
+-- in the rider, one in the vehicle - cannot see them. That rule is right and
+-- must stay: it is what stops it cutting the rig itself or a held tool.
+--
+-- When the kit's undo does not run, the rider walks away with RootJoint.Part1
+-- nil and a weld holding the torso rigid, which is the torso stuck to the bike.
+--
+-- Only R6 is affected. The kit gates the whole block on the character having a
+-- Torso, which an R15 rig does not, so this is a no-op on a modern avatar and
+-- exists for players whose avatar is R6 under Player Choice.
+local function restoreRig(character: Model): number
+	local repaired = 0
+	for _, entry in R6_JOINTS do
+		local holder = character:FindFirstChild(entry.Holder)
+		local held = character:FindFirstChild(entry.Held)
+		local joint = holder and holder:FindFirstChild(entry.Joint)
+		if joint and joint:IsA("Motor6D") and held and held:IsA("BasePart") then
+			if joint.Part1 == nil then
+				joint.Part1 = held
+				repaired += 1
+			end
+		end
+	end
+	if repaired == 0 then
+		return 0
+	end
+	-- The rigid welds the kit put in place of those joints. Both ends have to be
+	-- body parts, which is exactly the set it created and nothing else: a tool's
+	-- grip weld holds a Handle, and a Handle is not a body part.
+	for _, descendant in character:GetDescendants() do
+		if not descendant:IsA("Weld") then
+			continue
+		end
+		local weld = descendant :: Weld
+		local first, second = weld.Part0, weld.Part1
+		if
+			first
+			and second
+			and R6_BODY_PARTS[first.Name]
+			and R6_BODY_PARTS[second.Name]
+			and first.Parent == character
+			and second.Parent == character
+		then
+			weld:Destroy()
+		end
+	end
+	return repaired
+end
+
 -- The vehicle a seat belongs to: the outermost model it sits inside.
 local function vehicleOf(seat: BasePart): Instance
 	local root: Instance = seat
@@ -1007,12 +1088,17 @@ function VehicleSpawnerService:_watchSeat(player: Player)
 				-- nothing, which is a different way of losing it.
 				local restored = reattachAccessories(body, vehicle)
 				local removed = detachRider(body, vehicle)
-				if removed > 0 or restored > 0 then
+				-- Last, because it is the only one that puts joints back rather than
+				-- taking them away, and it must not have its work cut by the two
+				-- above.
+				local repaired = restoreRig(body)
+				if removed > 0 or restored > 0 or repaired > 0 then
 					self.context.Logger:Info("Rider released from a vehicle that kept hold", {
 						UserId = player.UserId,
 						Vehicle = vehicle.Name,
 						JointsRemoved = removed,
 						AccessoriesRestored = restored,
+						RigJointsRepaired = repaired,
 					})
 				end
 			end)
