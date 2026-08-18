@@ -22,13 +22,14 @@ type Counts = {
 	Models: number,
 	Lights: number,
 	Sounds: number,
+	Shadows: number,
 	-- Counted apart from "nothing needed changing", because the two look
 	-- identical in a total of zero and mean opposite things.
 	Refused: number,
 }
 
 local function newCounts(): Counts
-	return { Meshes = 0, Models = 0, Lights = 0, Sounds = 0, Refused = 0 }
+	return { Meshes = 0, Models = 0, Lights = 0, Sounds = 0, Shadows = 0, Refused = 0 }
 end
 
 function WorldBudgetService:Init(context: any)
@@ -43,6 +44,26 @@ end
 -- caller can report what it changed rather than what it looked at.
 function WorldBudgetService:_apply(instance: Instance, counts: Counts)
 	local settings = self:_settings()
+
+	-- Small parts stop casting shadows.
+	--
+	-- Every part in a map casts by default, and the sun's shadow pass draws all of
+	-- them whether or not the result is visible. A part smaller than a couple of
+	-- studs cubed -- a handle, a mirror, a bolt, a light lens -- contributes a
+	-- shadow of a few pixels that nobody has ever looked at, while costing the same
+	-- per-part work as a wall.
+	--
+	-- Deliberately a volume test and not a count or a distance: it removes only
+	-- shadows that were never legible, so nothing that reads on screen changes.
+	-- Checked before the MeshPart branch because a small MeshPart wants both this
+	-- and its detail setting.
+	if instance:IsA("BasePart") and settings.ShadowlessPartVolume > 0 then
+		local size = instance.Size
+		if instance.CastShadow and size.X * size.Y * size.Z < settings.ShadowlessPartVolume then
+			instance.CastShadow = false
+			counts.Shadows += 1
+		end
+	end
 
 	if instance:IsA("MeshPart") then
 		-- Precise holds every triangle at every distance. Automatic is Roblox's
@@ -233,6 +254,7 @@ function WorldBudgetService:Start()
 			MeshesReducedToAutomaticDetail = counts.Meshes,
 			ModelsGivenDistantDetail = counts.Models,
 			LightsMadeCheaper = counts.Lights,
+			SmallPartsNoLongerCastingShadows = counts.Shadows,
 			SoundsGivenAFalloff = counts.Sounds,
 			RefusedByEngine = counts.Refused,
 		})
