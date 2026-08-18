@@ -24,8 +24,11 @@ local CLOSE_ACTION = "RoleplayOSCustodyActionsClose"
 local INTERACTION_RANGE = 12
 
 local SEARCH_POWERS = {
-	{ Code = "PACE_S1", Label = "PACE S1  ·  STOP AND SEARCH" },
+	{ Code = "PACE_S1", Label = "PACE S1  ·  STOLEN OR PROHIBITED" },
+	{ Code = "CJPOA_S60", Label = "CJPOA S60  ·  OFFENSIVE WEAPONS" },
+	{ Code = "FIREARMS_S47", Label = "FIREARMS ACT S47  ·  FIREARMS" },
 	{ Code = "PACE_S32_POST_ARREST", Label = "PACE S32  ·  POST-ARREST" },
+	{ Code = "PACE_S54_CUSTODY", Label = "PACE S54  ·  DETAINEE AT STATION" },
 }
 
 local function corner(parent: Instance, radius: number)

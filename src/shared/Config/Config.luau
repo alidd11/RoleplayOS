@@ -819,18 +819,26 @@ local Config = {
 		EscortDistance = 3.25,
 		EscortMaximumForce = 18000,
 		EscortMaximumVelocity = 16,
-		-- Deliberately two.
+		-- Ordered the way an incident runs: on the street, then at the point of
+		-- arrest, then at the station.
 		--
-		-- A drugs search power was offered here and is gone. Roblox does not permit
-		-- references to controlled substances, and a search reason naming them is
-		-- exactly that whichever way it is worded, so this is a removal rather than
-		-- a rename: a euphemism for the same thing is the same thing. The server
-		-- validates against this list, so a client that still sends the old code
-		-- gets INVALID_SEARCH_POWER and no search is recorded.
-		--
-		-- The two that remain cover the gameplay: a stop and search before arrest,
-		-- and a search after one.
-		SearchPowers = { "PACE_S1", "PACE_S32_POST_ARREST" },
+		-- Every one of these is a real search power an officer would cite, chosen
+		-- so the reason an officer gives matches what is actually happening in the
+		-- game. Section 60 and section 47 cover weapons and firearms, which the
+		-- game has; section 54 is the search on booking, which the game already
+		-- performs automatically. A drugs power was offered here and was removed:
+		-- Roblox does not permit references to controlled substances, and a search
+		-- reason naming them is exactly that whichever way it is worded, so it went
+		-- rather than being renamed. A euphemism for the same thing is the same
+		-- thing. The server validates against this list, so a client that sends
+		-- anything absent from it gets INVALID_SEARCH_POWER and records no search.
+		SearchPowers = {
+			"PACE_S1",
+			"CJPOA_S60",
+			"FIREARMS_S47",
+			"PACE_S32_POST_ARREST",
+			"PACE_S54_CUSTODY",
+		},
 		DisconnectPenaltyCode = "LEAVE_WHILE_RESTRAINED",
 		SimulationNotice = "Simplified roleplay simulation — not legal advice or professional training.",
 		ArrestCaution = "You do not have to say anything. But it may harm your defence if you do not mention when questioned something which you later rely on in court. Anything you do say may be given in evidence.",

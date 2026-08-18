@@ -58,8 +58,11 @@ local REFUSALS = {
 -- being told they had been searched under the raw wire value, which is not a
 -- sentence anybody reads.
 local SEARCH_POWERS = {
-	PACE_S1 = "stop and search",
+	PACE_S1 = "stop and search powers",
+	CJPOA_S60 = "powers to search for offensive weapons",
+	FIREARMS_S47 = "powers to search for firearms",
 	PACE_S32_POST_ARREST = "post-arrest search powers",
+	PACE_S54_CUSTODY = "custody search powers",
 }
 
 local function formatTime(seconds: number): string
