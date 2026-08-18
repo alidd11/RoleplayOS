@@ -1707,7 +1707,13 @@ function App.mount(context: any): ScreenGui
 	-- Below this a poster stops being readable, so a page too short to hold the
 	-- grid scrolls rather than shrinking its tiles any further.
 	local function posterMinimumHeight(): number
-		return if shortLandscape() then 176 else 208
+		-- Tall enough for the image and its caption, and no taller.
+		--
+		-- Two hundred and eight put the caption on the page edge, so the label under
+		-- the Civilian poster was cut in half by the bottom of the scroll. The tile
+		-- is an image with a label beneath it, and the label belongs inside the tile
+		-- rather than against wherever the tile happens to end.
+		return if shortLandscape() then 176 else 190
 	end
 	-- Bumped by every render. A page that asks the server for anything yields,
 	-- and clearing the container before the yield does not help: two renders both
@@ -1820,7 +1826,11 @@ function App.mount(context: any): ScreenGui
 				0,
 				if shortLandscape() then 32 else 38
 			)
-			back.TextSize = 12
+			-- Regular weight, one step up. This was the bold face at twelve, which
+			-- closes the letterforms before the size does and reads as pixelated
+			-- rather than small - the same fault the lighting panel legends had.
+			back.Font = Enum.Font.GothamMedium
+			back.TextSize = 13
 			back.TextColor3 = COLOURS.Accent
 			local backStroke = back:FindFirstChildOfClass("UIStroke")
 			if backStroke then

@@ -224,8 +224,20 @@ function EmergencyLightsController:_setHorn(down: boolean)
 	if not horn then
 		return
 	end
-	horn.Looped = false
+	-- Looped while held, so a short sample sustains.
+	--
+	-- This was Looped = false, which is right for a long sample and wrong for a
+	-- short one. The Sur-Ron's airhorn is a hundred and thirteen milliseconds -
+	-- it is a horn blip, not an airhorn - so one press gave a single tick and
+	-- then silence however long the key was held, which is exactly what "the air
+	-- horn is basically just a horn" describes. Looping it while down turns any
+	-- sample into a held horn, and the release still stops it dead.
+	--
+	-- The sample itself is the vehicle's own and is not ours to change from here;
+	-- a Sur-Ron with a real airhorn needs the sound swapping in the model.
+	horn.Looped = down
 	if down then
+		horn.TimePosition = 0
 		horn:Play()
 	else
 		horn:Stop()
@@ -662,10 +674,12 @@ function EmergencyLightsController:_mount()
 	table.insert(self.connections, horn.MouseButton1Up:Connect(hornUp))
 	table.insert(self.connections, horn.MouseLeave:Connect(hornUp))
 
+	-- AT SCENE before 999, so the row runs left to right in order of escalation
+	-- and RESET stays last as the way out of both.
 	for order, entry in
 		{
-			{ Id = "Response", Label = "999", Cap = RESPONSE_CAP },
 			{ Id = "AtScene", Label = "AT SCENE", Cap = SCENE_CAP },
+			{ Id = "Response", Label = "999", Cap = RESPONSE_CAP },
 			{ Id = "Reset", Label = "RESET", Cap = RESET_CAP },
 		}
 	do
@@ -918,6 +932,31 @@ function EmergencyLightsController:_kitRemote(): RemoteFunction?
 	return if remote and remote:IsA("RemoteFunction") then remote else nil
 end
 
+-- One step through the kit's main patterns, counted.
+--
+-- EasyLS keeps its stage in a local and its remote answers only GetBinds, so
+-- there is no way to ask where it is. Counting presses tracks it exactly, for
+-- the same reason the director count does: nothing else in this fleet is bound
+-- to the kit's main key, so this is the only thing moving it.
+function EmergencyLightsController:_cycleMain()
+	self.kitStep = ((self.kitStep or 0) + 1) % (self.settings.Stages + 1)
+	self:_cycleKit("MainELS")
+end
+
+-- Steps the kit round to dark, however many presses that takes.
+--
+-- The kit cycles rather than switches, so "off" is not one press from anywhere
+-- except the last pattern. Bounded by the number of patterns so a count that has
+-- somehow drifted cannot spin here.
+function EmergencyLightsController:_kitOff()
+	local guard = self.settings.Stages + 1
+	while (self.kitStep or 0) ~= 0 and guard > 0 do
+		self:_cycleMain()
+		guard -= 1
+	end
+	self.kitStep = 0
+end
+
 function EmergencyLightsController:_cycleKit(action: string)
 	local remote = self:_kitRemote()
 	if not remote then
@@ -943,10 +982,18 @@ function EmergencyLightsController:_activate(id: string)
 	-- Each one drives the tone as well as the stage, because nothing watches the
 	-- siren attribute any more - the panel plays the vehicle's own sounds.
 	if id == "Reset" then
-		if (self.state.Stage or 0) > 0 then
-			self:_cycleKit("MainELS")
-		end
+		-- Everything down, and it has to mean it.
+		--
+		-- This cycled the kit once, and the kit cycles rather than switches: from
+		-- pattern one of two, one press goes to pattern two. So RESET made the bar
+		-- brighter instead of dark, which is exactly what it looked like.
+		--
+		-- The kit's stage is a local it will not report, so it is counted here the
+		-- way the director stage already is, and RESET steps it round to zero
+		-- however many presses that takes.
+		self:_kitOff()
 		self:_setTone("")
+		self:_setHorn(false)
 		self:_request({ Reset = true })
 		self:_paint()
 		return
@@ -957,7 +1004,7 @@ function EmergencyLightsController:_activate(id: string)
 		return
 	elseif id == "Response" then
 		if (self.state.Stage or 0) < self.settings.Stages then
-			self:_cycleKit("MainELS")
+			self:_cycleMain()
 		end
 		self:_request({ Stage = self.settings.Stages })
 		self:_setTone("Wail")
@@ -982,7 +1029,7 @@ function EmergencyLightsController:_activate(id: string)
 	elseif id == "Master" then
 		-- Cycles the kit's pattern and tells the server the lights are on, so the
 		-- two agree about a vehicle that is now visibly lit.
-		self:_cycleKit("MainELS")
+		self:_cycleMain()
 		self:_request({
 			Stage = if self.state.Stage == self.settings.Stages then 0 else self.settings.Stages,
 		})
@@ -1012,9 +1059,12 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	local seat = humanoid and humanoid.SeatPart
 	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
 	self.vehicleOwnsKeys = vehicle ~= nil and vehicle:FindFirstChild("SirenControl", true) ~= nil
+	-- Both counts belong to the vehicle they were counted against, so a fresh car
+	-- starts from dark rather than inheriting the last one's position.
 	if vehicle ~= self.lastVehicle then
 		self.lastVehicle = vehicle
 		self.directorStep = 0
+		self.kitStep = 0
 	end
 	-- Asked more than once.
 	--
