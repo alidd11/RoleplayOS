@@ -115,6 +115,45 @@ return {
 		-- and discovery refuses a civilian vehicle with no price. All seven were
 		-- therefore being dropped on load, which is why none of them reached a
 		-- forecourt. Stating the price here is what admits them.
+		-- The three below arrived as models on disk with no definition, so they
+		-- synced into ServerStorage and shipped in the place while being reachable
+		-- from nowhere. Prices sit them against the cars already here: the Corolla
+		-- under the Civic because a hatchback is not a hot hatch, the V90 between
+		-- the S90 saloon and the XC90 it shares a platform with, and the 545e above
+		-- both as the executive car of the three.
+		CorollaHatchback = {
+			Id = "CorollaHatchback",
+			Name = "Toyota Corolla Hatchback",
+			Price = 24000,
+			ModelName = "23' Toyota Corolla HB",
+			WorkspaceModelName = "23' Toyota Corolla HB",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "23' Toyota Corolla HB" },
+			Colours = { "White", "Silver", "Black" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		VolvoV90 = {
+			Id = "VolvoV90",
+			Name = "Volvo V90",
+			Price = 46000,
+			ModelName = "24' Volvo V90",
+			WorkspaceModelName = "24' Volvo V90",
+			AssetPath = { "Vehicles", "Civilian", "Standard", "24' Volvo V90" },
+			Colours = { "Black", "White", "Grey" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
+		Bmw545e = {
+			Id = "Bmw545e",
+			Name = "BMW 545e",
+			Price = 58000,
+			ModelName = "72' BMW 545e",
+			WorkspaceModelName = "72' BMW 545e",
+			AssetPath = { "Vehicles", "Civilian", "Premium", "72' BMW 545e" },
+			Colours = { "Black", "White", "Blue" },
+			Access = { AccessType = "Public" },
+			Category = "Civilian",
+		},
 		CivicTypeR = {
 			Id = "CivicTypeR",
 			Name = "Honda Civic Type R",
@@ -175,14 +214,19 @@ return {
 		CityMotors = {
 			Id = "CityMotors",
 			Name = "City Motors",
+			-- Ordered by price, so the forecourt reads as a range rather than as the
+			-- order things happened to be added in.
 			VehicleIds = {
 				"HondaADV160",
+				"SurronCivilian",
+				"CorollaHatchback",
 				"CivicTypeR",
 				"VolvoS90",
+				"VolvoV90",
 				"VolvoXC90",
+				"Bmw545e",
 				"AudiRS3",
 				"BmwX5",
-				"SurronCivilian",
 			},
 		},
 	},
