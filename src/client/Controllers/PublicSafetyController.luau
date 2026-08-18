@@ -25,7 +25,6 @@ local INTERACTION_RANGE = 12
 
 local SEARCH_POWERS = {
 	{ Code = "PACE_S1", Label = "PACE S1  ·  STOP AND SEARCH" },
-	{ Code = "PACE_S23_MDA", Label = "S23 MDA  ·  DRUGS" },
 	{ Code = "PACE_S32_POST_ARREST", Label = "PACE S32  ·  POST-ARREST" },
 }
 

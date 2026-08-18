@@ -55,11 +55,10 @@ local REFUSALS = {
 }
 
 -- Readable names for the search powers the server accepts. The detainee was
--- being told they had been searched under "PACE_S23_MDA", which is the wire
--- value and not a sentence anybody reads.
+-- being told they had been searched under the raw wire value, which is not a
+-- sentence anybody reads.
 local SEARCH_POWERS = {
 	PACE_S1 = "stop and search",
-	PACE_S23_MDA = "drugs search powers",
 	PACE_S32_POST_ARREST = "post-arrest search powers",
 }
 

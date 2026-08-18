@@ -819,7 +819,18 @@ local Config = {
 		EscortDistance = 3.25,
 		EscortMaximumForce = 18000,
 		EscortMaximumVelocity = 16,
-		SearchPowers = { "PACE_S1", "PACE_S23_MDA", "PACE_S32_POST_ARREST" },
+		-- Deliberately two.
+		--
+		-- A drugs search power was offered here and is gone. Roblox does not permit
+		-- references to controlled substances, and a search reason naming them is
+		-- exactly that whichever way it is worded, so this is a removal rather than
+		-- a rename: a euphemism for the same thing is the same thing. The server
+		-- validates against this list, so a client that still sends the old code
+		-- gets INVALID_SEARCH_POWER and no search is recorded.
+		--
+		-- The two that remain cover the gameplay: a stop and search before arrest,
+		-- and a search after one.
+		SearchPowers = { "PACE_S1", "PACE_S32_POST_ARREST" },
 		DisconnectPenaltyCode = "LEAVE_WHILE_RESTRAINED",
 		SimulationNotice = "Simplified roleplay simulation — not legal advice or professional training.",
 		ArrestCaution = "You do not have to say anything. But it may harm your defence if you do not mention when questioned something which you later rely on in court. Anything you do say may be given in evidence.",
