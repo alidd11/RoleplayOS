@@ -2034,7 +2034,24 @@ function App.mount(context: any): ScreenGui
 			-- lower half was never on screen. Width is the plentiful axis, so the
 			-- portrait moves beside the text instead of above it and the whole card
 			-- fits, with the next one showing beneath to say the list continues.
-			local tileHeight = if landscape then 150 else 284
+			-- Side by side whenever the card is wide, not only on a phone held
+			-- sideways.
+			--
+			-- shortLandscape asks whether this is a small screen in landscape - it
+			-- requires the long axis to be under a thousand pixels - and the card
+			-- orientation was being decided by it. So a desktop, which has more
+			-- width than anything, took the portrait branch: a full-width portrait
+			-- stacked above its text in a 284 pixel card, with the name, date and
+			-- button crammed into the left third of a nine hundred pixel row and
+			-- most of the height empty.
+			--
+			-- The question the card actually needs answered is whether it is wide
+			-- enough to put the portrait beside the text, which a desktop always is.
+			local viewportWidth = if workspace.CurrentCamera
+				then workspace.CurrentCamera.ViewportSize.X
+				else 1280
+			local sideBySide = landscape or viewportWidth >= 900
+			local tileHeight = if sideBySide then 168 else 284
 			local extraSlotPass = nil
 			for _, pass in menuData.Gamepasses or {} do
 				if pass.Id == "ExtraCharacterSlot" and pass.PurchaseType == "DeveloperProduct" then
@@ -2070,28 +2087,30 @@ function App.mount(context: any): ScreenGui
 					end
 				)
 				-- Beside the text in landscape, above it in portrait.
-				local textLeft = if landscape then 124 else 16
-				local textInset = if landscape then -140 else -32
+				local textLeft = if sideBySide then 132 else 16
+				local textInset = if sideBySide then -148 else -32
 				preview.Position = UDim2.fromOffset(12, 12)
-				preview.Size = if landscape
-					then UDim2.fromOffset(100, 126)
+				preview.Size = if sideBySide
+					then UDim2.fromOffset(108, 144)
 					else UDim2.new(1, -24, 0, 132)
 				local name = text(item, character.FullName, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(textLeft, if landscape then 14 else 156)
+				name.Position = UDim2.fromOffset(textLeft, if sideBySide then 18 else 156)
 				name.Size = UDim2.new(1, textInset, 0, 27)
 				local dob = text(item, "Born " .. character.DateOfBirth, 12, COLOURS.Muted)
-				dob.Position = UDim2.fromOffset(textLeft, if landscape then 40 else 182)
+				dob.Position = UDim2.fromOffset(textLeft, if sideBySide then 48 else 182)
 				dob.Size = UDim2.new(1, textInset, 0, 22)
 				local identity = text(item, "CIVILIAN CHARACTER", 11, COLOURS.Accent, true)
-				identity.Position = UDim2.fromOffset(textLeft, if landscape then 62 else 205)
+				identity.Position = UDim2.fromOffset(textLeft, if sideBySide then 74 else 205)
 				identity.Size = UDim2.new(1, textInset, 0, 18)
 				-- A fixed label restating what the card plainly is. It goes first when
 				-- the buttons need the room, which in landscape they do.
+				-- Room for it once the card is on its side on a real screen; only a
+				-- short landscape phone has to drop it for the button.
 				identity.Visible = not landscape
 				local choose = button(item, if selected then "Enter city" else "Choose", selected)
 				choose.AnchorPoint = Vector2.new(0, 1)
 				choose.Position = UDim2.new(0, textLeft, 1, -12)
-				choose.Size = UDim2.new(1, textInset, 0, if landscape then 34 else 42)
+				choose.Size = UDim2.new(1, textInset, 0, if sideBySide then 38 else 42)
 				if
 					selected
 					and Players.LocalPlayer.Team
