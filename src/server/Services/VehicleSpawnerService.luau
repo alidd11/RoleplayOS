@@ -130,6 +130,75 @@ local function vehicleOf(seat: BasePart): Instance
 	return root
 end
 
+-- Puts back accessory welds a vehicle destroyed when it posed the rider.
+--
+-- The counterpart to detachRider below, for the other end of the ride. Bike kits
+-- pose their rider by welding limbs to the machine, and several of them clear
+-- the character's joints first so their own welds are the only ones left.
+-- BreakJoints does not distinguish: it takes the accessory welds with it, so
+-- hats, hair and anything else on the head come off the moment the rider mounts
+-- and never come back, because the kit only rebuilds the joints it cares about.
+--
+-- Roblox attaches an accessory by matching an Attachment on the handle to one of
+-- the same name on a body part, so rebuilding is the same match. Anything still
+-- welded is left alone, which means this does nothing at all on a vehicle that
+-- behaved.
+local function reattachAccessories(character: Model): number
+	local attachments: { [string]: Attachment } = {}
+	for _, descendant in character:GetDescendants() do
+		if descendant:IsA("Attachment") and descendant.Parent:IsA("BasePart") then
+			local part = descendant.Parent :: BasePart
+			-- Body parts only. A handle's own attachment is the other half of the
+			-- pair and must not be matched against itself.
+			if not part:FindFirstAncestorWhichIsA("Accessory") then
+				attachments[descendant.Name] = descendant
+			end
+		end
+	end
+	local restored = 0
+	for _, accessory in character:GetChildren() do
+		if not accessory:IsA("Accessory") then
+			continue
+		end
+		local handle = accessory:FindFirstChild("Handle")
+		if not handle or not handle:IsA("BasePart") then
+			continue
+		end
+		local attached = false
+		for _, joint in handle:GetChildren() do
+			if joint:IsA("Weld") or joint:IsA("WeldConstraint") or joint:IsA("Motor6D") then
+				attached = true
+				break
+			end
+		end
+		if attached then
+			continue
+		end
+		local handleAttachment: Attachment? = nil
+		for _, child in handle:GetChildren() do
+			if child:IsA("Attachment") and attachments[child.Name] then
+				handleAttachment = child
+				break
+			end
+		end
+		local bodyAttachment = handleAttachment and attachments[handleAttachment.Name]
+		if not handleAttachment or not bodyAttachment then
+			continue
+		end
+		local weld = Instance.new("Weld")
+		weld.Name = "AccessoryWeld"
+		weld.Part0 = bodyAttachment.Parent :: BasePart
+		weld.Part1 = handle
+		weld.C0 = bodyAttachment.CFrame
+		weld.C1 = handleAttachment.CFrame
+		weld.Parent = handle
+		handle.CanCollide = false
+		handle.Massless = true
+		restored += 1
+	end
+	return restored
+end
+
 local function seatPlayer(player: Player, seat: VehicleSeat)
 	task.spawn(function()
 		for _ = 1, 12 do
@@ -815,6 +884,23 @@ function VehicleSpawnerService:_watchSeat(player: Player)
 			local seat = humanoid.SeatPart
 			if seat then
 				lastVehicle = vehicleOf(seat)
+				-- Given a moment for the vehicle to finish posing the rider, then
+				-- checked. A kit that cleared the character's joints to make room for
+				-- its own has taken the accessory welds with them.
+				task.delay(0.35, function()
+					local body = player.Character
+					if not body or humanoid.SeatPart ~= seat then
+						return
+					end
+					local restored = reattachAccessories(body)
+					if restored > 0 then
+						self.context.Logger:Info("Accessories reattached after mounting", {
+							UserId = player.UserId,
+							Vehicle = if lastVehicle then lastVehicle.Name else "unknown",
+							AccessoriesRestored = restored,
+						})
+					end
+				end)
 				return
 			end
 			-- Just got off. Deferred by a frame so Roblox has finished removing
