@@ -31,6 +31,12 @@ function TaserPoseController:_clear(tool: Tool)
 	if state.RightShoulder and state.RightShoulder.Parent then
 		state.RightShoulder.Transform = CFrame.identity
 	end
+	if state.Track then
+		pcall(function()
+			state.Track:Stop(0.15)
+		end)
+		state.Track = nil
+	end
 	state.Control = nil
 	state.Target = nil
 	state.PoseConnection = nil
@@ -41,8 +47,53 @@ end
 -- when Animator:LoadAnimation returns a track. This local R15 IK pose is an
 -- ownership-independent fallback: the right hand retains Roblox's Tool grip and
 -- the support hand is brought onto the device. It exists only while equipped.
+-- An authored hold, if the tool was issued with one.
+--
+-- The IK pose below exists because imported animation ids can be unavailable to
+-- a group-owned experience, which makes a hand-built pose the only thing that
+-- always works. That reasoning does not apply to an animation the group itself
+-- owns: it loads, and a hand-authored hold beats anything assembled from an
+-- IKControl and a shoulder angle. Tried first, and the pose stays as the answer
+-- for every tool that has none.
+function TaserPoseController:_animated(tool: Tool): boolean
+	local animation = tool:FindFirstChild("Idle")
+	if not (animation and animation:IsA("Animation")) or animation.AnimationId == "" then
+		return false
+	end
+	local character = tool.Parent
+	local humanoid = character
+		and character:IsA("Model")
+		and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return false
+	end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		return false
+	end
+	local ok, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	if not ok or not track then
+		return false
+	end
+	-- Idle priority so the walk and run underneath it still read, and looped
+	-- because a hold is held rather than played once.
+	track.Priority = Enum.AnimationPriority.Idle
+	track.Looped = true
+	track:Play(0.15)
+	local state = self.watched[tool]
+	if state then
+		state.Track = track
+	end
+	return true
+end
+
 function TaserPoseController:_pose(tool: Tool)
 	self:_clear(tool)
+	if self:_animated(tool) then
+		return
+	end
 	local character = tool.Parent
 	if not character or not character:IsA("Model") then
 		return
@@ -113,6 +164,7 @@ function TaserPoseController:_watch(tool: Tool)
 		Target = nil,
 		PoseConnection = nil,
 		RightShoulder = nil,
+		Track = nil,
 	}
 	self.watched[tool] = state
 	table.insert(

@@ -1738,12 +1738,10 @@ local Config = {
 			Id = "Taser",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Taser" },
 			DepartmentId = "Police",
-			-- No Animations entry, deliberately. The group owns a taserhold clip
-			-- (116507173136573) that would suit this, but TaserPoseController builds
-			-- its R15 pose by hand and never looks for an Animation instance, so
-			-- naming it here would attach an asset nothing plays. Wiring the
-			-- controller to prefer a configured hold is the work that makes this
-			-- line worth adding, and it has not been done.
+			-- The group's own taser hold, published May 2025 and unused until now.
+			-- TaserPoseController prefers it and keeps its hand-built R15 pose as
+			-- the fallback, which is still what carries any tool without one.
+			Animations = { Idle = 116507173136573 },
 		},
 		MedicalBag = {
 			Id = "MedicalBag",
