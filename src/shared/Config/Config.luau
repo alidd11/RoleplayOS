@@ -844,13 +844,114 @@ local Config = {
 		ArrestCaution = "You do not have to say anything. But it may harm your defence if you do not mention when questioned something which you later rely on in court. Anything you do say may be given in evidence.",
 		-- Compressed gameplay tariffs, not real-world sentences. The server adds these values;
 		-- clients can only submit an allowlisted Code.
+		-- Named, cited and priced.
+		--
+		-- Six offences covered a game with speed cameras, a roads policing unit and
+		-- a traffic division, so almost everything an officer actually stopped
+		-- somebody for had to be booked as "Other recorded offence". Statutes are
+		-- carried alongside the name because citing one is most of what makes a
+		-- charge read as a charge rather than as a label, and the booking screen
+		-- has room for it.
+		--
+		-- Seconds are compressed gameplay tariffs and deliberately not real
+		-- sentences. They are ordered by how much harm the offence does rather than
+		-- by what the statute carries: a firearms offence is the longest here and
+		-- would not be the longest in law.
+		--
+		-- Nothing involving controlled substances or alcohol appears, and nothing
+		-- will: Roblox does not permit either, and a charge naming them is the same
+		-- problem as a search reason naming them.
 		OffenceTariffs = {
 			OTHER = { Name = "Other recorded offence", Seconds = 120 },
-			THEFT = { Name = "Theft", Seconds = 180 },
-			ASSAULT = { Name = "Assault", Seconds = 240 },
-			DANGEROUS_DRIVING = { Name = "Dangerous driving", Seconds = 300 },
-			ROBBERY = { Name = "Robbery", Seconds = 420 },
-			FIREARMS = { Name = "Firearms offence", Seconds = 480 },
+
+			-- Road traffic.
+			SPEEDING = {
+				Name = "Exceeding a speed limit",
+				Statute = "Road Traffic Regulation Act 1984 s89",
+				Seconds = 90,
+			},
+			NO_INSURANCE = {
+				Name = "Using a vehicle without insurance",
+				Statute = "Road Traffic Act 1988 s143",
+				Seconds = 120,
+			},
+			NO_LICENCE = {
+				Name = "Driving otherwise than in accordance with a licence",
+				Statute = "Road Traffic Act 1988 s87",
+				Seconds = 120,
+			},
+			CARELESS_DRIVING = {
+				Name = "Driving without due care and attention",
+				Statute = "Road Traffic Act 1988 s3",
+				Seconds = 150,
+			},
+			FAIL_TO_STOP_POLICE = {
+				Name = "Failing to stop for a constable",
+				Statute = "Road Traffic Act 1988 s163",
+				Seconds = 180,
+			},
+			FAIL_TO_STOP_COLLISION = {
+				Name = "Failing to stop after a collision",
+				Statute = "Road Traffic Act 1988 s170",
+				Seconds = 240,
+			},
+			VEHICLE_TAKEN_WITHOUT_CONSENT = {
+				Name = "Taking a vehicle without consent",
+				Statute = "Theft Act 1968 s12",
+				Seconds = 240,
+			},
+			DANGEROUS_DRIVING = {
+				Name = "Dangerous driving",
+				Statute = "Road Traffic Act 1988 s2",
+				Seconds = 300,
+			},
+
+			-- Against property.
+			THEFT = { Name = "Theft", Statute = "Theft Act 1968 s1", Seconds = 180 },
+			CRIMINAL_DAMAGE = {
+				Name = "Criminal damage",
+				Statute = "Criminal Damage Act 1971 s1",
+				Seconds = 180,
+			},
+			BURGLARY = { Name = "Burglary", Statute = "Theft Act 1968 s9", Seconds = 360 },
+			ROBBERY = { Name = "Robbery", Statute = "Theft Act 1968 s8", Seconds = 420 },
+
+			-- Against the person, and against officers doing the job.
+			PUBLIC_ORDER = {
+				Name = "Threatening or abusive behaviour",
+				Statute = "Public Order Act 1986 s4",
+				Seconds = 180,
+			},
+			OBSTRUCT_POLICE = {
+				Name = "Obstructing a constable in the execution of their duty",
+				Statute = "Police Act 1996 s89",
+				Seconds = 150,
+			},
+			ASSAULT = { Name = "Assault", Statute = "Criminal Justice Act 1988 s39", Seconds = 240 },
+			ASSAULT_EMERGENCY_WORKER = {
+				Name = "Assaulting an emergency worker",
+				Statute = "Assaults on Emergency Workers Act 2018 s1",
+				Seconds = 360,
+			},
+
+			-- Weapons. All three name things the game actually issues.
+			BLADED_ARTICLE = {
+				Name = "Possession of a bladed article",
+				Statute = "Criminal Justice Act 1988 s139",
+				Seconds = 300,
+			},
+			OFFENSIVE_WEAPON = {
+				Name = "Possession of an offensive weapon",
+				Statute = "Prevention of Crime Act 1953 s1",
+				Seconds = 300,
+			},
+			FIREARMS = {
+				Name = "Firearms offence",
+				Statute = "Firearms Act 1968 s1",
+				Seconds = 480,
+			},
+
+			-- Not an offence. The penalty for walking out of custody by quitting.
 			LEAVE_WHILE_RESTRAINED = {
 				Name = "Left the server while restrained",
 				Seconds = 180,

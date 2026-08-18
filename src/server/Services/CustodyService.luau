@@ -66,6 +66,9 @@ function CustodyService:_policy(): { any }
 			table.insert(policy, {
 				Code = code,
 				Name = tariff.Name,
+				-- Optional, because the catch-all and the disconnect penalty are not
+				-- offences under anything.
+				Statute = tariff.Statute,
 				Seconds = tariff.Seconds,
 			})
 		end
