@@ -21,6 +21,7 @@ export type Layout = {
 	SafeViewport: Vector2,
 	HudScale: number,
 	HotbarBottom: number,
+	ToolbarBottom: number,
 	RightReserve: number,
 	InputMode: string,
 	VR: boolean,
@@ -142,6 +143,14 @@ function UIOrchestrator:_layout(): Layout
 			1.25
 		),
 		HotbarBottom = if vr then 124 else if vehicle then 112 else 76,
+		-- The equipped-tools bar alone, without the driving controls added on top.
+		--
+		-- HotbarBottom grows to 112 in a vehicle to clear the pedals, but the pedals
+		-- only render on touch (DrivingControlsController gates them on InputMode),
+		-- so on a desktop that reserve protects nothing and anything anchored to it
+		-- floats a good forty pixels above the tools with empty screen underneath.
+		-- Panels that only need to clear the tools should use this instead.
+		ToolbarBottom = if vr then 124 else 76,
 		RightReserve = if vr
 			then 64
 			else if vehicle then (if breakpoint == "Compact" then 150 else 210) else 18,

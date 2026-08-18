@@ -2123,11 +2123,16 @@ local Config = {
 		-- empty tank therefore had no effect at all on the cars this game
 		-- actually uses. Cutting the engine is the one lever that reaches them.
 		EngineValueName = "IsOn",
-		-- Redline lived here, scaling the sweep when the chassis reported engine
-		-- speed. The dial now carries printed mph numerals and follows road speed
-		-- only, so nothing read it: a tachometer needs its own dial, and a key no
-		-- code reads is a setting that lies about being adjustable.
+		-- Engine speed the tachometer arc treats as full.
 		--
+		-- This briefly scaled the speed needle, which was wrong: it pointed the
+		-- needle at "80" on a dial printed in mph while the van did thirty. It now
+		-- scales the tacho ring outside the speed ticks, which is the only place a
+		-- redline means anything.
+		Redline = 8000,
+		-- Fraction of Redline the tacho arc shades red. 0.85 of 8000 is 6800, which
+		-- is where a petrol engine's limiter usually sits.
+		RedlineBand = 0.85,
 		-- Road speed the sweep treats as full, and the number printed against the
 		-- last major tick on the dial face.
 		--

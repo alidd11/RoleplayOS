@@ -14,7 +14,7 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- needle rendered outside it. Everything is placed from this size and the dial
 -- centre below, so the ticks, the numerals, the needle, the readout and the
 -- tell-tales cannot drift apart when one of them is adjusted.
-local CLUSTER_SIZE = Vector2.new(300, 222)
+local CLUSTER_SIZE = Vector2.new(300, 234)
 
 -- A car's speedometer, not a half-circle progress meter.
 --
@@ -30,7 +30,7 @@ local CLUSTER_SIZE = Vector2.new(300, 222)
 --
 -- Zero degrees is straight up, so the sweep runs from the lower left, up over the
 -- top, and down to the lower right, leaving the bottom open for the tell-tales.
-local DIAL_CENTRE = Vector2.new(150, 112)
+local DIAL_CENTRE = Vector2.new(150, 124)
 local DIAL_RADIUS = 92
 local SWEEP_START = -125
 local SWEEP_ARC = 250
@@ -45,11 +45,53 @@ local SWEEP_ARC = 250
 local NEEDLE_INNER = 50
 local NEEDLE_OUTER = 88
 
+-- How often the cluster reads the chassis, and how quickly the needle catches up
+-- with what it read.
+--
+-- These were one number. The loop sampled every 0.08s and wrote the needle's
+-- rotation straight from the sample, so the needle advanced in twelve visible
+-- steps a second -- it ticked round the dial like a clock's second hand rather
+-- than sweeping. That stepping is most of what separates a gauge from a readout:
+-- a real needle has mass, so it lags its input slightly and always moves
+-- continuously.
+--
+-- Sampling stays at 12.5Hz, because reading the chassis and rewriting six labels
+-- every frame is waste. The needle is now animated separately on every frame,
+-- easing toward whatever the last sample asked for.
+local SAMPLE_INTERVAL = 0.08
+
+-- Time constant of that easing, in seconds: roughly how long the needle takes to
+-- cover the first two thirds of a gap. Low enough to feel responsive on the
+-- throttle, high enough to absorb the jitter in a chassis velocity reading.
+local NEEDLE_TAU = 0.11
+
 -- Majors every third tick. With the sweep divided into 22, that lands them on 0,
 -- 20, 40 ... 140, which is a UK speedometer's face rather than an arbitrary
 -- division of whatever top speed the chassis claims.
 local MAJOR_EVERY = 3
 local NUMERAL_RADIUS = DIAL_RADIUS - 30
+
+-- The tachometer, as a ring of ticks concentric with the speed dial and just
+-- outside it.
+--
+-- A-Chassis has always published RPM. It used to drive the speed needle, which
+-- was wrong, and removing that left the value going nowhere -- the chassis
+-- reporting engine speed to an instrument that had stopped listening. A car
+-- solves this with a second dial, and on a cluster this size a second full dial
+-- does not fit, so the revs become a ring around the first one. Reading revs off
+-- a ring is what most modern clusters do anyway.
+--
+-- No numerals on it. The useful information in a tacho at a glance is how close
+-- the needle is to the red, not the precise figure, and printing a second set of
+-- numbers around the outside of a dial that already has eight would clutter it.
+local TACHO_OUTER = 101
+local TACHO_LENGTH = 5
+local TACHO_SEGMENTS = 30
+
+-- Revs move far faster than road speed, so the ring chases its target harder
+-- than the needle does. Damped all the same: an undamped ring flickers between
+-- adjacent ticks at idle.
+local TACHO_TAU = 0.06
 
 -- Places a point on the dial by its position along the sweep. Roblox rotates
 -- about an object's centre, so anything that must stay upright -- a numeral --
@@ -226,6 +268,9 @@ local C = {
 	-- pointer, and a coloured pointer reads as a progress bar.
 	Live = Color3.fromRGB(232, 238, 246),
 	Warn = Color3.fromRGB(232, 162, 42),
+	-- The redline band before the engine reaches it: dark enough to read as a
+	-- marking on the dial face rather than a lamp that is already lit.
+	RedlineIdle = Color3.fromRGB(104, 44, 42),
 	Danger = Color3.fromRGB(214, 68, 62),
 	Text = Color3.fromRGB(246, 249, 253),
 	Muted = Color3.fromRGB(126, 138, 156),
@@ -345,6 +390,40 @@ function SpeedometerController:_mount()
 		end
 	end
 
+	-- The tacho ring. Same rotated-frame construction as the speed ticks, at a
+	-- larger radius and a shorter mark.
+	--
+	-- The redline is drawn permanently rather than only appearing once the engine
+	-- reaches it, because that is what the band on a real dial is for: it tells you
+	-- where the limit is before you get there.
+	self.tachoSegments = {}
+	self.tachoRedline = {}
+	local redlineFrom = self.settings.RedlineBand
+	for index = 1, TACHO_SEGMENTS do
+		local t = (index - 1) / (TACHO_SEGMENTS - 1)
+		local spoke = Instance.new("Frame")
+		spoke.Name = "Rev" .. index
+		spoke.AnchorPoint = Vector2.new(0.5, 0.5)
+		spoke.BackgroundTransparency = 1
+		spoke.Position = UDim2.fromOffset(DIAL_CENTRE.X, DIAL_CENTRE.Y)
+		spoke.Size = UDim2.fromOffset(2, TACHO_OUTER * 2)
+		spoke.Rotation = SWEEP_START + SWEEP_ARC * t
+		spoke.Parent = frame
+		local mark = Instance.new("Frame")
+		mark.BorderSizePixel = 0
+		mark.Size = UDim2.new(1, 0, 0, TACHO_LENGTH)
+		mark.Parent = spoke
+		local halo = Instance.new("UIStroke")
+		halo.Color = Color3.fromRGB(0, 0, 0)
+		halo.Thickness = 1
+		halo.Transparency = 0.55
+		halo.Parent = mark
+		local inRedline = t >= redlineFrom
+		self.tachoRedline[index] = inRedline
+		mark.BackgroundColor3 = if inRedline then C.RedlineIdle else C.Unlit
+		self.tachoSegments[index] = mark
+	end
+
 	-- Same construction as the ticks: a frame centred on the pivot, twice the
 	-- needle's reach, with only the band between NEEDLE_INNER and NEEDLE_OUTER
 	-- drawn. Rotating it swings that band round the dial without it ever crossing
@@ -452,7 +531,7 @@ function SpeedometerController:_mount()
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
 	fuelTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 196)
+	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 210)
 	fuelTrack.Size = UDim2.fromOffset(132, 5)
 	fuelTrack.BackgroundColor3 = C.Unlit
 	fuelTrack.BorderSizePixel = 0
@@ -473,7 +552,7 @@ function SpeedometerController:_mount()
 	fuelMark.Name = "FuelMark"
 	fuelMark.Text = "FUEL"
 	fuelMark.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 210)
+	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 224)
 	fuelMark.Size = UDim2.fromOffset(170, 12)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Center
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
@@ -484,6 +563,117 @@ function SpeedometerController:_mount()
 	local frameScale = Instance.new("UIScale")
 	frameScale.Parent = frame
 	self.frameScale = frameScale
+end
+
+-- Lights the tacho ring up to a fraction of the redline.
+--
+-- Unlit ticks keep the dark red of the band where they fall inside it, so the
+-- redline stays visible as a marking on the face at idle. Lit ticks go white,
+-- and red once past the band -- the same convention the speed dial uses, which
+-- is what makes the two rings read as one instrument.
+function SpeedometerController:_paintTacho(fraction: number)
+	local count = #self.tachoSegments
+	local lit = math.clamp(math.floor(fraction * count + 0.5), 0, count)
+	if lit == self.tachoLit then
+		return
+	end
+	self.tachoLit = lit
+	for index, segment in self.tachoSegments do
+		local inRedline = self.tachoRedline[index]
+		if index > lit then
+			segment.BackgroundColor3 = if inRedline then C.RedlineIdle else C.Unlit
+		else
+			segment.BackgroundColor3 = if inRedline then C.Danger else C.Live
+		end
+	end
+end
+
+-- Shows or hides the whole ring.
+--
+-- A vehicle that publishes no engine speed gets no tacho rather than a ring
+-- frozen at zero, which would read as an engine that is not running.
+function SpeedometerController:_setTachoVisible(visible: boolean)
+	if self.tachoVisible == visible then
+		return
+	end
+	self.tachoVisible = visible
+	for _, segment in self.tachoSegments do
+		local spoke = segment.Parent :: Frame
+		spoke.Visible = visible
+	end
+end
+
+-- Moves the needle and the number one frame closer to the last sample.
+--
+-- Exponential easing rather than a fixed step per frame, so the needle covers a
+-- large gap quickly and a small one gently, which is how a real one behaves. The
+-- alpha is derived from dt through exp rather than used directly, because a
+-- constant fraction per frame would make the needle settle at a different speed
+-- on a 144Hz screen than on a 30Hz one.
+--
+-- The number is driven from the same eased value as the needle rather than from
+-- the raw sample. That is deliberate: a digital readout that jumps to 58 while
+-- the needle is still passing 40 reads as two instruments disagreeing.
+function SpeedometerController:_animate(dt: number)
+	local target = self.targetMph
+	-- Nothing sampled yet. Drawing a zero here would make the needle wind up from
+	-- the end stop on the first frame after the cluster appears.
+	if target == nil then
+		return
+	end
+	local shown = self.shownMph
+	if shown == nil then
+		-- First sample since getting in. Start where the vehicle already is.
+		shown = target
+	end
+	shown += (target - shown) * (1 - math.exp(-dt / NEEDLE_TAU))
+	-- Snapped once it is within a twentieth of a mph, so the needle actually
+	-- comes to rest instead of creeping toward the target forever and rewriting
+	-- two properties every frame of a parked car.
+	if math.abs(target - shown) < 0.05 then
+		shown = target
+	end
+	self.shownMph = shown
+
+	-- Capped at three digits for the label only. The needle clamps separately in
+	-- _paintSweep, so a vehicle above the dial's range parks the needle at the end
+	-- stop while the number keeps counting, exactly as a real cluster does.
+	self:_setText(self.speed, tostring(math.min(math.floor(shown + 0.5), 999)))
+	self:_paintSweep(shown / math.max(self.settings.TopSpeedMph, 1))
+
+	-- The rev ring, on its own shorter time constant.
+	local targetRpm = self.targetRpm
+	if targetRpm == nil then
+		self:_setTachoVisible(false)
+	else
+		self:_setTachoVisible(true)
+		local shownRpm = self.shownRpm
+		if shownRpm == nil then
+			shownRpm = targetRpm
+		end
+		shownRpm += (targetRpm - shownRpm) * (1 - math.exp(-dt / TACHO_TAU))
+		if math.abs(targetRpm - shownRpm) < 1 then
+			shownRpm = targetRpm
+		end
+		self.shownRpm = shownRpm
+		self:_paintTacho(shownRpm / math.max(self.settings.Redline, 1))
+	end
+end
+
+-- Puts the needle where the vehicle already is, without sweeping to it.
+--
+-- Getting into a moving car should not show the needle winding up from zero: the
+-- car was doing forty before the cluster appeared, and animating that is the
+-- gauge lying about the first half second.
+function SpeedometerController:_snapToSeat()
+	self.targetMph = nil
+	self.shownMph = nil
+	self.targetRpm = nil
+	self.shownRpm = nil
+	-- Forces the next _setTachoVisible through, since the new vehicle may not have
+	-- a tachometer where the last one did.
+	self.tachoVisible = nil
+	self.tachoLit = nil
 end
 
 function SpeedometerController:_setText(item: TextLabel, text: string)
@@ -568,6 +758,9 @@ function SpeedometerController:_watch(character: Model)
 				else nil
 			local driving = self.seat ~= nil
 			self.frame.Visible = driving
+			-- Discards the previous vehicle's needle position, so the first sample
+			-- in this one is adopted rather than swept to.
+			self:_snapToSeat()
 			-- Deferred on the way in, because the chassis parents its gauge after
 			-- the seat changes and hiding it before it arrives does nothing.
 			if driving then
@@ -586,24 +779,34 @@ end
 function SpeedometerController:Start()
 	self:_mount()
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Speedometer", function(layout)
-		local compactTouch = layout.InputMode == "Touch" and layout.Compact
+		local touch = layout.InputMode == "Touch"
+		local compactTouch = touch and layout.Compact
 		self.frameScale.Scale = if compactTouch
 			then math.min(layout.HudScale, 0.62)
 			else layout.HudScale
 		self.frame.AnchorPoint = Vector2.new(0.5, 1)
-		-- Clear of Roblox's toolbar rather than pinned to the bottom edge, which
-		-- put the readout underneath the equipped tools. The needs bars move to
-		-- the left while driving, so the bottom centre is free for this.
-		-- UIScale changes the rendered footprint around the frame's authored
-		-- origin. On compact touch screens compensate vertically so the visual
-		-- bottom, rather than the unscaled 176px box, sits directly above the
-		-- hotbar. X remains an exact 0.5 screen anchor.
-		self.frame.Position = UDim2.new(
-			0.5,
-			0,
-			1,
-			-(if compactTouch then layout.SafeBottom + 86 else layout.HotbarBottom + 14)
-		)
+		-- Sits directly above the equipped tools.
+		--
+		-- This used to measure from HotbarBottom, which a vehicle inflates to 112 to
+		-- clear the driving pedals. The pedals are touch-only, so on a desktop that
+		-- reserve protects nothing: the cluster hung about fifty pixels above the
+		-- tools with a band of empty screen beneath it. ToolbarBottom is the tools
+		-- bar on its own, so the gap below the dial is now the ten pixels intended
+		-- rather than ten plus a reserve for controls that were never drawn.
+		--
+		-- Touch still measures from HotbarBottom and adds the pedal height, because
+		-- there the controls genuinely are on screen. Every touch device, not just
+		-- the compact ones -- a tablet has pedals too, and the old test sent it down
+		-- the desktop path and put the cluster underneath them.
+		--
+		-- UIScale pivots about the AnchorPoint, not the authored origin, so the
+		-- anchored bottom edge stays put at any scale and needs no compensation.
+		-- The previous code compensated anyway, which pushed compact screens too
+		-- high by however much the scale differed from one.
+		local bottomGap = if touch
+			then layout.HotbarBottom + Config.DrivingControls.PedalSize + 24
+			else layout.ToolbarBottom + 10
+		self.frame.Position = UDim2.new(0.5, 0, 1, -bottomGap)
 		-- One authored size, scaled by the interface factor, rather than a second
 		-- set of measurements for compact screens that has to be kept in step.
 		self.frame.Size = UDim2.fromOffset(CLUSTER_SIZE.X, CLUSTER_SIZE.Y)
@@ -623,22 +826,30 @@ function SpeedometerController:Start()
 	table.insert(
 		self.connections,
 		RunService.RenderStepped:Connect(function(dt)
-			self.accumulator += dt
-			if self.accumulator < 0.08 then
-				return
-			end
-			self.accumulator = 0
 			local seat = self.seat
 			if not seat then
 				return
 			end
+			-- Every frame, regardless of whether the chassis was read this one. The
+			-- needle's smoothness is the whole point of the split.
+			self:_animate(dt)
+
+			self.accumulator += dt
+			if self.accumulator < SAMPLE_INTERVAL then
+				return
+			end
+			-- Subtracted rather than zeroed, so a long frame does not throw away the
+			-- overshoot and slowly drift the sample rate.
+			self.accumulator -= SAMPLE_INTERVAL
 			local values = self:_chassisValues(seat)
-			local mph = math.floor(speedMph(seat, values) + 0.5)
-			-- Assigned only on change. A property write replicates and dirties
-			-- layout even when the value is identical, and at this refresh rate a
-			-- car standing still would otherwise rewrite the whole cluster
-			-- twelve times a second for nothing.
-			self:_setText(self.speed, tostring(math.min(mph, 999)))
+			-- Unrounded, and only a target. The animation step below owns what is
+			-- actually drawn; rounding here would quantise the needle to whole mph
+			-- and put back a coarser version of the stepping this replaced.
+			self.targetMph = speedMph(seat, values)
+			-- nil rather than zero where the chassis reports nothing, so the ring can
+			-- tell "no tachometer fitted" apart from "engine idling".
+			local rpm = readValue(values, self.settings.RpmValueName)
+			self.targetRpm = if type(rpm) == "number" then math.max(rpm, 0) else nil
 
 			-- The chassis knows its own gear, including reverse and each ratio,
 			-- which throttle direction alone cannot tell apart. Fall back to
@@ -673,22 +884,6 @@ function SpeedometerController:Start()
 						else registration :: string
 				)
 			end
-
-			-- Road speed, always.
-			--
-			-- This used to prefer engine speed wherever the chassis published it,
-			-- falling back to road speed only on a vehicle that reported no RPM. That
-			-- was defensible while the arc was an unlabelled sweep, because an
-			-- unlabelled arc means whatever you say it means.
-			--
-			-- It is not defensible now. The dial's face is printed 0, 20, 40 ... 140
-			-- and those numerals are generated from TopSpeedMph, so a needle driven by
-			-- rpm/Redline points at "80" while the van is doing thirty. A gauge that
-			-- disagrees with its own numbers is worse than no gauge, and every vehicle
-			-- in this game is A-Chassis, which does publish RPM -- so that was the
-			-- normal case, not the edge case. The tachometer this used to be belongs
-			-- on a second dial, not on the one labelled MPH.
-			self:_paintSweep(mph / math.max(self.settings.TopSpeedMph, 1))
 
 			-- RoleplayOS fuel is authoritative. Existing authoring vehicles can
 			-- still expose a chassis value for display; if neither exists the gauge
