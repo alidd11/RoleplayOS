@@ -22,7 +22,15 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 
 -- The two shapes the panel takes. Tall on a desktop, wide on a phone, because a
 -- landscape phone has height to spare in neither direction but width in one.
-local FULL_PANEL = Vector2.new(276, 402)
+-- Wider, and the keys inside it are taller.
+--
+-- At 276 across, three columns and a 12px inset left 78px cells, and a legend
+-- like "FRT BLUE" wrapped onto a second line inside 29px of remaining height --
+-- two lines of 14px text in 29px, hard under the indicator lamp with nothing
+-- above or below. That is what read as squashed. 300 gives 88px cells, which
+-- holds those legends on one line, and the extra key height gives the ones that
+-- still wrap somewhere to go.
+local FULL_PANEL = Vector2.new(300, 402)
 local COMPACT_PANEL = Vector2.new(468, 206)
 
 -- The moulding the keys are set into. Three greys, so the caps carry the colour.
@@ -510,8 +518,11 @@ function EmergencyLightsController:_button(
 	local legend = Instance.new("TextLabel")
 	legend.Name = "Legend"
 	legend.BackgroundTransparency = 1
-	legend.Position = UDim2.fromOffset(3, 13)
-	legend.Size = UDim2.new(1, -6, 1, -17)
+	-- Sized from the cap down. The lamp occupies the top 9 pixels, so the legend
+	-- takes everything below it less a matching margin at the bottom, which is
+	-- what stops a wrapped legend sitting hard against the bottom edge.
+	legend.Position = UDim2.fromOffset(4, 14)
+	legend.Size = UDim2.new(1, -8, 1, -20)
 	legend.Font = Enum.Font.GothamMedium
 	legend.Text = text
 	legend.TextColor3 = LEGEND
@@ -716,7 +727,7 @@ function EmergencyLightsController:_layout()
 
 	local columns = if compact then 6 else 3
 	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
-	local cellHeight = if compact then 40 else 46
+	local cellHeight = if compact then 44 else 54
 	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
 
 	local circuits = 0
@@ -746,7 +757,7 @@ function EmergencyLightsController:_layout()
 	local top = 30 + gridHeight + 10
 	self.modeRow.Position = UDim2.fromOffset(inset, top)
 	self.modeRow.Size = UDim2.fromOffset(width, 1)
-	local keyHeight = if compact then 40 else 46
+	local keyHeight = if compact then 44 else 54
 	for index, key in keys do
 		local column = (index - 1) % across
 		local line = math.floor((index - 1) / across)
