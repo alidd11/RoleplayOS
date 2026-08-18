@@ -22,8 +22,8 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 
 -- The two shapes the panel takes. Tall on a desktop, wide on a phone, because a
 -- landscape phone has height to spare in neither direction but width in one.
-local FULL_PANEL = Vector2.new(252, 402)
-local COMPACT_PANEL = Vector2.new(420, 188)
+local FULL_PANEL = Vector2.new(292, 402)
+local COMPACT_PANEL = Vector2.new(468, 206)
 
 -- The moulding the keys are set into. Three greys, so the caps carry the colour.
 local CHASSIS = Color3.fromRGB(13, 15, 17)
@@ -63,17 +63,17 @@ local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
-	{ Id = "FrontBlue", Label = "FRONT\nBLUE" },
-	{ Id = "RearBlue", Label = "REAR\nBLUE" },
-	{ Id = "FrontScene", Label = "FRONT\nSCENE" },
-	{ Id = "RearScene", Label = "REAR\nSCENE" },
-	{ Id = "RearReds", Label = "REAR\nREDS" },
+	{ Id = "FrontBlue", Label = "FRT BLUE" },
+	{ Id = "RearBlue", Label = "RR BLUE" },
+	{ Id = "FrontScene", Label = "FRT SCN" },
+	{ Id = "RearScene", Label = "RR SCN" },
+	{ Id = "RearReds", Label = "RR REDS" },
 	{ Id = "LowPower", Label = "LOW PWR" },
 	{ Id = "Grille", Label = "GRILLE" },
 	{ Id = "RunLock", Label = "RUN LOCK" },
-	{ Id = "LeftAlley", Label = "LEFT\nALLEY" },
+	{ Id = "LeftAlley", Label = "L ALLEY" },
 	{ Id = "Spots", Label = "SPOTS" },
-	{ Id = "RightAlley", Label = "RIGHT\nALLEY" },
+	{ Id = "RightAlley", Label = "R ALLEY" },
 	-- The kit's second pattern. Shown only on a vehicle that has one, like every
 	-- other control here.
 	{ Id = "Director", Label = "DIR" },
@@ -465,25 +465,15 @@ function EmergencyLightsController:_button(
 	item.BackgroundColor3 = colour or CAP
 	item.BorderSizePixel = 0
 	item.Font = Enum.Font.GothamMedium
-	item.Text = text
-	item.TextColor3 = LEGEND
-	item.TextSize = 13
-	item.TextWrapped = true
-	item.LineHeight = 1.05
+	-- The cap carries no text of its own; the legend below is a child, so the
+	-- lamp and the words can be positioned against each other directly.
+	item.Text = ""
 	item.Parent = parent
 	corner(item, 9)
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(63, 67, 66)
 	stroke.Thickness = 2
 	stroke.Parent = item
-	-- The legend sits below the lamp rather than under it. Without this the
-	-- indicator lies across the first line of any two-line label.
-	local padding = Instance.new("UIPadding")
-	padding.PaddingTop = UDim.new(0, 13)
-	padding.PaddingBottom = UDim.new(0, 3)
-	padding.PaddingLeft = UDim.new(0, 2)
-	padding.PaddingRight = UDim.new(0, 2)
-	padding.Parent = item
 
 	local lamp = Instance.new("Frame")
 	lamp.Name = "Lamp"
@@ -502,6 +492,26 @@ function EmergencyLightsController:_button(
 	glow.Thickness = 3
 	glow.Transparency = 1
 	glow.Parent = lamp
+
+	-- The legend, in the space the lamp does not occupy.
+	--
+	-- This was the button's own Text with a UIPadding pushing it clear of the
+	-- lamp. UIPadding offsets every child of a GuiObject, not only its text, so
+	-- it pushed the lamp down by exactly as much as it pushed the words - which
+	-- is why the indicator kept landing on the legend however much padding was
+	-- added. A separate label sized to the gap below the lamp cannot collide with
+	-- it at all.
+	local legend = Instance.new("TextLabel")
+	legend.Name = "Legend"
+	legend.BackgroundTransparency = 1
+	legend.Position = UDim2.fromOffset(3, 13)
+	legend.Size = UDim2.new(1, -6, 1, -17)
+	legend.Font = Enum.Font.GothamMedium
+	legend.Text = text
+	legend.TextColor3 = LEGEND
+	legend.TextSize = 14
+	legend.TextWrapped = true
+	legend.Parent = item
 
 	local scale = Instance.new("UIScale")
 	scale.Parent = item
@@ -680,7 +690,7 @@ function EmergencyLightsController:_mount()
 	self.grid = grid
 	local layout = Instance.new("UIGridLayout")
 	self.gridLayout = layout
-	layout.CellSize = UDim2.fromOffset(66, 52)
+	layout.CellSize = UDim2.fromOffset(84, 46)
 	layout.CellPadding = UDim2.fromOffset(6, 6)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
@@ -713,7 +723,7 @@ function EmergencyLightsController:_layout()
 	end
 	local compact = self.compactShape == true
 	local size = if compact then COMPACT_PANEL else FULL_PANEL
-	local inset, gap = 10, 6
+	local inset, gap = 12, 8
 	local width = size.X - 12 - inset * 2
 	local top = 25
 
@@ -788,7 +798,7 @@ function EmergencyLightsController:_layout()
 
 	local columns = if compact then 6 else 3
 	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
-	local cellHeight = if compact then 40 else 52
+	local cellHeight = if compact then 38 else 46
 	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
 	self.grid.Position = UDim2.fromOffset(inset, top)
 	local circuits = #visibleIn(self.grid)
@@ -1235,7 +1245,21 @@ function EmergencyLightsController:Start()
 				self.panel.AnchorPoint = Vector2.new(1, 1)
 				self.panel.Position = UDim2.new(1, -(layout.SafeRight + 16), 1, -reserve)
 			end
-			self.panelScale.Scale = scale
+			-- Scaled only when it genuinely will not fit.
+			--
+			-- FitScale returns a fraction on almost every screen, and a fraction is
+			-- what makes the legends blurry: Roblox renders text at the size you
+			-- ask for and then the UIScale resamples every glyph. A thirteen pixel
+			-- legend at 0.86 is not a smaller legend, it is a smeared one.
+			--
+			-- Full size wherever it fits, and where it does not, snapped to a
+			-- quarter so the resampling at least lands on a repeatable fraction
+			-- rather than an arbitrary one.
+			if scale >= 0.98 then
+				self.panelScale.Scale = 1
+			else
+				self.panelScale.Scale = math.max(math.floor(scale * 4) / 4, 0.5)
+			end
 			local driver = layout.State == "Driver"
 			if self.driver ~= driver then
 				self.driver = driver
