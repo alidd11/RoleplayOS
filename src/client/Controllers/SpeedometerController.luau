@@ -14,7 +14,7 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- needle rendered outside it. Everything is placed from this size and the dial
 -- centre below, so the ticks, the numerals, the needle, the readout and the
 -- tell-tales cannot drift apart when one of them is adjusted.
-local CLUSTER_SIZE = Vector2.new(300, 234)
+local CLUSTER_SIZE = Vector2.new(300, 242)
 
 -- A car's speedometer, not a half-circle progress meter.
 --
@@ -194,6 +194,30 @@ local function ancestorAttribute(instance: Instance, name: string): any?
 	return nil
 end
 
+-- Walks a path of child names from the vehicle down to a value.
+--
+-- The lighting addon keeps its state as BoolValues nested in the model rather
+-- than in the chassis's Values folder, so these cannot go through readFirstValue.
+-- Returns nil where any step is missing, which is the normal case: an ELS van
+-- carries a different lighting kit from a civilian car, and a vehicle without
+-- this addon must leave the lamps dark rather than pretend they are off.
+local function readPath(vehicle: Instance?, candidates: { { string } }): boolean?
+	for _, path in candidates do
+		local node: Instance? = vehicle
+		for _, name in path do
+			if not node then
+				break
+			end
+			node = node:FindFirstChild(name)
+		end
+		if node and node:IsA("ValueBase") then
+			local value = (node :: any).Value
+			return if type(value) == "boolean" then value else value ~= nil and value ~= 0
+		end
+	end
+	return nil
+end
+
 local function readsOn(value: any): boolean
 	if type(value) == "boolean" then
 		return value
@@ -271,6 +295,11 @@ local C = {
 	-- The redline band before the engine reaches it: dark enough to read as a
 	-- marking on the dial face rather than a lamp that is already lit.
 	RedlineIdle = Color3.fromRGB(104, 44, 42),
+	-- Indicators and the headlight lamp are green, main beam is blue. Not a
+	-- decision: those are the colours every car on the road uses, and a driver
+	-- reads them without looking.
+	Indicator = Color3.fromRGB(86, 198, 110),
+	Beam = Color3.fromRGB(96, 154, 255),
 	Danger = Color3.fromRGB(214, 68, 62),
 	Text = Color3.fromRGB(246, 249, 253),
 	Muted = Color3.fromRGB(126, 138, 156),
@@ -495,7 +524,7 @@ function SpeedometerController:_mount()
 	-- dark lamp means not fitted, dim means fitted and watching, lit amber means it
 	-- is working this instant. Amber rather than the cluster's white because amber
 	-- is what a car uses for "a system is intervening".
-	local TELLTALE_Y = DIAL_CENTRE.Y + 64
+	local TELLTALE_Y = DIAL_CENTRE.Y + 72
 	local function telltale(name: string, text: string, offsetX: number, size: number): TextLabel
 		local mark = label(frame, Enum.Font.GothamBold, size, C.Muted)
 		mark.Name = name
@@ -506,8 +535,28 @@ function SpeedometerController:_mount()
 		mark.TextXAlignment = Enum.TextXAlignment.Center
 		return mark
 	end
-	self.abs = telltale("ABS", "ABS", DIAL_CENTRE.X - 52, 12)
-	self.tcs = telltale("TCS", "TC", DIAL_CENTRE.X + 52, 12)
+	self.abs = telltale("ABS", "ABS", DIAL_CENTRE.X - 44, 12)
+	self.tcs = telltale("TCS", "TC", DIAL_CENTRE.X + 44, 12)
+
+	-- Headlight and main beam, flanking the driver aids. Green and blue, which is
+	-- what every car uses and what a driver recognises without reading.
+	--
+	-- Lettered rather than drawn. The real symbols are the same lamp shape twice
+	-- and differ only in whether the beam lines slope, which at twelve pixels in a
+	-- Roblox font came out as two identical glyphs sitting either side of the dial
+	-- -- accurate to the standard and useless to look at. LO and HI cannot be
+	-- confused with each other at any size, and the colours still carry the
+	-- convention.
+	self.headlight = telltale("Headlight", "LO", DIAL_CENTRE.X - 84, 12)
+	self.mainBeam = telltale("MainBeam", "HI", DIAL_CENTRE.X + 84, 12)
+
+	-- The indicators, out at the sides of the dial clear of the tacho ring, which
+	-- is where a cluster puts them. Arrows rather than words: an indicator lamp has
+	-- never carried text, and a driver checking one is not reading.
+	self.indicatorLeft = telltale("IndicatorLeft", "◀", DIAL_CENTRE.X - 122, 15)
+	self.indicatorLeft.Position = UDim2.fromOffset(DIAL_CENTRE.X - 122, DIAL_CENTRE.Y)
+	self.indicatorRight = telltale("IndicatorRight", "▶", DIAL_CENTRE.X + 122, 15)
+	self.indicatorRight.Position = UDim2.fromOffset(DIAL_CENTRE.X + 122, DIAL_CENTRE.Y)
 
 	-- The parking brake lamp, drawn the way a car draws it: a P inside a ring. It
 	-- was a filled disc that turned solid red, which reads as a button rather than
@@ -531,7 +580,7 @@ function SpeedometerController:_mount()
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
 	fuelTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 210)
+	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 220)
 	fuelTrack.Size = UDim2.fromOffset(132, 5)
 	fuelTrack.BackgroundColor3 = C.Unlit
 	fuelTrack.BorderSizePixel = 0
@@ -552,7 +601,7 @@ function SpeedometerController:_mount()
 	fuelMark.Name = "FuelMark"
 	fuelMark.Text = "FUEL"
 	fuelMark.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 224)
+	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 234)
 	fuelMark.Size = UDim2.fromOffset(170, 12)
 	fuelMark.TextXAlignment = Enum.TextXAlignment.Center
 	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
@@ -683,18 +732,30 @@ function SpeedometerController:_setText(item: TextLabel, text: string)
 end
 
 -- Lights the sweep to a fraction of its length, warming through amber to red as
--- it fills, the way a cluster shades its upper range.
+-- it fills.
+--
+-- The thresholds are speeds, not fractions of the dial. They were 0.68 and 0.86
+-- of top speed -- amber at 95mph, red at 120 -- which is a rev counter's logic
+-- applied to a speedometer: a redline marks a mechanical limit and a speedometer
+-- has none, so the colours meant nothing. Now amber is the national speed limit,
+-- above which the driver is speeding wherever they happen to be, and red is where
+-- a traffic stop stops being a ticket.
 function SpeedometerController:_paintSweep(fraction: number)
 	local count = #self.segments
 	local lit = math.clamp(math.floor(fraction * count + 0.5), 0, count)
+	local top = math.max(self.settings.TopSpeedMph, 1)
+	-- The same thresholds expressed as positions along the sweep, so a tick and
+	-- the needle cannot disagree about where amber starts.
+	local warnAt = self.settings.WarnAboveMph / top
+	local dangerAt = self.settings.DangerAboveMph / top
 	-- The needle moves before the early exit below, and follows the true fraction
 	-- rather than the lit tick count. Behind that exit it would only move when a
 	-- whole tick lit, which is the one thing a needle must not do: a dial that
 	-- jumps in twenty second steps reads worse than the bar it replaced.
 	self.needle.Rotation = SWEEP_START + SWEEP_ARC * math.clamp(fraction, 0, 1)
-	self.needleArm.BackgroundColor3 = if fraction > 0.86
+	self.needleArm.BackgroundColor3 = if fraction > dangerAt
 		then C.Danger
-		elseif fraction > 0.68 then C.Warn
+		elseif fraction > warnAt then C.Warn
 		else C.Live
 	if lit == self.lit then
 		return
@@ -707,9 +768,9 @@ function SpeedometerController:_paintSweep(fraction: number)
 			-- legibility fix the moment the first sample arrived: the ticks were
 			-- built light and then immediately repainted dark here.
 			segment.BackgroundColor3 = C.Unlit
-		elseif index > count * 0.86 then
+		elseif index > count * dangerAt then
 			segment.BackgroundColor3 = C.Danger
-		elseif index > count * 0.68 then
+		elseif index > count * warnAt then
 			segment.BackgroundColor3 = C.Warn
 		else
 			segment.BackgroundColor3 = C.Live
@@ -960,6 +1021,41 @@ function SpeedometerController:Start()
 			end
 			telltaleState(self.abs, self.settings.AbsValueNames, self.settings.AbsActiveValueNames)
 			telltaleState(self.tcs, self.settings.TcsValueNames, self.settings.TcsActiveValueNames)
+
+			-- The lighting addon's lamps.
+			--
+			-- Read straight off the BoolValues its own handler writes, so the cluster
+			-- follows the indicators the driver is actually using rather than a second
+			-- set of state that could disagree with the lamps on the car.
+			local vehicle = seat:FindFirstAncestorOfClass("Model")
+			local paths = self.settings.LightStatePaths
+			local function lamp(mark: TextLabel, state: boolean?, lit: Color3)
+				-- nil means this vehicle has no such lamp. Dark and fully faded, which
+				-- is different from fitted-but-off: a van with a different lighting kit
+				-- should not show a headlight tell-tale it cannot drive.
+				if state == nil then
+					mark.TextColor3 = C.Track
+					mark.TextTransparency = 0.72
+					return
+				end
+				mark.TextColor3 = if state then lit else C.Muted
+				mark.TextTransparency = if state then 0 else 0.5
+			end
+
+			-- Hazards drive both arrows, because that is what pressing them does.
+			local hazards = readPath(vehicle, paths.Hazards) == true
+			lamp(
+				self.indicatorLeft,
+				if hazards then true else readPath(vehicle, paths.IndicatorLeft),
+				C.Indicator
+			)
+			lamp(
+				self.indicatorRight,
+				if hazards then true else readPath(vehicle, paths.IndicatorRight),
+				C.Indicator
+			)
+			lamp(self.headlight, readPath(vehicle, paths.Headlight), C.Indicator)
+			lamp(self.mainBeam, readPath(vehicle, paths.MainBeam), C.Beam)
 		end)
 	)
 end

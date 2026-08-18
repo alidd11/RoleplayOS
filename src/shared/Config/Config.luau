@@ -2133,6 +2133,24 @@ local Config = {
 		-- Fraction of Redline the tacho arc shades red. 0.85 of 8000 is 6800, which
 		-- is where a petrol engine's limiter usually sits.
 		RedlineBand = 0.85,
+		-- Where the speed dial starts warning.
+		--
+		-- The ticks used to warm at 0.68 and 0.86 of top speed, which put amber at
+		-- 95mph and red at 120. That is a rev counter's logic on a speedometer: a
+		-- redline is a mechanical limit, and a speedometer has no mechanical limit
+		-- to mark. Nothing on the dial meant anything to a driver.
+		--
+		-- These are limits instead. 70 is the national speed limit and the highest
+		-- number lawful anywhere in the UK, so above it the driver is speeding
+		-- wherever they are; 100 is where a traffic stop stops being a ticket.
+		--
+		-- Per-road limits would be better still, and RoadSafetyService does know
+		-- them -- but only per speed camera sensor, as an attribute on the sensor
+		-- rather than as an ambient property of the road. A live "current limit"
+		-- needs a zone system that does not exist yet, and inventing one blind would
+		-- be worse than a fixed national limit that is at least always true.
+		WarnAboveMph = 70,
+		DangerAboveMph = 100,
 		-- Road speed the sweep treats as full, and the number printed against the
 		-- last major tick on the dial face.
 		--
@@ -2155,6 +2173,39 @@ local Config = {
 		-- cluster shows a different state for each. A vehicle publishing neither
 		-- leaves both lamps dark, which is the honest reading for a car that has
 		-- no ABS rather than one whose ABS is idle.
+		-- Where the lighting addon keeps its state.
+		--
+		-- These vehicles already have working indicators, headlights, main beam and
+		-- hazards: the A-Chassis lighting plugin binds Z and C to the indicators, X
+		-- to the hazards and L to the light stages, and its server handler flips a
+		-- BoolValue for each. None of it was on the cluster, so a driver had no way
+		-- to tell a left indicator was still running.
+		--
+		-- Read rather than rebuilt, for the same reason the ELS panel drives the
+		-- vehicle's own siren instead of playing its own: a second indicator system
+		-- would fight the one already in the model, and the lamps belong to the kit.
+		-- Each entry is a path from the vehicle model down to a BoolValue.
+		-- A list of candidate paths per lamp, first one found wins. The kit is not
+		-- consistent with itself: its handler writes hazards to Body.Lights.Hazards,
+		-- but the models carry the value at Plugins.hazards instead, so a single
+		-- path finds it on some vehicles and nothing on others.
+		LightStatePaths = {
+			IndicatorLeft = { { "Body", "Lights", "Left", "on" } },
+			IndicatorRight = { { "Body", "Lights", "Right", "on" } },
+			-- Three, because the value moves. The handler writes to Body.Lights.
+			-- Hazards; the models author it at Plugins.hazards; and A-Chassis
+			-- reparents its whole Plugins folder into the interface on initialise,
+			-- so at runtime it is under A-Chassis Interface instead. Only the last
+			-- of those is true on a spawned vehicle, and the first two are kept for
+			-- vehicles authored differently.
+			Hazards = {
+				{ "A-Chassis Tune", "A-Chassis Interface", "hazards" },
+				{ "Body", "Lights", "Hazards" },
+				{ "A-Chassis Tune", "Plugins", "hazards" },
+			},
+			Headlight = { { "Body", "Lights", "Headlight", "on" } },
+			MainBeam = { { "Body", "Lights", "Highlight", "on" } },
+		},
 		AbsValueNames = { "ABS", "Abs", "AntiLock" },
 		AbsActiveValueNames = { "ABSActive", "AbsActive" },
 		TcsValueNames = { "TCS", "Tcs", "TractionControl" },
