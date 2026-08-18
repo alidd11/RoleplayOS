@@ -2113,6 +2113,18 @@ local Config = {
 		-- two sets of gauges are never on screen at once. Names differ between
 		-- A-Chassis forks, so check what actually appears in PlayerGui while
 		-- seated and add it here rather than assuming this list is complete.
+		-- The chassis's own gauge interfaces, which the cluster replaces.
+		--
+		-- Removed at spawn rather than hidden at runtime. They used to be hidden
+		-- twice over -- VehicleUIController disabling the chassis ScreenGui, and
+		-- the speedometer separately hiding the gauge frame inside it -- and the
+		-- scripts kept running behind both, updating a hidden needle and readout
+		-- off every Velocity change for the whole drive.
+		--
+		-- Matched on the script rather than the frame, because the frame is called
+		-- AC6_Stock_Gauges on most cars, FH5_Gauge on one, and AC6C_Style_Gauges on
+		-- the bikes, while the script inside is the same name in all three.
+		StockGaugeScripts = { "Gauges_AC6", "DigitalGauges" },
 		SuppressGuiNames = {
 			"A-Chassis Interface",
 			"AC6_Interface",

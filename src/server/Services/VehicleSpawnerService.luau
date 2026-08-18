@@ -1028,6 +1028,7 @@ function VehicleSpawnerService:Spawn(
 	end
 	-- Road lighting, which every vehicle has whether or not it is a service one.
 	self.context.Services:Get("VehicleLightingService"):Adopt(vehicle)
+	self:_removeStockGauges(vehicle)
 	self.context.Services:Get("WorldBudgetService"):Normalise(vehicle)
 	-- A-Chassis templates are intentionally authored anchored. Their Initialize
 	-- script creates the runtime joints and unanchors the correct assemblies.
@@ -1183,6 +1184,35 @@ function VehicleSpawnerService:_consumeTick(dt: number)
 			self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
 		end
 	end
+end
+
+-- Takes the chassis's own gauges out of a vehicle.
+--
+-- The cluster replaces them, and two separate pieces of code were previously
+-- hiding them: VehicleUIController disabling the chassis ScreenGui, and the
+-- speedometer hiding the gauge frame within it. Neither stopped the script, which
+-- carried on writing a needle rotation and a speed string to an invisible frame
+-- on every Velocity change for as long as anybody was driving.
+--
+-- The whole gauge frame goes rather than just the script, so there is nothing
+-- left to be re-enabled by something else later. Done on the live clone only --
+-- the template is a Rojo $path and would be overwritten on the next sync.
+function VehicleSpawnerService:_removeStockGauges(vehicle: Model): number
+	local names = self.context.Configuration.Chassis.StockGaugeScripts or {}
+	local removed = 0
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA("LocalScript") and table.find(names, descendant.Name) then
+			-- The frame is the thing worth removing; the script rides inside it.
+			local frame = descendant.Parent
+			if frame and frame:IsA("GuiObject") then
+				frame:Destroy()
+			else
+				descendant.Disabled = true
+			end
+			removed += 1
+		end
+	end
+	return removed
 end
 
 -- Watches one player's seat, and cleans up after whatever they were riding.

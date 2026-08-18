@@ -791,38 +791,6 @@ function SpeedometerController:_paintSweep(fraction: number)
 	end
 end
 
--- The chassis's own gauge, which it hands to the driver whether or not the game
--- already has one.
---
--- A-Chassis carries a frame called AC6_Stock_Gauges holding a tacho, a speedo, a
--- gear readout and a Speed button, and parents it into the driver's PlayerGui on
--- mounting. So an officer got two speedometers: this cluster, and the kit's own
--- strip along the bottom of the screen reading the same number in a different
--- typeface. Two readouts of one value is not a richer dashboard, it is a game
--- that looks like it was assembled rather than designed.
---
--- Hidden rather than destroyed, and only while this cluster is up, because the
--- frame belongs to the vehicle and its scripts keep writing to it. Put back the
--- moment the driver gets out, so nothing is permanently taken from the kit.
-local STOCK_GAUGE_NAMES = { "AC6_Stock_Gauges", "Gauges_AC6", "DigitalGauges" }
-
-function SpeedometerController:_setStockGaugesVisible(visible: boolean)
-	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-	if not playerGui then
-		return
-	end
-	for _, descendant in playerGui:GetDescendants() do
-		if descendant:IsA("GuiObject") then
-			for _, name in STOCK_GAUGE_NAMES do
-				if descendant.Name == name then
-					descendant.Visible = visible
-					break
-				end
-			end
-		end
-	end
-end
-
 function SpeedometerController:_watch(character: Model)
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if not humanoid or not humanoid:IsA("Humanoid") then
@@ -834,22 +802,15 @@ function SpeedometerController:_watch(character: Model)
 			self.seat = if humanoid.SeatPart and humanoid.SeatPart:IsA("VehicleSeat")
 				then humanoid.SeatPart
 				else nil
-			local driving = self.seat ~= nil
-			self.frame.Visible = driving
+			self.frame.Visible = self.seat ~= nil
 			-- Discards the previous vehicle's needle position, so the first sample
 			-- in this one is adopted rather than swept to.
 			self:_snapToSeat()
-			-- Deferred on the way in, because the chassis parents its gauge after
-			-- the seat changes and hiding it before it arrives does nothing.
-			if driving then
-				task.delay(0.35, function()
-					if self.seat ~= nil then
-						self:_setStockGaugesVisible(false)
-					end
-				end)
-			else
-				self:_setStockGaugesVisible(true)
-			end
+			-- The chassis's own gauge strip used to be hidden here on the way in and
+			-- put back on the way out, because it parented a second speedometer into
+			-- the driver's PlayerGui reading the same number in a different typeface.
+			-- The spawner now removes that frame from the vehicle outright, so there
+			-- is nothing left to hide and the script behind it is no longer running.
 		end)
 	)
 end
