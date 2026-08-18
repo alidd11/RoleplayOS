@@ -95,6 +95,31 @@ local function prepareVisibleTool(tool: Tool, toolId: string, definition: any?)
 		end
 		scaler:Destroy()
 	end
+	-- Animations the configuration names for this tool.
+	--
+	-- The clients look for an Animation instance inside the tool - Swing for a
+	-- blade, Idle for a held pose - and fall back to procedural motion when they
+	-- find none. Nine animations were published under the group in May 2025 and
+	-- not one was ever referenced, because referencing them meant opening each
+	-- .rbxm, adding an instance and re-exporting. Attaching them at issue instead
+	-- means an animation is one line of configuration and the authored asset is
+	-- never touched, which is the same reasoning as Grip and Scale above.
+	if definition and type(definition.Animations) == "table" then
+		for role, assetId in definition.Animations do
+			if type(role) == "string" and type(assetId) == "number" and assetId > 0 then
+				-- Replaced rather than added to, so re-issuing a tool cannot stack
+				-- duplicates that LoadAnimation would then pick between at random.
+				local existing = tool:FindFirstChild(role)
+				if existing and existing:IsA("Animation") then
+					existing:Destroy()
+				end
+				local animation = Instance.new("Animation")
+				animation.Name = role
+				animation.AnimationId = "rbxassetid://" .. tostring(assetId)
+				animation.Parent = tool
+			end
+		end
+	end
 	handle.Anchored = false
 	handle.CanCollide = false
 	handle.CanTouch = false

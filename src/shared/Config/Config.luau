@@ -1699,6 +1699,14 @@ local Config = {
 			-- left the lanyard swinging below. Verified against an R15 rig posed
 			-- with Roblox's own equip weld.
 			Grip = CFrame.Angles(math.rad(90), 0, 0),
+			-- Hand-authored, published under the group in May 2025, and until now
+			-- never referenced by anything: the swing was a sine curve applied to
+			-- the shoulder joint because no tool carried an AnimationId. The client
+			-- looks for an Animation named Swing inside the tool and prefers it over
+			-- the procedural fallback the moment it finds one, so issuing the tool
+			-- with these attached is the whole wiring. Named by role rather than by
+			-- asset so a re-cut animation is a change to one line here.
+			Animations = { Swing = 121274779518215 },
 			Weapon = { Damage = 24, Cooldown = 0.8, Range = 8 },
 		},
 		ZKnife = {
@@ -1730,6 +1738,12 @@ local Config = {
 			Id = "Taser",
 			AssetPath = { "Tools", "Services", "Police", "Shared", "Taser" },
 			DepartmentId = "Police",
+			-- No Animations entry, deliberately. The group owns a taserhold clip
+			-- (116507173136573) that would suit this, but TaserPoseController builds
+			-- its R15 pose by hand and never looks for an Animation instance, so
+			-- naming it here would attach an asset nothing plays. Wiring the
+			-- controller to prefer a configured hold is the work that makes this
+			-- line worth adding, and it has not been done.
 		},
 		MedicalBag = {
 			Id = "MedicalBag",
