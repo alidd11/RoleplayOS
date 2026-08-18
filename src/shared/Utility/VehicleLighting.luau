@@ -35,18 +35,25 @@
 
 local VehicleLighting = {}
 
--- Where the lamp groups live inside a vehicle, and what each is for.
+-- What each lamp group inside a Lights container is called, mapped to our name.
 --
--- Second entries exist because the boot lid on some models carries its own
--- duplicate set, which the original kit drove in parallel with the body's.
-VehicleLighting.Groups = {
-	Left = { "Body.Lights.Left", "Misc.TK.Boot.Lights.Left" },
-	Right = { "Body.Lights.Right", "Misc.TK.Boot.Lights.Right" },
-	Headlight = { "Body.Lights.Headlight", "Misc.TK.Boot.Lights.Headlight" },
-	MainBeam = { "Body.Lights.Highlight" },
-	Sidelight = { "Body.Lights.DRL" },
-	Brakes = { "Body.Lights.Brakes", "Misc.TK.Boot.Lights.Brakes" },
-	Reverse = { "Body.Lights.Reverse", "Misc.TK.Boot.Lights.Reverse" },
+-- Found structurally rather than by path. It began as a list of paths --
+-- Body.Lights, Misc.TK.Boot.Lights -- which is wrong for the same reason
+-- hardcoding any of this is wrong: the bikes keep their front indicators,
+-- headlight and main beam under FrontSection.Wheel.WheelFixed.Stand.Lights, and
+-- a path list found the rear lamps only. That mattered a great deal, because
+-- taking over a vehicle also silences the kit script that sets these values: a
+-- half-found bike had its front lights left with nothing driving them at all.
+--
+-- Any container called Lights, anywhere in the vehicle, is searched.
+VehicleLighting.GroupNames = {
+	Left = "Left",
+	Right = "Right",
+	Headlight = "Headlight",
+	Highlight = "MainBeam",
+	DRL = "Sidelight",
+	Brakes = "Brakes",
+	Reverse = "Reverse",
 }
 
 -- Groups that flash rather than sit steady.
@@ -71,23 +78,20 @@ VehicleLighting.StageLamps = {
 -- 120 flashes a minute; 90 is the middle and what most cars use.
 VehicleLighting.FlashesPerMinute = 90
 
+-- What a lamp group calls the folder holding its lens parts.
+--
+-- Cars use G1. The bikes use LED for their indicators and G1 for their brake
+-- lamp, in the same vehicle. Checking only G1 found the bike's brake light and
+-- neither of its indicators, which mattered: the service would then have silenced
+-- the bike's own lighting script while replacing only a third of what it did,
+-- leaving the indicators dead.
+VehicleLighting.PartFolders = { "G1", "LED" }
+
 -- Lit and unlit transparency for a lamp lens. Not fully opaque when lit, because
 -- these lenses are emissive meshes and a little transparency is what makes them
 -- read as glowing rather than as painted plastic.
 VehicleLighting.LitTransparency = 0.2
 VehicleLighting.UnlitTransparency = 1
-
--- Resolves a dotted path like "Body.Lights.Left" to an instance.
-local function resolve(root: Instance, path: string): Instance?
-	local node: Instance? = root
-	for name in string.gmatch(path, "[^%.]+") do
-		if not node then
-			return nil
-		end
-		node = node:FindFirstChild(name)
-	end
-	return node
-end
 
 export type Lamp = {
 	Model: Instance,
@@ -102,30 +106,52 @@ export type Lamp = {
 -- almost none of this.
 function VehicleLighting.collect(vehicle: Instance): { [string]: { Lamp } }
 	local found: { [string]: { Lamp } } = {}
-	for name, paths in VehicleLighting.Groups do
-		for _, path in paths do
-			local model = resolve(vehicle, path)
-			if model then
-				local parts: { BasePart } = {}
-				local group = model:FindFirstChild("G1")
+	for _, container in vehicle:GetDescendants() do
+		if container.Name ~= "Lights" then
+			continue
+		end
+		for _, model in container:GetChildren() do
+			local name = VehicleLighting.GroupNames[model.Name]
+			if not name then
+				continue
+			end
+			local parts: { BasePart } = {}
+			for _, folderName in VehicleLighting.PartFolders do
+				local group = model:FindFirstChild(folderName)
 				for _, child in (if group then group:GetChildren() else {}) do
 					if child:IsA("BasePart") then
 						table.insert(parts, child)
 					end
 				end
-				if #parts > 0 then
-					local state = model:FindFirstChild("on")
-					found[name] = found[name] or {}
-					table.insert(found[name], {
-						Model = model,
-						State = if state and state:IsA("BoolValue") then state else nil,
-						Parts = parts,
-					})
-				end
+			end
+			if #parts > 0 then
+				local state = model:FindFirstChild("on")
+				found[name] = found[name] or {}
+				table.insert(found[name], {
+					Model = model,
+					State = if state and state:IsA("BoolValue") then state else nil,
+					Parts = parts,
+				})
 			end
 		end
 	end
 	return found
+end
+
+-- Is this a vehicle we are able to take over?
+--
+-- Only when both indicators were found. Adopting a vehicle silences the kit
+-- script that sets every one of its lamp values, so a partial match does not
+-- degrade gracefully -- it leaves the lamps we did not find with nothing driving
+-- them. The indicators are the right test because they are what the controls
+-- exist for: a vehicle whose indicators we cannot drive is one we should not be
+-- taking the keys of at all.
+--
+-- The Honda scooter is the case this protects. It names its groups Brake,
+-- Headlights, Indicators and Fog, so almost nothing matches, and it keeps its own
+-- lighting kit intact rather than being half-adopted and left dark.
+function VehicleLighting.canAdopt(lamps: { [string]: { Lamp } }): boolean
+	return lamps.Left ~= nil and lamps.Right ~= nil
 end
 
 -- Whether a flashing lamp should be lit at this moment.

@@ -38,17 +38,33 @@ end
 -- shipped with.
 --
 -- Three things to silence. The LocalScript holding the keybinds, the server
--- Script holding the state, and one Halogen animator per lamp group -- the last
--- being the reason this has to happen at all, since it would fight us for
--- control of the same lamps.
-local KIT_SCRIPTS = { LightAddon = true, Halogen = true }
+-- Script holding the state, and the per-group animator that would otherwise
+-- fight us for control of the same lamps.
+--
+-- The animators are found by position rather than by name. They are called
+-- Halogen on the cars, "LED Handler" on a bike's indicators and Control on the
+-- same bike's brake lamp, and a name list would have to grow with every kit --
+-- while blanket-disabling anything called Control would reach scripts that have
+-- nothing to do with lighting. A script sitting directly inside a lamp group we
+-- have taken over is unambiguously that group's animator.
+local VEHICLE_LEVEL_SCRIPTS = { LightAddon = true }
 
-function VehicleLightingService:_silenceKit(vehicle: Instance): number
+function VehicleLightingService:_silenceKit(vehicle: Instance, lamps: any): number
 	local silenced = 0
+	for _, group in lamps do
+		for _, lamp in group do
+			for _, child in lamp.Model:GetChildren() do
+				if child:IsA("BaseScript") and not child.Disabled then
+					child.Disabled = true
+					silenced += 1
+				end
+			end
+		end
+	end
 	for _, descendant in vehicle:GetDescendants() do
 		if
 			descendant:IsA("BaseScript")
-			and KIT_SCRIPTS[descendant.Name]
+			and VEHICLE_LEVEL_SCRIPTS[descendant.Name]
 			and not descendant.Disabled
 		then
 			descendant.Disabled = true
@@ -71,10 +87,13 @@ end
 -- creates, alongside the emergency-lights adoption beside it.
 function VehicleLightingService:Adopt(vehicle: Instance)
 	local lamps = VehicleLighting.collect(vehicle)
-	if next(lamps) == nil then
+	-- Refused rather than partially adopted. Silencing the kit takes away what
+	-- sets every lamp value on the vehicle, so taking over half of one leaves the
+	-- other half dark with nothing driving it.
+	if not VehicleLighting.canAdopt(lamps) then
 		return
 	end
-	local silenced = self:_silenceKit(vehicle)
+	local silenced = self:_silenceKit(vehicle, lamps)
 	self.vehicles[vehicle] = {
 		Lamps = lamps,
 		Stage = "Off",
