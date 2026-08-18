@@ -64,8 +64,18 @@ local function isPAVA(tool: Instance): boolean
 		and (tool.Name == "PAVA" or tool:GetAttribute("RoleplayOSToolId") == "PAVA")
 end
 
+-- The spray plume, whichever the package calls it.
+--
+-- This looked for one name. The purchased PAVA calls its emitter Spray, inside
+-- a part also called Spray, so on the real asset the plume was never found and
+-- the canister fired nothing at all. A tool carries one emitter and it is the
+-- spray, so the class is a better question than the name; the name is still
+-- tried first for a package that has more than one.
 local function setSprayEffect(tool: Tool, enabled: boolean)
-	local emitter = tool:FindFirstChild("SprayEmitter", true)
+	local emitter: Instance? = tool:FindFirstChild("SprayEmitter", true)
+	if not (emitter and emitter:IsA("ParticleEmitter")) then
+		emitter = tool:FindFirstChildWhichIsA("ParticleEmitter", true)
+	end
 	if emitter and emitter:IsA("ParticleEmitter") then
 		emitter.Enabled = enabled
 		if enabled then

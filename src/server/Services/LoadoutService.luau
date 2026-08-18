@@ -66,16 +66,13 @@ local function prepareVisibleTool(tool: Tool, toolId: string, definition: any?)
 		created.Parent = tool
 		handle = created
 	end
-	-- PAVA's authored visual is the Spray part. The source package used a
-	-- transparent placeholder, which made the issued tool appear empty even
-	-- though its server interaction worked. Keep the handle hidden, but make
-	-- the reviewed body visible when it is issued.
-	if toolId == "PAVA" then
-		local spray = tool:FindFirstChild("Spray", true)
-		if spray and spray:IsA("BasePart") then
-			spray.Transparency = 0
-		end
-	end
+	-- PAVA used to be issued as a stand-in whose only visible part was a box
+	-- called Spray, so this revealed it to stop the tool appearing empty. On the
+	-- purchased canister that name belongs to the nozzle rather than the body -
+	-- a fifth of a stud, deliberately invisible, holding the plume emitter - and
+	-- revealing it put a small cube in front of the spray head of an asset that
+	-- already has geometry of its own. Whatever a package chooses to show is now
+	-- left as its author set it.
 	handle.Name = "Handle"
 	-- Authored size is whoever modelled it's business, and it is not always a
 	-- size a person could hold. The cuffs arrive two studs long against a five
