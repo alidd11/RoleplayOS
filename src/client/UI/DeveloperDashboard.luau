@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
+local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 local Tokens = require(script.Parent.DesignTokens)
 local TooltipSystem = require(script.Parent.TooltipSystem)
 local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
@@ -114,20 +115,14 @@ local ROLE_DISPLAY_ORDER = {
 	PCSO = 10,
 }
 
-local ROLE_TILE_ASSET_IDS = {
-	Police = "rbxassetid://108952619314292",
-	Ambulance = "rbxassetid://82458182331259",
-	Fire = "rbxassetid://129231885538259",
-	Civilian = "rbxassetid://90347985847798",
-	Highways = "rbxassetid://113273816836442",
-	Transport = "rbxassetid://123377791263414",
-	RoyaltyMail = "rbxassetid://132576980521526",
-	Cashier = "rbxassetid://104308905863825",
-	ComingSoon = "rbxassetid://112525022208467",
-}
+-- The tile artwork now lives in Config, so the preloader warms exactly what
+-- these tiles ask for. It was duplicated here, and the two drifted: the preload
+-- list still held the Decal ids these were before they were re-uploaded as
+-- Images, wrapped in a thumbnail size Roblox does not serve.
 
 local function roleTileImageUri(role: any): string?
-	local assetId = ROLE_TILE_ASSET_IDS[role.DepartmentId] or ROLE_TILE_ASSET_IDS[role.Id]
+	local tiles = Config.RoleTileImages
+	local assetId = tiles[role.DepartmentId] or tiles[role.Id]
 	if not assetId then
 		return nil
 	end

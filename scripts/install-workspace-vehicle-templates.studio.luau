@@ -68,17 +68,25 @@ local function sanitiseImportedVehicle(template, definitionId)
 		end
 	end
 
+	-- Audio the group cannot fetch, silenced the same way VehicleSpawnerService
+	-- silences it at spawn. The instance stays because the kit plugins call
+	-- their sounds by name the moment they start, so removing one turns a failed
+	-- fetch into an attempt to index nil.
 	local blockedAudio = {
+		["0"] = true,
 		["10652911149"] = true,
 		["10652911247"] = true,
 		["11503290062"] = true,
+		["188608071"] = true,
+		["201887209"] = true,
 		["370689846"] = true,
 	}
 	for _, descendant in template:GetDescendants() do
 		if descendant:IsA("Sound") then
 			local id = string.match(descendant.SoundId, "%d+")
 			if id and blockedAudio[id] then
-				descendant:Destroy()
+				descendant.SoundId = ""
+				descendant.Volume = 0
 				removed += 1
 			end
 		end

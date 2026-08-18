@@ -23,8 +23,16 @@ local function blankReport(): WiringReport
 end
 
 local EPAULETTE_FOLDER = "RoleplayOSIssuedEpaulettes"
+-- Rank insignia boards, indexed by the police rank ladder in Config.
+--
+-- There is deliberately no entry for a constable. In the British services the
+-- junior rank wears its shoulder number and takes rank insignia only further up
+-- the ladder, which is the same distinction Config records as Numbered. The
+-- placeholder that used to sit here was rbxassetid://0, and because it was also
+-- the fallback for any rank without a board, every constable going on duty
+-- asked Roblox for asset zero and got an invalid-asset error back for each
+-- shoulder. A blank texture leaves the board bare and asks for nothing.
 local RANK_TEXTURES = {
-	[1] = "rbxassetid://0",
 	[2] = "rbxassetid://6188309917",
 	[3] = "rbxassetid://1312054043",
 	[4] = "rbxassetid://6188309143",
@@ -257,7 +265,7 @@ function ImportedSystemAdapterService:ApplyEpaulettes(
 		then self.context.Services:Get("ShoulderNumberService"):Format(number)
 		else "----"
 	local rank = math.clamp(math.floor(tonumber(profile.Rank) or 1), 1, 9)
-	local texture = RANK_TEXTURES[rank] or RANK_TEXTURES[1]
+	local texture = RANK_TEXTURES[rank] or ""
 	local issued = Instance.new("Folder")
 	issued.Name = EPAULETTE_FOLDER
 	issued.Parent = character

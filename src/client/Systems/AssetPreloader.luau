@@ -45,6 +45,17 @@ function AssetPreloader:_discoverAssets()
 		end
 	end
 
+	-- The start screen's role tiles, warmed from the same table the tiles render
+	-- from rather than a hand-kept copy. The copy that used to sit in
+	-- AssetPreload.Background had gone stale against them completely: nine
+	-- rbxthumb://type=Asset URLs pointing at the Decal ids these were before they
+	-- were re-uploaded as Images, requested at 768x768, which is not a size
+	-- Roblox serves for that type. Every one failed on the client at startup,
+	-- and none of them was an asset any tile ever asked for.
+	for _, asset in config.RoleTileImages or {} do
+		addAsset(background, asset)
+	end
+
 	local discovered = {}
 	if config.Vehicles then
 		for _, vehicle in config.Vehicles do

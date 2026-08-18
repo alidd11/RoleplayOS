@@ -451,19 +451,62 @@ local function sanitiseImportedVehicle(vehicle: Model)
 		remove(path)
 	end
 
-	-- Remove known inaccessible Creator Store sounds. Empty/invalid audio must
-	-- not be allowed to throw repeatedly from imported handlers.
-	local blocked = {
-		["10652911149"] = true,
-		["10652911247"] = true,
-		["11503290062"] = true,
-		["370689846"] = true,
+	-- Audio nobody in this group can fetch.
+	--
+	-- These uploads belong to the people who built these kits, so the group cannot
+	-- be granted access and the engine reports every one on each spawn -- the wind
+	-- loop alone is carried by nine vehicles and accounts for most of the noise in
+	-- the log.
+	--
+	-- Most of them are replaced rather than silenced, because the fleet already
+	-- contains a working sound for the same job. The kits do not agree on which
+	-- ignition or indicator sample to use, so the ones that happen to be locked
+	-- can simply borrow the id from the ones that are not: every replacement below
+	-- is an id already in use on other vehicles here and proven to load.
+	local replacements = {
+		-- Ignition crank. Ten vehicles already use this one.
+		["370689846"] = "rbxassetid://906447701",
+		-- Ignition second stage. Six kits ship this with no id at all, which
+		-- arrives as a request for asset zero; three others fill it in with this.
+		["0"] = "rbxassetid://6224906632",
+		-- Indicator relay clicks, off and on, from the lighting kit four other
+		-- vehicles carry.
+		["10652911149"] = "rbxassetid://6212969290",
+		["10652911247"] = "rbxassetid://6212969851",
+		-- The helmet click has no equivalent anywhere, but it is the same kind of
+		-- short mechanical tick, so it borrows the indicator's.
+		["11503290062"] = "rbxassetid://6212969290",
 	}
+
+	-- Nothing in the fleet plays a wind loop or a tyre squeal, so there is nothing
+	-- to borrow and these two are silenced instead.
+	--
+	-- Silenced rather than destroyed, and so is everything above. A kit plugin
+	-- reaches its sounds by name and immediately uses them -- the ignition script
+	-- does script:WaitForChild("Start1") and then car.DriveSeat.Start1:Play() --
+	-- so taking the instance away does not merely error, it hangs that script on
+	-- the WaitForChild forever. An empty SoundId asks the network for nothing and
+	-- still leaves the plugin something to hold.
+	local silenced = {
+		["188608071"] = true,
+		["201887209"] = true,
+	}
+
 	for _, descendant in vehicle:GetDescendants() do
 		if descendant:IsA("Sound") then
 			local id = string.match(descendant.SoundId, "%d+")
-			if id and blocked[id] then
-				descendant:Destroy()
+			-- Zero is only ever substituted on the ignition sound it belongs to. It
+			-- is a blank field rather than a real id, so anything else carrying it
+			-- is a different kit's oversight and gets silence rather than a crank.
+			local swap = if id == "0" and descendant.Name ~= "Start2"
+				then nil
+				else replacements[id or ""]
+			if swap then
+				descendant.SoundId = swap
+				removed += 1
+			elseif id and (silenced[id] or id == "0") then
+				descendant.SoundId = ""
+				descendant.Volume = 0
 				removed += 1
 			end
 		end

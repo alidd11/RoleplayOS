@@ -108,22 +108,36 @@ local Config = {
 		MaximumDrivingFines = 80,
 		MaximumEmploymentHistory = 40,
 	},
+	-- The role tile artwork, in one place.
+	--
+	-- This is the single source for both the start screen's tiles and the
+	-- preloader that warms them, because the two had drifted apart completely.
+	-- The preload list still held nine rbxthumb://type=Asset URLs pointing at the
+	-- Decal ids these tiles used before they were re-uploaded as Images, wrapped
+	-- at 768x768 -- which is not a size Roblox serves for type=Asset, so every
+	-- one errored on the client at startup. It was warming nine assets that were
+	-- the wrong ids, in an invalid size, that nothing on screen ever asked for.
+	--
+	-- Keyed by DepartmentId, falling back to a role id, which is the order the
+	-- dashboard looks them up in.
+	RoleTileImages = {
+		Police = "rbxassetid://108952619314292",
+		Ambulance = "rbxassetid://82458182331259",
+		Fire = "rbxassetid://129231885538259",
+		Civilian = "rbxassetid://90347985847798",
+		Highways = "rbxassetid://113273816836442",
+		Transport = "rbxassetid://123377791263414",
+		RoyaltyMail = "rbxassetid://132576980521526",
+		Cashier = "rbxassetid://104308905863825",
+		ComingSoon = "rbxassetid://112525022208467",
+	},
 	AssetPreload = {
 		Critical = {},
-		-- The start screen is the first interaction, so its role artwork should
-		-- be ready before the cards are displayed instead of arriving as blank
-		-- panels while Roblox fetches each image.
-		Background = {
-			"rbxthumb://type=Asset&id=124510305332365&w=768&h=768", -- Police
-			"rbxthumb://type=Asset&id=115689835891137&w=768&h=768", -- Ambulance
-			"rbxthumb://type=Asset&id=95977486831570&w=768&h=768", -- Firefighter
-			"rbxthumb://type=Asset&id=113064266300926&w=768&h=768", -- Civilian
-			"rbxthumb://type=Asset&id=133420507327997&w=768&h=768", -- Highways / council worker
-			"rbxthumb://type=Asset&id=102874702573163&w=768&h=768", -- Transport
-			"rbxthumb://type=Asset&id=88863810610980&w=768&h=768", -- Royalty Mail
-			"rbxthumb://type=Asset&id=127971383421481&w=768&h=768",
-			"rbxthumb://type=Asset&id=101846745500511&w=768&h=768",
-		},
+		-- The start screen is the first interaction, so its role artwork should be
+		-- ready before the cards are displayed instead of arriving as blank panels
+		-- while Roblox fetches each image. Filled from RoleTileImages at load, so
+		-- the list cannot go stale against the tiles again.
+		Background = {},
 	},
 	ContentQuality = {
 		RequireCertification = true,
