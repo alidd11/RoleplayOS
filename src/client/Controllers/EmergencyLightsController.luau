@@ -284,7 +284,15 @@ function EmergencyLightsController:_step()
 			-- the whole street.
 			local circuitOn = record.CircuitAttribute ~= nil
 				and model:GetAttribute(record.CircuitAttribute) == true
-			local inStage = stage >= settings.Stages
+			-- Work lights answer to their own button and nothing else.
+			--
+			-- Takedowns, scene lamps, alleys and spots are white and steady, and
+			-- the all-on stage lit them along with the blues: pressing 999 put six
+			-- steady white lamps on the Peugeot's bar, which is not a response, it
+			-- is a car parked with its work lights on. Real heads keep them apart
+			-- from the warning circuits and so does this.
+			local steadyCircuit = settings.SteadyCircuits[record.Circuit] == true
+			local inStage = (not steadyCircuit) and stage >= settings.Stages
 				or (stage == 1 and (record.Circuit == "RearBlue" or record.Circuit == "RearReds"))
 				or (stage == 1 and record.Circuit == nil and index % 2 == 0)
 				or circuitOn
@@ -679,10 +687,18 @@ end
 function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	if not driver then
 		self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
+		self.vehicleOwnsKeys = false
 		self.panel.Visible = false
 		self:_bindControls(false)
 		return
 	end
+	-- Whether this vehicle came with its own keyboard controls. A fact about the
+	-- model, so it is read from the model rather than from the server's reply.
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
+	self.vehicleOwnsKeys = vehicle ~= nil and vehicle:FindFirstChild("SirenControl", true) ~= nil
 	-- Asked more than once.
 	--
 	-- This ran only on the transition into driving, and the server does not
@@ -729,11 +745,21 @@ end
 -- sinks rather than passes, which is safe precisely because it is only bound
 -- while the player is driving a vehicle that has lights.
 function EmergencyLightsController:_bindControls(available: boolean)
-	if available == self.bound then
+	-- Not on a vehicle that brought its own keys.
+	--
+	-- Every emergency vehicle in this fleet carries a siren box, cloned into the
+	-- driver's PlayerGui, that binds R, T, G and F through UserInputService. This
+	-- bound F for lights and G for sirens, and sinking an input in
+	-- ContextActionService does not stop UserInputService seeing it: both handlers
+	-- ran on one press. F toggled the framework's lights and sounded the vehicle's
+	-- airhorn; G cycled this panel's tone and switched the car to priority
+	-- underneath it. The vehicle's keys win, and the panel needs no key of its own.
+	local wanted = available and not self.vehicleOwnsKeys
+	if wanted == self.bound then
 		return
 	end
-	self.bound = available
-	if not available then
+	self.bound = wanted
+	if not wanted then
 		ContextActionService:UnbindAction(ACTION_LIGHTS)
 		ContextActionService:UnbindAction(ACTION_SIREN)
 		return
@@ -762,7 +788,7 @@ end
 function EmergencyLightsController:CycleSiren()
 	local tones = { "" }
 	if self.state.Tones then
-		for _, tone in { "Wail", "Yelp", "Phaser", "Horn" } do
+		for _, tone in { "Wail", "Yelp", "Priority", "Airhorn" } do
 			if self.state.Tones[tone] and self.state.Tones[tone] ~= "" then
 				table.insert(tones, tone)
 			end

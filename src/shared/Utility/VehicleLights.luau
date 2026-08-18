@@ -202,11 +202,17 @@ end
 -- client, which played the sounds, while the server decided which tones to
 -- offer from a table of ids it never used - so a vehicle could be offered a
 -- tone it had no sound for, and denied one it did. Both sides read this now.
+-- Named for what the vehicle calls them.
+--
+-- These were Phaser and Horn, mapped onto sounds every kit in this fleet names
+-- Priority and Airhorn. The panel offered a tone by one name while the car's own
+-- dash legend beside it read another, which is a button an officer has to learn
+-- by pressing. Real control heads label the tone, so this labels the tone.
 VehicleLights.SirenAliases = {
 	Wail = { "Wail" },
 	Yelp = { "Yelp" },
-	Phaser = { "Phaser", "Priority" },
-	Horn = { "Horn", "Airhorn" },
+	Priority = { "Priority", "Phaser", "HiLo", "Hi-Lo" },
+	Airhorn = { "Airhorn", "Horn", "Bullhorn" },
 }
 
 -- The Sound in this vehicle for a tone, if it has one.

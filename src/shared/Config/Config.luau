@@ -1014,12 +1014,19 @@ local Config = {
 		-- stopped allowing, and putting a guessed asset id here would fail the same
 		-- way while looking configured. Upload the tones under the group and put
 		-- their ids in EDIT_HERE.
+		-- The tones a vehicle may be recorded as sounding. Names, not ids.
+		--
+		-- These were asset ids under a comment claiming they were owned by the
+		-- group and verified in its inventory. Neither is in the group's audio
+		-- inventory, and nothing has ever played them: every emergency vehicle in
+		-- the fleet ships its own siren sounds and its own script to play them.
+		-- The framework's part is to record which tone is running so dispatch and
+		-- the speed cameras agree with the street, and that needs a name.
 		Sirens = {
-			-- Owned by Universal Projects. and verified in the group inventory.
-			Wail = "18707739719",
-			Yelp = "16312459952",
-			Phaser = "",
-			Horn = "",
+			Wail = true,
+			Yelp = true,
+			Priority = true,
+			Airhorn = true,
 		},
 		SirenVolume = 0.5,
 		SirenRangeStuds = 320,
