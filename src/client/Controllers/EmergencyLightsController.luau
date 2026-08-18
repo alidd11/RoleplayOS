@@ -365,15 +365,22 @@ function EmergencyLightsController:_step()
 			-- the whole street.
 			local circuitOn = record.CircuitAttribute ~= nil
 				and model:GetAttribute(record.CircuitAttribute) == true
-			-- Work lights answer to their own button and nothing else.
+			-- Work lights belong to the scene, not to the response.
 			--
-			-- Takedowns, scene lamps, alleys and spots are white and steady, and
-			-- the all-on stage lit them along with the blues: pressing 999 put six
-			-- steady white lamps on the Peugeot's bar, which is not a response, it
-			-- is a car parked with its work lights on. Real heads keep them apart
-			-- from the warning circuits and so does this.
+			-- Takedowns, alleys and scene lamps are white and steady. The Peugeot
+			-- authors them at rgb(159,173,192) against rgb(96,117,207) for every
+			-- blue in the same bar, which is the model itself saying these are a
+			-- different kind of lamp.
+			--
+			-- They were on their own button and nothing else, so a full response
+			-- left six lamps dark in the middle of the bar. They are not part of a
+			-- response - pointing takedowns at oncoming traffic at speed is the one
+			-- thing they are never for - but they are exactly what a car stopped at
+			-- a scene puts on. So AT SCENE lights them, steady, alongside the rear
+			-- warning lamps, and 999 leaves them off.
 			local steadyCircuit = settings.SteadyCircuits[record.Circuit] == true
 			local inStage = (not steadyCircuit) and stage >= settings.Stages
+				or (steadyCircuit and stage == 1)
 				or (stage == 1 and (record.Circuit == "RearBlue" or record.Circuit == "RearReds"))
 				or (stage == 1 and record.Circuit == nil and index % 2 == 0)
 				or circuitOn
