@@ -82,11 +82,18 @@ function VehicleLights.isLightPart(settings: any, part: BasePart, root: Instance
 	if not named then
 		return false
 	end
-	-- Named in its own right is enough. Named only by an ancestor has to look
-	-- like a lamp, for the housing reason above.
-	if matches(part.Name, settings.LightNamePatterns) then
-		return true
-	end
+	-- It still has to look like a lamp, whichever level named it.
+	--
+	-- A matching part name used to be accepted on the spot, skipping the check
+	-- entirely. On the Peugeot that adopted a body panel called
+	-- "extra_3.002_els_emissives" - grey, plastic, fully opaque, and part of the
+	-- bodywork - because "els" appears in its name. It sat in the adopted set
+	-- waiting to be painted neon blue along with the lightbar.
+	--
+	-- The shortcut existed so an oddly named bulb could be rescued by its name,
+	-- but a bulb that neither emits, glows nor carries a colour is not a bulb, and
+	-- the RoleplayOSLight attribute above is the deliberate override for anything
+	-- this test genuinely gets wrong.
 	return looksLikeLamp(part)
 end
 

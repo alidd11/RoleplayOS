@@ -875,14 +875,33 @@ function EmergencyLightsController:_paint()
 	self:_lamp("Response", stage >= self.settings.Stages, LAMP_BLUE)
 
 	if self.readout then
-		local text = if stage == 0 then "STANDBY" elseif stage == 1 then "AT SCENE" else "RESPONSE"
+		-- Circuits count, not just the stage.
+		--
+		-- A vehicle with FRONT BLUE and REAR BLUE switched on has a bar flashing
+		-- above the bonnet at stage zero, and the readout said STANDBY, because it
+		-- only ever looked at the stage. A head that reports standby while the
+		-- lights are running is worse than one that reports nothing.
+		local anyCircuit = false
+		if state.Circuits then
+			for _, on in state.Circuits do
+				if on == true then
+					anyCircuit = true
+					break
+				end
+			end
+		end
+		local text = if stage >= self.settings.Stages
+			then "RESPONSE"
+			elseif stage == 1 then "AT SCENE"
+			elseif anyCircuit then "LIGHTS ON"
+			else "STANDBY"
 		if tone ~= "" then
 			text = string.upper(tone)
 		end
 		self.readout.Text = text
 		self.readout.TextColor3 = if tone ~= ""
 			then LAMP_RED
-			elseif stage > 0 then LAMP_BLUE
+			elseif stage > 0 or anyCircuit then LAMP_BLUE
 			else LAMP_GREEN
 	end
 end
