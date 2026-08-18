@@ -364,6 +364,38 @@ function SpeedometerController:_mount()
 	self.handbrake = handbrake
 	self.handbrakeStroke = handbrakeStroke
 
+	-- Driver aid tell-tales, in the row a real cluster keeps them in.
+	--
+	-- A-Chassis has published all four of these from the start - ABS and TCS say
+	-- whether the system is fitted and armed, ABSActive and TCSActive say whether
+	-- it is intervening right now - and none of it was on screen. The cluster
+	-- showed a gear, a handbrake and a speed, which is less than the chassis knew.
+	--
+	-- Three states, because two would lose the distinction that matters. A lamp
+	-- that is dark means the system is not fitted. Dim means fitted and watching.
+	-- Lit amber means it is working this instant, which is the only one a driver
+	-- reacts to, and the reason these are amber rather than the cluster's blue:
+	-- amber is what a car uses for "a system is intervening".
+	local function telltale(name: string, text: string, offsetX: number): (Frame, TextLabel)
+		local badge = Instance.new("Frame")
+		badge.Name = name
+		badge.AnchorPoint = Vector2.new(0.5, 0)
+		badge.Position = UDim2.fromOffset(offsetX, 82)
+		badge.Size = UDim2.fromOffset(44, 26)
+		badge.BackgroundColor3 = C.Track
+		badge.BackgroundTransparency = 0.35
+		badge.BorderSizePixel = 0
+		badge.Parent = frame
+		Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 7)
+		local mark = label(badge, Enum.Font.GothamBold, 13, C.Muted)
+		mark.Text = text
+		mark.Size = UDim2.fromScale(1, 1)
+		mark.TextXAlignment = Enum.TextXAlignment.Center
+		return badge, mark
+	end
+	self.absBadge, self.abs = telltale("ABS", "ABS", 42)
+	self.tcsBadge, self.tcs = telltale("TCS", "TC", CLUSTER_SIZE.X - 42)
+
 	local fuelTrack = Instance.new("Frame")
 	fuelTrack.Name = "Fuel"
 	fuelTrack.AnchorPoint = Vector2.new(0.5, 0)
@@ -648,6 +680,33 @@ function SpeedometerController:Start()
 			self.handbrakeBadge.BackgroundColor3 = if handbrakeOn
 				then Color3.fromRGB(73, 20, 25)
 				else C.Track
+
+			-- Fitted, and intervening. Read straight from the chassis, so a vehicle
+			-- that publishes neither leaves both lamps dark rather than pretending.
+			local function telltaleState(
+				badge: Frame,
+				mark: TextLabel,
+				fittedNames: { string },
+				activeNames: { string }
+			)
+				local fitted = readsOn(readFirstValue(values, fittedNames))
+				local active = readsOn(readFirstValue(values, activeNames))
+				mark.TextColor3 = if active then C.Warn elseif fitted then C.Muted else C.Track
+				badge.BackgroundColor3 = if active then Color3.fromRGB(66, 47, 12) else C.Track
+				badge.BackgroundTransparency = if fitted or active then 0.35 else 0.7
+			end
+			telltaleState(
+				self.absBadge,
+				self.abs,
+				self.settings.AbsValueNames,
+				self.settings.AbsActiveValueNames
+			)
+			telltaleState(
+				self.tcsBadge,
+				self.tcs,
+				self.settings.TcsValueNames,
+				self.settings.TcsActiveValueNames
+			)
 		end)
 	)
 end

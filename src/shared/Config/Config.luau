@@ -2137,6 +2137,15 @@ local Config = {
 		VelocityValueNames = { "Velocity", "LinearVelocity" },
 		FuelValueNames = { "Fuel", "FuelLevel", "FuelPercent" },
 		HandbrakeValueNames = { "Handbrake", "HandBrake", "ParkingBrake", "PBrake", "ParkBrake" },
+		-- Driver aids. Two names each, because a chassis says separately whether a
+		-- system is fitted and whether it is intervening this instant, and the
+		-- cluster shows a different state for each. A vehicle publishing neither
+		-- leaves both lamps dark, which is the honest reading for a car that has
+		-- no ABS rather than one whose ABS is idle.
+		AbsValueNames = { "ABS", "Abs", "AntiLock" },
+		AbsActiveValueNames = { "ABSActive", "AbsActive" },
+		TcsValueNames = { "TCS", "Tcs", "TractionControl" },
+		TcsActiveValueNames = { "TCSActive", "TcsActive" },
 	},
 	VehicleData = {
 		-- Retained for speed enforcement and the replacement spawner integration;
