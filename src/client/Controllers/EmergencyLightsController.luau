@@ -68,15 +68,15 @@ local CIRCUIT_CONTROLS = {
 	{ Id = "FrontScene", Label = "FRONT\nSCENE" },
 	{ Id = "RearScene", Label = "REAR\nSCENE" },
 	{ Id = "RearReds", Label = "REAR\nREDS" },
-	{ Id = "LowPower", Label = "LOW\nPOWER" },
-	{ Id = "Grille", Label = "GRILLE\nLIGHTS" },
-	{ Id = "RunLock", Label = "RUN\nLOCK" },
+	{ Id = "LowPower", Label = "LOW PWR" },
+	{ Id = "Grille", Label = "GRILLE" },
+	{ Id = "RunLock", Label = "RUN LOCK" },
 	{ Id = "LeftAlley", Label = "LEFT\nALLEY" },
 	{ Id = "Spots", Label = "SPOTS" },
 	{ Id = "RightAlley", Label = "RIGHT\nALLEY" },
 	-- The kit's second pattern. Shown only on a vehicle that has one, like every
 	-- other control here.
-	{ Id = "Director", Label = "DIRECTOR" },
+	{ Id = "Director", Label = "DIR" },
 }
 
 -- Controls that are always worth showing, whatever lamps the vehicle turns out
@@ -467,7 +467,7 @@ function EmergencyLightsController:_button(
 	item.Font = Enum.Font.GothamMedium
 	item.Text = text
 	item.TextColor3 = LEGEND
-	item.TextSize = 12
+	item.TextSize = 13
 	item.TextWrapped = true
 	item.LineHeight = 1.05
 	item.Parent = parent
@@ -978,6 +978,39 @@ function EmergencyLightsController:_cycleKit(action: string)
 end
 
 function EmergencyLightsController:_activate(id: string)
+	-- The three modes, handled before anything else.
+	--
+	-- These used to be wired with their own inline handlers on the buttons. The
+	-- rebuild routed every key through here instead and did not bring them with
+	-- it, so all three fell through to the branch at the bottom and asked the
+	-- server to toggle a circuit named "Reset", "AtScene" or "Response". No such
+	-- circuit exists, so the request did nothing at all: pressing OFF left the
+	-- lights running.
+	--
+	-- Each one drives the tone as well as the stage, because nothing watches the
+	-- siren attribute any more - the panel plays the vehicle's own sounds.
+	if id == "Reset" then
+		if (self.state.Stage or 0) > 0 then
+			self:_cycleKit("MainELS")
+		end
+		self:_setTone("")
+		self:_request({ Reset = true })
+		self:_paint()
+		return
+	elseif id == "AtScene" then
+		self:_setTone("")
+		self:_request({ Stage = 1 })
+		self:_paint()
+		return
+	elseif id == "Response" then
+		if (self.state.Stage or 0) < self.settings.Stages then
+			self:_cycleKit("MainELS")
+		end
+		self:_request({ Stage = self.settings.Stages })
+		self:_setTone("Wail")
+		self:_paint()
+		return
+	end
 	if id == "Director" then
 		-- Counted here because the kit will not say.
 		--
