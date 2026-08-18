@@ -882,10 +882,16 @@ local Config = {
 		-- Who may run lights, and in what colour. Traffic officers run amber in
 		-- the UK, not blue, and a department missing from here has no lights at
 		-- all rather than defaulting to blue.
+		-- Primary and Secondary are the two halves of a bar, alternating. They are
+		-- not "the colour and a highlight": whatever is here is half of what the
+		-- street sees, so a near-white secondary is a bar that flashes white down
+		-- one side. A marked British police car is blue throughout, with the white
+		-- kept to the takedowns and scene lamps, which have their own colours in
+		-- CircuitColours below.
 		Departments = {
 			Police = {
 				Primary = Color3.fromRGB(0, 68, 255),
-				Secondary = Color3.fromRGB(235, 242, 255),
+				Secondary = Color3.fromRGB(60, 130, 255),
 			},
 			Ambulance = {
 				Primary = Color3.fromRGB(0, 92, 255),
@@ -905,6 +911,37 @@ local Config = {
 		-- dazzling the traffic it is warning.
 		Stages = 2,
 		FlashesPerSecond = 2.2,
+		-- What each circuit is, rather than what colour the department flashes.
+		--
+		-- Colour used to come from the lamp's position in the adoption order:
+		-- every other lamp took the department's primary and the rest took its
+		-- secondary, whatever the lamp actually was. On a police vehicle that is
+		-- blue and near-white, so a bar half flashed blue and half flashed white
+		-- with no relation to which side of the car the lamp was on - and the rear
+		-- reds, correctly identified as reds, came out blue or white like
+		-- everything else, because red is not in the police palette at all.
+		--
+		-- These are facts about the fitting, not about the force: rear reds are
+		-- red on every marked car in the country, and scene, alley and takedown
+		-- lamps are white work lights. Only the blues take the department colours.
+		CircuitColours = {
+			RearReds = Color3.fromRGB(255, 32, 24),
+			FrontScene = Color3.fromRGB(255, 250, 235),
+			RearScene = Color3.fromRGB(255, 250, 235),
+			LeftAlley = Color3.fromRGB(255, 250, 235),
+			RightAlley = Color3.fromRGB(255, 250, 235),
+			Spots = Color3.fromRGB(255, 250, 235),
+		},
+		-- Work lights, which are lit rather than flashed. A scene lamp strobing is
+		-- the tell that a lightbar is being driven by something that does not know
+		-- what its lamps are for.
+		SteadyCircuits = {
+			FrontScene = true,
+			RearScene = true,
+			LeftAlley = true,
+			RightAlley = true,
+			Spots = true,
+		},
 		-- A model can identify a lamp explicitly with a RoleplayOSLightCircuit
 		-- attribute, or use one of these case-insensitive name fragments. Models
 		-- without circuit names still work through 360 and at-scene modes.

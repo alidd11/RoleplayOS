@@ -276,7 +276,10 @@ function EmergencyLightsController:_step()
 				or (stage == 1 and (record.Circuit == "RearBlue" or record.Circuit == "RearReds"))
 				or (stage == 1 and record.Circuit == nil and index % 2 == 0)
 				or circuitOn
-			local on = inStage and record.Side == phase
+			-- Work lights hold; warning lights alternate. A scene lamp that strobes
+			-- is not a scene lamp.
+			local steady = settings.SteadyCircuits[record.Circuit] == true
+			local on = inStage and (steady or record.Side == phase)
 			-- Written only when it changes.
 			--
 			-- This loop runs nearly nine times a second while the pattern itself
@@ -288,9 +291,15 @@ function EmergencyLightsController:_step()
 			-- anything. On a full server that is the whole cost of this feature
 			-- and none of its effect.
 			local material = if on then Enum.Material.Neon else record.Material
-			local colour = if on
-				then (if record.Side == 0 then primary else secondary)
-				else record.Colour
+			-- The fitting decides the colour, and only the blues take the
+			-- department's. Reds are red and work lights are white on every marked
+			-- car there is, so a force whose palette contains neither still gets
+			-- both, which is what the alternation by adoption index could never do.
+			local fitted = settings.CircuitColours[record.Circuit]
+			local colour = if not on
+				then record.Colour
+				elseif fitted then fitted
+				else (if record.Side == 0 then primary else secondary)
 			if record.LastMaterial ~= material then
 				record.LastMaterial = material
 				record.Part.Material = material
