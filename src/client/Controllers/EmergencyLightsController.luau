@@ -39,6 +39,10 @@ local RESET_BASE = Color3.fromRGB(77, 139, 91)
 local RESET_LIT = Color3.fromRGB(118, 200, 138)
 local SIREN_BASE = Color3.fromRGB(204, 61, 51)
 local SIREN_LIT = Color3.fromRGB(255, 108, 96)
+-- Deeper than the tone button, because it is a different kind of control: one is
+-- a selection that stays, the other only sounds while it is held.
+local HORN_BASE = Color3.fromRGB(150, 46, 40)
+local HORN_LIT = Color3.fromRGB(238, 96, 84)
 
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
@@ -189,6 +193,26 @@ function EmergencyLightsController:_toneSound(rack: Instance, tone: string): Sou
 		end
 	end
 	return nil
+end
+
+-- The airhorn, which is held rather than selected. Not looped, and the tone
+-- underneath it is left running: sounding the horn over a wail is what the horn
+-- is for.
+function EmergencyLightsController:_setHorn(down: boolean)
+	local rack = self:_sirenRack()
+	if not rack then
+		return
+	end
+	local horn = self:_toneSound(rack, VehicleLights.MomentaryTone)
+	if not horn then
+		return
+	end
+	horn.Looped = false
+	if down then
+		horn:Play()
+	else
+		horn:Stop()
+	end
 end
 
 -- Which continuous tone the vehicle is actually sounding, by asking it.
@@ -503,6 +527,29 @@ function EmergencyLightsController:_mount()
 	sirens.Activated:Connect(function()
 		self:CycleSiren()
 	end)
+
+	-- Held, not selected.
+	--
+	-- Every kit sounds its airhorn while the key is down and stops on release, so
+	-- this is the one control on the panel that is not a toggle. Down on press and
+	-- up on release, and also on the pointer leaving the button while still held,
+	-- which is otherwise how a horn gets stuck on: the button never sees the
+	-- release because it happened somewhere else.
+	local horn = self:_button(panel, "Airhorn", "AIR HORN", HORN_BASE)
+	self.secondary[#self.secondary + 1] = horn
+	table.insert(
+		self.connections,
+		horn.MouseButton1Down:Connect(function()
+			self:_setHorn(true)
+			horn.BackgroundColor3 = HORN_LIT
+		end)
+	)
+	local function hornUp()
+		self:_setHorn(false)
+		horn.BackgroundColor3 = HORN_BASE
+	end
+	table.insert(self.connections, horn.MouseButton1Up:Connect(hornUp))
+	table.insert(self.connections, horn.MouseLeave:Connect(hornUp))
 	local response = self:_button(panel, "Response", "999", Color3.fromRGB(42, 83, 184))
 	response.Position = UDim2.fromOffset(124, 288)
 	response.Size = UDim2.fromOffset(102, 47)
@@ -568,12 +615,22 @@ function EmergencyLightsController:_layout()
 	local top = 34 + gridHeight + 10
 	local across = if compact then 4 else 2
 	local width = math.floor((size.X - 24 - (across - 1) * 8) / across)
-	local secondaryRows = math.ceil(#self.secondary / across)
-	for index, item in self.secondary do
+	local shown = {}
+	for _, item in self.secondary do
+		if item.Visible then
+			table.insert(shown, item)
+		end
+	end
+	local secondaryRows = math.max(math.ceil(#shown / across), 1)
+	for index, item in shown do
 		local column = (index - 1) % across
 		local row = math.floor((index - 1) / across)
+		-- A button left alone on the last row takes the whole width rather than
+		-- sitting half-empty beside a gap. With five controls and two columns that
+		-- is RESET, and an odd count is the normal case now the horn is here.
+		local alone = index == #shown and column == 0
 		item.Position = UDim2.fromOffset(12 + column * (width + 8), top + row * 53)
-		item.Size = UDim2.fromOffset(width, 46)
+		item.Size = UDim2.fromOffset(if alone then size.X - 24 else width, 46)
 	end
 	self.panel.Size = UDim2.fromOffset(size.X, top + secondaryRows * 53 - 7 + 12)
 end
@@ -603,6 +660,27 @@ function EmergencyLightsController:_applyAvailability()
 				item.LayoutOrder = shown
 			end
 		end
+	end
+	-- The audio controls come off the panel on a vehicle that cannot sound them,
+	-- for the same reason a circuit does: a button that records a state against a
+	-- speaker the vehicle does not have is indistinguishable, to the person
+	-- pressing it, from a broken button.
+	local rack = self:_sirenRack()
+	if self.buttons.Airhorn then
+		self.buttons.Airhorn.Visible = rack ~= nil
+			and self:_toneSound(rack, VehicleLights.MomentaryTone) ~= nil
+	end
+	if self.buttons.Sirens then
+		local anyTone = false
+		if rack then
+			for _, tone in VehicleLights.SirenCycle do
+				if self:_toneSound(rack, tone) then
+					anyTone = true
+					break
+				end
+			end
+		end
+		self.buttons.Sirens.Visible = anyTone
 	end
 	-- Measured again, because what was just hidden is what the panel has to close
 	-- up around. Skipped before the panel exists, which is every call during Init.
