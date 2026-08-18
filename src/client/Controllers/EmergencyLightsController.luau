@@ -130,7 +130,13 @@ function EmergencyLightsController:_adopt(model: Instance)
 					Transparency = descendant.Transparency,
 					-- Alternates the two sides of the bar, which is what makes it
 					-- read as a lightbar rather than as a lamp switching on and off.
-					Side = #parts % 2,
+					-- Taken from where the lamp physically sits, with the adoption
+					-- order kept only for a vehicle with no seat to measure against.
+					-- Parity of the adoption order alternated whatever GetDescendants
+					-- happened to return next, which on a bar modelled as Front, Rear
+					-- and Side groups scatters rather than splitting left from right,
+					-- so the bar read as flickering instead of lighting up.
+					Side = VehicleLights.sideOf(descendant, model) or (#parts % 2),
 				})
 			end
 		end
@@ -705,7 +711,7 @@ function EmergencyLightsController:_paint()
 	self:_applyAvailability()
 	for _, control in CIRCUIT_CONTROLS do
 		local active = if control.Id == "Director"
-			then false
+			then (self.directorStep or 0) > 0
 			elseif control.Id == "Master" then state.Stage == self.settings.Stages
 			elseif control.Id == "LowPower" then state.LowPower == true
 			elseif control.Id == "RunLock" then state.RunLock == true
@@ -789,7 +795,20 @@ end
 
 function EmergencyLightsController:_activate(id: string)
 	if id == "Director" then
+		-- Counted here because the kit will not say.
+		--
+		-- EasyLS keeps its director stage in a local and its remote answers only
+		-- GetBinds, so there is nothing to read. The button lit nothing at all as a
+		-- result, which on a control that cycles rather than toggles leaves no way
+		-- to know whether it is running. Every press is one step through the kit's
+		-- director patterns and back to off, so counting presses against the number
+		-- of patterns tracks it exactly as long as this is the only thing pressing
+		-- it - and it is, because the kit's own key for it is not bound anywhere in
+		-- this fleet. Reset whenever the vehicle changes, so a stale count cannot
+		-- follow the officer into the next car.
+		self.directorStep = ((self.directorStep or 0) + 1) % (self.settings.DirectorStages + 1)
 		self:_cycleKit("DirectorELS")
+		self:_paint()
 	elseif id == "Master" then
 		-- Cycles the kit's pattern and tells the server the lights are on, so the
 		-- two agree about a vehicle that is now visibly lit.
@@ -811,6 +830,7 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	if not driver then
 		self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 		self.vehicleOwnsKeys = false
+		self.directorStep = 0
 		self.panel.Visible = false
 		self:_bindControls(false)
 		return
@@ -822,6 +842,10 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	local seat = humanoid and humanoid.SeatPart
 	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
 	self.vehicleOwnsKeys = vehicle ~= nil and vehicle:FindFirstChild("SirenControl", true) ~= nil
+	if vehicle ~= self.lastVehicle then
+		self.lastVehicle = vehicle
+		self.directorStep = 0
+	end
 	-- Asked more than once.
 	--
 	-- This ran only on the transition into driving, and the server does not

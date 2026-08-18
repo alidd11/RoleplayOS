@@ -130,6 +130,32 @@ local function isAtFront(part: BasePart, root: Instance): boolean?
 	return reference:PointToObjectSpace(part.Position).Z < 0
 end
 
+-- Which half of the bar a lamp sits in, or nil if that cannot be worked out.
+--
+-- The flash alternates two groups, and those groups were the odd and even
+-- entries of the adoption order - the order GetDescendants happened to return
+-- parts in. On a bar whose lamps are modelled left, right, left, right that
+-- looks correct by accident; on one grouped into Front, Rear, Side models it
+-- scatters, and the bar never reads as lighting up so much as flickering at
+-- random. Half the lamps are lit at any instant either way, which is why this
+-- looks like lamps failing to come on rather than like the wrong ones coming on.
+--
+-- Same reference frame as isAtFront and for the same reason: a seat is the one
+-- part of a vehicle that cannot be fitted sideways.
+function VehicleLights.sideOf(part: BasePart, root: Instance): number?
+	local ok, box, orientation = pcall(function()
+		local model = root :: any
+		local seat = model:FindFirstChildWhichIsA("VehicleSeat", true)
+			or model:FindFirstChildWhichIsA("Seat", true)
+		return model:GetBoundingBox(), if seat then seat.CFrame - seat.CFrame.Position else nil
+	end)
+	if not ok or typeof(box) ~= "CFrame" or typeof(orientation) ~= "CFrame" then
+		return nil
+	end
+	local reference = CFrame.new(box.Position) * orientation
+	return if reference:PointToObjectSpace(part.Position).X < 0 then 0 else 1
+end
+
 local function isRed(colour: Color3): boolean
 	return colour.R > 0.4 and colour.R > colour.G * 1.6 and colour.R > colour.B * 1.6
 end

@@ -910,6 +910,11 @@ local Config = {
 		-- everything. A vehicle parked at an incident should be visible without
 		-- dazzling the traffic it is warning.
 		Stages = 2,
+		-- How many director patterns a kit cycles through before returning to off.
+		-- Used only to keep the DIRECTOR button's indicator honest: EasyLS keeps its
+		-- director stage in a local and offers no way to read it, so presses are
+		-- counted against this instead. Two is what the kits in this fleet ship.
+		DirectorStages = 2,
 		FlashesPerSecond = 2.2,
 		-- What each circuit is, rather than what colour the department flashes.
 		--
