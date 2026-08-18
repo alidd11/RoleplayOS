@@ -483,11 +483,21 @@ function ContentValidationService:_discoverVehicle(assets: Instance, model: Mode
 		definition.Access = if type(gamepassId) == "number" and gamepassId > 0
 			then { AccessType = "Gamepass", GamepassId = gamepassId, DisplayWhenLocked = true }
 			else { AccessType = "Public" }
+		-- The model's own attribute first, then the configured fallback.
+		--
+		-- The attribute can only be set by re-exporting the .rbxm, since
+		-- server-assets/Vehicles is a Rojo $path, so requiring it meant a price
+		-- could not be set in source control at all. Config.VehiclePrices lets one
+		-- be, without taking priority from a model that already carries its own.
 		local price = model:GetAttribute("Price")
+		if type(price) ~= "number" then
+			price = self.context.Configuration.VehiclePrices[id]
+		end
 		if path[3] ~= "Starter" and (type(price) ~= "number" or price < 0) then
-			table.insert(self.report.Invalid, "Vehicle:" .. id .. ":PRICE_ATTRIBUTE_REQUIRED")
+			table.insert(self.report.Invalid, "Vehicle:" .. id .. ":PRICE_REQUIRED")
 			return
 		end
+		definition.Price = price
 		local dealershipId = model:GetAttribute("DealershipId") or "CityMotors"
 		local dealership = self.context.Configuration.Dealerships[dealershipId]
 		if not dealership then

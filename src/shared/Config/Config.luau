@@ -2237,6 +2237,27 @@ local Config = {
 		TcsValueNames = { "TCS", "Tcs", "TractionControl" },
 		TcsActiveValueNames = { "TCSActive", "TcsActive" },
 	},
+	-- Showroom prices for imported civilian vehicles, in pounds.
+	--
+	-- A civilian vehicle is rejected outright without a price, and the price is
+	-- read from a Price attribute on the model. That attribute can only be set by
+	-- opening the .rbxm and re-exporting it, because server-assets/Vehicles is a
+	-- Rojo $path and anything written to it in Studio is overwritten on the next
+	-- sync. Six vehicles have been sitting rejected for want of one number.
+	--
+	-- This table is the fallback, consulted when the attribute is absent. The
+	-- attribute still wins where a model carries one, so nothing already authored
+	-- changes; this simply means a price can be set in source control rather than
+	-- inside a binary model file.
+	--
+	-- Keyed by the vehicle's id, which is its model name unless the model carries
+	-- a RoleplayOSAssetId.
+	VehiclePrices = {
+		-- A BMW R1200RT is a large touring motorbike. New ones were around
+		-- seventeen thousand and clean used examples go for eleven to thirteen, so
+		-- this sits where a civilian would actually find one.
+		["BMW RT1200"] = 12500,
+	},
 	VehicleData = {
 		-- Retained for speed enforcement and the replacement spawner integration;
 		-- RoleplayOS no longer contains a vehicle spawning implementation.
