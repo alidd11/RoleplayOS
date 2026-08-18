@@ -948,7 +948,12 @@ local Config = {
 		Circuits = {
 			FrontBlue = { "frontblue", "front blue", "front_blue" },
 			RearBlue = { "rearblue", "rear blue", "rear_blue" },
-			RearReds = { "rearred", "rear red", "rear_red" },
+			-- "reds" on its own is here for the fittings that are named for what
+			-- they are rather than where they are: the Mondeo's rear reds sit in a
+			-- model called Reds, with the parts inside numbered and nothing else to
+			-- go on. Deliberately plural, so it cannot claim a single red bulb in a
+			-- brake cluster.
+			RearReds = { "rearred", "rear red", "rear_red", "reds" },
 			FrontScene = { "frontscene", "front scene", "front_scene" },
 			RearScene = { "rearscene", "rear scene", "rear_scene" },
 			Grille = { "grille", "grill" },

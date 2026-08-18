@@ -160,6 +160,28 @@ function VehicleLights.circuitFor(settings: any, part: BasePart, root: Instance)
 			return circuit
 		end
 	end
+	-- Then the model the lamp is fitted into.
+	--
+	-- Kits name the fitting and number the bulbs. The Mondeo's rear reds are two
+	-- parts called Reds1 and Reds2 inside a model called Reds, and its grille
+	-- lights are G1 to G4 inside Grill: the part names carry nothing, and the
+	-- answer was sitting one level up the whole time. Without this the reds fell
+	-- through to the position test, which correctly placed them at the back and
+	-- so called them rear blues - a car with rear reds fitted, wired to a button
+	-- that could never light them.
+	--
+	-- Safe to read a parent's name only because every caller has already
+	-- established that this part is a lamp. The bodywork that made "grille"
+	-- dangerous as a part name never reaches here.
+	local ancestor = part.Parent
+	while ancestor and ancestor ~= root do
+		for circuit, patterns in settings.Circuits do
+			if matches(ancestor.Name, patterns) then
+				return circuit
+			end
+		end
+		ancestor = ancestor.Parent
+	end
 	local front = isAtFront(part, root)
 	if front == nil then
 		return nil
