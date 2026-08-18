@@ -215,6 +215,33 @@ VehicleLights.SirenAliases = {
 	Airhorn = { "Airhorn", "Horn", "Bullhorn" },
 }
 
+-- The order a control head steps through, and the one tone that is momentary.
+--
+-- An airhorn is held, not selected: every kit sounds it while the key is down
+-- and stops on release. Keeping it out of the rotation is what stops the horn
+-- becoming a tone that blares until something else is picked.
+VehicleLights.SirenCycle = { "Wail", "Yelp", "Priority" }
+VehicleLights.MomentaryTone = "Airhorn"
+
+-- Where a kit keeps its siren sounds, if it brought any.
+--
+-- Every emergency vehicle in this fleet carries a Siren part holding four
+-- Sounds, and its own script plays them straight from the driver's keyboard.
+-- Finding that container is what lets the panel drive the same objects the
+-- vehicle's own keys do, rather than keeping a second idea of what is sounding.
+function VehicleLights.sirenRack(model: Instance): Instance?
+	local rack = model:FindFirstChild("Siren", true)
+	if not rack then
+		return nil
+	end
+	for _, child in rack:GetChildren() do
+		if child:IsA("Sound") then
+			return rack
+		end
+	end
+	return nil
+end
+
 -- The Sound in this vehicle for a tone, if it has one.
 function VehicleLights.sirenSound(model: Instance, tone: string): Sound?
 	local aliases = VehicleLights.SirenAliases[tone]

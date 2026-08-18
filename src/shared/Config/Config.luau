@@ -1028,7 +1028,9 @@ local Config = {
 			Priority = true,
 			Airhorn = true,
 		},
-		SirenVolume = 0.5,
+		-- No SirenVolume. The vehicles author their own, and the panel plays the
+		-- vehicle's own sounds rather than a copy, so overriding it here would only
+		-- fight the level the kit was balanced at.
 		SirenRangeStuds = 320,
 	},
 	-- Rank ladders. A profile stores its rank as an index into this list, so

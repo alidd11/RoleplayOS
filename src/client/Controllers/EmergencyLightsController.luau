@@ -151,62 +151,89 @@ function EmergencyLightsController:_adopt(model: Instance)
 		return
 	end
 	self.pending[model] = nil
-	self.tracked[model] = { Parts = parts, Lit = false, Siren = "", MissingSiren = {} }
+	self.tracked[model] = { Parts = parts, Lit = false }
 end
 
-function EmergencyLightsController:_syncSiren(model: Instance, entry: any, tone: string)
-	if entry.Siren == tone then
-		return
-	end
-	entry.Siren = tone
-	local sounds = {}
-	for _, descendant in model:GetDescendants() do
-		if descendant:IsA("Sound") then
-			-- Imported ELS kits vary in casing (for example AirHorn/Airhorn).
-			-- Resolve the vehicle's native sounds case-insensitively so a visible
-			-- siren button cannot silently produce no audio.
-			sounds[string.lower(descendant.Name)] = descendant
+-- The siren sounds belonging to the vehicle being driven.
+--
+-- There used to be a _syncSiren here that walked the whole model, stopped every
+-- tone it found and played the one the server's attribute named, at this
+-- framework's volume. The vehicles already have a script that does exactly that
+-- from the driver's keyboard, over the same four Sound objects, with its own
+-- volumes and its own idea of which tone is on. Two owners of one Sound is a
+-- siren that stops whenever the other one spoke last, which is what a panel
+-- button that appears to do nothing looks like.
+--
+-- The panel drives the vehicle's own sounds the way its own keys do, and reads
+-- which tone is running from the sounds themselves rather than from the value
+-- the server last recorded. One owner, one truth.
+function EmergencyLightsController:_drivenVehicle(): Model?
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local seat = humanoid and humanoid.SeatPart
+	return if seat then seat:FindFirstAncestorOfClass("Model") else nil
+end
+
+function EmergencyLightsController:_sirenRack(): Instance?
+	local vehicle = self:_drivenVehicle()
+	return if vehicle then VehicleLights.sirenRack(vehicle) else nil
+end
+
+function EmergencyLightsController:_toneSound(rack: Instance, tone: string): Sound?
+	for _, name in VehicleLights.SirenAliases[tone] or {} do
+		for _, child in rack:GetChildren() do
+			-- Kits vary in casing, AirHorn against Airhorn among them.
+			if child:IsA("Sound") and string.lower(child.Name) == string.lower(name) then
+				return child
+			end
 		end
 	end
-	for _, aliases in VehicleLights.SirenAliases do
-		for _, name in aliases do
-			local sound = sounds[string.lower(name)]
-			if sound then
-				sound.Looped = true
+	return nil
+end
+
+-- Which continuous tone the vehicle is actually sounding, by asking it.
+function EmergencyLightsController:_playingTone(): string
+	local rack = self:_sirenRack()
+	if not rack then
+		return ""
+	end
+	for _, tone in VehicleLights.SirenCycle do
+		local sound = self:_toneSound(rack, tone)
+		if sound and sound.IsPlaying then
+			return tone
+		end
+	end
+	return ""
+end
+
+-- Selects one continuous tone, or silence, exactly as the vehicle's own keys do:
+-- the tones are mutually exclusive and looped, and the volume the kit was
+-- authored with is left alone.
+function EmergencyLightsController:_setTone(tone: string)
+	local rack = self:_sirenRack()
+	if not rack then
+		return
+	end
+	for _, other in VehicleLights.SirenCycle do
+		local sound = self:_toneSound(rack, other)
+		if sound then
+			sound.Looped = true
+			sound.RollOffMaxDistance = self.settings.SirenRangeStuds
+			if other == tone then
+				if not sound.IsPlaying then
+					sound:Play()
+				end
+			elseif sound.IsPlaying then
 				sound:Stop()
 			end
 		end
 	end
-	if tone == "" then
-		return
-	end
-	local selected: Sound? = nil
-	for _, name in VehicleLights.SirenAliases[tone] or {} do
-		selected = sounds[string.lower(name)]
-		if selected then
-			break
-		end
-	end
-	if not selected then
-		if not entry.MissingSiren[tone] then
-			entry.MissingSiren[tone] = true
-			warn(
-				"[RoleplayOS] Vehicle has no native siren sound for "
-					.. tone
-					.. ": "
-					.. model:GetFullName()
-			)
-		end
-		return
-	end
-	selected.Looped = true
-	selected.Volume = self.settings.SirenVolume
-	selected.RollOffMaxDistance = self.settings.SirenRangeStuds
-	selected.RollOffMode = Enum.RollOffMode.InverseTapered
-	selected:Play()
+	-- Recorded, not obeyed. Dispatch and the speed cameras need to know a unit is
+	-- running a siren; the sound itself is the vehicle's business.
+	self:_request({ Siren = tone, Stage = if tone ~= "" then self.settings.Stages else nil })
 end
 
-function EmergencyLightsController:_restore(entry: any, model: Instance?)
+function EmergencyLightsController:_restore(entry: any)
 	for _, record in entry.Parts do
 		if record.Part.Parent then
 			record.Part.Color = record.Colour
@@ -230,14 +257,23 @@ function EmergencyLightsController:_restore(entry: any, model: Instance?)
 		record.LastBrightness = nil
 	end
 	entry.Lit = false
-	if model then
-		self:_syncSiren(model, entry, "")
-	end
 end
 
 function EmergencyLightsController:_step()
 	local settings = self.settings
 	local phase = math.floor(os.clock() * settings.FlashesPerSecond * 2) % 2
+
+	-- The panel follows the vehicle's keys as well as driving them. R, T and G go
+	-- straight to the vehicle's own script, so a button lit for a tone that
+	-- stopped ten seconds ago is worse than no button at all. Compared rather
+	-- than repainted, so the usual answer costs one string comparison.
+	if self.panel and self.panel.Visible then
+		local tone = self:_playingTone()
+		if tone ~= self.paintedTone then
+			self.paintedTone = tone
+			self:_paint()
+		end
+	end
 
 	-- Vehicles whose lamps had not arrived when the tag did.
 	for model in self.pending do
@@ -252,8 +288,6 @@ function EmergencyLightsController:_step()
 		if not model.Parent then
 			continue
 		end
-		local siren = model:GetAttribute(settings.SirenAttribute)
-		self:_syncSiren(model, entry, if type(siren) == "string" then siren else "")
 		local stage = model:GetAttribute(settings.StageAttribute)
 		local lightsActive = model:GetAttribute(settings.StateAttribute) == true
 		if type(stage) ~= "number" then
@@ -261,7 +295,7 @@ function EmergencyLightsController:_step()
 		end
 		if not lightsActive then
 			if entry.Lit then
-				self:_restore(entry, model)
+				self:_restore(entry)
 			end
 			continue
 		end
@@ -786,23 +820,25 @@ function EmergencyLightsController:Toggle()
 end
 
 function EmergencyLightsController:CycleSiren()
+	local rack = self:_sirenRack()
+	if not rack then
+		return
+	end
 	local tones = { "" }
-	if self.state.Tones then
-		for _, tone in { "Wail", "Yelp", "Priority", "Airhorn" } do
-			if self.state.Tones[tone] and self.state.Tones[tone] ~= "" then
-				table.insert(tones, tone)
-			end
+	for _, tone in VehicleLights.SirenCycle do
+		if self:_toneSound(rack, tone) then
+			table.insert(tones, tone)
 		end
 	end
 	if #tones == 1 then
 		return
 	end
-	local current = table.find(tones, self.state.Siren or "") or 1
-	local nextIndex = current % #tones + 1
-	-- One request. The follow-up that used to be here read self.state, which the
-	-- reply above had already replaced, so it tested the answer rather than the
-	-- question and never fired. The server raises the stage itself now.
-	self:_request({ Siren = tones[nextIndex] })
+	-- Stepped from what the vehicle is sounding, not from what the server last
+	-- recorded. The two differ the moment the driver uses the vehicle's own keys,
+	-- and stepping from the stale one skips a tone or repeats one.
+	local current = table.find(tones, self:_playingTone()) or 1
+	self:_setTone(tones[current % #tones + 1])
+	self:_paint()
 end
 
 function EmergencyLightsController:Start()
@@ -904,7 +940,7 @@ function EmergencyLightsController:Start()
 		CollectionService:GetInstanceRemovedSignal(self.settings.Tag):Connect(function(model)
 			local entry = self.tracked[model]
 			if entry then
-				self:_restore(entry, model)
+				self:_restore(entry)
 				self.tracked[model] = nil
 			end
 		end)
