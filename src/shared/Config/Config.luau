@@ -2229,6 +2229,19 @@ local Config = {
 		-- Retained for speed enforcement and the replacement spawner integration;
 		-- RoleplayOS no longer contains a vehicle spawning implementation.
 		StudsPerSecondToMph = 0.626,
+		-- Is fuel a system in this game at all?
+		--
+		-- Off. Consumption, the engine cut and the cluster's fuel gauge all go with
+		-- it, because a gauge that reads the same number forever is the decoration
+		-- this work set out to remove -- showing a permanent 100% would be worse
+		-- than showing nothing.
+		--
+		-- The burn itself is kept rather than deleted, and is covered by the tests
+		-- in tests/run.luau either way, so turning this back on is one line. The
+		-- odometer is deliberately not gated behind it: mileage is a property of the
+		-- vehicle that the MDT and the vehicle record both read, and it has nothing
+		-- to do with whether anybody is buying petrol.
+		FuelEnabled = false,
 		-- Fuel burn, and the odometer that shares its measurement.
 		--
 		-- RoleplayOSFuel was written once at spawn and never touched again, so the

@@ -14,7 +14,15 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 -- needle rendered outside it. Everything is placed from this size and the dial
 -- centre below, so the ticks, the numerals, the needle, the readout and the
 -- tell-tales cannot drift apart when one of them is adjusted.
-local CLUSTER_SIZE = Vector2.new(300, 242)
+-- Whether this game has a fuel system at all. Read once: it decides both the
+-- cluster's height and whether the strip is built, and those two must not be
+-- able to disagree.
+local FUEL_ENABLED = Config.VehicleData.FuelEnabled
+
+-- The strip and its legend take the bottom twenty six pixels. Without a fuel
+-- system that would be an empty band under the tell-tales, so the cluster simply
+-- ends above it rather than reserving space for something that is not drawn.
+local CLUSTER_SIZE = if FUEL_ENABLED then Vector2.new(300, 242) else Vector2.new(300, 210)
 
 -- A car's speedometer, not a half-circle progress meter.
 --
@@ -574,37 +582,42 @@ function SpeedometerController:_mount()
 	Instance.new("UICorner", handbrake).CornerRadius = UDim.new(1, 0)
 	self.handbrake, self.handbrakeStroke = handbrake, handbrakeStroke
 
-	-- Fuel, as a strip under the dial. Short, square-ended and grey: a wide bright
-	-- green pill is a health bar, and a car's fuel gauge is neither wide nor green
-	-- until it is nearly empty.
-	local fuelTrack = Instance.new("Frame")
-	fuelTrack.Name = "Fuel"
-	fuelTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 220)
-	fuelTrack.Size = UDim2.fromOffset(132, 5)
-	fuelTrack.BackgroundColor3 = C.Unlit
-	fuelTrack.BorderSizePixel = 0
-	fuelTrack.Parent = frame
-	local fuelFill = Instance.new("Frame")
-	fuelFill.Name = "Fill"
-	fuelFill.BackgroundColor3 = C.Fuel
-	fuelFill.BorderSizePixel = 0
-	fuelFill.Size = UDim2.fromScale(1, 1)
-	fuelFill.Parent = fuelTrack
-	local fuelHalo = Instance.new("UIStroke")
-	fuelHalo.Color = Color3.fromRGB(0, 0, 0)
-	fuelHalo.Thickness = 1
-	fuelHalo.Transparency = 0.5
-	fuelHalo.Parent = fuelTrack
-	self.fuelFill = fuelFill
-	local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
-	fuelMark.Name = "FuelMark"
-	fuelMark.Text = "FUEL"
-	fuelMark.AnchorPoint = Vector2.new(0.5, 0.5)
-	fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 234)
-	fuelMark.Size = UDim2.fromOffset(170, 12)
-	fuelMark.TextXAlignment = Enum.TextXAlignment.Center
-	self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
+	-- Built only where fuel is a system. A gauge that reads the same figure for a
+	-- whole session is the decoration this cluster was cleared of, and a permanent
+	-- 100% would be worse than nothing at all.
+	if FUEL_ENABLED then
+		-- Fuel, as a strip under the dial. Short, square-ended and grey: a wide bright
+		-- green pill is a health bar, and a car's fuel gauge is neither wide nor green
+		-- until it is nearly empty.
+		local fuelTrack = Instance.new("Frame")
+		fuelTrack.Name = "Fuel"
+		fuelTrack.AnchorPoint = Vector2.new(0.5, 0.5)
+		fuelTrack.Position = UDim2.fromOffset(DIAL_CENTRE.X, 220)
+		fuelTrack.Size = UDim2.fromOffset(132, 5)
+		fuelTrack.BackgroundColor3 = C.Unlit
+		fuelTrack.BorderSizePixel = 0
+		fuelTrack.Parent = frame
+		local fuelFill = Instance.new("Frame")
+		fuelFill.Name = "Fill"
+		fuelFill.BackgroundColor3 = C.Fuel
+		fuelFill.BorderSizePixel = 0
+		fuelFill.Size = UDim2.fromScale(1, 1)
+		fuelFill.Parent = fuelTrack
+		local fuelHalo = Instance.new("UIStroke")
+		fuelHalo.Color = Color3.fromRGB(0, 0, 0)
+		fuelHalo.Thickness = 1
+		fuelHalo.Transparency = 0.5
+		fuelHalo.Parent = fuelTrack
+		self.fuelFill = fuelFill
+		local fuelMark = label(frame, Enum.Font.GothamBold, 9, C.Muted)
+		fuelMark.Name = "FuelMark"
+		fuelMark.Text = "FUEL"
+		fuelMark.AnchorPoint = Vector2.new(0.5, 0.5)
+		fuelMark.Position = UDim2.fromOffset(DIAL_CENTRE.X, 234)
+		fuelMark.Size = UDim2.fromOffset(170, 12)
+		fuelMark.TextXAlignment = Enum.TextXAlignment.Center
+		self.fuelTrack, self.fuelMark = fuelTrack, fuelMark
+	end
 
 	self.gui, self.frame = gui, frame
 	-- Ambient display, scaled with the rest of it so the readout keeps its
@@ -953,37 +966,44 @@ function SpeedometerController:Start()
 
 			-- RoleplayOS fuel is authoritative. Existing authoring vehicles can
 			-- still expose a chassis value for display; if neither exists the gauge
-			-- remains visible as unknown rather than silently disappearing.
-			local fuel = ancestorAttribute(seat, "RoleplayOSFuel")
-			if type(fuel) ~= "number" then
-				for _, name in self.settings.FuelValueNames or {} do
-					fuel = ancestorAttribute(seat, name)
-					if type(fuel) == "number" then
-						break
+			-- reads unknown rather than silently disappearing.
+			--
+			-- Skipped entirely where the game has no fuel system, because then the
+			-- strip was never built and there is nothing to write to.
+			if FUEL_ENABLED then
+				local fuel = ancestorAttribute(seat, "RoleplayOSFuel")
+				if type(fuel) ~= "number" then
+					for _, name in self.settings.FuelValueNames or {} do
+						fuel = ancestorAttribute(seat, name)
+						if type(fuel) == "number" then
+							break
+						end
 					end
 				end
-			end
-			if type(fuel) ~= "number" then
-				fuel = readFirstValue(values, self.settings.FuelValueNames)
-			end
-			local metered = type(fuel) == "number"
-			self.fuelTrack.Visible = true
-			self.fuelMark.Visible = true
-			if metered then
-				local level = fuel :: number
-				if level >= 0 and level <= 1 then
-					level *= 100
+				if type(fuel) ~= "number" then
+					fuel = readFirstValue(values, self.settings.FuelValueNames)
 				end
-				self:_setText(self.fuelMark, string.format("FUEL %d%%", math.floor(level + 0.5)))
-				self.fuelFill.Size = UDim2.fromScale(math.clamp(level / 100, 0, 1), 1)
-				self.fuelFill.BackgroundColor3 = if level <= 10
-					then C.Danger
-					elseif level <= 25 then C.Warn
-					else C.Fuel
-			else
-				self:_setText(self.fuelMark, "FUEL --")
-				self.fuelFill.Size = UDim2.fromScale(0, 1)
-				self.fuelFill.BackgroundColor3 = C.Muted
+				self.fuelTrack.Visible = true
+				self.fuelMark.Visible = true
+				if type(fuel) == "number" then
+					local level = fuel :: number
+					if level >= 0 and level <= 1 then
+						level *= 100
+					end
+					self:_setText(
+						self.fuelMark,
+						string.format("FUEL %d%%", math.floor(level + 0.5))
+					)
+					self.fuelFill.Size = UDim2.fromScale(math.clamp(level / 100, 0, 1), 1)
+					self.fuelFill.BackgroundColor3 = if level <= 10
+						then C.Danger
+						elseif level <= 25 then C.Warn
+						else C.Fuel
+				else
+					self:_setText(self.fuelMark, "FUEL --")
+					self.fuelFill.Size = UDim2.fromScale(0, 1)
+					self.fuelFill.BackgroundColor3 = C.Muted
+				end
 			end
 
 			local handbrakeState = ancestorAttribute(seat, "RoleplayOSHandbrake")

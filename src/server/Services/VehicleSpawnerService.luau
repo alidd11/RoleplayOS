@@ -1005,7 +1005,9 @@ function VehicleSpawnerService:Spawn(
 			end
 		end
 	end
-	vehicle:SetAttribute("RoleplayOSFuel", 100)
+	if self.context.Configuration.VehicleData.FuelEnabled then
+		vehicle:SetAttribute("RoleplayOSFuel", 100)
+	end
 	vehicle:SetAttribute("RoleplayOSMileage", mileage)
 	local vehicleSeat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
 	if vehicleSeat then
@@ -1117,7 +1119,8 @@ function VehicleSpawnerService:_persistTelemetry(userId: number, force: boolean)
 		return false
 	end
 	local ownership = self.context.Services:Get("VehicleOwnershipService")
-	local wrote = ownership:RecordTelemetry(player, state.VehicleId, state.Fuel, state.Mileage)
+	local fuel = if self.context.Configuration.VehicleData.FuelEnabled then state.Fuel else nil
+	local wrote = ownership:RecordTelemetry(player, state.VehicleId, fuel, state.Mileage)
 	state.PersistedFuel = state.Fuel
 	state.PersistedMileage = state.Mileage
 	return wrote
@@ -1167,11 +1170,16 @@ function VehicleSpawnerService:_consumeTick(dt: number)
 		)).Magnitude
 
 		local miles, burnt = FuelConsumption.tick(moved, dt, settings)
+		-- The odometer runs whether or not fuel is a system here. Mileage is a
+		-- property of the vehicle that the MDT and the vehicle record both read.
 		state.Mileage += miles
-		state.Fuel = math.max(state.Fuel - burnt, 0)
-		vehicle:SetAttribute("RoleplayOSFuel", state.Fuel)
 		vehicle:SetAttribute("RoleplayOSMileage", state.Mileage)
-		self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
+
+		if settings.FuelEnabled then
+			state.Fuel = math.max(state.Fuel - burnt, 0)
+			vehicle:SetAttribute("RoleplayOSFuel", state.Fuel)
+			self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
+		end
 	end
 end
 
