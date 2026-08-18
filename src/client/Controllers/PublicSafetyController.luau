@@ -5,14 +5,29 @@ local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
+local Tokens = require(script.Parent.Parent.UI.DesignTokens)
+local C, T, S = Tokens.Colour, Tokens.Text, Tokens.Stroke
+
 -- Weak keyed. A tool destroyed on respawn should be collectable, and holding it
 -- strongly kept every tool the player had ever carried alive for the session.
 local PublicSafetyController = {
 	connections = {},
 	watched = setmetatable({}, { __mode = "k" }),
 	scanConnections = {},
+	actionState = {},
 }
 local CLOSE_ACTION = "RoleplayOSCustodyActionsClose"
+
+-- The distance the server enforces on every restraint action. Shown rather than
+-- enforced here: the officer is told how far away the detainee is and where the
+-- line is, so a refusal reads as "walk forward" instead of as a broken button.
+local INTERACTION_RANGE = 12
+
+local SEARCH_POWERS = {
+	{ Code = "PACE_S1", Label = "PACE S1  ·  STOP AND SEARCH" },
+	{ Code = "PACE_S23_MDA", Label = "S23 MDA  ·  DRUGS" },
+	{ Code = "PACE_S32_POST_ARREST", Label = "PACE S32  ·  POST-ARREST" },
+}
 
 local function corner(parent: Instance, radius: number)
 	local value = Instance.new("UICorner")
@@ -41,18 +56,51 @@ local function label(
 	return item
 end
 
-local function actionButton(parent: Instance, text: string): TextButton
+-- Square and on the terminal palette, like every other operational surface. This
+-- panel was the last one still drawing its own rounded navy, which made the one
+-- screen an officer uses while holding somebody look like a different product
+-- from the vehicle forecourt and the MDT.
+local function actionButton(parent: Instance, value: string, fill: Color3?): TextButton
 	local item = Instance.new("TextButton")
+	item.AutoButtonColor = false
 	item.Size = UDim2.new(0.5, -5, 0, 38)
-	item.BackgroundColor3 = Color3.fromRGB(25, 39, 55)
+	item.BackgroundColor3 = fill or C.raised
 	item.BorderSizePixel = 0
-	item.Font = Enum.Font.GothamBold
-	item.Text = text
-	item.TextColor3 = Color3.fromRGB(239, 245, 251)
-	item.TextSize = 11
+	item.Font = Tokens.Font.bold
+	item.Text = value
+	item.TextColor3 = C.text
+	item.TextSize = T.button
 	item.Parent = parent
-	corner(item, 8)
 	return item
+end
+
+local function panelLabel(
+	parent: Instance,
+	value: string,
+	size: number,
+	colour: Color3,
+	bold: boolean?
+): TextLabel
+	local item = Instance.new("TextLabel")
+	item.BackgroundTransparency = 1
+	item.Font = if bold then Tokens.Font.bold else Tokens.Font.regular
+	item.Text = value
+	item.TextColor3 = colour
+	item.TextSize = size
+	item.TextXAlignment = Enum.TextXAlignment.Left
+	item.Parent = parent
+	return item
+end
+
+local function distanceToTarget(userId: number?): number?
+	local target = if userId then Players:GetPlayerByUserId(userId) else nil
+	local localCharacter = Players.LocalPlayer.Character
+	local localRoot = localCharacter and localCharacter:FindFirstChild("HumanoidRootPart")
+	local root = target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+	if not localRoot or not root or not localRoot:IsA("BasePart") or not root:IsA("BasePart") then
+		return nil
+	end
+	return math.floor((localRoot.Position - root.Position).Magnitude + 0.5)
 end
 
 function PublicSafetyController:Init(context: any)
@@ -84,30 +132,165 @@ end
 
 function PublicSafetyController:_setActionsOpen(open: boolean)
 	self.actionPanel.Visible = open
+	self.actionGeneration = (self.actionGeneration or 0) + 1
 	if open then
 		self.previousSelection = GuiService.SelectedObject
 		if UserInputService.GamepadEnabled then
 			GuiService.SelectedObject = self.actionClose
 		end
-	elseif
-		GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.actionPanel)
-	then
+		self:_startActionRefresh()
+		return
+	end
+	self.actionTargetUserId = nil
+	table.clear(self.actionState)
+	if GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.actionPanel) then
 		local previous = self.previousSelection
 		GuiService.SelectedObject = if previous and previous.Parent then previous else nil
 	end
 end
 
-function PublicSafetyController:_showActions(targetUserId: number)
+function PublicSafetyController:_showActions(targetUserId: number, state: any?)
 	self.actionTargetUserId = targetUserId
-	local target = Players:GetPlayerByUserId(targetUserId)
-	self.actionTarget.Text = if target
-		then string.format("DETAINEE  ·  %s  (@%s)", target.DisplayName, target.Name)
-		else "DETAINEE  ·  UNKNOWN"
+	table.clear(self.actionState)
+	if type(state) == "table" then
+		for key, value in state do
+			self.actionState[key] = value
+		end
+	end
+	self.searchResult.Text = ""
 	self:_setActionsOpen(true)
+	self:_refreshActions()
+end
+
+-- Everything the officer needs to know before pressing anything: who they are
+-- holding, what has already been done to them, and how far away they are.
+--
+-- The panel used to state only the name. Whether the caution had been read,
+-- whether a search had been recorded and whether the officer still had hold of
+-- them were all facts the server tracked and the officer had no way to see, so
+-- the workflow was carried out from memory and the buttons gave no clue which
+-- of them had already been used.
+function PublicSafetyController:_refreshActions()
+	local userId = self.actionTargetUserId
+	local target = if userId then Players:GetPlayerByUserId(userId) else nil
+	if not target then
+		self.actionTarget.Text = "DETAINEE  ·  NO LONGER HERE"
+		self.actionStatus.Text = ""
+		self.actionRange.Text = ""
+		return
+	end
+	self.actionTarget.Text = string.format("%s  ·  @%s", target.DisplayName, target.Name)
+
+	-- The reply to CuffPlayer beats the detainee's replicated attribute to this
+	-- client, so for the first moments after an arrest the panel is trusting the
+	-- answer it already has rather than reporting the person it just cuffed as
+	-- not cuffed.
+	local cuffed = target:GetAttribute("RoleplayOSCuffed") == true
+		or (not self.actionCuffedSeen and self.actionState.Cuffed == true)
+	local escorted = target:GetAttribute("RoleplayOSEscorted") == true
+	local position = tostring(target:GetAttribute("RoleplayOSCuffPosition") or "Rear")
+	local held = escorted and self.actionState.EscortedByUserId == Players.LocalPlayer.UserId
+	local parts = {}
+	table.insert(parts, if cuffed then "CUFFED " .. string.upper(position) else "NOT CUFFED")
+	if escorted then
+		table.insert(parts, if held then "YOU HAVE HOLD" else "HELD BY ANOTHER OFFICER")
+	end
+	if self.actionState.Cautioned then
+		table.insert(parts, "CAUTIONED")
+	end
+	if self.actionState.Searched then
+		table.insert(parts, "SEARCHED")
+	end
+	self.actionStatus.Text = table.concat(parts, "   ·   ")
+	self.actionStatus.TextColor3 = if cuffed then C.accent else C.warning
+
+	local metres = distanceToTarget(userId)
+	if not metres then
+		self.actionRange.Text = "OUT OF SIGHT"
+		self.actionRange.TextColor3 = C.warning
+	elseif metres > INTERACTION_RANGE then
+		self.actionRange.Text = string.format("%d M AWAY  ·  TOO FAR, WALK CLOSER", metres)
+		self.actionRange.TextColor3 = C.warning
+	else
+		self.actionRange.Text = string.format("%d M AWAY  ·  IN REACH", metres)
+		self.actionRange.TextColor3 = C.muted
+	end
+
+	self.escort.Text = if held then "LET GO" elseif escorted then "HELD BY OTHER" else "TAKE HOLD"
+end
+
+-- Distance changes with every step and the cuffs can come off from the other
+-- officer's panel, so the readout is re-derived on a timer from replicated
+-- attributes. No request is made: everything on it is already on the client.
+function PublicSafetyController:_startActionRefresh()
+	local generation = self.actionGeneration
+	self.actionCuffedSeen = false
+	task.spawn(function()
+		local opened = os.clock()
+		while self.actionGeneration == generation and self.actionPanel.Visible do
+			local userId = self.actionTargetUserId
+			local target = if userId then Players:GetPlayerByUserId(userId) else nil
+			if target and target:GetAttribute("RoleplayOSCuffed") == true then
+				self.actionCuffedSeen = true
+			end
+			self:_refreshActions()
+			-- The panel describes a person in handcuffs in front of the officer, and
+			-- closes when that stops being true rather than staying up over a
+			-- workflow that has already ended somewhere else. It waits to have seen
+			-- the cuffs replicate before it will act on their absence, because
+			-- otherwise the arrest that opened it would close it a frame later.
+			local uncuffed = self.actionCuffedSeen
+				and (not target or target:GetAttribute("RoleplayOSCuffed") ~= true)
+			local neverArrived = not self.actionCuffedSeen and os.clock() - opened > 5
+			if not target or uncuffed or neverArrived then
+				self:_setActionsOpen(false)
+				return
+			end
+			task.wait(0.4)
+		end
+	end)
+end
+
+-- What actually happened, rather than "Custody action completed" for every
+-- button on the panel and "Custody action was refused" for every possible reason.
+function PublicSafetyController:_describe(action: string, data: any): string
+	local state = if type(data) == "table" and type(data.State) == "table" then data.State else data
+	if action == "Caution" then
+		return "Caution read out."
+	elseif action == "Search" then
+		local items = if type(data) == "table" and type(data.Items) == "table"
+			then data.Items
+			else {}
+		return if #items > 0
+			then "Search recorded. Found: " .. table.concat(items, ", ") .. "."
+			else "Search recorded. They were carrying nothing."
+	elseif action == "SeizeWeapons" then
+		local weapons = if type(data) == "table" and type(data.Weapons) == "table"
+			then data.Weapons
+			else {}
+		return if #weapons > 0
+			then "Seized: " .. table.concat(weapons, ", ") .. "."
+			else "Nothing to seize. They were carrying no weapons."
+	elseif action == "Escort" then
+		local held = type(state) == "table" and state.EscortedByUserId == Players.LocalPlayer.UserId
+		return if held then "You have hold of them." else "You have let go of them."
+	elseif action == "Vehicle" then
+		return "Moved into or out of the nearest custody seat."
+	elseif action == "CuffPosition" then
+		local position = if type(state) == "table" then tostring(state.CuffPosition) else "Rear"
+		return "Cuffs moved to the " .. string.lower(position) .. "."
+	elseif action == "Release" then
+		return "Handcuffs removed. They are free to go."
+	end
+	return "Done."
 end
 
 function PublicSafetyController:_custodyAction(action: string, data: any?)
 	if not self.actionTargetUserId then
+		self.context.Controllers.NotificationController:Show(
+			"Nobody is selected. Use your handcuffs on somebody first.",
+			"Custody"
+		)
 		return
 	end
 	local response = self.context.Controllers.NetworkController:Request("CustodyAction", {
@@ -115,11 +298,43 @@ function PublicSafetyController:_custodyAction(action: string, data: any?)
 		Action = action,
 		Data = data or {},
 	})
-	self.context.Controllers.NotificationController:Show(response.Message, "Custody")
-	if response.Success and action == "Release" then
-		self:_setActionsOpen(false)
-		self.actionTargetUserId = nil
+	if not response.Success then
+		self.context.Controllers.NotificationController:Show(
+			self.context.Controllers.CustodyController:Explain(
+				response,
+				"That custody action was refused."
+			),
+			"Custody",
+			"Danger"
+		)
+		return
 	end
+	local state = if type(response.Data) == "table"
+			and type(response.Data.State) == "table"
+		then response.Data.State
+		else response.Data
+	if type(state) == "table" and state.Cuffed ~= nil then
+		for key, value in state do
+			self.actionState[key] = value
+		end
+	end
+	if action == "Search" then
+		local items = if type(response.Data.Items) == "table" then response.Data.Items else {}
+		self.searchResult.Text = if #items > 0
+			then "FOUND  ·  " .. table.concat(items, ", ")
+			else "FOUND  ·  NOTHING"
+		self.searchResult.TextColor3 = if #items > 0 then C.warning else C.muted
+	end
+	self.context.Controllers.NotificationController:Show(
+		self:_describe(action, response.Data),
+		"Custody",
+		"Success"
+	)
+	if action == "Release" then
+		self:_setActionsOpen(false)
+		return
+	end
+	self:_refreshActions()
 end
 
 function PublicSafetyController:_showCard(card: any)
@@ -179,7 +394,7 @@ function PublicSafetyController:_watchTool(tool: Tool)
 			local target = self:_targetUserId()
 			if not target then
 				self.context.Controllers.NotificationController:Show(
-					"Look at a nearby player and try again.",
+					"Point at a player standing near you and use it again.",
 					tool.Name
 				)
 				return
@@ -196,11 +411,32 @@ function PublicSafetyController:_watchTool(tool: Tool)
 							else "Civilian",
 					}
 			)
-			self.context.Controllers.NotificationController:Show(response.Message, roleplayToolId)
-			if response.Success then
-				if isCuffs and response.Data.Cuffed then
-					self:_showActions(target)
-				end
+			if not response.Success then
+				-- The server sends one message for every refusal the handcuffs can
+				-- meet -- wrong role, too far, target dead, cuffs not in hand -- and
+				-- the officer was shown the same sentence for all of them.
+				self.context.Controllers.NotificationController:Show(
+					self.context.Controllers.CustodyController:Explain(
+						response,
+						"The handcuffs could not be used."
+					),
+					roleplayToolId,
+					"Danger"
+				)
+				return
+			end
+			if not isCuffs then
+				self.context.Controllers.NotificationController:Show(
+					response.Message,
+					roleplayToolId
+				)
+				return
+			end
+			if response.Data and response.Data.Cuffed then
+				-- Also the way back in. Using the cuffs on somebody already wearing
+				-- them reopens their custody actions, which is the only route back
+				-- to the panel after the officer has closed it.
+				self:_showActions(target, response.Data)
 			end
 		end)
 	)
@@ -300,70 +536,105 @@ function PublicSafetyController:_mount()
 
 	local actionPanel = Instance.new("Frame")
 	actionPanel.AnchorPoint = Vector2.new(1, 0.5)
-	actionPanel.Size = UDim2.fromOffset(410, 430)
-	actionPanel.BackgroundColor3 = Color3.fromRGB(8, 15, 24)
+	actionPanel.Size = UDim2.fromOffset(420, 570)
+	actionPanel.BackgroundColor3 = C.surface
 	actionPanel.BorderSizePixel = 0
 	actionPanel.Visible = false
 	actionPanel.Parent = gui
-	corner(actionPanel, 15)
 	local actionStroke = Instance.new("UIStroke")
-	actionStroke.Color = Color3.fromRGB(47, 70, 94)
-	actionStroke.Transparency = 0.25
+	actionStroke.Color = C.border
+	actionStroke.Thickness = S.thickness
+	actionStroke.Transparency = S.transparency
 	actionStroke.Parent = actionPanel
 	local actionScale = Instance.new("UIScale")
 	actionScale.Parent = actionPanel
-	local actionTitle = Instance.new("TextLabel")
-	actionTitle.Position = UDim2.fromOffset(18, 15)
-	actionTitle.Size = UDim2.new(1, -76, 0, 24)
-	actionTitle.BackgroundTransparency = 1
-	actionTitle.Font = Enum.Font.GothamBold
-	actionTitle.Text = "RESTRAINT & CUSTODY ACTIONS"
-	actionTitle.TextColor3 = Color3.fromRGB(240, 246, 252)
-	actionTitle.TextSize = 14
-	actionTitle.TextXAlignment = Enum.TextXAlignment.Left
-	actionTitle.Parent = actionPanel
+	local actionRule = Instance.new("Frame")
+	actionRule.Size = UDim2.new(1, 0, 0, 2)
+	actionRule.BackgroundColor3 = C.accent
+	actionRule.BorderSizePixel = 0
+	actionRule.Parent = actionPanel
+
+	local actionTitle = panelLabel(actionPanel, "PERSON IN CUSTODY", T.subtitle, C.text, true)
+	actionTitle.Position = UDim2.fromOffset(18, 16)
+	actionTitle.Size = UDim2.new(1, -76, 0, 22)
 	local actionClose = actionButton(actionPanel, "×")
-	actionClose.Position = UDim2.new(1, -52, 0, 11)
+	actionClose.Position = UDim2.new(1, -52, 0, 12)
 	actionClose.Size = UDim2.fromOffset(38, 34)
-	actionClose.TextSize = 20
-	local actionTarget = actionTitle:Clone()
-	actionTarget.Position = UDim2.fromOffset(18, 48)
-	actionTarget.Size = UDim2.new(1, -36, 0, 22)
-	actionTarget.Font = Enum.Font.Gotham
-	actionTarget.Text = "DETAINEE  ·  NOT SELECTED"
-	actionTarget.TextColor3 = Color3.fromRGB(153, 174, 195)
-	actionTarget.TextSize = 10
-	actionTarget.Parent = actionPanel
+	actionClose.TextSize = T.title
+
+	local actionTarget = panelLabel(actionPanel, "NOBODY SELECTED", T.body, C.text, true)
+	actionTarget.Position = UDim2.fromOffset(18, 44)
+	actionTarget.Size = UDim2.new(1, -36, 0, 20)
+	actionTarget.TextTruncate = Enum.TextTruncate.AtEnd
+	local actionStatus = panelLabel(actionPanel, "", T.dense, C.accent, true)
+	actionStatus.Position = UDim2.fromOffset(18, 66)
+	actionStatus.Size = UDim2.new(1, -36, 0, 18)
+	actionStatus.TextTruncate = Enum.TextTruncate.AtEnd
+	local actionRange = panelLabel(actionPanel, "", T.dense, C.muted)
+	actionRange.Position = UDim2.fromOffset(18, 86)
+	actionRange.Size = UDim2.new(1, -36, 0, 18)
+
+	local searchLabel = panelLabel(actionPanel, "SEARCH", T.section, C.muted, true)
+	searchLabel.Position = UDim2.fromOffset(18, 114)
+	searchLabel.Size = UDim2.new(1, -36, 0, 14)
+
+	local powerIndex = 1
+	local power = actionButton(actionPanel, SEARCH_POWERS[powerIndex].Label)
+	power.Position = UDim2.fromOffset(18, 132)
+	power.Size = UDim2.new(1, -36, 0, 34)
+	power.TextColor3 = C.accent
+
 	local grounds = Instance.new("TextBox")
-	grounds.Position = UDim2.fromOffset(18, 82)
-	grounds.Size = UDim2.new(1, -36, 0, 66)
-	grounds.BackgroundColor3 = Color3.fromRGB(17, 28, 41)
+	grounds.Position = UDim2.fromOffset(18, 172)
+	grounds.Size = UDim2.new(1, -36, 0, 64)
+	grounds.BackgroundColor3 = C.raised
 	grounds.BorderSizePixel = 0
 	grounds.ClearTextOnFocus = false
-	grounds.Font = Enum.Font.Gotham
-	grounds.PlaceholderText = "Record the grounds and objective of any search"
+	grounds.Font = Tokens.Font.regular
+	grounds.MultiLine = true
+	grounds.PlaceholderText = "Why you are searching them, and what you expect to find"
+	grounds.PlaceholderColor3 = C.muted
 	grounds.Text = ""
-	grounds.TextColor3 = Color3.fromRGB(237, 243, 249)
-	grounds.TextSize = 12
+	grounds.TextColor3 = C.text
+	grounds.TextSize = T.body
 	grounds.TextWrapped = true
+	grounds.TextXAlignment = Enum.TextXAlignment.Left
+	grounds.TextYAlignment = Enum.TextYAlignment.Top
 	grounds.Parent = actionPanel
-	corner(grounds, 8)
+	local groundsPad = Instance.new("UIPadding")
+	groundsPad.PaddingLeft = UDim.new(0, Tokens.Spacing.inset)
+	groundsPad.PaddingRight = UDim.new(0, Tokens.Spacing.inset)
+	groundsPad.PaddingTop = UDim.new(0, Tokens.Spacing.gap)
+	groundsPad.Parent = grounds
+	local groundsStroke = Instance.new("UIStroke")
+	groundsStroke.Color = C.border
+	groundsStroke.Thickness = S.thickness
+	groundsStroke.Transparency = S.transparency
+	groundsStroke.Parent = grounds
 
-	local powers = { "PACE_S1", "PACE_S23_MDA", "PACE_S32_POST_ARREST" }
-	local powerNames = {
-		PACE_S1 = "PACE S1 · STOP & SEARCH",
-		PACE_S23_MDA = "S23 MDA · DRUGS",
-		PACE_S32_POST_ARREST = "PACE S32 · POST-ARREST",
-	}
-	local powerIndex = 1
-	local power = actionButton(actionPanel, powerNames[powers[powerIndex]])
-	power.Position = UDim2.fromOffset(18, 158)
-	power.Size = UDim2.new(1, -36, 0, 34)
-	power.TextColor3 = Color3.fromRGB(112, 190, 249)
+	-- What the search turned up, on the panel rather than nowhere. The server has
+	-- always replied with the detainee's inventory and this client discarded it,
+	-- so an officer recorded a search and was never told the result of it.
+	local searchResult = panelLabel(actionPanel, "", T.dense, C.muted, true)
+	searchResult.Position = UDim2.fromOffset(18, 240)
+	searchResult.Size = UDim2.new(1, -36, 0, 18)
+	searchResult.TextTruncate = Enum.TextTruncate.AtEnd
+	self.searchResult = searchResult
 
+	local actionsLabel = panelLabel(actionPanel, "ACTIONS", T.section, C.muted, true)
+	actionsLabel.Position = UDim2.fromOffset(18, 264)
+	actionsLabel.Size = UDim2.new(1, -36, 0, 14)
+
+	-- Four rows of two, and the box is the height of four rows.
+	--
+	-- It held eight buttons in a box sized for four, and a ninth was added later,
+	-- so the last pair overflowed the frame and drew on top of the disclaimer at
+	-- the bottom of the panel. Booking moved out to a full width button of its
+	-- own below, which both fixes the arithmetic and stops the one action that
+	-- ends the arrest from sitting in the grid looking like a cuff position.
 	local actions = Instance.new("Frame")
-	actions.Position = UDim2.fromOffset(18, 204)
-	actions.Size = UDim2.new(1, -36, 0, 162)
+	actions.Position = UDim2.fromOffset(18, 282)
+	actions.Size = UDim2.new(1, -36, 0, 160)
 	actions.BackgroundTransparency = 1
 	actions.Parent = actionPanel
 	local actionLayout = Instance.new("UIGridLayout")
@@ -373,34 +644,45 @@ function PublicSafetyController:_mount()
 	actionLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	actionLayout.Parent = actions
 	local caution = actionButton(actions, "READ CAUTION")
+	caution.LayoutOrder = 1
 	local search = actionButton(actions, "RECORD SEARCH")
-	local escort = actionButton(actions, "ESCORT / STOP")
+	search.LayoutOrder = 2
+	local escort = actionButton(actions, "TAKE HOLD")
+	escort.LayoutOrder = 3
+	self.escort = escort
 	local vehicle = actionButton(actions, "VEHICLE IN / OUT")
+	vehicle.LayoutOrder = 4
 	local front = actionButton(actions, "CUFFS TO FRONT")
+	front.LayoutOrder = 5
 	local rear = actionButton(actions, "CUFFS TO REAR")
-	local release = actionButton(actions, "REMOVE CUFFS")
-	release.BackgroundColor3 = Color3.fromRGB(112, 43, 48)
-	-- The end of the arrest, and until now it had no button anywhere.
-	--
-	-- The booking panel lives in CustodyController and its only opener was a HUD
-	-- launcher that is forced invisible, so an officer could caution, search,
-	-- cuff and escort somebody and then simply had nothing to press. It belongs
-	-- on this grid, with the detainee already selected, rather than behind a
-	-- separate control the officer would have to find and re-target.
-	local book = actionButton(actions, "BOOK INTO CUSTODY")
-	book.BackgroundColor3 = Color3.fromRGB(37, 78, 122)
+	rear.LayoutOrder = 6
 	local seize = actionButton(actions, "SEIZE WEAPONS")
-	seize.BackgroundColor3 = Color3.fromRGB(116, 75, 35)
-	seize.Activated:Connect(function()
-		self:_custodyAction("SeizeWeapons")
-	end)
-	local notice = actionTarget:Clone()
-	notice.Position = UDim2.fromOffset(18, 378)
+	seize.LayoutOrder = 7
+	local release = actionButton(actions, "REMOVE CUFFS")
+	release.LayoutOrder = 8
+	release.TextColor3 = C.danger
+
+	-- The end of the arrest, and until recently it had no button anywhere.
+	--
+	-- The booking screen lives in CustodyController and its only opener was a HUD
+	-- launcher that is forced invisible, so an officer could caution, search,
+	-- cuff and escort somebody and then simply had nothing to press. It is the
+	-- primary action of this panel, so it is the full width button under the
+	-- grid rather than one cell among eight.
+	local book = actionButton(actionPanel, "BOOK INTO CUSTODY", C.accentFill)
+	book.Position = UDim2.fromOffset(18, 454)
+	book.Size = UDim2.new(1, -36, 0, 48)
+
+	local notice = panelLabel(
+		actionPanel,
+		"Simplified UK roleplay workflow · server validated · not professional training",
+		T.dense,
+		C.muted
+	)
+	notice.Position = UDim2.fromOffset(18, 510)
 	notice.Size = UDim2.new(1, -36, 0, 36)
-	notice.Text = "SIMPLIFIED UK ROLEPLAY WORKFLOW · SERVER VALIDATED · NOT PROFESSIONAL TRAINING"
 	notice.TextWrapped = true
-	notice.TextColor3 = Color3.fromRGB(116, 137, 157)
-	notice.Parent = actionPanel
+	notice.TextYAlignment = Enum.TextYAlignment.Top
 
 	table.insert(
 		self.connections,
@@ -411,8 +693,8 @@ function PublicSafetyController:_mount()
 	table.insert(
 		self.connections,
 		power.Activated:Connect(function()
-			powerIndex = (powerIndex % #powers) + 1
-			power.Text = powerNames[powers[powerIndex]]
+			powerIndex = (powerIndex % #SEARCH_POWERS) + 1
+			power.Text = SEARCH_POWERS[powerIndex].Label
 		end)
 	)
 	table.insert(
@@ -424,17 +706,35 @@ function PublicSafetyController:_mount()
 	table.insert(
 		self.connections,
 		book.Activated:Connect(function()
-			-- Carried across so the booking panel opens on the person the officer
-			-- already has selected, rather than asking them to pick again.
+			-- Carried across so the booking screen opens on the person the officer
+			-- already has selected, rather than asking them to pick again. The
+			-- actions panel only stands down once the booking screen is up, so a
+			-- refused open does not leave the officer looking at nothing.
 			local target = self.actionTargetUserId
-			self:_setActionsOpen(false)
-			self.context.Controllers.CustodyController:Open(target)
+			if self.context.Controllers.CustodyController:Open(target) then
+				self:_setActionsOpen(false)
+			end
 		end)
 	)
 	table.insert(
 		self.connections,
 		search.Activated:Connect(function()
-			self:_custodyAction("Search", { Grounds = grounds.Text, Power = powers[powerIndex] })
+			-- Checked here as well as on the server, because the server's refusal
+			-- arrives as a notification over a form the officer can no longer see
+			-- the state of, and the fix is always "type in the box above".
+			local written = string.match(grounds.Text, "^%s*(.-)%s*$") or ""
+			if #written < 5 then
+				self.context.Controllers.NotificationController:Show(
+					"Write your grounds for the search in the box first.",
+					"Search"
+				)
+				grounds:CaptureFocus()
+				return
+			end
+			self:_custodyAction(
+				"Search",
+				{ Grounds = written, Power = SEARCH_POWERS[powerIndex].Code }
+			)
 		end)
 	)
 	table.insert(
@@ -463,6 +763,12 @@ function PublicSafetyController:_mount()
 	)
 	table.insert(
 		self.connections,
+		seize.Activated:Connect(function()
+			self:_custodyAction("SeizeWeapons")
+		end)
+	)
+	table.insert(
+		self.connections,
 		release.Activated:Connect(function()
 			self:_custodyAction("Release")
 		end)
@@ -473,7 +779,7 @@ function PublicSafetyController:_mount()
 		function(layout)
 			local orchestrator = self.context.Controllers.UIOrchestrator
 			scale.Scale = orchestrator:FitScale(layout, Vector2.new(480, 303), 40)
-			actionScale.Scale = orchestrator:FitScale(layout, Vector2.new(410, 430), 40)
+			actionScale.Scale = orchestrator:FitScale(layout, Vector2.new(420, 570), 40)
 			actionPanel.AnchorPoint = if layout.Compact or layout.VR
 				then Vector2.new(0.5, 0.5)
 				else Vector2.new(1, 0.5)
@@ -494,6 +800,8 @@ function PublicSafetyController:_mount()
 	self.actionPanel = actionPanel
 	self.actionClose = actionClose
 	self.actionTarget = actionTarget
+	self.actionStatus = actionStatus
+	self.actionRange = actionRange
 	self.gui = gui
 end
 
@@ -523,7 +831,38 @@ function PublicSafetyController:Start()
 		CLOSE_ACTION,
 		"Closes the restraint and custody action panel"
 	)
+	-- Stand the panel down when the thing it belongs to ends.
+	--
+	-- It closed on its own buttons, on Escape, and on nothing else, so going off
+	-- duty, changing team or being killed mid-arrest left a full custody
+	-- workflow on screen for a detainee the officer no longer had, every button
+	-- of which the server would refuse.
+	table.insert(
+		self.connections,
+		self.context.Events.DutyChanged.Event:Connect(function()
+			if self.actionPanel.Visible then
+				self:_setActionsOpen(false)
+			end
+		end)
+	)
+	table.insert(
+		self.connections,
+		self.context.Events.StartMenuChanged.Event:Connect(function()
+			if self.actionPanel.Visible then
+				self:_setActionsOpen(false)
+			end
+		end)
+	)
 	local player = Players.LocalPlayer
+	table.insert(
+		self.connections,
+		player.CharacterRemoving:Connect(function()
+			if self.actionPanel.Visible then
+				self:_setActionsOpen(false)
+			end
+			self.card.Visible = false
+		end)
+	)
 	self:_scan(player:WaitForChild("Backpack"), "Backpack")
 	if player.Character then
 		self:_scan(player.Character, "Character")
@@ -538,13 +877,18 @@ end
 
 function PublicSafetyController:Destroy()
 	ContextActionService:UnbindAction(CLOSE_ACTION)
+	-- Retires the status refresh loop as well: it is a spawned thread rather than
+	-- a connection, so nothing else would stop it.
+	self.actionGeneration = (self.actionGeneration or 0) + 1
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
 	for _, connection in self.scanConnections do
 		connection:Disconnect()
 	end
+	table.clear(self.connections)
 	table.clear(self.scanConnections)
+	table.clear(self.actionState)
 	if self.unbindLayout then
 		self.unbindLayout()
 	end
