@@ -22,7 +22,7 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 
 -- The two shapes the panel takes. Tall on a desktop, wide on a phone, because a
 -- landscape phone has height to spare in neither direction but width in one.
-local FULL_PANEL = Vector2.new(238, 402)
+local FULL_PANEL = Vector2.new(252, 402)
 local COMPACT_PANEL = Vector2.new(420, 188)
 
 -- The moulding the keys are set into. Three greys, so the caps carry the colour.
@@ -698,6 +698,7 @@ function EmergencyLightsController:_reshape(compact: boolean)
 		return
 	end
 	self.compactShape = compact
+	self.laidOut = nil
 	self:_layout()
 end
 
@@ -777,7 +778,7 @@ function EmergencyLightsController:_layout()
 			top += height + gap
 		end
 		place(self.toneRow, keyHeight)
-		place(self.hornRow, if compact then 28 else 32)
+		place(self.hornRow, if compact then 32 else 38)
 		place(self.modeRow, keyHeight)
 	end
 
@@ -842,10 +843,31 @@ function EmergencyLightsController:_applyAvailability()
 		self.buttons.Airhorn.Visible = rack ~= nil
 			and self:_toneSound(rack, VehicleLights.MomentaryTone) ~= nil
 	end
-	-- Measured again, because what was just hidden is what the panel has to close
-	-- up around. Skipped before the panel exists, which is every call during Init.
+	-- Measured again only when what is on the panel actually changed.
+	--
+	-- _paint runs on every request, and this used to re-measure the box each
+	-- time, so the head resized on every button press - shrinking and growing
+	-- under the officer's finger as availability momentarily differed between one
+	-- reply and the next. A control head does not change size when you press it.
+	-- The signature is the visible set, so a genuine change still re-lays it out.
 	if self.grid then
-		self:_layout()
+		local signature = {}
+		for _, name in { "Tones", "Horn", "Modes", "Circuits" } do
+			local frame = self.face and self.face:FindFirstChild(name)
+			if frame then
+				for _, child in frame:GetChildren() do
+					if child:IsA("TextButton") and child.Visible then
+						table.insert(signature, child.Name)
+					end
+				end
+			end
+		end
+		table.sort(signature)
+		local joined = table.concat(signature, ",")
+		if joined ~= self.laidOut then
+			self.laidOut = joined
+			self:_layout()
+		end
 	end
 end
 
