@@ -420,11 +420,18 @@ function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, s
 		for id, definition in self:_vehicleDefinitions() do
 			local template = self:_template(definition)
 			if self:_definitionAllowed(player, spawner, definition) and template then
+				self:_ensurePreview(id, definition)
 				table.insert(vehicles, {
 					Id = id,
 					Name = definition.Name,
 					Category = definition.Category,
 					DivisionId = definition.DivisionId,
+					-- Issued, never sold. A department vehicle belongs to the unit
+					-- rather than to the officer, so this terminal takes one out and
+					-- has nothing to charge for. Saying so here is what stops the
+					-- forecourt's buy flow from being offered at a police bay,
+					-- where it read as a free car nobody could actually take.
+					Spawnable = true,
 				})
 			end
 		end
@@ -730,6 +737,26 @@ function VehicleSpawnerService:Spawn(
 		vehicle:SetAttribute("RoleplayOSVehicleId", vehicleId)
 	end
 	self.context.Services:Get("VehiclePlateService"):Apply(vehicle, registration or "")
+	-- Publish what the record says the tank holds.
+	--
+	-- Two client gauges read this attribute and nothing on the server had ever
+	-- written it, so every vehicle in the game showed its fuel as "--". The
+	-- number is real - it is the figure kept on the vehicle's own record - but it
+	-- is a figure nothing yet moves: there is no consumption anywhere and nowhere
+	-- in the map to refuel, so building one without the other would stop cars
+	-- with no way to start them again. Showing the stored value is honest; the
+	-- gauge stops claiming to be broken and starts meaning something the day a
+	-- filling station exists.
+	local fuel = 100
+	if definition.Category == "Civilian" and type(vehicleId) == "string" then
+		for _, owned in ownership:List(player) do
+			if owned.VehicleId == vehicleId and type(owned.Fuel) == "number" then
+				fuel = owned.Fuel
+				break
+			end
+		end
+	end
+	vehicle:SetAttribute("RoleplayOSFuel", fuel)
 	local vehicleSeat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
 	if vehicleSeat then
 		vehicleSeat:SetAttribute("RoleplayOSRegistration", registration or "")

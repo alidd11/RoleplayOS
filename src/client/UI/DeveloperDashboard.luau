@@ -418,7 +418,15 @@ local function text(
 	return item
 end
 
-local function pressable(button: GuiButton)
+-- keepColour leaves the background alone and animates the scale only.
+--
+-- This captures the colour a control was built with and writes it back on every
+-- hover and release, which is right for a button whose colour never changes and
+-- wrong for one that carries a selected state: the bottom navigation set its
+-- chosen tab to the accent and the first hover painted it straight back to the
+-- unselected surface. Play looked selected purely because nobody had touched it
+-- yet.
+local function pressable(button: GuiButton, keepColour: boolean?)
 	local scale = Instance.new("UIScale")
 	scale.Parent = button
 	local baseColour = button.BackgroundColor3
@@ -437,7 +445,9 @@ local function pressable(button: GuiButton)
 			else if hovered then hoverColour else baseColour
 		if not motionEnabled() then
 			scale.Scale = targetScale
-			button.BackgroundColor3 = targetColour
+			if not keepColour then
+				button.BackgroundColor3 = targetColour
+			end
 			return
 		end
 		TweenService:Create(
@@ -449,11 +459,13 @@ local function pressable(button: GuiButton)
 			),
 			{ Scale = targetScale }
 		):Play()
-		TweenService:Create(
-			button,
-			TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-			{ BackgroundColor3 = targetColour }
-		):Play()
+		if not keepColour then
+			TweenService:Create(
+				button,
+				TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+				{ BackgroundColor3 = targetColour }
+			):Play()
+		end
 	end
 	button.MouseEnter:Connect(function()
 		hovered = true
@@ -485,7 +497,16 @@ local function pressable(button: GuiButton)
 	end)
 end
 
-local function button(parent: Instance, label: string, primary: boolean?): TextButton
+-- plain drops the outline and the press animation. The role tiles' call to
+-- action wants neither: it is a full width bar under a poster, where a stroke
+-- reads as a second border against the card's own edge and a scale on press
+-- makes the whole tile appear to wobble.
+local function button(
+	parent: Instance,
+	label: string,
+	primary: boolean?,
+	plain: boolean?
+): TextButton
 	local item = Instance.new("TextButton")
 	item.AutoButtonColor = false
 	item.BackgroundColor3 = if primary then COLOURS.AccentFill else COLOURS.SurfaceRaised
@@ -504,8 +525,14 @@ local function button(parent: Instance, label: string, primary: boolean?): TextB
 		item.LayoutOrder = nextOrder
 	end
 	corner(item, 8)
-	stroke(item, if primary then COLOURS.Accent else COLOURS.Border, if primary then 0.55 else 0)
-	pressable(item)
+	if not plain then
+		stroke(
+			item,
+			if primary then COLOURS.Accent else COLOURS.Border,
+			if primary then 0.55 else 0
+		)
+		pressable(item)
+	end
 	item.Activated:Connect(function()
 		if activeAudioFeedback then
 			activeAudioFeedback:ButtonClick()
@@ -674,17 +701,17 @@ local function posterTile(parent: Instance, options: PosterTileOptions): (Frame,
 		detail.TextTruncate = Enum.TextTruncate.AtEnd
 		detail.ZIndex = 11
 	end
-	local action = button(cell, options.ActionLabel, false)
+	local action = button(cell, options.ActionLabel, false, true)
 	action.Name = "RoleAction_" .. options.Id
 	action.AnchorPoint = Vector2.new(0, 1)
 	action.Position = UDim2.fromScale(0, 1)
 	action.Size = UDim2.new(1, 0, 0, options.ActionHeight)
-	action.TextSize = 12
+	-- Roblox's own interface font. This is the one control a player meets before
+	-- they have agreed to anything the game does, so it reads better as part of
+	-- the platform than as this game's own lettering.
+	action.Font = Enum.Font.BuilderSansBold
+	action.TextSize = 14
 	action.TextColor3 = if options.ActionMuted then COLOURS.Muted else options.Accent
-	local actionStroke = action:FindFirstChildOfClass("UIStroke")
-	if actionStroke then
-		actionStroke.Color = options.Accent
-	end
 	return cell, action
 end
 
@@ -1324,7 +1351,17 @@ function App.mount(context: any): ScreenGui
 	end
 	local function setMenuOpen(isOpen: boolean)
 		playerGui:SetAttribute("RoleplayOSMenuOpen", isOpen)
-		menuToggle.Visible = true
+		-- Nothing to go back to yet.
+		--
+		-- On a first join the menu is the whole game, and a toggle floating over
+		-- it offered to dismiss the one screen the player has to use before
+		-- anything else works.
+		--
+		-- Or-ing the closed state in is deliberate rather than belt and braces: a
+		-- menu that is shut means the player is in the city whatever route took
+		-- them there, and gating purely on the flag would hide their only way
+		-- back if any path ever entered the world without setting it.
+		menuToggle.Visible = hasEnteredWorld or not isOpen
 		updateMenuToggleAppearance(isOpen)
 		pcall(function()
 			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, not isOpen)
@@ -3437,7 +3474,7 @@ function App.mount(context: any): ScreenGui
 		item.Parent = bottomDock
 		corner(item, 10)
 		stroke(item, COLOURS.Border, 0.25)
-		pressable(item)
+		pressable(item, true)
 		bottomNavItems[key] = item
 		bottomNavRenders[key] = render
 		if onEnter then
@@ -3548,7 +3585,11 @@ function App.mount(context: any): ScreenGui
 			-- These are now derived from what the row holds rather than picked, so
 			-- the band shrinks and the overlap goes at the same time: the content
 			-- below gains the twelve pixels it was losing plus the reduction.
-			local barHeight = safeTop + (if narrow then 64 else if compactLandscape then 42 else 36)
+			-- The bar holds one line of status text and nothing else, so it is sized
+			-- to that line rather than to a comfortable row. Every pixel taken off
+			-- here goes to the posters, which is the only thing on this page a
+			-- player is actually looking at.
+			local barHeight = safeTop + (if narrow then 56 else if compactLandscape then 36 else 26)
 			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
 			content.Position = UDim2.fromOffset(0, barHeight)
 			content.Size = UDim2.new(1, 0, 1, -barHeight)

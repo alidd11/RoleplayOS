@@ -200,7 +200,8 @@ function VehicleSpawnerController:_details(spawnerId: string, definition: any, o
 		existing:Destroy()
 	end
 	local owned = definition.Owned == true and definition.VehicleId ~= nil
-	local forSale = definition.ForSale == true
+	local issued = definition.Spawnable == true
+	local forSale = definition.ForSale == true and not issued
 
 	local scrim = Instance.new("TextButton")
 	scrim.Name = "VehicleDetails"
@@ -316,6 +317,12 @@ function VehicleSpawnerController:_details(spawnerId: string, definition: any, o
 		table.insert(parts, if definition.Insured then "INSURED" else "UNINSURED")
 		table.insert(parts, if definition.Taxed then "TAXED" else "UNTAXED")
 		facts.Text = table.concat(parts, "  •  ")
+	elseif issued then
+		headline.Text = string.upper(tostring(definition.DivisionId or "FLEET"))
+		facts.Text = "Issued to your unit. It keeps the same registration every time "
+			.. "you take it out."
+		facts.TextWrapped = true
+		facts.Size = UDim2.new(1, -48, 0, 40)
 	else
 		headline.Text = "£" .. formatMoney(definition.Price or 0)
 		facts.Text = "Choose a colour. It is kept on the vehicle's record, and buying "
@@ -377,7 +384,7 @@ function VehicleSpawnerController:_details(spawnerId: string, definition: any, o
 	action.TextSize = T.button
 	action.Text = if definition.Locked
 		then "REQUIRES ITS GAME PASS"
-		elseif owned then "SPAWN THIS VEHICLE"
+		elseif owned or issued then "SPAWN THIS VEHICLE"
 		else "BUY"
 	action.ZIndex = 31
 	action.Parent = sheet
@@ -386,7 +393,7 @@ function VehicleSpawnerController:_details(spawnerId: string, definition: any, o
 			return
 		end
 		action.Active = false
-		if owned then
+		if owned or issued then
 			action.Text = "SPAWNING…"
 			local spawned = self.context.Controllers.NetworkController:Request("SpawnVehicle", {
 				SpawnerId = spawnerId,
@@ -459,6 +466,11 @@ function VehicleSpawnerController:_card(
 	onChanged: () -> ()
 )
 	local owned = definition.Owned == true and definition.VehicleId ~= nil
+	-- Issued rather than bought. A department vehicle belongs to the unit, so
+	-- this terminal takes one out and there is nothing to pay: without this the
+	-- police bay offered its whole fleet at zero pounds with a buy button that
+	-- the server then refused, because a service vehicle is not for sale.
+	local issued = definition.Spawnable == true
 	local card = Instance.new("TextButton")
 	card.Name = tostring(definition.Id)
 	card.LayoutOrder = order
@@ -513,8 +525,9 @@ function VehicleSpawnerController:_card(
 	detail.TextTruncate = Enum.TextTruncate.AtEnd
 	detail.Text = if owned
 		then "REG " .. tostring(definition.Registration or "--")
+		elseif issued then string.upper(tostring(definition.DivisionId or "FLEET"))
 		else "£" .. formatMoney(definition.Price or 0)
-	if owned then
+	if owned or issued then
 		detail.Font = Tokens.Font.regular
 		detail.TextColor3 = C.muted
 		detail.TextSize = T.dense
@@ -531,7 +544,7 @@ function VehicleSpawnerController:_card(
 	hint.TextColor3 = if definition.Locked then C.muted else C.accent
 	hint.TextSize = T.button
 	hint.TextXAlignment = Enum.TextXAlignment.Right
-	hint.Text = if definition.Locked then "LOCKED" elseif owned then "SPAWN" else "BUY"
+	hint.Text = if definition.Locked then "LOCKED" elseif owned or issued then "SPAWN" else "BUY"
 	hint.Parent = card
 
 	local ring = Instance.new("UIStroke")
@@ -581,7 +594,14 @@ function VehicleSpawnerController:_open(spawnerId: string)
 	gui.Name = "RoleplayOSVehicleSpawner"
 	gui.ResetOnSpawn = false
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
-	gui.DisplayOrder = 35
+	-- Above the HUD, below the menu.
+	--
+	-- At 35 this sat under the radio at 38 and the phone at 40, which was
+	-- survivable while it was a small dialog and absurd once it went full screen:
+	-- the radio drew straight down the middle of the forecourt. A screen that
+	-- takes over the whole display belongs above every panel that decorates the
+	-- world and below the start menu, which takes over harder still.
+	gui.DisplayOrder = 45
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
@@ -801,6 +821,31 @@ function VehicleSpawnerController:_bind(prompt: ProximityPrompt)
 end
 
 function VehicleSpawnerController:Start()
+	-- Shut when the thing it belongs to goes away.
+	--
+	-- The forecourt closed on its own buttons and on nothing else, so going
+	-- civilian while it was open left it on screen over a world it no longer
+	-- described, with a fleet the player could not use and no way back to the
+	-- game but the close button they had already walked away from.
+	table.insert(
+		self.connections,
+		self.context.Events.DutyChanged.Event:Connect(function()
+			self:_close()
+		end)
+	)
+	table.insert(
+		self.connections,
+		self.context.Events.StartMenuChanged.Event:Connect(function()
+			self:_close()
+		end)
+	)
+	local player = Players.LocalPlayer
+	table.insert(
+		self.connections,
+		player.CharacterRemoving:Connect(function()
+			self:_close()
+		end)
+	)
 	local folder = workspace:WaitForChild("RoleplayOSVehicleFacilities", 20)
 	if not folder then
 		return

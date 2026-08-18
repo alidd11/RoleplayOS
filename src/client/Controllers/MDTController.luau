@@ -162,7 +162,10 @@ function MDTController:_mount()
 	gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	gui.ClipToDeviceSafeArea = true
 	gui.Enabled = false
-	gui.DisplayOrder = 35
+	-- Above the HUD, below the menu, for the same reason the forecourt is: a
+	-- terminal that fills the screen must not have the radio and the phone drawn
+	-- through the middle of it.
+	gui.DisplayOrder = 45
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	self.gui = gui
 
