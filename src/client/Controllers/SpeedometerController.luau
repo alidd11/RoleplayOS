@@ -138,15 +138,40 @@ local function readsOn(value: any): boolean
 	return false
 end
 
+-- How fast the vehicle is actually going, from whichever source can tell.
+--
+-- The published value was trusted whenever it existed, and existing was the only
+-- test it had to pass. A-Chassis creates its Velocity as a Vector3Value at zero
+-- and writes it from a LocalScript, so a chassis whose Drive script has not
+-- started - or is running for somebody else - leaves a perfectly valid Vector3
+-- sitting at 0,0,0. typeof said Vector3, the function returned zero, and the
+-- fallback below it could never be reached. A speedometer reading a confident
+-- nought is indistinguishable from a broken one, which is what it looked like.
+--
+-- Measured on a moving Peugeot: published 0,0,0 while the seat's own assembly
+-- reported real motion.
+--
+-- The seat's assembly velocity is the reading that cannot lie. It is used
+-- whenever the chassis has nothing to say, and the chassis is preferred only
+-- when it says something, because a chassis that reports properly is smoothed
+-- and gear-aware in a way raw physics is not.
+local IDLE_STUDS_PER_SECOND = 0.5
+
+local function horizontalStuds(value: Vector3): number
+	return Vector3.new(value.X, 0, value.Z).Magnitude
+end
+
 local function speedMph(seat: VehicleSeat, values: Folder?): number
+	local seatStuds = horizontalStuds(seat.AssemblyLinearVelocity)
 	local published = readFirstValue(values, Config.Chassis.VelocityValueNames)
 	if typeof(published) == "Vector3" then
-		local horizontal = Vector3.new(published.X, 0, published.Z).Magnitude
-		return horizontal * Config.VehicleData.StudsPerSecondToMph
+		local publishedStuds = horizontalStuds(published)
+		-- Believed unless it claims stationary while the vehicle plainly is not.
+		if publishedStuds > IDLE_STUDS_PER_SECOND or seatStuds <= IDLE_STUDS_PER_SECOND then
+			return publishedStuds * Config.VehicleData.StudsPerSecondToMph
+		end
 	end
-	-- Fallback for plain VehicleSeats and packages that do not publish telemetry.
-	local velocity = seat.AssemblyLinearVelocity
-	return Vector3.new(velocity.X, 0, velocity.Z).Magnitude * Config.VehicleData.StudsPerSecondToMph
+	return seatStuds * Config.VehicleData.StudsPerSecondToMph
 end
 
 local C = {
@@ -409,6 +434,38 @@ function SpeedometerController:_paintSweep(fraction: number)
 	end
 end
 
+-- The chassis's own gauge, which it hands to the driver whether or not the game
+-- already has one.
+--
+-- A-Chassis carries a frame called AC6_Stock_Gauges holding a tacho, a speedo, a
+-- gear readout and a Speed button, and parents it into the driver's PlayerGui on
+-- mounting. So an officer got two speedometers: this cluster, and the kit's own
+-- strip along the bottom of the screen reading the same number in a different
+-- typeface. Two readouts of one value is not a richer dashboard, it is a game
+-- that looks like it was assembled rather than designed.
+--
+-- Hidden rather than destroyed, and only while this cluster is up, because the
+-- frame belongs to the vehicle and its scripts keep writing to it. Put back the
+-- moment the driver gets out, so nothing is permanently taken from the kit.
+local STOCK_GAUGE_NAMES = { "AC6_Stock_Gauges", "Gauges_AC6", "DigitalGauges" }
+
+function SpeedometerController:_setStockGaugesVisible(visible: boolean)
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	for _, descendant in playerGui:GetDescendants() do
+		if descendant:IsA("GuiObject") then
+			for _, name in STOCK_GAUGE_NAMES do
+				if descendant.Name == name then
+					descendant.Visible = visible
+					break
+				end
+			end
+		end
+	end
+end
+
 function SpeedometerController:_watch(character: Model)
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if not humanoid or not humanoid:IsA("Humanoid") then
@@ -420,7 +477,19 @@ function SpeedometerController:_watch(character: Model)
 			self.seat = if humanoid.SeatPart and humanoid.SeatPart:IsA("VehicleSeat")
 				then humanoid.SeatPart
 				else nil
-			self.frame.Visible = self.seat ~= nil
+			local driving = self.seat ~= nil
+			self.frame.Visible = driving
+			-- Deferred on the way in, because the chassis parents its gauge after
+			-- the seat changes and hiding it before it arrives does nothing.
+			if driving then
+				task.delay(0.35, function()
+					if self.seat ~= nil then
+						self:_setStockGaugesVisible(false)
+					end
+				end)
+			else
+				self:_setStockGaugesVisible(true)
+			end
 		end)
 	)
 end
