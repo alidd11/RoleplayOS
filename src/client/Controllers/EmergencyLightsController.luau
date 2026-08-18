@@ -555,21 +555,32 @@ function EmergencyLightsController:_mount()
 	response.Size = UDim2.fromOffset(102, 47)
 	self.secondary[#self.secondary + 1] = response
 	response.Activated:Connect(function()
-		self:_request({ Stage = self.settings.Stages, Siren = "Wail" })
+		-- Through _setTone, not through the request.
+		--
+		-- These three used to pass a Siren field and stop there, which was enough
+		-- when a client-side player watched that attribute and made the noise.
+		-- Nothing watches it now: the panel drives the vehicle's own sounds. Left
+		-- as it was, 999 recorded a wail it never sounded and AT SCENE and RESET
+		-- recorded silence over a siren that kept running.
+		self:_request({ Stage = self.settings.Stages })
+		self:_setTone("Wail")
+		self:_paint()
 	end)
 	local scene = self:_button(panel, "AtScene", "AT SCENE", Color3.fromRGB(174, 169, 93))
 	scene.Position = UDim2.fromOffset(12, 345)
 	scene.Size = UDim2.fromOffset(102, 45)
 	self.secondary[#self.secondary + 1] = scene
 	scene.Activated:Connect(function()
-		self:_request({ Stage = 1, Siren = "" })
+		self:_setTone("")
+		self:_request({ Stage = 1 })
 	end)
 	local reset = self:_button(panel, "Reset", "RESET", Color3.fromRGB(77, 139, 91))
 	reset.Position = UDim2.fromOffset(124, 345)
 	reset.Size = UDim2.fromOffset(102, 45)
 	self.secondary[#self.secondary + 1] = reset
 	reset.Activated:Connect(function()
-		self:_request({ Reset = true, Siren = "" })
+		self:_setTone("")
+		self:_request({ Reset = true })
 	end)
 end
 
