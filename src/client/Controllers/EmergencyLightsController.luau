@@ -28,6 +28,18 @@ local COMPACT_PANEL = Vector2.new(420, 188)
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
+-- Each mode button at rest and in force. The lit value is the same hue carried
+-- brighter rather than a different colour, so a panel with one mode running
+-- still reads as one panel.
+local RESPONSE_BASE = Color3.fromRGB(42, 83, 184)
+local RESPONSE_LIT = Color3.fromRGB(86, 140, 255)
+local SCENE_BASE = Color3.fromRGB(174, 169, 93)
+local SCENE_LIT = Color3.fromRGB(240, 226, 120)
+local RESET_BASE = Color3.fromRGB(77, 139, 91)
+local RESET_LIT = Color3.fromRGB(118, 200, 138)
+local SIREN_BASE = Color3.fromRGB(204, 61, 51)
+local SIREN_LIT = Color3.fromRGB(255, 108, 96)
+
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
 	{ Id = "FrontBlue", Label = "FRONT\nBLUE" },
@@ -482,22 +494,46 @@ function EmergencyLightsController:_reshape(compact: boolean)
 		return
 	end
 	self.compactShape = compact
+	self:_layout()
+end
+
+-- Positions everything and sizes the panel to what it is actually holding.
+--
+-- The height was a constant that assumed all thirteen circuits. A marked car
+-- reports nine or ten, an unmarked one fewer, and the rows that were not drawn
+-- kept their space anyway: the panel stood as tall as the tallest vehicle in the
+-- fleet with a third of it empty, floating in the middle of the screen with
+-- nothing under it. Measured from the visible controls instead, so the box is
+-- the size of its contents on every vehicle.
+function EmergencyLightsController:_layout()
+	local compact = self.compactShape == true
 	local size = if compact then COMPACT_PANEL else FULL_PANEL
 	local columns = if compact then 6 else 3
 	local cell = if compact then Vector2.new(60, 48) else Vector2.new(66, 55)
-	self.panel.Size = UDim2.fromOffset(size.X, size.Y)
 	self.gridLayout.CellSize = UDim2.fromOffset(cell.X, cell.Y)
-	local rows = math.ceil(#CIRCUIT_CONTROLS / columns)
-	self.grid.Size = UDim2.new(1, -24, 0, rows * cell.Y + (rows - 1) * 8)
-	local top = 34 + rows * cell.Y + (rows - 1) * 8 + 10
+
+	local visible = 0
+	for _, control in CIRCUIT_CONTROLS do
+		local item = self.buttons[control.Id]
+		if item and item.Visible then
+			visible += 1
+		end
+	end
+	local rows = math.max(math.ceil(visible / columns), 1)
+	local gridHeight = rows * cell.Y + (rows - 1) * 8
+	self.grid.Size = UDim2.new(1, -24, 0, gridHeight)
+
+	local top = 34 + gridHeight + 10
 	local across = if compact then 4 else 2
 	local width = math.floor((size.X - 24 - (across - 1) * 8) / across)
+	local secondaryRows = math.ceil(#self.secondary / across)
 	for index, item in self.secondary do
 		local column = (index - 1) % across
 		local row = math.floor((index - 1) / across)
 		item.Position = UDim2.fromOffset(12 + column * (width + 8), top + row * 53)
 		item.Size = UDim2.fromOffset(width, 46)
 	end
+	self.panel.Size = UDim2.fromOffset(size.X, top + secondaryRows * 53 - 7 + 12)
 end
 
 -- Hides the controls this vehicle cannot carry out.
@@ -526,6 +562,11 @@ function EmergencyLightsController:_applyAvailability()
 			end
 		end
 	end
+	-- Measured again, because what was just hidden is what the panel has to close
+	-- up around. Skipped before the panel exists, which is every call during Init.
+	if self.grid then
+		self:_layout()
+	end
 end
 
 function EmergencyLightsController:_paint()
@@ -545,10 +586,31 @@ function EmergencyLightsController:_paint()
 				else Color3.fromRGB(220, 220, 154)
 		end
 	end
+	-- The mode buttons say which mode you are in.
+	--
+	-- 999, AT SCENE and RESET all looked the same whichever was in force, so the
+	-- only way to tell a car running a full response from one sitting at a scene
+	-- was to look out of the window. They are the three states of one switch, so
+	-- they are painted like one: the one in force is lit and the others are not.
+	local stage = state.Stage or 0
+	local function mode(id: string, on: boolean, base: Color3, lit: Color3)
+		local item = self.buttons[id]
+		if item then
+			item.BackgroundColor3 = if on then lit else base
+		end
+	end
+	mode("Response", stage >= self.settings.Stages, RESPONSE_BASE, RESPONSE_LIT)
+	mode("AtScene", stage == 1, SCENE_BASE, SCENE_LIT)
+	mode("Reset", stage == 0, RESET_BASE, RESET_LIT)
+
 	if self.buttons.Sirens then
-		self.buttons.Sirens.Text = if state.Siren and state.Siren ~= ""
-			then string.upper(state.Siren)
-			else "SIRENS"
+		local tone = state.Siren
+		local sounding = type(tone) == "string" and tone ~= ""
+		-- Named for what pressing it does next, and for what it is doing now. A
+		-- button that only ever reads SIRENS gives no way to tell a silent car
+		-- from one whose tone the driver changed from the keyboard.
+		self.buttons.Sirens.Text = if sounding then string.upper(tone) else "SIREN OFF"
+		self.buttons.Sirens.BackgroundColor3 = if sounding then SIREN_LIT else SIREN_BASE
 	end
 end
 
@@ -762,10 +824,24 @@ function EmergencyLightsController:Start()
 				self.panel.AnchorPoint = Vector2.new(1, 1)
 				self.panel.Position = UDim2.new(1, -(layout.SafeRight + 16), 1, -reserve)
 			else
+				-- Sat on the bottom right rather than floating at half height.
+				--
+				-- Centred vertically, the panel had nothing to line up with: it hung
+				-- in the middle of the right-hand side with a gap above and below it,
+				-- and because its height changed with the vehicle, that gap moved
+				-- from car to car. Every other element of the driving HUD is anchored
+				-- to an edge, and this is a dashboard control, so the bottom right is
+				-- both where the rest of the furniture is and where a control head
+				-- actually lives.
+				--
+				-- The same reserve as the compact shape, so it clears the pedals on a
+				-- touchscreen and the speedometer everywhere else.
 				self:_reshape(false)
-				self.panel.AnchorPoint = Vector2.new(1, 0.5)
-				self.panel.Position =
-					UDim2.new(1, -(layout.SafeRight + 16), 0.5, math.floor(layout.NativeTop * 0.25))
+				local reserve = if layout.InputMode == "Touch"
+					then layout.HotbarBottom + Config.DrivingControls.PedalSize + 34
+					else layout.HotbarBottom + 16
+				self.panel.AnchorPoint = Vector2.new(1, 1)
+				self.panel.Position = UDim2.new(1, -(layout.SafeRight + 16), 1, -reserve)
 			end
 			self.panelScale.Scale = scale
 			local driver = layout.State == "Driver"

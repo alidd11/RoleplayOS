@@ -954,12 +954,16 @@ local Config = {
 			-- go on. Deliberately plural, so it cannot claim a single red bulb in a
 			-- brake cluster.
 			RearReds = { "rearred", "rear red", "rear_red", "reds" },
-			FrontScene = { "frontscene", "front scene", "front_scene" },
+			-- Takedowns are the forward-facing work lights, which is what a front
+			-- scene light is. Kits name them that far more often than they write
+			-- "front scene", and a vehicle whose fitting is called Takedowns had
+			-- nothing to match before.
+			FrontScene = { "frontscene", "front scene", "front_scene", "takedown" },
 			RearScene = { "rearscene", "rear scene", "rear_scene" },
 			Grille = { "grille", "grill" },
 			LeftAlley = { "leftalley", "left alley", "left_alley" },
 			RightAlley = { "rightalley", "right alley", "right_alley" },
-			Spots = { "spotlight", "spot light", "spots" },
+			Spots = { "spotlight", "spot light", "spots", "floodlight", "worklight" },
 		},
 		-- How a light part is recognised inside a vehicle. Excluded names are
 		-- checked first, so an ordinary lamp is never taken for a blue light.
