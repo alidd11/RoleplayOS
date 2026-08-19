@@ -155,10 +155,14 @@ function LocationController:_show(street: string, district: string)
 end
 
 function LocationController:Start()
-	self:_mount()
+	-- Checked before mounting, not after. Turning the banner off still built and
+	-- parented it and only skipped the updates, so the box stayed on screen
+	-- holding whatever text it had -- which is exactly the thing that was meant to
+	-- disappear.
 	if not self.settings.Enabled then
 		return
 	end
+	self:_mount()
 	self.top = 0
 	self.unbindLayout = self.context.Controllers.UIOrchestrator:Bind("Location", function(layout)
 		-- Sits under Roblox's own top bar, centred, and steps down further while

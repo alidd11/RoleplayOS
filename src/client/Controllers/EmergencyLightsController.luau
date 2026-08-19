@@ -36,6 +36,26 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 -- which made the panel a wide slab down the side of the screen. Two across holds
 -- the same legends in a box two thirds the width, and the keys come out closer to
 -- square rather than wide and flat.
+-- Controls that are on the panel but connected to nothing.
+--
+-- RunLock and LowPower each set an attribute on the vehicle and that is the whole
+-- of it: grep the tree and nothing reads either one, so pressing them changes a
+-- value nobody consults. They took two of the seven rows on a panel that was
+-- already too long.
+--
+-- Hidden rather than deleted. The server still accepts and stores both, so the
+-- day something does read them -- a real run-lock that keeps the engine going
+-- with the keys out, a low-power mode that dims the bar on scene -- this is one
+-- line to undo rather than a feature to rebuild.
+--
+-- Director is deliberately not in here. It looks equally inert but it is not: it
+-- cycles the kit's director patterns, and it already hides itself on a vehicle
+-- with no lighting kit to cycle.
+local HIDDEN_CONTROLS = {
+	RunLock = true,
+	LowPower = true,
+}
+
 local FULL_PANEL = Vector2.new(232, 402)
 local COMPACT_PANEL = Vector2.new(468, 206)
 
@@ -790,8 +810,9 @@ function EmergencyLightsController:_applyAvailability()
 	for _, control in CIRCUIT_CONTROLS do
 		local item = self.buttons[control.Id]
 		if item then
-			local visible = if control.Id == "Director"
-				then hasKit
+			local visible = if HIDDEN_CONTROLS[control.Id]
+				then false
+				elseif control.Id == "Director" then hasKit
 				elseif ALWAYS_AVAILABLE[control.Id] then true
 				else available[control.Id] == true
 			item.Visible = visible
