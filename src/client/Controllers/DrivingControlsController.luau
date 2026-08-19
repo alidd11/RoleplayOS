@@ -26,6 +26,9 @@ local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 local DrivingControlsController = {
 	connections = {},
 	throttle = 0,
+	-- The humanoid's current seat is stable while a driver remains seated. Cache
+	-- it so the render-step bridge does not repeatedly resolve the same seat.
+	controlSeat = nil,
 	-- Weak keyed, so a destroyed vehicle does not keep its seat alive here.
 	valuesBySeat = setmetatable({}, { __mode = "k" }),
 	brakeState = false,
@@ -259,8 +262,17 @@ end
 function DrivingControlsController:_seat(): VehicleSeat?
 	local character = Players.LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local cached = self.controlSeat
+	if cached and humanoid and cached.Parent and cached.Occupant == humanoid then
+		return cached
+	end
+	self.controlSeat = nil
 	local seat = humanoid and humanoid.SeatPart
-	return if seat and seat:IsA("VehicleSeat") and seat.Occupant == humanoid then seat else nil
+	if seat and seat:IsA("VehicleSeat") and seat.Occupant == humanoid then
+		self.controlSeat = seat
+		return seat
+	end
+	return nil
 end
 
 -- Finds the chassis input values, wherever in the vehicle they are kept.
@@ -438,6 +450,7 @@ function DrivingControlsController:Start()
 			local seat = self:_seat()
 			if not seat then
 				self.throttle = 0
+				self.controlSeat = nil
 				self.heldFor = 0
 				self.brakeState = false
 				if self.stopHorn then

@@ -63,6 +63,12 @@ function EmergencyLightsService:FindLights(model: Instance): { BasePart }
 	local settings = self:_settings()
 	local found: { BasePart } = {}
 	for _, descendant in model:GetDescendants() do
+		-- Stop processing once the configured cap is reached. The inner loop's
+		-- break prevents additional parts from one group, but without this guard
+		-- the outer descendant walk still inspects the rest of the vehicle.
+		if settings.MaximumLightParts > 0 and #found >= settings.MaximumLightParts then
+			break
+		end
 		if
 			descendant:IsA("BasePart") and VehicleLights.isLightPart(settings, descendant, model)
 		then
