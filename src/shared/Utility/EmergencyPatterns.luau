@@ -60,23 +60,53 @@ export type Stage = {
 	Length: number,
 }
 
+-- Interprets one lamp module's already-required data.
+--
+-- Pulled apart from the Instance/require plumbing below it so the actual shape
+-- check -- what makes a table a lamp rather than a spacer or garbage -- can be
+-- tested directly with plain tables instead of live ModuleScripts. Roblox will
+-- not let a runtime script set another script's Source, so a fixture module
+-- with fabricated pattern data is not something a test can build.
+--
+-- A vehicle's kit ships one of these for every position on the bar, including
+-- spacers that mark a gap and carry no patternData at all. Malformed or absent
+-- data returns nil rather than erroring, because one bad export must cost that
+-- lamp, not the whole stage.
+function EmergencyPatterns.lampFromData(data: any, fallbackName: string?): LampPattern?
+	if type(data) ~= "table" then
+		return nil
+	end
+	local steps = data.patternData
+	if type(steps) ~= "table" or #steps == 0 then
+		return nil
+	end
+	return {
+		Name = data.lightName or fallbackName or "",
+		Steps = steps,
+	}
+end
+
 -- Reads one lamp's module.
 --
 -- Wrapped, because these are ModuleScripts that came in with a bought kit and a
 -- malformed one must cost that lamp rather than the whole lightbar.
 local function readLamp(module: ModuleScript): LampPattern?
 	local ok, data = pcall(require, module)
-	if not ok or type(data) ~= "table" then
+	if not ok then
 		return nil
 	end
-	local steps = (data :: any).patternData
-	if type(steps) ~= "table" or #steps == 0 then
-		return nil
-	end
-	return {
-		Name = (data :: any).lightName or module.Name,
-		Steps = steps,
-	}
+	return EmergencyPatterns.lampFromData(data, module.Name)
+end
+
+-- The step spacing a stage runs at, from its Tempo child if it has one.
+--
+-- Extracted for the same reason lampFromData is: it is a pure conversion, and
+-- testing it should not require building a Configuration and an IntValue to
+-- prove that a missing one falls back to the default.
+function EmergencyPatterns.tempoSeconds(milliseconds: number?): number
+	-- Held in seconds, because everything that will step this counts in
+	-- seconds and converting once here is better than at every tick.
+	return math.max(milliseconds or EmergencyPatterns.DefaultTempo, 1) / 1000
 end
 
 -- Reads one stage: its tempo and every lamp strip inside it.
@@ -98,23 +128,80 @@ function EmergencyPatterns.readStage(container: Instance): Stage?
 		return nil
 	end
 	local tempo = container:FindFirstChild("Tempo")
-	local milliseconds = if tempo and tempo:IsA("IntValue")
-		then tempo.Value
-		else EmergencyPatterns.DefaultTempo
+	local milliseconds = if tempo and tempo:IsA("IntValue") then tempo.Value else nil
 	return {
 		Name = container.Name,
-		-- Held in seconds, because everything that will step this counts in
-		-- seconds and converting once here is better than at every tick.
-		TempoSeconds = math.max(milliseconds, 1) / 1000,
+		TempoSeconds = EmergencyPatterns.tempoSeconds(milliseconds),
 		Lamps = lamps,
 		Length = length,
 	}
+end
+
+-- The standard five names every kit in this fleet ships, in case a vehicle's
+-- own EasyLS_Config cannot be read at all. Each vehicle was tuned with its own
+-- shades of these -- reds and blues that are visibly different car to car --
+-- so this is a fallback for a broken export, not the palette itself.
+EmergencyPatterns.DefaultColours = {
+	Red = Color3.fromRGB(220, 60, 50),
+	Blue = Color3.fromRGB(90, 115, 210),
+	White = Color3.fromRGB(180, 185, 230),
+	Amber = Color3.fromRGB(255, 140, 100),
+	Green = Color3.fromRGB(0, 170, 127),
+}
+
+-- A vehicle's own colour names, read from the config module it was exported
+-- with. Wrapped for the same reason readLamp is: this is third-party code and
+-- a vehicle whose config fails to require must still light with something
+-- rather than take the whole kit down.
+local function readColours(remote: Instance): { [string]: Color3 }
+	local config = remote:FindFirstChild("EasyLS_Config")
+	if not config or not config:IsA("ModuleScript") then
+		return EmergencyPatterns.DefaultColours
+	end
+	local ok, settings = pcall(require, config)
+	if not ok or type(settings) ~= "table" or type(settings.brickLightColors) ~= "table" then
+		return EmergencyPatterns.DefaultColours
+	end
+	return settings.brickLightColors
+end
+
+-- Every lamp name any stage on this vehicle refers to, matched against a
+-- physical part under LightsParent.
+--
+-- The parts are not direct children of LightsParent -- they sit nested inside
+-- group models such as Front, Rear and Reds, named for the side of the car
+-- rather than the lamp -- so each name is searched for recursively rather than
+-- assumed to be one level down.
+local function collectLampParts(
+	lightsParent: Instance?,
+	stages: { [string]: Stage }
+): { [string]: BasePart }
+	local parts: { [string]: BasePart } = {}
+	if not lightsParent then
+		return parts
+	end
+	for _, stage in stages do
+		for _, lamp in stage.Lamps do
+			if not parts[lamp.Name] then
+				local found = lightsParent:FindFirstChild(lamp.Name, true)
+				if found and found:IsA("BasePart") then
+					parts[lamp.Name] = found
+				end
+			end
+		end
+	end
+	return parts
 end
 
 export type Kit = {
 	Remote: Instance,
 	LightsParent: Instance?,
 	Stages: { [string]: Stage },
+	Colours: { [string]: Color3 },
+	-- Every lamp any stage names, matched to the part it actually lights.
+	-- A name with no match here belongs to a stage that cannot be driven --
+	-- see canAdopt.
+	Lamps: { [string]: BasePart },
 }
 
 -- Everything one vehicle's lightbar was authored with.
@@ -142,11 +229,25 @@ function EmergencyPatterns.read(vehicle: Instance): Kit?
 		return nil
 	end
 	local parent = remote:FindFirstChild("LightsParent")
+	local lightsParent = if parent and parent:IsA("ObjectValue") then parent.Value else nil
 	return {
 		Remote = remote,
-		LightsParent = if parent and parent:IsA("ObjectValue") then parent.Value else nil,
+		LightsParent = lightsParent,
 		Stages = stages,
+		Colours = readColours(remote),
+		Lamps = collectLampParts(lightsParent, stages),
 	}
+end
+
+-- Whether a kit is complete enough to drive.
+--
+-- Refused rather than partially adopted, the same rule the road lighting
+-- replacement follows: taking over a vehicle silences the scripts that light
+-- it, so a kit with no lights parent -- five in the fleet, at last survey --
+-- or one whose lamp names matched nothing under it would be left with nothing
+-- driving it at all.
+function EmergencyPatterns.canAdopt(kit: Kit): boolean
+	return kit.LightsParent ~= nil and next(kit.Lamps) ~= nil
 end
 
 -- What a lamp should be doing at a given moment.

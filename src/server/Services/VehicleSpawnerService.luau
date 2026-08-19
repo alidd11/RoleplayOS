@@ -1120,6 +1120,9 @@ function VehicleSpawnerService:Spawn(
 	-- that the spawned car had no recognised lights.
 	if type(definition.DepartmentId) == "string" then
 		self.context.Services:Get("EmergencyLightsService"):Adopt(vehicle, definition.DepartmentId)
+		-- A no-op on a vehicle with no EasyLS kit. On one that has it, this is
+		-- what actually lights the bar EmergencyLightsService just silenced.
+		self.context.Services:Get("EmergencyLightPatternService"):Adopt(vehicle)
 	end
 	-- Road lighting, which every vehicle has whether or not it is a service one.
 	self.context.Services:Get("VehicleLightingService"):Adopt(vehicle)

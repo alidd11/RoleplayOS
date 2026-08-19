@@ -54,12 +54,6 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 local HIDDEN_CONTROLS = {
 	RunLock = true,
 	LowPower = true,
-	-- Director cycles the kit's director patterns, so unlike the two above it is
-	-- wired to something -- but it is a rear-facing arrow board for closing a
-	-- lane, which almost nothing in this fleet actually carries. It cost a row on
-	-- every panel to be useful on a handful of vehicles. Hidden on the same terms
-	-- as the others: the control and its cycling are intact behind this.
-	Director = true,
 }
 
 local FULL_PANEL = Vector2.new(232, 402)
@@ -847,7 +841,7 @@ function EmergencyLightsController:_applyAvailability()
 		if item then
 			local visible = if HIDDEN_CONTROLS[control.Id]
 				then false
-				elseif control.Id == "Director" then false
+				elseif control.Id == "Director" then #(state.DirectorStages or {}) > 0
 				elseif ALWAYS_AVAILABLE[control.Id] then true
 				else available[control.Id] == true
 			item.Visible = visible
@@ -916,7 +910,7 @@ function EmergencyLightsController:_paint()
 
 	for _, control in CIRCUIT_CONTROLS do
 		local active = if control.Id == "Director"
-			then (self.directorStep or 0) > 0
+			then (state.Director or "") ~= ""
 			elseif control.Id == "Master" then state.Stage == self.settings.Stages
 			elseif control.Id == "LowPower" then state.LowPower == true
 			elseif control.Id == "RunLock" then state.RunLock == true
@@ -1032,20 +1026,16 @@ function EmergencyLightsController:_activate(id: string)
 		return
 	end
 	if id == "Director" then
-		-- Counted here because the kit will not say.
-		--
-		-- EasyLS keeps its director stage in a local and its remote answers only
-		-- GetBinds, so there is nothing to read. The button lit nothing at all as a
-		-- result, which on a control that cycles rather than toggles leaves no way
-		-- to know whether it is running. Every press is one step through the kit's
-		-- director patterns and back to off, so counting presses against the number
-		-- of patterns tracks it exactly as long as this is the only thing pressing
-		-- it - and it is, because the kit's own key for it is not bound anywhere in
-		-- this fleet. Reset whenever the vehicle changes, so a stale count cannot
-		-- follow the officer into the next car.
-		-- Director patterns remain hidden until the native renderer has an explicit
-		-- arrow-board circuit. Imported kits are no longer invoked from here.
-		self:_request({ Circuit = "Director", Enabled = true })
+		-- Steps to the next pattern this vehicle actually has and back to off,
+		-- the same shape as the old kit-cycle button but driven from the list
+		-- the server reports rather than a local count: EmergencyLightPatternService
+		-- knows exactly which arrow-board patterns this vehicle carries and knows
+		-- exactly which one is running, so there is no state to lose track of here.
+		local stages = self.state.DirectorStages or {}
+		local current = self.state.Director or ""
+		local index = table.find(stages, current)
+		local nextStage = if index and index < #stages then stages[index + 1] else ""
+		self:_request({ Director = nextStage })
 	elseif id == "Master" then
 		-- Cycles the kit's pattern and tells the server the lights are on, so the
 		-- two agree about a vehicle that is now visibly lit.
@@ -1066,7 +1056,6 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	if not driver then
 		self.state = { Available = false, Stage = 0, Siren = "", Circuits = {} }
 		self.vehicleOwnsKeys = false
-		self.directorStep = 0
 		self.panel.Visible = false
 		self:_bindControls(false)
 		return
@@ -1078,13 +1067,6 @@ function EmergencyLightsController:_refreshAvailability(driver: boolean)
 	local seat = humanoid and humanoid.SeatPart
 	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
 	self.vehicleOwnsKeys = vehicle ~= nil and vehicle:FindFirstChild("SirenControl", true) ~= nil
-	-- Both counts belong to the vehicle they were counted against, so a fresh car
-	-- starts from dark rather than inheriting the last one's position.
-	if vehicle ~= self.lastVehicle then
-		self.lastVehicle = vehicle
-		self.directorStep = 0
-		self.kitStep = 0
-	end
 	-- Asked more than once.
 	--
 	-- This ran only on the transition into driving, and the server does not

@@ -124,6 +124,7 @@ local serviceOrder = {
 	"RadioService",
 	"PAVAService",
 	"EmergencyLightsService",
+	"EmergencyLightPatternService",
 	"VehicleLightingService",
 	"MDTService",
 	"PersonRecordService",

@@ -25,6 +25,7 @@ local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Coalescer = require(Shared.Coalescer)
 local Fuel = require(Shared.FuelConsumption)
 local Gangs = require(Shared.GangRules)
+local EmergencyPatterns = require(Shared.EmergencyPatterns)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("cash drops require bounded whole pound amounts", function()
@@ -659,6 +660,96 @@ H.test("contest timings leave room for a fight and for it to settle", function()
 		Gangs.MaximumMembers > 1 and Gangs.MaximumMembers <= 30,
 		"the member cap is not a sane size"
 	)
+end)
+
+H.test("a lamp module's data becomes a pattern, or nil when it is not one", function()
+	local lamp =
+		EmergencyPatterns.lampFromData({ lightName = "F1", patternData = { "Blue", false } })
+	H.expect(lamp ~= nil and lamp.Name == "F1", "a valid lamp was not read")
+	H.expect(#lamp.Steps == 2, "the steps were not carried across")
+
+	local fallback = EmergencyPatterns.lampFromData({ patternData = { "Red" } }, "F2")
+	H.expect(fallback ~= nil and fallback.Name == "F2", "a missing lightName did not fall back")
+
+	H.expect(
+		EmergencyPatterns.lampFromData({ lightID = 9, spacer = true }) == nil,
+		"a spacer with no patternData was read as a lamp"
+	)
+	H.expect(
+		EmergencyPatterns.lampFromData({ lightName = "F1", patternData = {} }) == nil,
+		"an empty pattern was read as a lamp"
+	)
+	H.expect(EmergencyPatterns.lampFromData("not a table") == nil, "a non-table was read as a lamp")
+	H.expect(EmergencyPatterns.lampFromData(nil) == nil, "nil was read as a lamp")
+end)
+
+H.test("tempo falls back to the default and floors at one millisecond", function()
+	H.expect(
+		EmergencyPatterns.tempoSeconds(nil) == EmergencyPatterns.DefaultTempo / 1000,
+		"a missing tempo did not fall back to the default"
+	)
+	H.expect(EmergencyPatterns.tempoSeconds(900) == 0.9, "900ms did not convert to 0.9s")
+	H.expect(EmergencyPatterns.tempoSeconds(0) == 0.001, "a zero tempo produced a zero-length step")
+	H.expect(EmergencyPatterns.tempoSeconds(-50) == 0.001, "a negative tempo was not floored")
+end)
+
+H.test("colourAt steps a lamp at the stage's tempo and wraps short strips", function()
+	local lamp: EmergencyPatterns.LampPattern = { Name = "F1", Steps = { "Red", false } }
+	local stage: EmergencyPatterns.Stage =
+		{ Name = "Stage1", TempoSeconds = 1, Lamps = { lamp }, Length = 4 }
+	H.expect(EmergencyPatterns.colourAt(lamp, stage, 0) == "Red", "step 0 was not the first entry")
+	H.expect(EmergencyPatterns.colourAt(lamp, stage, 1) == nil, "step 1 was not dark")
+	-- The lamp only has two steps but the stage runs four long, so it repeats
+	-- rather than running out and going dark for the back half of the cycle.
+	H.expect(EmergencyPatterns.colourAt(lamp, stage, 2) == "Red", "the short strip did not wrap")
+	H.expect(
+		EmergencyPatterns.colourAt(lamp, stage, 3) == nil,
+		"the short strip's wrap was misaligned"
+	)
+	-- The stage itself wraps at its own Length, back to step 0.
+	H.expect(
+		EmergencyPatterns.colourAt(lamp, stage, 4) == "Red",
+		"the stage did not wrap at its length"
+	)
+
+	local halfTempo: EmergencyPatterns.Stage =
+		{ Name = "Stage1", TempoSeconds = 0.5, Lamps = { lamp }, Length = 4 }
+	H.expect(
+		EmergencyPatterns.colourAt(lamp, halfTempo, 0.5) == nil,
+		"a faster tempo did not advance the step"
+	)
+end)
+
+H.test("a kit is only adopted whole", function()
+	local lamp: EmergencyPatterns.LampPattern = { Name = "F1", Steps = { "Red" } }
+	local stage: EmergencyPatterns.Stage =
+		{ Name = "Stage1", TempoSeconds = 1, Lamps = { lamp }, Length = 1 }
+	local part = Instance.new("Part")
+	H.expect(not EmergencyPatterns.canAdopt({
+		Remote = workspace,
+		LightsParent = nil,
+		Stages = { Stage1 = stage },
+		Colours = EmergencyPatterns.DefaultColours,
+		Lamps = {},
+	}), "a kit with no lights parent was adopted")
+	H.expect(not EmergencyPatterns.canAdopt({
+		Remote = workspace,
+		LightsParent = workspace,
+		Stages = { Stage1 = stage },
+		Colours = EmergencyPatterns.DefaultColours,
+		Lamps = {},
+	}), "a kit whose lamp names matched nothing was adopted")
+	H.expect(
+		EmergencyPatterns.canAdopt({
+			Remote = workspace,
+			LightsParent = workspace,
+			Stages = { Stage1 = stage },
+			Colours = EmergencyPatterns.DefaultColours,
+			Lamps = { F1 = part },
+		}),
+		"a complete kit was refused"
+	)
+	part:Destroy()
 end)
 
 H.finish()

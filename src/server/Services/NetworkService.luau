@@ -176,6 +176,7 @@ function NetworkService:Start()
 			and (payload.RunLock == nil or type(payload.RunLock) == "boolean")
 			and (payload.LowPower == nil or type(payload.LowPower) == "boolean")
 			and (payload.Reset == nil or type(payload.Reset) == "boolean")
+			and (payload.Director == nil or type(payload.Director) == "string")
 	end, function(player, payload, requestId)
 		local ok, reason = self.context.Services:Get("EmergencyLightsService"):Set(player, payload)
 		if not ok then

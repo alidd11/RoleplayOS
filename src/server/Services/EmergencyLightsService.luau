@@ -5,6 +5,8 @@ local Workspace = game:GetService("Workspace")
 local RolePermissions =
 	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.RolePermissions)
 local VehicleLights = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.VehicleLights)
+local EmergencyPatterns =
+	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.EmergencyPatterns)
 
 -- Emergency lighting this framework owns.
 --
@@ -101,6 +103,7 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 	model:SetAttribute(settings.StateAttribute, false)
 	model:SetAttribute(settings.StageAttribute, 0)
 	model:SetAttribute(settings.SirenAttribute, "")
+	model:SetAttribute(settings.DirectorAttribute, "")
 	model:SetAttribute(settings.RunLockAttribute, false)
 	model:SetAttribute(settings.LowPowerAttribute, false)
 	for circuit in settings.Circuits do
@@ -185,6 +188,7 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 		end
 		model:SetAttribute(settings.RunLockAttribute, false)
 		model:SetAttribute(settings.LowPowerAttribute, false)
+		model:SetAttribute(settings.DirectorAttribute, "")
 	elseif type(request.Circuit) == "string" then
 		if settings.Circuits[request.Circuit] == nil or type(request.Enabled) ~= "boolean" then
 			return false, "INVALID_LIGHT_CIRCUIT"
@@ -224,6 +228,20 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 	end
 	if stage == 0 then
 		model:SetAttribute(settings.SirenAttribute, "")
+	end
+
+	-- The arrow-board pattern, independent of the main bar: a vehicle can be at
+	-- full response with the director running a lane closure at the same time.
+	-- An unrecognised name is silence rather than an error, the same rule the
+	-- siren tone follows -- EmergencyPatterns.DirectorStages is the fixed set of
+	-- names any kit can use, not a promise this particular vehicle has one, so
+	-- EmergencyLightPatternService simply has nothing to paint if it does not.
+	if type(request.Director) == "string" then
+		local director = if request.Director == ""
+				or table.find(EmergencyPatterns.DirectorStages, request.Director)
+			then request.Director
+			else ""
+		model:SetAttribute(settings.DirectorAttribute, director)
 	end
 
 	return true, nil
@@ -276,22 +294,27 @@ function EmergencyLightsService:GetState(player: Player): any
 			end
 		end
 	end
+	-- The director patterns this specific vehicle actually has -- an arrow
+	-- board is not something every EasyLS vehicle carries, and EmergencyPatterns
+	-- reads the kit itself rather than guessing from a fixed count. Empty for a
+	-- vehicle with no kit at all, which is most of the fleet.
+	local directorStages = {}
+	local kit = EmergencyPatterns.read(model)
+	if kit then
+		for _, name in EmergencyPatterns.DirectorStages do
+			if kit.Stages[name] then
+				table.insert(directorStages, name)
+			end
+		end
+	end
 	return {
 		Available = true,
 		AvailableCircuits = available,
-		-- Whether the vehicle carries its own lighting kit.
-		--
-		-- These vehicles run EasyLS, which owns their lamps and offers exactly two
-		-- operations: cycle the main pattern and cycle the director pattern. It
-		-- publishes no per-circuit control and no way to read its state back, so
-		-- the panel drives it as the two cycles it is rather than pretending it is
-		-- nine switches.
-		-- Imported EasyLS is intentionally not exposed as an active kit. The
-		-- hierarchy remains on the clone only so its patterns can be migrated.
-		Kit = nil,
 		Stage = model:GetAttribute(settings.StageAttribute) or 0,
 		Lights = model:GetAttribute(settings.StateAttribute) == true,
 		Siren = model:GetAttribute(settings.SirenAttribute) or "",
+		Director = model:GetAttribute(settings.DirectorAttribute) or "",
+		DirectorStages = directorStages,
 		-- What this vehicle can actually sound.
 		--
 		-- This was settings.Sirens, a table of ids nothing plays: the client
@@ -362,6 +385,7 @@ function EmergencyLightsService:Start()
 				continue
 			end
 			self:Adopt(child, departmentId)
+			self.context.Services:Get("EmergencyLightPatternService"):Adopt(child)
 			if CollectionService:HasTag(child, settings.Tag) then
 				adopted += 1
 			else
