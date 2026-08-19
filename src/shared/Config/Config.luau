@@ -211,6 +211,55 @@ local Config = {
 					},
 				},
 			},
+			-- The bundled toolkit's own combat/animation/UI scripts, certified as a
+			-- stopgap rather than stripped. Due for replacement with RoleplayOS's own
+			-- MeleeWeaponService-driven logic -- see replace-bought-systems-eventually
+			-- -- at which point this entry and the bundled scripts both go.
+			["ASP Baton"] = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied ASP baton toolkit with its own bundled scripts",
+				RealWorldReference = "UK police ASP friction-lock baton",
+				ReviewedBy = "RoleplayOS engineering security review",
+				AllowedUnsafeDescendants = {
+					["Local Gui"] = { ClassName = "LocalScript", Path = { "Local Gui" } },
+					SwordScript = { ClassName = "Script", Path = { "SwordScript" } },
+					Weld = { ClassName = "Script", Path = { "Weld" } },
+					Script = { ClassName = "Script", Path = { "Cylinder", "Script" } },
+					AnimationScript = {
+						ClassName = "LocalScript",
+						Path = { "AnimationScript" },
+					},
+				},
+			},
+			["Flash Light"] = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied police flashlight toolkit with its own bundled scripts",
+				RealWorldReference = "UK police issue torch",
+				ReviewedBy = "RoleplayOS engineering security review",
+				AllowedUnsafeDescendants = {
+					Turn = { ClassName = "LocalScript", Path = { "Turn" } },
+					["On/Off"] = { ClassName = "Script", Path = { "On/Off" } },
+				},
+			},
+			-- Named "Battering Ram", the Tool's own name -- one level inside the
+			-- "Big Red Key" model the asset ships as.
+			["Battering Ram"] = {
+				Certified = true,
+				ReviewVersion = 1,
+				Source = "User-supplied battering ram toolkit with its own bundled scripts",
+				RealWorldReference = 'UK police door-entry enforcer ("big red key")',
+				ReviewedBy = "RoleplayOS engineering security review",
+				AllowedUnsafeDescendants = {
+					Welding = { ClassName = "Script", Path = { "Welding" } },
+					EventScript = { ClassName = "Script", Path = { "EventScript" } },
+					LocalScript = { ClassName = "LocalScript", Path = { "LocalScript" } },
+					WeldArm = { ClassName = "Script", Path = { "WeldArm" } },
+					WeldArms = { ClassName = "Script", Path = { "WeldArms" } },
+					RemoteEvent = { ClassName = "RemoteEvent", Path = { "RemoteEvent" } },
+				},
+			},
 		},
 		WorldAssetTag = "RoleplayOSWorldAsset",
 		WorldAssetRootName = "RoleplayOSWorldAssets",
