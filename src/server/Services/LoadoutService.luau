@@ -41,6 +41,42 @@ local function canonicalizeTool(tool: Tool, toolId: string)
 	tool:SetAttribute("RoleplayOSToolId", toolId)
 end
 
+-- The bundled battering ram's Handle ships Anchored -- live-confirmed on the
+-- issued clone, not merely suspected. Equipping welds the character's hand to
+-- Handle through Roblox's own grip system; an anchored part cannot be moved
+-- by that weld, so the solver drags the character to Handle's fixed position
+-- instead, reported live as equipping the tool teleporting the character
+-- elsewhere on the map and holding it there until the tool comes back off.
+-- None of the tool's own scripts ever unanchor Handle itself -- the "Welding"
+-- script welds every other part in the model *to* Handle and unanchors those,
+-- but Handle is never a target of its own Weld, so nothing in the kit ever
+-- clears the flag that was authored on it.
+--
+-- The tool also carries two separate arm-rigging scripts, WeldArm and
+-- WeldArms, both firing on Tool.Equipped with the same intent -- weld Left
+-- and Right Arm to Torso -- but with each arm's offset swapped between the
+-- two, which would double-weld each arm to two contradictory targets at
+-- once. Confirmed harmless on this fleet's R15 rig, since both scripts only
+-- know the R6 part names ("Torso", "Left Arm", "Right Arm") and silently
+-- find nothing to weld -- but silencing the duplicate now costs nothing and
+-- removes a real conflict waiting for whatever R6 gets added next. WeldArm is
+-- kept: it clears the native Left/Right Shoulder joints before adding its
+-- replacement Welds, where WeldArms adds its Weld on top of the still-live
+-- native shoulder motors.
+local function patchBatteringRam(tool: Tool, toolId: string)
+	if toolId ~= "Battering Ram" then
+		return
+	end
+	local handle = tool:FindFirstChild("Handle")
+	if handle and handle:IsA("BasePart") then
+		handle.Anchored = false
+	end
+	local duplicate = tool:FindFirstChild("WeldArms")
+	if duplicate and duplicate:IsA("BaseScript") then
+		duplicate.Disabled = true
+	end
+end
+
 local function issue(tool: Tool, backpack: Instance, loadoutId: string, toolId: string)
 	canonicalizeTool(tool, toolId)
 	tool:SetAttribute("RoleplayOSDutyIssued", true)
@@ -230,6 +266,7 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 			local clone = template:Clone()
 			canonicalizeTool(clone, toolId)
 			prepareVisibleTool(clone, toolId, toolDefinition)
+			patchBatteringRam(clone, toolId)
 			clone.CanBeDropped = false
 			issue(clone, backpack, loadoutId, toolId)
 		else
