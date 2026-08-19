@@ -67,7 +67,6 @@ local COMPACT_PANEL = Vector2.new(468, 206)
 
 -- The moulding the keys are set into. Three greys, so the caps carry the colour.
 local CHASSIS = Color3.fromRGB(16, 19, 21)
-local BEZEL = Color3.fromRGB(48, 55, 60)
 local ENGRAVED = Color3.fromRGB(205, 211, 213)
 -- The coloured keys under the grid, as they were.
 local SIREN_CAP = Color3.fromRGB(204, 61, 51)
@@ -91,26 +90,31 @@ local LAMP_ON = Color3.fromRGB(255, 214, 64)
 local LAMP_BLUE = Color3.fromRGB(64, 148, 255)
 local LAMP_RED = Color3.fromRGB(240, 78, 68)
 local LAMP_GREEN = Color3.fromRGB(104, 216, 146)
+-- The panel's own border and the line between each key, both at once: every
+-- button already carries its own stroke, so painting them the same colour as
+-- the panel's outer edge reads as one continuous red outline running around
+-- the frame and down every seam between keys.
+local BORDER_RED = Color3.fromRGB(196, 42, 42)
 
 local ACTION_LIGHTS = "RoleplayOSEmergencyLights"
 local ACTION_SIREN = "RoleplayOSEmergencySiren"
 
 local CIRCUIT_CONTROLS = {
 	{ Id = "Master", Label = "360" },
-	{ Id = "FrontBlue", Label = "FRT BLUE" },
-	{ Id = "RearBlue", Label = "RR BLUE" },
-	{ Id = "FrontScene", Label = "FRT SCN" },
-	{ Id = "RearScene", Label = "RR SCN" },
-	{ Id = "RearReds", Label = "RR REDS" },
-	{ Id = "LowPower", Label = "LOW PWR" },
+	{ Id = "FrontBlue", Label = "FRONT BLUE" },
+	{ Id = "RearBlue", Label = "REAR BLUE" },
+	{ Id = "FrontScene", Label = "FRONT SCENE" },
+	{ Id = "RearScene", Label = "REAR SCENE" },
+	{ Id = "RearReds", Label = "REAR REDS" },
+	{ Id = "LowPower", Label = "LOW POWER" },
 	{ Id = "Grille", Label = "GRILLE" },
 	{ Id = "RunLock", Label = "RUN LOCK" },
-	{ Id = "LeftAlley", Label = "L ALLEY" },
+	{ Id = "LeftAlley", Label = "LEFT ALLEY" },
 	{ Id = "Spots", Label = "SPOTS" },
-	{ Id = "RightAlley", Label = "R ALLEY" },
+	{ Id = "RightAlley", Label = "RIGHT ALLEY" },
 	-- The kit's second pattern. Shown only on a vehicle that has one, like every
 	-- other control here.
-	{ Id = "Director", Label = "DIR" },
+	{ Id = "Director", Label = "DIRECTOR" },
 }
 
 -- Controls that are always worth showing, whatever lamps the vehicle turns out
@@ -516,9 +520,12 @@ function EmergencyLightsController:_button(
 	item.Text = ""
 	item.Parent = parent
 	corner(item, 9)
+	-- A thin line rather than a filled background: this is what actually
+	-- divides one key from the next, on every edge, without ever painting a
+	-- solid red block behind the grid.
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(63, 67, 66)
-	stroke.Thickness = 2
+	stroke.Color = BORDER_RED
+	stroke.Thickness = 1.5
 	stroke.Parent = item
 
 	local lamp = Instance.new("Frame")
@@ -625,10 +632,18 @@ function EmergencyLightsController:_mount()
 	panel.Visible = false
 	panel.SelectionGroup = true
 	panel.Parent = gui
-	corner(panel, 10)
+	-- Square rather than rounded: a rounded corner under a straight stroke is
+	-- what made the edge look like it was floating clear of the panel instead
+	-- of tracing it.
+	--
+	-- Black, not red: red is reserved for what separates one key from the
+	-- next, on the keys themselves. The panel's own edge is a different line
+	-- doing a different job and painting it the same colour as the dividers
+	-- made the whole thing read as one red shape rather than a bordered panel
+	-- of red-edged keys.
 	local panelStroke = Instance.new("UIStroke")
-	panelStroke.Color = BEZEL
-	panelStroke.Thickness = 1.5
+	panelStroke.Color = Color3.new(0, 0, 0)
+	panelStroke.Thickness = 2
 	panelStroke.Parent = panel
 	self.panel = panel
 	local panelScale = Instance.new("UIScale")
@@ -797,9 +812,15 @@ function EmergencyLightsController:_layout()
 	local across = if compact then 5 else 2
 	local keyWidth = math.floor((width - (across - 1) * gap) / across)
 	local top = 26 + gridHeight + 8
-	self.modeRow.Position = UDim2.fromOffset(inset, top)
-	self.modeRow.Size = UDim2.fromOffset(width, 1)
 	local keyHeight = if compact then 44 else 54
+	local lines = math.max(math.ceil(#keys / across), 1)
+	self.modeRow.Position = UDim2.fromOffset(inset, top)
+	-- Sized to what it actually holds, not a 1px sliver. The row used to be
+	-- transparent, so its own size never mattered -- only the absolutely
+	-- positioned keys inside it were visible. Now that it carries the red
+	-- divider colour, a frame shorter than its own children shows the colour
+	-- for one row and nothing for the rest of them.
+	self.modeRow.Size = UDim2.fromOffset(width, lines * keyHeight + (lines - 1) * gap)
 	for index, key in keys do
 		local column = (index - 1) % across
 		local line = math.floor((index - 1) / across)
@@ -807,7 +828,6 @@ function EmergencyLightsController:_layout()
 		key.Position = UDim2.fromOffset(column * (keyWidth + gap), line * (keyHeight + gap))
 		key.Size = UDim2.fromOffset(if alone then width else keyWidth, keyHeight)
 	end
-	local lines = math.max(math.ceil(#keys / across), 1)
 	self.panel.Size = UDim2.fromOffset(size.X, top + lines * keyHeight + (lines - 1) * gap + inset)
 end
 
@@ -1185,9 +1205,24 @@ function EmergencyLightsController:_bindControls(available: boolean)
 		ContextActionService:UnbindAction(ACTION_SIREN)
 		return
 	end
-	ContextActionService:BindAction(ACTION_LIGHTS, function(_, state)
+	-- Horn lives on this same bind rather than a second one on the same key.
+	-- ContextActionService does not guarantee two actions bound to the same
+	-- KeyCode both receive it -- bound separately, this action's Sink appeared
+	-- to swallow the other one, so F toggled the lights and the horn stayed
+	-- silent. One handler, gated on which key triggered it, is the only way to
+	-- get both without depending on bind order.
+	ContextActionService:BindAction(ACTION_LIGHTS, function(_, state, inputObject)
 		if state == Enum.UserInputState.Begin then
 			self:Toggle()
+			if inputObject.KeyCode == Enum.KeyCode.F then
+				self:_setHorn(true)
+				self:_lamp("Airhorn", true, LAMP_RED)
+			end
+		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
+			if inputObject.KeyCode == Enum.KeyCode.F then
+				self:_setHorn(false)
+				self:_lamp("Airhorn", false)
+			end
 		end
 		return Enum.ContextActionResult.Sink
 	end, false, Enum.KeyCode.F, Enum.KeyCode.DPadUp)

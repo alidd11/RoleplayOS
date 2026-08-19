@@ -15,9 +15,6 @@ local TerminalTheme = require(script.Parent.Parent.UI.OperationalTerminalTheme)
 
 local MDTController = { connections = {} }
 local MDT_ACTION = "RoleplayOSToggleMDT"
--- Tall enough to hit with a thumb. FitScale never scales a panel up, so this
--- is a ceiling as well as the authored size.
-local UNIT_STATUS_ROW_HEIGHT = 44
 
 -- The map shares GetDispatchSnapshot with the dispatch board on this same
 -- client, so it takes half of that endpoint's one-per-second refill.
@@ -207,7 +204,12 @@ function MDTController:_mount()
 	chassis.Name = "Terminal"
 	chassis.AnchorPoint = Vector2.new(0.5, 0.5)
 	chassis.Position = UDim2.fromScale(0.5, 0.5)
-	chassis.Size = UDim2.fromScale(0.86, 0.82)
+	-- A fraction of the viewport, not a fixed size, so it still fits a small
+	-- screen -- but 0.86/0.82 read as "the whole screen" on anything roomier
+	-- than that, which is not what a tablet sitting in an officer's hand should
+	-- look like. The 720x470 floor is unchanged: that is the smallest this can
+	-- be and still hold the home grid without its tiles overlapping.
+	chassis.Size = UDim2.fromScale(0.58, 0.6)
 	chassis.BackgroundColor3 = Color3.fromRGB(8, 11, 17)
 	chassis.BorderSizePixel = 0
 	chassis.SelectionGroup = true
@@ -216,7 +218,7 @@ function MDTController:_mount()
 	corner(chassis, 22)
 	local constraint = Instance.new("UISizeConstraint")
 	constraint.MinSize = Vector2.new(720, 470)
-	constraint.MaxSize = Vector2.new(1120, 720)
+	constraint.MaxSize = Vector2.new(860, 600)
 	constraint.Parent = chassis
 	self.constraint = constraint
 	local scale = Instance.new("UIScale")
@@ -317,32 +319,6 @@ function MDTController:_mount()
 	homeTab.Size = UDim2.fromOffset(104, 44)
 	self.homeTab = homeTab
 
-	-- The officer's own status, on every page.
-	--
-	-- Dispatch could attach a unit to a call and nothing could ever say the unit
-	-- had arrived, so every car on the board read as still driving to it however
-	-- long it had been at the scene. The endpoint for this has been registered
-	-- and rate limited on the server all along with nothing anywhere calling it.
-	--
-	-- Beside HOME rather than on a page of its own, because an officer pulling up
-	-- outside should be one press away from saying so, not three.
-	local statusStrip = Instance.new("Frame")
-	statusStrip.Name = "UnitStatus"
-	statusStrip.BackgroundTransparency = 1
-	statusStrip.Position = UDim2.fromOffset(134, 70)
-	statusStrip.Size = UDim2.new(1, -156, 0, UNIT_STATUS_ROW_HEIGHT)
-	statusStrip.Visible = false
-	statusStrip.Parent = shell
-	self.statusStrip = statusStrip
-	local statusRow = Instance.new("UIListLayout")
-	statusRow.FillDirection = Enum.FillDirection.Horizontal
-	statusRow.Padding = UDim.new(0, 8)
-	statusRow.SortOrder = Enum.SortOrder.LayoutOrder
-	statusRow.VerticalAlignment = Enum.VerticalAlignment.Center
-	statusRow.Parent = statusStrip
-
-	self.unitStatusButtons = {}
-
 	-- The home screen the terminal opens on, and the only way into a page. Each
 	-- card says what its page is for, so an officer who has just picked the
 	-- terminal up is not required to already know where to look.
@@ -354,9 +330,19 @@ function MDTController:_mount()
 	home.Parent = shell
 	self.home = home
 	local homeGrid = Instance.new("UIGridLayout")
-	homeGrid.CellSize = UDim2.fromOffset(232, 96)
+	-- Narrower than the old 232: at three per row, three cells plus their two
+	-- gaps has to clear comfortably inside the home area even at the chassis's
+	-- 720-wide floor, not sit within a pixel of it. 232 left three cells and
+	-- two 14px gaps equal to the available width at some sizes, which rounded
+	-- down to two columns instead of three depending on the viewport.
+	homeGrid.CellSize = UDim2.fromOffset(200, 90)
 	homeGrid.CellPadding = UDim2.fromOffset(14, 14)
 	homeGrid.SortOrder = Enum.SortOrder.LayoutOrder
+	-- Capped at three rather than left to fill the shell's width. Unlimited,
+	-- the row simply grew with the terminal -- four cards stretched into one
+	-- wide strip on anything wider than a phone -- and every card added after
+	-- this one would have kept widening it rather than starting a new row.
+	homeGrid.FillDirectionMaxCells = 3
 	homeGrid.Parent = home
 
 	local input = Instance.new("TextBox")
@@ -631,16 +617,6 @@ function MDTController:_renderTabs()
 	-- Nothing to return to from the home screen itself, so the control only
 	-- appears once the officer has opened a page.
 	self.homeTab.Visible = self.recordType ~= "Home"
-	-- The status strip shares that row, so it takes the space back on the home
-	-- screen rather than sitting behind a gap where the control used to be.
-	if self.statusStrip then
-		local afterHome = self.homeTab.Visible
-		self.statusStrip.Position = UDim2.fromOffset(if afterHome then 134 else 22, 70)
-		-- Same height as where the strip is built. Written in two places, so it
-		-- is written once and read twice rather than being kept in step by hand.
-		self.statusStrip.Size =
-			UDim2.new(1, if afterHome then -156 else -44, 0, UNIT_STATUS_ROW_HEIGHT)
-	end
 	-- Home and the map each replace the records surface rather than sharing it,
 	-- so the search controls cannot be used against a page that has no search.
 	local mapping = self.recordType == "Map"
@@ -930,79 +906,6 @@ function MDTController:_performSearch()
 	end
 end
 
--- Paints the strip from a status the server has confirmed.
-function MDTController:_renderUnitStatusChoices(statuses: { string })
-	for _, control in self.unitStatusButtons do
-		control:Destroy()
-	end
-	table.clear(self.unitStatusButtons)
-	local labelsByDepartment = {
-		Police = {
-			Available = "AVAILABLE",
-			Assigned = "EN ROUTE",
-			OnScene = "ON SCENE",
-			Unavailable = "UNAVAILABLE",
-		},
-		Ambulance = {
-			Available = "AVAILABLE",
-			Assigned = "MOBILISED",
-			OnScene = "ON SCENE",
-			Unavailable = "AT HANDOVER",
-		},
-		Fire = {
-			Available = "AVAILABLE",
-			Assigned = "MOBILISED",
-			OnScene = "AT INCIDENT",
-			Unavailable = "UNAVAILABLE",
-		},
-		Control = {
-			Available = "AVAILABLE",
-			Assigned = "ALLOCATING",
-			OnScene = "MONITORING",
-			Unavailable = "UNAVAILABLE",
-		},
-	}
-	local labels = labelsByDepartment[self.departmentId or ""] or labelsByDepartment.Control
-	for index, status in statuses do
-		local label = labels[status] or string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
-		local control = button(self.statusStrip, label)
-		control.LayoutOrder = index
-		control.Size = UDim2.fromOffset(112, UNIT_STATUS_ROW_HEIGHT)
-		control.Activated:Connect(function()
-			self:SetUnitStatus(status)
-		end)
-		self.unitStatusButtons[status] = control
-	end
-	self:_renderUnitStatus(self.unitStatus)
-end
-
-function MDTController:_renderUnitStatus(status: string?)
-	self.unitStatus = status
-	self.statusStrip.Visible = status ~= nil
-	for id, control in self.unitStatusButtons do
-		local selected = id == status
-		control.BackgroundColor3 = if selected then C.Accent else C.Raised
-		control.TextColor3 = if selected then C.Text else C.Muted
-	end
-end
-
-function MDTController:SetUnitStatus(status: string)
-	if status == self.unitStatus then
-		return
-	end
-	local response = self.context.Controllers.NetworkController:Request(
-		"DispatchSetUnitStatus",
-		{ Status = status }
-	)
-	if response.Success then
-		-- Painted from the server's answer rather than from the press, so a status
-		-- the server declined is never left showing as though it took.
-		self:_renderUnitStatus(response.Data and response.Data.Status or status)
-	else
-		self.context.Controllers.NotificationController:Show(response.Message, "Unit status")
-	end
-end
-
 function MDTController:RefreshAccess()
 	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
 	self.allowed = response.Success and response.Data.Allowed == true
@@ -1018,16 +921,12 @@ function MDTController:RefreshAccess()
 			else C.Classification
 	end
 	self:_buildHome()
-	self:_renderUnitStatusChoices(if self.allowed then response.Data.UnitStatuses or {} else {})
 	self.canWriteWarrants = self.allowed
 		and table.find(response.Data.Permissions or {}, "WarrantWrite") ~= nil
 	if self.allowed then
 		self.secureLabel.Text = "●  "
 			.. tostring(response.Data.DepartmentId or "AUTHORISED"):upper()
 	end
-	-- A unit only exists while the officer is on duty, so going off duty takes
-	-- the strip away rather than leaving a stale status on screen.
-	self:_renderUnitStatus(if self.allowed then response.Data.UnitStatus else nil)
 	self.gui.Enabled = self.allowed
 	-- The MDT is a persistent UX surface, not an equipment item. Emergency
 	-- departments do not need an authored Tool in their loadout just to access

@@ -19,6 +19,40 @@ local C = {
 	Border = TerminalTheme.Border,
 	Immediate = TerminalTheme.Immediate,
 }
+-- Tall enough to hit with a thumb without costing the message log too much of
+-- an already compact panel. The MDT's equivalent row was 44; this is smaller
+-- because the radio has to fit the row inside 268-300px of width rather than
+-- an 860px terminal.
+local UNIT_STATUS_ROW_HEIGHT = 30
+-- Moved here from the MDT: the status is a dispatch concept that belongs
+-- wherever the officer can see it without opening a device, and the radio is
+-- on screen for the whole shift where the MDT terminal is opened deliberately.
+local UNIT_STATUS_LABELS = {
+	Police = {
+		Available = "AVAILABLE",
+		Assigned = "EN ROUTE",
+		OnScene = "ON SCENE",
+		Unavailable = "UNAVAILABLE",
+	},
+	Ambulance = {
+		Available = "AVAILABLE",
+		Assigned = "MOBILISED",
+		OnScene = "ON SCENE",
+		Unavailable = "AT HANDOVER",
+	},
+	Fire = {
+		Available = "AVAILABLE",
+		Assigned = "MOBILISED",
+		OnScene = "AT INCIDENT",
+		Unavailable = "UNAVAILABLE",
+	},
+	Control = {
+		Available = "AVAILABLE",
+		Assigned = "ALLOCATING",
+		OnScene = "MONITORING",
+		Unavailable = "UNAVAILABLE",
+	},
+}
 
 local function corner(parent: Instance, radius: number)
 	local item = Instance.new("UICorner")
@@ -98,6 +132,11 @@ function RadioController:Init(context: any)
 	self.deviceOpen = false
 	self.callsignEditable = false
 	self.muted = false
+	-- The officer's own dispatch status. Only populated while on duty in a
+	-- department that carries one -- see _refreshUnitStatus.
+	self.departmentId = nil
+	self.unitStatuses = {}
+	self.unitStatus = nil
 end
 
 function RadioController:_showCallsignModal()
@@ -373,6 +412,47 @@ function RadioController:_render()
 		end
 		self.context.Controllers.NotificationController:Show(response.Message, "RADIO PANIC")
 	end)
+	-- The officer's own dispatch status, moved here from the MDT. It only
+	-- exists as a row when there is something to put in it: a civilian or an
+	-- off-duty snapshot has no UnitStatuses, and the row would just be an empty
+	-- gap above the log.
+	local hasUnitStatus = #self.unitStatuses > 0
+	local logTop = 38
+	if hasUnitStatus then
+		local statusRow = Instance.new("Frame")
+		statusRow.Name = "UnitStatus"
+		statusRow.BackgroundTransparency = 1
+		statusRow.Position = UDim2.fromOffset(0, 38)
+		statusRow.Size = UDim2.new(1, 0, 0, UNIT_STATUS_ROW_HEIGHT)
+		statusRow.Parent = self.content
+		local statusListLayout = Instance.new("UIListLayout")
+		statusListLayout.FillDirection = Enum.FillDirection.Horizontal
+		statusListLayout.Padding = UDim.new(0, 6)
+		statusListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		statusListLayout.Parent = statusRow
+		local labels = UNIT_STATUS_LABELS[self.departmentId or ""] or UNIT_STATUS_LABELS.Control
+		local count = #self.unitStatuses
+		local totalPadding = 6 * math.max(0, count - 1)
+		-- Split evenly across whatever width the panel actually has rather than a
+		-- fixed pixel width, because this row has to fit both the 268 compact
+		-- panel and the 300 desktop one with two to four statuses.
+		local buttonWidth =
+			math.floor((self.content.AbsoluteSize.X - totalPadding) / math.max(count, 1))
+		for index, status in self.unitStatuses do
+			local label = labels[status] or string.gsub(status, "([a-z])([A-Z])", "%1 %2"):upper()
+			local control = button(statusRow, label)
+			control.LayoutOrder = index
+			control.Size = UDim2.fromOffset(buttonWidth, UNIT_STATUS_ROW_HEIGHT)
+			control.TextSize = 10
+			local selected = status == self.unitStatus
+			control.BackgroundColor3 = if selected then C.Green else C.Card
+			control.TextColor3 = if selected then C.Body else C.Text
+			control.Activated:Connect(function()
+				self:SetUnitStatus(status)
+			end)
+		end
+		logTop = 38 + UNIT_STATUS_ROW_HEIGHT + 6
+	end
 	local log = Instance.new("ScrollingFrame")
 	log.Name = "MessageLog"
 	log.BackgroundColor3 = C.Panel
@@ -381,8 +461,8 @@ function RadioController:_render()
 	log.CanvasSize = UDim2.new()
 	log.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	log.ScrollBarThickness = 6
-	log.Position = UDim2.fromOffset(0, 38)
-	log.Size = UDim2.new(1, 0, 1, -82)
+	log.Position = UDim2.fromOffset(0, logTop)
+	log.Size = UDim2.new(1, 0, 1, -(logTop + 44))
 	log.Parent = self.content
 	corner(log, 10)
 	local logLayout = Instance.new("UIListLayout")
@@ -473,6 +553,42 @@ function RadioController:refresh()
 		end
 	end
 	self:_render()
+end
+
+-- The same endpoint the MDT used to drive its own status strip. Reused rather
+-- than duplicated server-side: "is this player a recognised dispatch unit" is
+-- one question, and MDTService already answers it with everything this needs
+-- -- department, the allowed statuses for that department, and the current one.
+function RadioController:_refreshUnitStatus()
+	local response = self.context.Controllers.NetworkController:Request("GetMDTAccess", {})
+	if response.Success and response.Data.Allowed then
+		self.departmentId = response.Data.DepartmentId
+		self.unitStatuses = response.Data.UnitStatuses or {}
+		self.unitStatus = response.Data.UnitStatus
+	else
+		self.departmentId = nil
+		self.unitStatuses = {}
+		self.unitStatus = nil
+	end
+	self:_render()
+end
+
+function RadioController:SetUnitStatus(status: string)
+	if status == self.unitStatus then
+		return
+	end
+	local response = self.context.Controllers.NetworkController:Request(
+		"DispatchSetUnitStatus",
+		{ Status = status }
+	)
+	if response.Success then
+		-- Painted from the server's answer rather than from the press, so a status
+		-- the server declined is never left showing as though it took.
+		self.unitStatus = response.Data and response.Data.Status or status
+		self:_render()
+	else
+		self.context.Controllers.NotificationController:Show(response.Message, "Unit status")
+	end
 end
 
 function RadioController:Start()
@@ -624,8 +740,16 @@ function RadioController:Start()
 				task.delay(0.35, function()
 					if self.open then
 						self:refresh()
+						self:_refreshUnitStatus()
 					end
 				end)
+			else
+				-- A unit only exists while the officer is on duty, so going off
+				-- duty takes the row away rather than leaving a stale status
+				-- showing for a channel that no longer means anything.
+				self.departmentId = nil
+				self.unitStatuses = {}
+				self.unitStatus = nil
 			end
 		end)
 	)
@@ -650,6 +774,7 @@ function RadioController:Start()
 	if initial.Success then
 		self.snapshot = initial.Data
 		self:_setOpen(true)
+		self:_refreshUnitStatus()
 	end
 	local event = self.context.Controllers.NetworkController:ResolveEvent("RadioChanged")
 	if event then
