@@ -297,6 +297,14 @@ function GangService:Leave(player: Player): (boolean, string?)
 			end
 			return index
 		end)
+		-- A disbanded gang that held a territory would otherwise leave it
+		-- pointing at an id nothing can ever match again -- not a security
+		-- hole, since no profile keeps that id once the disband above runs,
+		-- but a spawner and a future contest both left addressing a dead gang
+		-- rather than the unowned ground this should actually be.
+		if type(gang.TerritoryId) == "string" and gang.TerritoryId ~= "" then
+			self.context.Services:Get("GangTerritoryService"):SetOwner(gang.TerritoryId, nil)
+		end
 		session.Profile.GangId = nil
 		dataService:MarkDirty(player)
 		self.context.Services:Get("AuditService"):Record({

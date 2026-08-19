@@ -635,6 +635,20 @@ function VehicleSpawnerService:_authorise(player: Player, spawnerId: string): (I
 		if type(divisionId) == "string" and divisionId ~= "" and duty.DivisionId ~= divisionId then
 			return nil, "WRONG_DIVISION"
 		end
+		return spawner, nil
+	end
+	-- A gang's own facility at its territory: the same shape, a different
+	-- authority. The check is against who currently holds the territory, not
+	-- against a name on the spawner itself, so a facility follows a contested
+	-- zone through a flip without anything here needing to change.
+	local territoryId = spawner:GetAttribute("TerritoryId")
+	if type(territoryId) == "string" and territoryId ~= "" then
+		local ownerGangId = self.context.Services:Get("GangTerritoryService"):OwnerOf(territoryId)
+		local session = self.context.Services:Get("DataService"):GetSession(player)
+		local gangId = session and session.Profile.GangId
+		if not ownerGangId or type(gangId) ~= "string" or gangId ~= ownerGangId then
+			return nil, "GANG_TERRITORY_NOT_HELD"
+		end
 	end
 	return spawner, nil
 end
@@ -675,6 +689,12 @@ function VehicleSpawnerService:_definitionAllowed(
 			or divisionId == ""
 			or definition.DivisionId == nil
 			or definition.DivisionId == divisionId
+	end
+	-- Named explicitly rather than left to fall into the generic non-Civilian
+	-- branch below: that branch authorises any Fleet vehicle regardless of
+	-- category, which is looser than a gang facility should be.
+	if definition.Category == "Gang" then
+		return definition.Fleet == true
 	end
 	if definition.Category ~= "Civilian" then
 		return definition.Fleet == true
@@ -752,7 +772,10 @@ function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, s
 	end
 	local vehicles = {}
 	local departmentId = spawner:GetAttribute("DepartmentId")
-	if type(departmentId) == "string" and departmentId ~= "" then
+	local territoryId = spawner:GetAttribute("TerritoryId")
+	local isIssuedFacility = (type(departmentId) == "string" and departmentId ~= "")
+		or (type(territoryId) == "string" and territoryId ~= "")
+	if isIssuedFacility then
 		for id, definition in self:_vehicleDefinitions() do
 			local template = self:_template(definition)
 			if self:_definitionAllowed(player, spawner, definition) and template then
@@ -1031,11 +1054,15 @@ function VehicleSpawnerService:Spawn(
 	local registration: string? = nil
 	self.spawning[player.UserId] = true
 	if definition.Category == "Service" or definition.Fleet == true then
-		local issuedRegistration, registrationReason = ownership:GetOrCreateTeamRegistration(
-			player,
-			tostring(spawner:GetAttribute("DepartmentId") or "Service"),
-			definitionId
-		)
+		-- A gang facility has no DepartmentId, so its own fleet plates would
+		-- otherwise file under the literal fallback "Service" alongside every
+		-- other department-less Fleet vehicle. TerritoryId is what actually
+		-- names this facility when DepartmentId does not.
+		local teamName = spawner:GetAttribute("DepartmentId")
+			or spawner:GetAttribute("TerritoryId")
+			or "Service"
+		local issuedRegistration, registrationReason =
+			ownership:GetOrCreateTeamRegistration(player, tostring(teamName), definitionId)
 		if not issuedRegistration then
 			self.spawning[player.UserId] = nil
 			vehicle:Destroy()
