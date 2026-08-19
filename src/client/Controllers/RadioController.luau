@@ -131,7 +131,6 @@ function RadioController:Init(context: any)
 	-- while one is open, it is hidden, and comes back when the device closes.
 	self.deviceOpen = false
 	self.callsignEditable = false
-	self.muted = false
 	-- The officer's own dispatch status. Only populated while on duty in a
 	-- department that carries one -- see _refreshUnitStatus.
 	self.departmentId = nil
@@ -349,19 +348,9 @@ function RadioController:_render()
 			self:_render()
 		end
 	end
-	local previous = button(channelBar, "‹")
-	-- The row is laid out from both edges with the channel name taking what is
-	-- left, rather than from a run of fixed offsets adding up to 268 pixels.
-	-- The compact panel gives this row 240, so the last control in that run --
-	-- PANIC -- was hanging 28 pixels outside it and being clipped. Of all the
-	-- buttons to lose off the edge of a phone, the emergency one is the worst.
-	--
-	-- Full height rather than 30 in a 34 row, and the steppers widened from 22:
-	-- these are pressed with a thumb, and 22 is half of what that needs.
-	previous.Size = UDim2.new(0, 34, 1, 0)
-	previous.Activated:Connect(function()
-		chooseChannel(-1)
-	end)
+	-- The channel itself is the only selector. Tapping it advances to the next
+	-- channel, removing two tiny arrow buttons from a row that is already only
+	-- 240px wide on a phone. The panic action is isolated at the right edge.
 	local channelName = tostring(snapshot.CurrentChannelId)
 	for _, channel in snapshot.Channels do
 		if channel.Id == snapshot.CurrentChannelId then
@@ -370,8 +359,8 @@ function RadioController:_render()
 		end
 	end
 	local channelTitle = button(channelBar, channelName)
-	channelTitle.Position = UDim2.fromOffset(38, 0)
-	channelTitle.Size = UDim2.new(1, -188, 1, 0)
+	channelTitle.Position = UDim2.fromOffset(0, 0)
+	channelTitle.Size = UDim2.new(1, -50, 1, 0)
 	-- Neutral, so green means "transmitting" and nothing else.
 	--
 	-- The channel pill, the send button, the microphone and the panic button
@@ -383,28 +372,15 @@ function RadioController:_render()
 	channelTitle.Activated:Connect(function()
 		chooseChannel(1)
 	end)
-	local nextChannel = button(channelBar, "›")
-	nextChannel.AnchorPoint = Vector2.new(1, 0)
-	nextChannel.Position = UDim2.new(1, -112, 0, 0)
-	nextChannel.Size = UDim2.new(0, 34, 1, 0)
-	nextChannel.Activated:Connect(function()
-		chooseChannel(1)
-	end)
-	local mute = button(channelBar, "MIC")
-	mute.AnchorPoint = Vector2.new(1, 0)
-	mute.Position = UDim2.new(1, -62, 0, 0)
-	mute.Size = UDim2.new(0, 46, 1, 0)
-	mute.Activated:Connect(function()
-		self.muted = not self.muted
-		mute.Text = if self.muted then "MUTED" else "MIC"
-		mute.BackgroundColor3 = if self.muted then C.Card else C.Accent
-	end)
-	local panic = button(channelBar, "PANIC")
+	local panic = button(channelBar, "!")
 	panic.Name = "Panic"
 	panic.AnchorPoint = Vector2.new(1, 0)
 	panic.Position = UDim2.fromScale(1, 0)
-	panic.Size = UDim2.new(0, 58, 1, 0)
+	panic.Size = UDim2.new(0, 44, 1, 0)
 	panic.BackgroundColor3 = C.Immediate
+	panic.TextColor3 = Color3.new(1, 1, 1)
+	panic.TextSize = 20
+	panic:SetAttribute("AccessibleLabel", "Send emergency panic alert")
 	panic.Activated:Connect(function()
 		local response = self.context.Controllers.NetworkController:Request("RadioPanic", {})
 		if response.Success and self.panicSound then
