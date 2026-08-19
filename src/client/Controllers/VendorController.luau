@@ -103,7 +103,8 @@ function VendorController:_mount()
 	-- An empty stall (every item hidden as EmergencyRestricted, or a definition
 	-- with no items) used to render as a bare panel with nothing in it and no
 	-- explanation, which reads as broken rather than as "nothing here for you".
-	local empty = label(list, "Nothing on offer for you right now.", DesignTokens.Text.body, C.muted)
+	local empty =
+		label(list, "Nothing on offer for you right now.", DesignTokens.Text.body, C.muted)
 	empty.LayoutOrder = -1
 	empty.Size = UDim2.new(1, 0, 0, 40)
 	empty.TextXAlignment = Enum.TextXAlignment.Center
@@ -117,7 +118,8 @@ function VendorController:_mount()
 	status.TextWrapped = true
 
 	self.gui, self.panel, self.scale = gui, panel, scale
-	self.title, self.subtitle, self.list, self.status, self.empty = title, subtitle, list, status, empty
+	self.title, self.subtitle, self.list, self.status, self.empty =
+		title, subtitle, list, status, empty
 
 	table.insert(
 		self.connections,
