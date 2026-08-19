@@ -497,6 +497,21 @@ local Config = {
 		-- where it moves to the left edge.
 		VehicleAnchorY = 0.52,
 	},
+	-- The radio panel's own size, shared so nothing has to guess where it ends.
+	--
+	-- The MDT launcher used to sit at a fixed 58 pixels down the left rail, which
+	-- is inside the radio, over its content -- and the MDT's higher DisplayOrder
+	-- meant the button won. An officer on foot saw it across the radio constantly.
+	-- Both now measure from the same numbers.
+	RadioPanel = {
+		Footprint = Vector2.new(300, 320),
+		CompactFootprint = Vector2.new(268, 264),
+		CollapsedHeight = 46,
+		-- Margin from the top-left corner, and the gap anything below it should
+		-- leave.
+		Margin = 12,
+		Clearance = 10,
+	},
 	Locations = {
 		-- Off. The banner is meant to sit under Roblox's own top bar, and it was
 		-- landing in the middle of the screen instead -- across the player, the

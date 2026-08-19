@@ -146,6 +146,18 @@ local function button(parent: Instance, value: string): TextButton
 	return item
 end
 
+-- Where the radio panel ends, so the launcher can sit clear of it.
+--
+-- Measured from the radio's own configured footprint rather than a number copied
+-- across, so the two cannot drift apart. Uses the expanded height because the
+-- radio can be expanded at any moment and a launcher that only clears the
+-- collapsed panel would be covered the instant it was.
+local function radioBottom(layout: any): number
+	local panel = Config.RadioPanel
+	local footprint = if layout.Compact then panel.CompactFootprint else panel.Footprint
+	return panel.Margin + footprint.Y + panel.Clearance
+end
+
 function MDTController:Init(context: any)
 	self.context = context
 	self.recordType = "Home"
@@ -1197,7 +1209,21 @@ function MDTController:Start()
 			-- top-left rail as the radio instead of placing it at a fixed fraction
 			-- of the viewport. That fixed 62% position was effectively invisible on
 			-- tall displays and looked like the MDT had not been issued.
-			else UDim2.fromOffset(18, layout.NativeTop + 58)
+			-- Below the radio, not on top of it.
+			--
+			-- This sat at a fixed 58 down the left rail, which is inside the radio
+			-- panel and over its content -- and the MDT's DisplayOrder is the higher
+			-- of the two, so the button won and an officer on foot saw it across the
+			-- radio the whole time. It now clears the radio's own footprint, read
+			-- from the same config the radio lays itself out from.
+			--
+			-- NativeTop is gone as well. This ScreenGui is mounted with
+			-- CoreUISafeInsets, so its origin is already below the top bar, and
+			-- adding it again applied the bar twice and pushed the launcher about
+			-- fifty pixels lower than intended. RadioController and
+			-- CustodyController both carry a note about having fixed exactly this;
+			-- the MDT was the one still doing it.
+			else UDim2.fromOffset(18, radioBottom(layout))
 		-- The shell never shrinks below its minimum size, so it is scaled against
 		-- the usable area on every device class. Measuring the raw viewport
 		-- instead let the terminal spill under the top bar and device cutouts.

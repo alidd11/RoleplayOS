@@ -1,3 +1,5 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Config = require(ReplicatedStorage.RoleplayOS.Config.Config)
 --!strict
 
 local Players = game:GetService("Players")
@@ -573,11 +575,14 @@ function RadioController:Start()
 		end
 		-- Smaller where there is less room, rather than the same panel everywhere
 		-- shrunk until its text is unreadable.
-		local footprint = if layout.Compact then Vector2.new(268, 264) else Vector2.new(300, 320)
+		-- Read from config rather than written here, because the MDT launcher has
+		-- to know where this panel ends in order to sit below it.
+		local panel = Config.RadioPanel
+		local footprint = if layout.Compact then panel.CompactFootprint else panel.Footprint
 		-- One header line on a phone instead of two. Desktop keeps both and its
 		-- 76-pixel band, where there is room for the callsign to have its own row.
 		local headerBand = if layout.Compact then 44 else 76
-		local collapsedHeight = 46
+		local collapsedHeight = panel.CollapsedHeight
 		local expanded = not self.collapsed
 		content.Visible = self.open and expanded
 		content.Position = UDim2.fromOffset(14, headerBand)
@@ -590,7 +595,7 @@ function RadioController:Start()
 		-- SafeLeft and NativeTop on top of that applied the cutout and the top bar
 		-- a second time and pushed the panel about fifty pixels further down than
 		-- intended, which is what drove its transmit box off the bottom edge.
-		body.Position = UDim2.fromOffset(12, 12)
+		body.Position = UDim2.fromOffset(panel.Margin, panel.Margin)
 		body.Size = UDim2.fromOffset(footprint.X, if expanded then footprint.Y else collapsedHeight)
 		if layout.Compact then
 			-- Fitted against the height actually left below the panel's own top
