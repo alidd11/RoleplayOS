@@ -1,7 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
-local TacticalMap = require(script.Parent.Parent.UI.TacticalMap)
+local TacticalMap = require(script.Parent.Parent.Parent.UI.TacticalMap)
 local Utils = require(script.Parent.Utils)
 local C = Utils.C
 local corner = Utils.corner
