@@ -1994,6 +1994,12 @@ local Config = {
 		-- never be answered. Declining or accepting one clears it either way, so
 		-- this only ever limits how many can be outstanding at once.
 		MaximumPendingInvites = 5,
+		-- Territory zones: invisible parts placed in the map, discovered through
+		-- CollectionService the same way RoleplayOSZone already works for
+		-- LocationController, rather than a hand-maintained list. Each carries a
+		-- TerritoryId and a DisplayName attribute; placing one in Studio is what
+		-- defines it, and nothing else needs to change.
+		TerritoryTag = "RoleplayOSGangTerritory",
 	},
 	Spawning = {
 		-- Tag applied to the SpawnLocation pads the framework manages. Tagging
