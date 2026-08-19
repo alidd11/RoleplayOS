@@ -76,18 +76,41 @@ function NotificationSystem.new(context)
 
 	self.container = Instance.new("Frame")
 	self.container.Name = "Container"
+	self.container.AnchorPoint = Vector2.new(1, 0)
 	self.container.Size = UDim2.fromOffset(360, 0)
-	self.container.Position = UDim2.new(1, -376, 0, 16)
+	self.container.Position = UDim2.new(1, -16, 0, 16)
 	self.container.BackgroundTransparency = 1
 	self.container.BorderSizePixel = 0
 	self.container.AutomaticSize = Enum.AutomaticSize.Y
 	self.container.Parent = self.screenGui
 
-	local layout = Instance.new("UIListLayout")
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Padding = UDim.new(0, self.toastGap)
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	layout.Parent = self.container
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Padding = UDim.new(0, self.toastGap)
+	listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+	listLayout.Parent = self.container
+
+	-- The only client surface that ignored UIOrchestrator entirely. Fixed at
+	-- (1, -376, 0, 16), it sat right on top of the Controls launcher -- both
+	-- anchor the same top-right corner -- and on a compact touch screen a full
+	-- stack could reach far enough down to reach the emergency-lights panel.
+	-- Right-anchored against the same RightReserve the launcher itself uses, so
+	-- the two cannot drift apart, and dropped below the launcher's own bottom
+	-- edge (14 top offset + 38 tall + a gap) rather than sharing its row.
+	-- Safe to bind here rather than in a Start phase: NotificationSystem has
+	-- none, and UIOrchestrator's bindings table and layout state are both
+	-- module-level defaults that exist before its own Init ever runs.
+	local uiOrchestrator = context and context.Controllers and context.Controllers.UIOrchestrator
+	if uiOrchestrator then
+		self.unbindLayout = uiOrchestrator:Bind("Notifications", function(orchestratorLayout)
+			local width = if orchestratorLayout.Compact then 300 else 360
+			self.container.Size = UDim2.fromOffset(width, 0)
+			self.container.Position = UDim2.new(1, -orchestratorLayout.RightReserve, 0, 60)
+			-- Fewer toasts kept on a short compact screen, so a full stack has
+			-- less chance of reaching down into the ELS panel's own corner.
+			self.maxToasts = if orchestratorLayout.Compact then 3 else 4
+		end)
+	end
 
 	return self
 end
@@ -362,6 +385,9 @@ end
 function NotificationSystem:Destroy()
 	for _, toastData in ipairs(self.activeToasts) do
 		self:_destroyToastData(toastData)
+	end
+	if self.unbindLayout then
+		self.unbindLayout()
 	end
 	if self.screenGui then
 		self.screenGui:Destroy()
