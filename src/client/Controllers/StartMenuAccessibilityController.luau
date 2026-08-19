@@ -129,9 +129,9 @@ function StartMenuAccessibilityController:_closeMenu()
 	menuGui.Enabled = false
 	menuToggle.Visible = true
 	self.playerGui:SetAttribute("RoleplayOSMenuOpen", false)
+	-- PlayerList stays off: PlayerListController owns it now, permanently.
 	pcall(function()
 		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, true)
-		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, true)
 	end)
 	GuiService.SelectedObject = menuToggle
 end

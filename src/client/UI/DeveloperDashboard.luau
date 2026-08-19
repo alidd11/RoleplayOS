@@ -1362,9 +1362,9 @@ function App.mount(context: any): ScreenGui
 		-- back if any path ever entered the world without setting it.
 		menuToggle.Visible = hasEnteredWorld or not isOpen
 		updateMenuToggleAppearance(isOpen)
+		-- PlayerList stays off: PlayerListController owns it now, permanently.
 		pcall(function()
 			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, not isOpen)
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not isOpen)
 		end)
 	end
 	playerGui:GetAttributeChangedSignal("RoleplayOSMenuOpen"):Connect(function()

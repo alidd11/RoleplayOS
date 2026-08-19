@@ -511,6 +511,14 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 	end
 	session.ActiveCharacterId = characterId
 	character.LastPlayedAt = os.time()
+	-- Player Instance attributes replicate to every client automatically, so the
+	-- roster panel can read a name straight off Players:GetPlayers() with no
+	-- remote of its own - the same reason RoleplayOSMenuOpen lives as an
+	-- attribute rather than an event.
+	player:SetAttribute(
+		"RoleplayOSDisplayName",
+		character.Identity.FirstName .. " " .. character.Identity.LastName
+	)
 	if character.StarterVehiclePending == true then
 		local starter, starterReason =
 			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
