@@ -555,6 +555,22 @@ end
 -- Removes the player's vehicle, whatever the reason.
 function VehicleSpawnerService:Remove(userId: number)
 	local vehicle = self.active[userId]
+	-- Banked before the entry is cleared, and cleared before the destroy.
+	--
+	-- These two lines were the other way round, and it cost every driver their
+	-- last stretch of mileage. The Destroying handler installed at spawn is
+	-- guarded on `self.active[userId] == vehicle`, so clearing the entry first
+	-- made that test false before the handler ran: the final flush that exists
+	-- precisely for this never happened, and self.telemetry kept the destroyed
+	-- model and its VehicleId for the life of the server, one entry per person who
+	-- had ever driven.
+	--
+	-- This is the path taken when a player dies and when they leave, so the loss
+	-- was up to fifteen seconds of driving every time, which is most of the reason
+	-- an odometer would ever look wrong. The replacement path in Spawn already had
+	-- the order right.
+	self:_persistTelemetry(userId, true)
+	self.telemetry[userId] = nil
 	self.active[userId] = nil
 	if vehicle and vehicle.Parent then
 		ejectOccupants(vehicle)

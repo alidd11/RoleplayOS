@@ -278,10 +278,6 @@ local Config = {
 	-- here exists to keep this framework under that ceiling, because a throttled
 	-- check is read as an unverified member and an unverified member is kicked.
 	Groups = {
-		-- Gap between prefetching one group link and the next, jittered. Ten links
-		-- warmed back to back per joining player is what made a filling server
-		-- throttle itself.
-		WarmSpacingSeconds = 0.6,
 		-- A verified answer is good for this long. Raising it cuts request volume
 		-- but leaves a promotion or removal unseen for longer.
 		CacheSeconds = 300,
@@ -372,7 +368,6 @@ local Config = {
 		MaximumSlots = 6,
 		MinimumAge = 16,
 		MaximumAge = 100,
-		DeletionConfirmationSeconds = 10,
 	},
 	Economy = {
 		StartingBankBalance = 2500,
