@@ -9,29 +9,21 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
+local DesignTokens = require(script.Parent.DesignTokens)
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local COLOURS = {
-	Canvas = Color3.fromHex("#0F141C"),
-	Surface = Color3.fromHex("#181F2B"),
-	SurfaceRaised = Color3.fromHex("#1F2837"),
-	Text = Color3.fromHex("#F0F4FB"),
-	Muted = Color3.fromHex("#AEB8C9"),
-	Border = Color3.fromHex("#38455C"),
-	Accent = Color3.fromHex("#5B9CFF"),
-	Success = Color3.fromHex("#54D38E"),
-	Warning = Color3.fromHex("#F5BC4E"),
-	Danger = Color3.fromHex("#F46870"),
-	Info = Color3.fromHex("#5B9CFF"),
-	AccentFill = Color3.fromHex("#1F5FD0"),
-}
+-- Toast sat on top of every other panel yet used a different palette entirely
+-- -- Info's own accent, #5B9CFF, is a different hue from the token accent
+-- every other surface shares, not just a different shade.
+local COLOURS = DesignTokens.Colour
 
 local LEVELS = {
-	Success = { Stripe = COLOURS.Success, Icon = "✓" },
-	Warning = { Stripe = COLOURS.Warning, Icon = "!" },
-	Danger = { Stripe = COLOURS.Danger, Icon = "✕" },
-	Info = { Stripe = COLOURS.Info, Icon = "i" },
+	Success = { Stripe = COLOURS.success, Icon = "✓" },
+	Warning = { Stripe = COLOURS.warning, Icon = "!" },
+	Danger = { Stripe = COLOURS.danger, Icon = "✕" },
+	Info = { Stripe = COLOURS.accent, Icon = "i" },
 }
 
 local NotificationSystem = {}
@@ -126,18 +118,18 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 	-- of hiding the rest of itself.
 	toast.Size = UDim2.fromOffset(360, self.toastHeight)
 	toast.AutomaticSize = Enum.AutomaticSize.Y
-	toast.BackgroundColor3 = COLOURS.SurfaceRaised
+	toast.BackgroundColor3 = COLOURS.raised
 	toast.BackgroundTransparency = 0
 	toast.BorderSizePixel = 0
 	toast.Active = true
 	toast.LayoutOrder = #self.activeToasts + 1
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
+	corner.CornerRadius = UDim.new(0, DesignTokens.Radius.card)
 	corner.Parent = toast
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = COLOURS.Border
+	stroke.Color = COLOURS.border
 	stroke.Transparency = 0.85
 	stroke.Thickness = 1
 	stroke.Parent = toast
@@ -151,7 +143,7 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 	accentStripe.Parent = toast
 
 	local stripeCorner = Instance.new("UICorner")
-	stripeCorner.CornerRadius = UDim.new(0, 10)
+	stripeCorner.CornerRadius = UDim.new(0, DesignTokens.Radius.card)
 	stripeCorner.Parent = accentStripe
 
 	local iconLabel = Instance.new("TextLabel")
@@ -171,9 +163,9 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 	titleLabel.Position = UDim2.fromOffset(36, 10)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.Text = title
-	titleLabel.TextColor3 = COLOURS.Text
-	titleLabel.Font = Enum.Font.GothamBold
-	titleLabel.TextSize = 13
+	titleLabel.TextColor3 = COLOURS.text
+	titleLabel.Font = DesignTokens.Font.bold
+	titleLabel.TextSize = DesignTokens.Text.subtitle
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	titleLabel.Parent = toast
@@ -195,9 +187,9 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 	bodyLabel.Position = UDim2.fromOffset(36, 28)
 	bodyLabel.BackgroundTransparency = 1
 	bodyLabel.Text = message
-	bodyLabel.TextColor3 = COLOURS.Muted
-	bodyLabel.Font = Enum.Font.Gotham
-	bodyLabel.TextSize = 12
+	bodyLabel.TextColor3 = COLOURS.muted
+	bodyLabel.Font = DesignTokens.Font.regular
+	bodyLabel.TextSize = DesignTokens.Text.body
 	bodyLabel.TextXAlignment = Enum.TextXAlignment.Left
 	bodyLabel.Parent = toast
 

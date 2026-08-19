@@ -9,19 +9,16 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
+local DesignTokens = require(script.Parent.DesignTokens)
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local COLOURS = {
-	Canvas = Color3.fromHex("#0F141C"),
-	Surface = Color3.fromHex("#181F2B"),
-	SurfaceRaised = Color3.fromHex("#1F2837"),
-	Text = Color3.fromHex("#F0F4FB"),
-	Muted = Color3.fromHex("#AEB8C9"),
-	Border = Color3.fromHex("#38455C"),
-	Accent = Color3.fromHex("#5B9CFF"),
-	AccentFill = Color3.fromHex("#1F5FD0"),
-}
+-- Modal and toast sat on top of every other panel yet used a different palette
+-- entirely -- this lighter accent blue instead of the operational terminal
+-- blue every other surface shares -- so a dialog opened from the MDT read as a
+-- different application from the MDT itself.
+local COLOURS = DesignTokens.Colour
 
 local ModalSystem = {}
 ModalSystem.__index = ModalSystem
@@ -96,18 +93,18 @@ function ModalSystem:_createCard(config)
 	card.Size = UDim2.fromOffset(width, height or 0)
 	card.Position = UDim2.fromScale(0.5, 0.5)
 	card.AnchorPoint = Vector2.new(0.5, 0.5)
-	card.BackgroundColor3 = COLOURS.Surface
+	card.BackgroundColor3 = COLOURS.surface
 	card.BackgroundTransparency = 0
 	card.BorderSizePixel = 0
 	card.AutomaticSize = height and Enum.AutomaticSize.None or Enum.AutomaticSize.Y
 	card.ZIndex = 2
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 15)
+	corner.CornerRadius = UDim.new(0, DesignTokens.Radius.shell)
 	corner.Parent = card
 
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = COLOURS.Border
+	stroke.Color = COLOURS.border
 	stroke.Transparency = 0.82
 	stroke.Thickness = 1
 	stroke.Parent = card
@@ -125,9 +122,9 @@ function ModalSystem:_createCard(config)
 	title.Size = UDim2.new(1, 0, 0, 28)
 	title.BackgroundTransparency = 1
 	title.Text = config.Title or ""
-	title.TextColor3 = COLOURS.Text
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 23
+	title.TextColor3 = COLOURS.text
+	title.Font = DesignTokens.Font.bold
+	title.TextSize = DesignTokens.Text.title
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.TextTruncate = Enum.TextTruncate.AtEnd
 	title.Parent = card
@@ -167,9 +164,9 @@ function ModalSystem:_createCard(config)
 		bodyText.Size = UDim2.fromScale(1, 0)
 		bodyText.BackgroundTransparency = 1
 		bodyText.Text = config.Body
-		bodyText.TextColor3 = COLOURS.Muted
-		bodyText.Font = Enum.Font.Gotham
-		bodyText.TextSize = 14
+		bodyText.TextColor3 = COLOURS.muted
+		bodyText.Font = DesignTokens.Font.regular
+		bodyText.TextSize = DesignTokens.Text.body
 		bodyText.TextXAlignment = Enum.TextXAlignment.Left
 		bodyText.TextYAlignment = Enum.TextYAlignment.Top
 		bodyText.TextWrapped = true
@@ -205,19 +202,19 @@ function ModalSystem:_createCard(config)
 			btn.Name = "Action_" .. i
 			btn.Size = UDim2.fromOffset(0, 36)
 			btn.AutomaticSize = Enum.AutomaticSize.X
-			btn.BackgroundColor3 = action.Primary and COLOURS.AccentFill or COLOURS.SurfaceRaised
+			btn.BackgroundColor3 = action.Primary and COLOURS.accentFill or COLOURS.raised
 			btn.BackgroundTransparency = 0
 			btn.BorderSizePixel = 0
 			btn.Text = "  " .. action.Label .. "  "
-			btn.TextColor3 = COLOURS.Text
-			btn.Font = Enum.Font.GothamBold
-			btn.TextSize = 13
+			btn.TextColor3 = COLOURS.text
+			btn.Font = DesignTokens.Font.bold
+			btn.TextSize = DesignTokens.Text.button
 			btn.AutoButtonColor = false
 			btn.Selectable = true
 			btn.Parent = actionsContainer
 
 			local btnCorner = Instance.new("UICorner")
-			btnCorner.CornerRadius = UDim.new(0, 8)
+			btnCorner.CornerRadius = UDim.new(0, DesignTokens.Radius.control)
 			btnCorner.Parent = btn
 
 			local btnPadding = Instance.new("UIPadding")
