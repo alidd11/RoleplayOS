@@ -2276,11 +2276,32 @@ local Config = {
 	--
 	-- Keyed by the vehicle's id, which is its model name unless the model carries
 	-- a RoleplayOSAssetId.
+	--
+	-- Priced against what the real car costs in the UK, using the plate year in
+	-- each name -- 20', 22', 72' and so on are registration years, so a '22 Audi
+	-- RS3 is a two year old RS3 rather than a new one. Round numbers, because
+	-- these are a starting point for the economy rather than a valuation: change
+	-- any of them here and the dealership follows on the next server start.
 	VehiclePrices = {
-		-- A BMW R1200RT is a large touring motorbike. New ones were around
-		-- seventeen thousand and clean used examples go for eleven to thirteen, so
-		-- this sits where a civilian would actually find one.
+		-- Hatchbacks and saloons.
+		["23' Toyota Corolla HB"] = 21000,
+		["20' Volvo S90"] = 23000,
+		["20' Honda Civic Type R"] = 30000,
+		-- Estates and SUVs, which carry a premium over the saloon they share a
+		-- platform with.
+		["24' Volvo V90"] = 44000,
+		["22' Volvo XC90"] = 46000,
+		["21' BMW X5 GO5"] = 48000,
+		-- Performance and executive.
+		["72' BMW 545e"] = 45000,
+		["22' Audi RS3"] = 52000,
+		-- Two wheels. A BMW R1200RT is a large touring motorbike -- new ones were
+		-- around seventeen thousand and clean used examples go for eleven to
+		-- thirteen. The scooter and the electric bike are a fraction of that, and
+		-- are the cheapest way onto the road here.
 		["BMW RT1200"] = 12500,
+		["HondaADV160"] = 4600,
+		["SurronCivilian"] = 4200,
 	},
 	VehicleData = {
 		-- Retained for speed enforcement and the replacement spawner integration;
