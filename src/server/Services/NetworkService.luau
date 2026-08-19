@@ -1475,10 +1475,26 @@ function NetworkService:Start()
 	end, function(player, payload, requestId)
 		local result, reason = self.context.Services:Get("VendorService"):Purchase(player, payload)
 		if not result then
+			-- Every failure used to collapse into "That purchase could not be
+			-- completed", so walking too far from the stall, being broke, and
+			-- already owning the item all read identically to the player. The
+			-- reason code was always there; nothing surfaced it.
+			local messages = {
+				VENDOR_NOT_FOUND = "That stall could not be found.",
+				VENDOR_OUT_OF_RANGE = "Move closer to the stall to buy from it.",
+				ITEM_NOT_FOUND = "That item is no longer on offer.",
+				EMERGENCY_SERVICE_RESTRICTED = "Not sold to on-duty emergency services.",
+				ALREADY_HELD = "You already have one of these.",
+				INSUFFICIENT_FUNDS = "You cannot afford that right now.",
+				CHARACTER_NOT_ACTIVE = "Select a character before buying.",
+				INVALID_FOOD = "That is not something this stall sells.",
+				BACKPACK_UNAVAILABLE = "Your backpack is not ready. Try again in a moment.",
+				TOOL_UNAVAILABLE = "That item is not currently available.",
+			}
 			return {
 				Success = false,
 				Code = reason or "VENDOR_PURCHASE_FAILED",
-				Message = "That purchase could not be completed.",
+				Message = (reason and messages[reason]) or "That purchase could not be completed.",
 				RequestId = requestId,
 			}
 		end

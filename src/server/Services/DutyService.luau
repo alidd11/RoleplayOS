@@ -43,9 +43,13 @@ function DutyService:Start()
 		forget(player)
 		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
 			task.delay(1, function()
-				-- Gamepass equipment is issued whether or not the player is on
-				-- duty, since a civilian off duty is exactly who bought it.
-				self.context.Services:Get("LoadoutService"):ApplyEquipmentPasses(player)
+				-- Gamepass weapons used to be dropped into the backpack here on
+				-- every spawn, silently, for whoever owned the pass. Everyone else
+				-- has to walk up to a dealer and press a button; owning a pass
+				-- should shorten that to "for nothing" at the same stall, not skip
+				-- it. VendorService's own gamepass branch already does exactly
+				-- that free-collection check when the player interacts with the
+				-- dealer, so this is the one path to any of these tools now.
 				local duty = self:Get(player)
 				if not duty then
 					return

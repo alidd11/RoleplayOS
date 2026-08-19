@@ -689,16 +689,6 @@ local Config = {
 			Description = "Unlock gang creation, membership management, leadership tools, communications, and associated criminal-roleplay features.",
 		},
 	},
-	EquipmentPasses = {
-		-- What a pass actually hands over. A pass missing from here, or carrying a
-		-- zero, is skipped by ApplyEquipmentPasses - so it sells for Robux and
-		-- gives nothing. The ZKnife pass had been created and its id never
-		-- brought across, and the machete pass had no entry at all, so both took
-		-- 149 Robux for an empty backpack.
-		Knife = { GamepassId = 1937446295, TeamName = "Civilian", ToolNames = { "Knife" } },
-		ZKnife = { GamepassId = 1949486956, TeamName = "Civilian", ToolNames = { "ZKnife" } },
-		Machete = { GamepassId = 1949228959, TeamName = "Civilian", ToolNames = { "Machete" } },
-	},
 	-- People standing around the map who sell things.
 	--
 	-- Tag a model with the tag below and give it a RoleplayOSVendorId attribute
