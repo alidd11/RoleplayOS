@@ -3374,7 +3374,6 @@ function App.mount(context: any): ScreenGui
 		-- One navigation language on every device: a top bar mirrors Roblox's
 		-- established menu pattern and avoids presenting desktop players with a
 		-- completely different sidebar information architecture.
-		local horizontal = true
 		local narrow = layout.SafeViewport.X < 720
 		-- Landscape phones have a short usable height but a wide viewport. Keep
 		-- their header in a dedicated compact row instead of applying desktop
@@ -3383,229 +3382,178 @@ function App.mount(context: any): ScreenGui
 			and layout.SafeViewport.X > layout.SafeViewport.Y
 		local safeLeft = layout.SafeLeft
 		local safeRight = layout.SafeRight
-		if horizontal then
-			-- On a landscape phone Roblox's native controls consume the whole first
-			-- row. Give the product identity and tabs their own row below it instead
-			-- of placing the title into the native logo/chat/microphone cluster.
-			-- Tall enough to actually contain the row, and no taller.
-			--
-			-- Measured on a running client at 1365x768: the band ended at y=38
-			-- while the navigation row ran to y=50, so the tabs sat twelve pixels
-			-- over the top of the content beneath them. On a narrow screen it was
-			-- worse -- the title occupied 38..68 and the tabs 44..76, overlapping
-			-- each other as well as the content, because both were positioned from
-			-- the band top with no regard for the other's height.
-			--
-			-- These are now derived from what the row holds rather than picked, so
-			-- the band shrinks and the overlap goes at the same time: the content
-			-- below gains the twelve pixels it was losing plus the reduction.
-			-- The bar holds one line of status text and nothing else, so it is sized
-			-- to that line rather than to a comfortable row. Every pixel taken off
-			-- here goes to the posters, which is the only thing on this page a
-			-- player is actually looking at.
-			local barHeight = safeTop + (if narrow then 56 else if compactLandscape then 36 else 26)
-			sidebar.Size = UDim2.new(1, 0, 0, barHeight)
-			content.Position = UDim2.fromOffset(0, barHeight)
-			content.Size = UDim2.new(1, 0, 1, -barHeight)
-			-- In this stacked layout the title shares its row with Roblox's own
-			-- controls, which sit at the top left. safeLeft only describes a
-			-- device cutout, so clearing that alone left the title underneath
-			-- them in portrait, where the control cluster is proportionally much
-			-- wider. NativeLeft is where Roblox reports its controls end.
-			local headerLeft = if compactLandscape
-				then safeLeft + 18
-				else math.max(safeLeft, layout.NativeLeft) + 18
-			-- Keep the product name directly below Roblox's native control band.
-			-- It should read as the experience identity, not compete with Roblox's
-			-- own logo, chat and microphone controls.
-			brand.Position = UDim2.fromOffset(
-				headerLeft,
-				if narrow then safeTop + 6 elseif compactLandscape then safeTop + 6 else safeTop + 8
-			)
-			brand.Size = UDim2.fromOffset(
-				if compactLandscape
-					then math.max(160, layout.SafeViewport.X - headerLeft - safeRight - 36)
-					elseif narrow then math.max(
-						80,
-						layout.SafeViewport.X - headerLeft - safeRight - 18
-					)
-					else 270,
-				30
-			)
-			brand.TextSize = 14
-			brand.TextWrapped = false
-			brand.TextScaled = false
-			brand.TextTruncate = Enum.TextTruncate.AtEnd
-			local brandBounds = brand:FindFirstChildOfClass("UITextSizeConstraint")
-			if not brandBounds then
-				brandBounds = Instance.new("UITextSizeConstraint")
-				brandBounds.Parent = brand
-			end
-			brandBounds.MinTextSize = 10
-			brandBounds.MaxTextSize = 17
-			TooltipSystem:Attach(brand, brand.Text)
-			-- Wide enough for the navigation to share the title's row, so it
-			-- starts past the title rather than at a fixed offset that could
-			-- land on top of it once the title has been pushed right.
-			-- The title reserves less of the row on a short screen. It is decorative
-			-- and already truncates, while the tabs beside it are the only way to
-			-- move around the menu, and they were the thing being squeezed.
-			local navLeft = headerLeft + 282
-			navigation.Position = if narrow
-				then UDim2.fromOffset(safeLeft + 18, safeTop + 32)
-				elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 8)
-				else UDim2.fromOffset(navLeft, safeTop + 4)
-			navigation.Size = if narrow
-				then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 28)
-				elseif compactLandscape then UDim2.new(
-					1,
-					-(headerLeft + safeRight + 18),
-					0,
-					28
+		-- On a landscape phone Roblox's native controls consume the whole first
+		-- row. Give the product identity and tabs their own row below it instead
+		-- of placing the title into the native logo/chat/microphone cluster.
+		-- Tall enough to actually contain the row, and no taller.
+		--
+		-- Measured on a running client at 1365x768: the band ended at y=38
+		-- while the navigation row ran to y=50, so the tabs sat twelve pixels
+		-- over the top of the content beneath them. On a narrow screen it was
+		-- worse -- the title occupied 38..68 and the tabs 44..76, overlapping
+		-- each other as well as the content, because both were positioned from
+		-- the band top with no regard for the other's height.
+		--
+		-- These are now derived from what the row holds rather than picked, so
+		-- the band shrinks and the overlap goes at the same time: the content
+		-- below gains the twelve pixels it was losing plus the reduction.
+		-- The bar holds one line of status text and nothing else, so it is sized
+		-- to that line rather than to a comfortable row. Every pixel taken off
+		-- here goes to the posters, which is the only thing on this page a
+		-- player is actually looking at.
+		local barHeight = safeTop + (if narrow then 56 else if compactLandscape then 36 else 26)
+		sidebar.Size = UDim2.new(1, 0, 0, barHeight)
+		content.Position = UDim2.fromOffset(0, barHeight)
+		content.Size = UDim2.new(1, 0, 1, -barHeight)
+		-- In this stacked layout the title shares its row with Roblox's own
+		-- controls, which sit at the top left. safeLeft only describes a
+		-- device cutout, so clearing that alone left the title underneath
+		-- them in portrait, where the control cluster is proportionally much
+		-- wider. NativeLeft is where Roblox reports its controls end.
+		local headerLeft = if compactLandscape
+			then safeLeft + 18
+			else math.max(safeLeft, layout.NativeLeft) + 18
+		-- Keep the product name directly below Roblox's native control band.
+		-- It should read as the experience identity, not compete with Roblox's
+		-- own logo, chat and microphone controls.
+		brand.Position = UDim2.fromOffset(
+			headerLeft,
+			if narrow then safeTop + 6 elseif compactLandscape then safeTop + 6 else safeTop + 8
+		)
+		brand.Size = UDim2.fromOffset(
+			if compactLandscape
+				then math.max(160, layout.SafeViewport.X - headerLeft - safeRight - 36)
+				elseif narrow then math.max(
+					80,
+					layout.SafeViewport.X - headerLeft - safeRight - 18
 				)
-				else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 28)
-			navLayout.FillDirection = Enum.FillDirection.Horizontal
-			navLayout.Padding = UDim.new(0, 6)
-			for _, item in navigation:GetChildren() do
-				if item:IsA("TextButton") then
-					item.Size = UDim2.new(1 / navItems, -5, 1, 0)
-					-- Shrink the label into its slot rather than letting it run out of one.
-					--
-					-- Every tab gets an equal share of the bar, but the words are not of
-					-- equal length. "Civilian jobs" wants about ninety pixels and its share
-					-- on a landscape phone is nearer eighty, so it overflowed and ran into
-					-- "Services" next to it: the highlight of one ending underneath the text
-					-- of the other. It read as a broken menu before the player had pressed
-					-- anything.
-					--
-					-- Scaled to fit rather than truncated, because "Civilian j..." is not a
-					-- usable label either. The floor is what stops the fit being achieved by
-					-- making the text unreadable: below about nine pixels these stop being
-					-- legible on a phone, and they are the only way around the menu.
-					item.TextScaled = false
-					item.TextTruncate = Enum.TextTruncate.AtEnd
-					local bounds = item:FindFirstChildOfClass("UITextSizeConstraint")
-					if not bounds then
-						bounds = Instance.new("UITextSizeConstraint")
-						bounds.Parent = item
-					end
-					bounds.MinTextSize = 10
-					bounds.MaxTextSize = if narrow then 11 else 12
-					item.TextXAlignment = Enum.TextXAlignment.Center
-					TooltipSystem:Attach(item, item.Text)
-					local padding = item:FindFirstChildOfClass("UIPadding")
-					if padding then
-						padding.PaddingLeft = UDim.new()
-					end
+				else 270,
+			30
+		)
+		brand.TextSize = 14
+		brand.TextWrapped = false
+		brand.TextScaled = false
+		brand.TextTruncate = Enum.TextTruncate.AtEnd
+		local brandBounds = brand:FindFirstChildOfClass("UITextSizeConstraint")
+		if not brandBounds then
+			brandBounds = Instance.new("UITextSizeConstraint")
+			brandBounds.Parent = brand
+		end
+		brandBounds.MinTextSize = 10
+		brandBounds.MaxTextSize = 17
+		TooltipSystem:Attach(brand, brand.Text)
+		-- Wide enough for the navigation to share the title's row, so it
+		-- starts past the title rather than at a fixed offset that could
+		-- land on top of it once the title has been pushed right.
+		-- The title reserves less of the row on a short screen. It is decorative
+		-- and already truncates, while the tabs beside it are the only way to
+		-- move around the menu, and they were the thing being squeezed.
+		local navLeft = headerLeft + 282
+		navigation.Position = if narrow
+			then UDim2.fromOffset(safeLeft + 18, safeTop + 32)
+			elseif compactLandscape then UDim2.fromOffset(headerLeft, safeTop + 8)
+			else UDim2.fromOffset(navLeft, safeTop + 4)
+		navigation.Size = if narrow
+			then UDim2.new(1, -(36 + safeLeft + safeRight), 0, 28)
+			elseif compactLandscape then UDim2.new(1, -(headerLeft + safeRight + 18), 0, 28)
+			else UDim2.new(1, -(navLeft + 18 + safeRight), 0, 28)
+		navLayout.FillDirection = Enum.FillDirection.Horizontal
+		navLayout.Padding = UDim.new(0, 6)
+		for _, item in navigation:GetChildren() do
+			if item:IsA("TextButton") then
+				item.Size = UDim2.new(1 / navItems, -5, 1, 0)
+				-- Shrink the label into its slot rather than letting it run out of one.
+				--
+				-- Every tab gets an equal share of the bar, but the words are not of
+				-- equal length. "Civilian jobs" wants about ninety pixels and its share
+				-- on a landscape phone is nearer eighty, so it overflowed and ran into
+				-- "Services" next to it: the highlight of one ending underneath the text
+				-- of the other. It read as a broken menu before the player had pressed
+				-- anything.
+				--
+				-- Scaled to fit rather than truncated, because "Civilian j..." is not a
+				-- usable label either. The floor is what stops the fit being achieved by
+				-- making the text unreadable: below about nine pixels these stop being
+				-- legible on a phone, and they are the only way around the menu.
+				item.TextScaled = false
+				item.TextTruncate = Enum.TextTruncate.AtEnd
+				local bounds = item:FindFirstChildOfClass("UITextSizeConstraint")
+				if not bounds then
+					bounds = Instance.new("UITextSizeConstraint")
+					bounds.Parent = item
+				end
+				bounds.MinTextSize = 10
+				bounds.MaxTextSize = if narrow then 11 else 12
+				item.TextXAlignment = Enum.TextXAlignment.Center
+				TooltipSystem:Attach(item, item.Text)
+				local padding = item:FindFirstChildOfClass("UIPadding")
+				if padding then
+					padding.PaddingLeft = UDim.new()
 				end
 			end
-			profile.Visible = false
-			-- Width taken from the parent rather than computed from SafeViewport.
-			--
-			-- The list is a child of a frame that already spans the screen, so a
-			-- scale width with pixel margins is exactly the usable area by
-			-- construction. Deriving an absolute width from SafeViewport instead
-			-- meant the answer was only as good as that measurement, and when the
-			-- two disagreed the list came up short and left a band of empty screen
-			-- down the right of every page while the navigation above it ran the
-			-- full width. Nothing here depends on that number any more.
-			local marginLeft = safeLeft + 24
-			local marginRight = safeRight + 24
-			local available = layout.Viewport.X - marginLeft - marginRight
-			local dockHeight = if narrow then 62 else 76
-			bottomDock.Visible = true
-			-- The rotating tip was creating a second header row on desktop. Keep the
-			-- menu control in Roblox's top band and let the page content start directly
-			-- beneath it; guidance remains available in Help.
-			announcement.Visible = false
-			bottomDock.Position = UDim2.new(0.5, 0, 1, -(layout.SafeBottom + 14))
-			bottomDock.Size = UDim2.new(1, -(marginLeft + marginRight), 0, dockHeight)
-			bottomDockPadding.PaddingLeft = UDim.new(0, if narrow then 5 else 8)
-			bottomDockPadding.PaddingRight = UDim.new(0, if narrow then 5 else 8)
-			bottomDockPadding.PaddingTop = UDim.new(0, if narrow then 5 else 8)
-			bottomDockPadding.PaddingBottom = UDim.new(0, if narrow then 5 else 8)
-			for _, item in bottomNavItems do
-				item.TextSize = if narrow then 12 else 14
-			end
-			announcement.Position = UDim2.new(0.5, 0, 0, safeTop + 2)
-			announcement.Size = UDim2.fromOffset(if narrow then 260 else 420, 28)
-			pageTitle.Visible = false
-			pageDescription.Visible = false
-			-- The strip moves into the bar rather than sitting in a row of its own.
-			--
-			-- On desktop that bar held nothing: the tabs are in the dock at the
-			-- bottom and the toggle is up in Roblox's own band, so the page paid
-			-- thirty eight pixels for one line of text with an empty strip above
-			-- it. Putting the text in the empty bar buys the grid both back.
-			status.Parent = sidebar
-			status.AnchorPoint = Vector2.new(1, 0.5)
-			status.Position = UDim2.new(1, -(marginRight > 0 and marginRight or 24), 0.5, 0)
-			status.Size = UDim2.fromOffset(190, 20)
-			header.Visible = false
-			if available > MAXIMUM_CONTENT_WIDTH then
-				-- On a display wide enough for it, a centred column reads better than
-				-- one line of text stretched across a metre of monitor.
-				local centred = math.floor((layout.Viewport.X - MAXIMUM_CONTENT_WIDTH) / 2)
-				header.Position = UDim2.fromOffset(centred, 6)
-				header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 0)
-				scroll.Position = UDim2.fromOffset(centred, 8)
-				scroll.Size = UDim2.new(
-					0,
-					MAXIMUM_CONTENT_WIDTH,
-					1,
-					-(16 + layout.SafeBottom + dockHeight + 12)
-				)
-			else
-				header.Position = UDim2.fromOffset(marginLeft, 6)
-				header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 0)
-				scroll.Position = UDim2.fromOffset(marginLeft, 8)
-				scroll.Size = UDim2.new(
-					1,
-					-(marginLeft + marginRight),
-					1,
-					-(16 + layout.SafeBottom + dockHeight + 12)
-				)
-			end
+		end
+		profile.Visible = false
+		-- Width taken from the parent rather than computed from SafeViewport.
+		--
+		-- The list is a child of a frame that already spans the screen, so a
+		-- scale width with pixel margins is exactly the usable area by
+		-- construction. Deriving an absolute width from SafeViewport instead
+		-- meant the answer was only as good as that measurement, and when the
+		-- two disagreed the list came up short and left a band of empty screen
+		-- down the right of every page while the navigation above it ran the
+		-- full width. Nothing here depends on that number any more.
+		local marginLeft = safeLeft + 24
+		local marginRight = safeRight + 24
+		local available = layout.Viewport.X - marginLeft - marginRight
+		local dockHeight = if narrow then 62 else 76
+		bottomDock.Visible = true
+		-- The rotating tip was creating a second header row on desktop. Keep the
+		-- menu control in Roblox's top band and let the page content start directly
+		-- beneath it; guidance remains available in Help.
+		announcement.Visible = false
+		bottomDock.Position = UDim2.new(0.5, 0, 1, -(layout.SafeBottom + 14))
+		bottomDock.Size = UDim2.new(1, -(marginLeft + marginRight), 0, dockHeight)
+		bottomDockPadding.PaddingLeft = UDim.new(0, if narrow then 5 else 8)
+		bottomDockPadding.PaddingRight = UDim.new(0, if narrow then 5 else 8)
+		bottomDockPadding.PaddingTop = UDim.new(0, if narrow then 5 else 8)
+		bottomDockPadding.PaddingBottom = UDim.new(0, if narrow then 5 else 8)
+		for _, item in bottomNavItems do
+			item.TextSize = if narrow then 12 else 14
+		end
+		announcement.Position = UDim2.new(0.5, 0, 0, safeTop + 2)
+		announcement.Size = UDim2.fromOffset(if narrow then 260 else 420, 28)
+		pageTitle.Visible = false
+		pageDescription.Visible = false
+		-- The strip moves into the bar rather than sitting in a row of its own.
+		--
+		-- On desktop that bar held nothing: the tabs are in the dock at the
+		-- bottom and the toggle is up in Roblox's own band, so the page paid
+		-- thirty eight pixels for one line of text with an empty strip above
+		-- it. Putting the text in the empty bar buys the grid both back.
+		status.Parent = sidebar
+		status.AnchorPoint = Vector2.new(1, 0.5)
+		status.Position = UDim2.new(1, -(marginRight > 0 and marginRight or 24), 0.5, 0)
+		status.Size = UDim2.fromOffset(190, 20)
+		header.Visible = false
+		if available > MAXIMUM_CONTENT_WIDTH then
+			-- On a display wide enough for it, a centred column reads better than
+			-- one line of text stretched across a metre of monitor.
+			local centred = math.floor((layout.Viewport.X - MAXIMUM_CONTENT_WIDTH) / 2)
+			header.Position = UDim2.fromOffset(centred, 6)
+			header.Size = UDim2.fromOffset(MAXIMUM_CONTENT_WIDTH, 0)
+			scroll.Position = UDim2.fromOffset(centred, 8)
+			scroll.Size =
+				UDim2.new(0, MAXIMUM_CONTENT_WIDTH, 1, -(16 + layout.SafeBottom + dockHeight + 12))
 		else
-			bottomDock.Visible = false
-			announcement.Visible = false
-			-- The sidebar hugs the left edge, so it absorbs the left reserve and
-			-- the content pane starts after it. Only the sidebar needs to know.
-			sidebar.Size = UDim2.new(0, 250 + safeLeft, 1, 0)
-			content.Position = UDim2.fromOffset(250 + safeLeft, 0)
-			content.Size = UDim2.new(1, -(250 + safeLeft), 1, 0)
-			brand.Position = UDim2.fromOffset(safeLeft + 26, safeTop + 20)
-			brand.Size = UDim2.new(1, -(52 + safeLeft), 0, 42)
-			brand.TextSize = 17
-			brand.TextScaled = false
-			brand.TextWrapped = true
-			brand.TextTruncate = Enum.TextTruncate.None
-			navigation.Position = UDim2.fromOffset(safeLeft + 18, safeTop + 112)
-			navigation.Size = UDim2.new(1, -(36 + safeLeft), 0, navItems * 44 + (navItems - 1) * 7)
-			navLayout.FillDirection = Enum.FillDirection.Vertical
-			navLayout.Padding = UDim.new(0, 7)
-			for _, item in navigation:GetChildren() do
-				if item:IsA("TextButton") then
-					item.Size = UDim2.new(1, 0, 0, 44)
-					item.TextSize = 14
-					item.TextXAlignment = Enum.TextXAlignment.Left
-					local padding = item:FindFirstChildOfClass("UIPadding")
-					if padding then
-						padding.PaddingLeft = UDim.new(0, 14)
-					end
-				end
-			end
-			profile.Visible = true
-			-- Desktop used to restore the title block that compact hides. Both now
-			-- show the same status strip, so a page looks like itself whatever it
-			-- is opened on, and the seventy pixels go to the content instead.
-			pageTitle.Visible = false
-			pageDescription.Visible = false
-			header.Position = UDim2.fromOffset(44, safeTop + 16)
-			header.Size = UDim2.new(1, -(88 + safeRight), 0, 24)
-			status.Position = UDim2.new(1, -safeRight, 0, 0)
-			scroll.Position = UDim2.fromOffset(44, safeTop + 48)
-			scroll.Size = UDim2.new(1, -(88 + safeRight), 1, -(safeTop + 76 + layout.SafeBottom))
+			header.Position = UDim2.fromOffset(marginLeft, 6)
+			header.Size = UDim2.new(1, -(marginLeft + marginRight), 0, 0)
+			scroll.Position = UDim2.fromOffset(marginLeft, 8)
+			scroll.Size = UDim2.new(
+				1,
+				-(marginLeft + marginRight),
+				1,
+				-(16 + layout.SafeBottom + dockHeight + 12)
+			)
 		end
 		-- Cards have genuinely different compositions at these breakpoints, not
 		-- merely different widths. Repaint only when a breakpoint changes so a
