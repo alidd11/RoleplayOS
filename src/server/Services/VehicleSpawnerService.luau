@@ -371,8 +371,44 @@ local function reattachAccessories(character: Model, vehicle: Instance?): number
 	return restored
 end
 
+-- Is the chassis finished building itself?
+--
+-- Measured by whether the seat has been unanchored. These templates are authored
+-- with every part anchored -- 163 of them on the van -- and releasing them is
+-- among the last things Initialize does, after it has created the runtime joints
+-- and wired the drive system up. An anchored seat is a vehicle that is still
+-- being assembled.
+--
+-- The obvious signal, the chassis Values folder, is not one: it ships inside the
+-- template, so it is present before Initialize has run at all and a check against
+-- it returns true immediately. That was the first attempt at this and it changed
+-- nothing, because it was never false.
+local function chassisReady(seat: VehicleSeat): boolean
+	return seat.Parent ~= nil and not seat.Anchored
+end
+
+-- Puts the driver in the seat, once there is something to drive.
+--
+-- This used to sit them on the frame after the vehicle was parented, which is
+-- before A-Chassis has finished initialising. The chassis binds its controls when
+-- the seat is taken, so taking it too early bound nothing: the car would not
+-- drive at all, and its interface never reached the player. Getting out and back
+-- in fixed it, because by then initialisation had long finished -- which is
+-- exactly the "jump out and back in before it works" this had.
+--
+-- Waiting on the chassis rather than on a fixed delay, because how long it takes
+-- depends on the vehicle. The timeout still seats them on a vehicle that never
+-- reports ready, since a car you cannot drive is better than one you cannot get
+-- into.
 local function seatPlayer(player: Player, seat: VehicleSeat)
 	task.spawn(function()
+		local deadline = os.clock() + 6
+		while os.clock() < deadline and not chassisReady(seat) do
+			if not seat.Parent then
+				return
+			end
+			task.wait(0.1)
+		end
 		for _ = 1, 12 do
 			if not seat.Parent or seat.Occupant then
 				return
