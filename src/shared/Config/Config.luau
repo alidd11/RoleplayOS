@@ -2000,6 +2000,12 @@ local Config = {
 		-- TerritoryId and a DisplayName attribute; placing one in Studio is what
 		-- defines it, and nothing else needs to change.
 		TerritoryTag = "RoleplayOSGangTerritory",
+		-- How often the contest loop re-checks presence in each territory. Not
+		-- a DataStore read on this cadence -- GangTerritoryService reads the
+		-- ownership it already mirrors onto each part's attributes -- so this
+		-- can stay short enough that a contest feels responsive without
+		-- risking DataStore throttling.
+		ContestCheckSeconds = 3,
 	},
 	Spawning = {
 		-- Tag applied to the SpawnLocation pads the framework manages. Tagging
