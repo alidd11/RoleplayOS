@@ -96,6 +96,9 @@ function VehicleLightingService:Adopt(vehicle: Instance)
 	local silenced = self:_silenceKit(vehicle, lamps)
 	self.vehicles[vehicle] = {
 		Lamps = lamps,
+		-- These objects are stable for the life of a spawned vehicle. Keeping the
+		-- references avoids a recursive search for every vehicle on every heartbeat.
+		Seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true),
 		Stage = "Off",
 		Left = false,
 		Right = false,
@@ -105,6 +108,8 @@ function VehicleLightingService:Adopt(vehicle: Instance)
 		-- Forces the first paint, so a vehicle adopted with its lenses left lit by
 		-- the kit is put into a known state rather than inheriting one.
 		Painted = nil,
+		Dirty = true,
+		LastFlashOn = nil,
 	}
 	vehicle.Destroying:Once(function()
 		self.vehicles[vehicle] = nil
@@ -154,6 +159,14 @@ function VehicleLightingService:_paint(vehicle: Instance, force: boolean?)
 		return
 	end
 	local flashOn = VehicleLighting.flashOn(os.clock())
+	-- Steady lamps do not need to be revisited until their state changes, and
+	-- indicators only need a paint when the shared flash clock changes phase.
+	-- This keeps the heartbeat cheap while retaining the same frame-level timing
+	-- for brake, reverse and indicator updates.
+	local flashing = state.Hazards or state.Left or state.Right
+	if not force and not state.Dirty and (not flashing or state.LastFlashOn == flashOn) then
+		return
+	end
 	local desired = self:_desired(state, flashOn)
 	local painted = state.Painted or {}
 	for name, group in state.Lamps do
@@ -179,6 +192,8 @@ function VehicleLightingService:_paint(vehicle: Instance, force: boolean?)
 		end
 	end
 	state.Painted = painted
+	state.Dirty = false
+	state.LastFlashOn = flashOn
 end
 
 -- The driver of a vehicle, or nil.
@@ -231,6 +246,7 @@ function VehicleLightingService:Set(player: Player, payload: any): (boolean, str
 	else
 		return false, "UNKNOWN_ACTION"
 	end
+	state.Dirty = true
 	self:_publish(vehicle, state)
 	self:_paint(vehicle, true)
 	return true, nil
@@ -260,15 +276,32 @@ end
 -- the brake was held. Both are simply functions of the seat and the gear, so
 -- they are read here on the same step as everything else.
 function VehicleLightingService:_readChassis(vehicle: Instance, state: any)
-	local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+	local seat = state.Seat
+	if not seat or not seat.Parent then
+		seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+		state.Seat = seat
+	end
 	if not seat then
 		return
 	end
-	state.Brakes = seat.Throttle < -0.05
+	local brakes = seat.Throttle < -0.05
 	local settings = self.context.Configuration.Chassis
-	local values = vehicle:FindFirstChild(settings.ValuesFolderName, true)
-	local gear = values and values:FindFirstChild(settings.GearValueName)
-	state.Reverse = gear ~= nil and (gear :: any).Value == -1
+	local values = state.Values
+	if not values or not values.Parent then
+		values = vehicle:FindFirstChild(settings.ValuesFolderName, true)
+		state.Values = values
+	end
+	local gear = state.Gear
+	if not gear or not gear.Parent then
+		gear = values and values:FindFirstChild(settings.GearValueName)
+		state.Gear = gear
+	end
+	local reverse = gear ~= nil and (gear :: any).Value == -1
+	if state.Brakes ~= brakes or state.Reverse ~= reverse then
+		state.Brakes = brakes
+		state.Reverse = reverse
+		state.Dirty = true
+	end
 end
 
 function VehicleLightingService:Start()
