@@ -334,16 +334,23 @@ function PhoneController:_mount()
 			body.Size =
 				UDim2.fromOffset(286, math.min(520, math.max(280, layout.SafeViewport.Y - 90)))
 		else
-			self.bodyScale.Scale = 1
 			body.AnchorPoint = Vector2.new(1, 1)
 			body.Position = UDim2.new(1, -(layout.RightReserve + 18), 1, -76)
+			-- Held at the design size and scaled via UIScale, the same as the
+			-- Compact branch above, rather than resized directly: every icon,
+			-- label and the dock inside are authored in fixed pixels against
+			-- that 326x610 canvas, so shrinking body.Size instead stretched
+			-- the frame's own bounds while those children stayed put. UIScale
+			-- scales around the frame's AnchorPoint, so the bottom-right
+			-- anchor above still holds as it shrinks.
+			--
 			-- Scale with the screen rather than sitting at a fixed size: a handset
 			-- that reads well on a laptop is overbearing on a large monitor. The
-			-- aspect ratio is held so it stays phone-shaped at any height, and the
 			-- 76 pixel bottom anchor plus a top margin are left free.
 			local height = math.clamp(layout.SafeViewport.Y * 0.54, 400, 610)
 			height = math.min(height, layout.SafeViewport.Y - 94)
-			body.Size = UDim2.fromOffset(math.floor(height * 0.535), math.floor(height))
+			body.Size = UDim2.fromOffset(DESIGN.X, DESIGN.Y)
+			self.bodyScale.Scale = height / DESIGN.Y
 		end
 		launcher.AnchorPoint = if layout.Vehicle then Vector2.new(0, 1) else Vector2.new(1, 1)
 		launcher.Position = if layout.Vehicle
