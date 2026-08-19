@@ -861,6 +861,12 @@ local Config = {
 		BookingDeskTag = "RoleplayOSCustodyDesk",
 		CellSpawnTag = "RoleplayOSCustodyCellSpawn",
 		VehicleSeatTag = "RoleplayOSCustodySeat",
+		-- A processing chair, distinct from VehicleSeatTag above (which seats a
+		-- detainee in a car). Sitting a cuffed detainee here, then pressing the
+		-- prompt on the chair, is what replaces "stand near a desk" as the
+		-- condition for booking - concrete rather than a distance check nobody
+		-- can see the edge of.
+		ChairTag = "RoleplayOSCustodyChair",
 		MaximumInteractionDistance = 12,
 		MaximumBookingDistance = 18,
 		MaximumVehicleDistance = 16,

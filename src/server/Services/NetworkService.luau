@@ -1558,8 +1558,8 @@ function NetworkService:Start()
 			Message = if record
 				then "Custody booking created."
 				elseif
-					reason == "BOOKING_DESK_REQUIRED"
-				then "Both the officer and detainee must be at a custody desk."
+					reason == "TARGET_NOT_SEATED"
+				then "Sit the detainee in a custody chair before booking them."
 				elseif
 					reason == "TARGET_NOT_CUFFED"
 				then "The detainee must be handcuffed before processing."

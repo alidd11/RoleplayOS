@@ -24,7 +24,9 @@ local CustodyController = {
 -- message, so nothing new has to be asked for to say which it is.
 local REFUSALS = {
 	NOT_AUTHORISED = "Your role cannot process custody.",
-	BOOKING_DESK_REQUIRED = "Stand at a custody desk with the detainee to book them.",
+	TARGET_NOT_SEATED = "Sit the detainee in a custody chair before booking them.",
+	CHAIR_NOT_FOUND = "That custody chair could not be found.",
+	CHAIR_EMPTY = "Nobody is sitting in that chair.",
 	TARGET_NOT_CUFFED = "The detainee has to be in handcuffs first.",
 	TARGET_OUT_OF_RANGE = "Get closer to the detainee, with nothing between you.",
 	TARGET_UNAVAILABLE = "That player cannot be dealt with right now.",
@@ -343,8 +345,8 @@ function CustodyController:_refreshSummary()
 	elseif seconds <= 0 then
 		self.hint.Text = "No offence selected. Booking now records this as Other recorded offence."
 		self.hint.TextColor3 = C.muted
-	elseif self.policyMetadata.BookingDeskRequired then
-		self.hint.Text = "Ready. You and the detainee both have to be standing at a custody desk."
+	elseif self.policyMetadata.BookingChairRequired then
+		self.hint.Text = "Ready. Sit the detainee in a custody chair before booking."
 		self.hint.TextColor3 = C.muted
 	else
 		self.hint.Text = "Ready. Stay next to the detainee while this goes through."

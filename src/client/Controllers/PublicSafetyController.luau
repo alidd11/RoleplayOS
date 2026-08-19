@@ -821,6 +821,34 @@ function PublicSafetyController:Start()
 			end)
 		)
 	end
+	-- CustodyService owns the chair's ProximityPrompt server-side and validates
+	-- the trigger itself, so this is a read-only reply naming who is in the
+	-- chair (or why there is nobody to process) rather than a request this
+	-- client makes - the same shape VendorOpened already uses.
+	local chairEvent =
+		self.context.Controllers.NetworkController:ResolveEvent("CustodyChairProcessed")
+	if chairEvent then
+		table.insert(
+			self.connections,
+			chairEvent.OnClientEvent:Connect(function(result)
+				if type(result) ~= "table" then
+					return
+				end
+				if result.Success and type(result.Data) == "table" then
+					self:_showActions(result.Data.TargetUserId, result.Data)
+					return
+				end
+				self.context.Controllers.NotificationController:Show(
+					self.context.Controllers.CustodyController:Explain(
+						{ Code = result.Reason },
+						"That chair could not be used."
+					),
+					"Custody Chair",
+					"Danger"
+				)
+			end)
+		)
+	end
 	ContextActionService:BindAction(CLOSE_ACTION, function(_, state)
 		if state ~= Enum.UserInputState.Begin or not self.actionPanel.Visible then
 			return Enum.ContextActionResult.Pass
