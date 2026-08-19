@@ -762,7 +762,13 @@ function EmergencyLightsController:_layout()
 	local width = size.X - inset * 2
 
 	local columns = if compact then 6 else 2
-	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
+	-- One pixel short of an exact fit, deliberately.
+	--
+	-- Two cells plus a gap came to precisely the grid's width, and UIGridLayout
+	-- treats an exact fit as an overflow and wraps -- so a two column grid laid
+	-- itself out one key to a row and the panel became a tall single stack. Taking
+	-- a pixel off each cell is invisible and leaves the layout no room to disagree.
+	local cellWidth = math.floor((width - (columns - 1) * gap) / columns) - 1
 	local cellHeight = if compact then 44 else 54
 	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
 

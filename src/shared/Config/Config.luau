@@ -2627,7 +2627,14 @@ local Config = {
 			GetFrameworkStatus = { Capacity = 4, RefillPerSecond = 1 },
 			-- Flicked often on a response, so generous, but still bounded so a held
 			-- key cannot become a packet flood.
-			SetEmergencyLights = { Capacity = 8, RefillPerSecond = 3 },
+			-- Deeper than it was, because 8 and 3/s was refusing ordinary use. An
+			-- officer setting up on scene presses several keys in a couple of
+			-- seconds, and some presses send two requests -- a tone and a stage --
+			-- so the bucket emptied and the panel answered "please wait before
+			-- trying again" to a first press. That is what made the controls feel
+			-- like they needed clicking twice: the first press was not ignored, it
+			-- was refused. Still far below what a held key or a script could send.
+			SetEmergencyLights = { Capacity = 20, RefillPerSecond = 8 },
 			-- Indicators and headlights. A driver signalling at a junction taps
 			-- these in quick succession, so the bucket is a little deeper than the
 			-- ELS one, but a held key still cannot flood the server.
