@@ -842,7 +842,31 @@ function CustodyService:Start()
 							player:SetAttribute("RoleplayOSCustodyReleaseAt", now + remaining)
 							player:SetAttribute("RoleplayOSCustodyRemaining", remaining)
 							if remaining == 0 then
-								self:_completeSentence(player, "Served", nil)
+								local completed, completeReason =
+									self:_completeSentence(player, "Served", nil)
+								if not completed then
+									-- Retried rather than left at a permanently zeroed
+									-- timer. _completeSentence can fail for reasons that
+									-- resolve themselves a few seconds later -- no
+									-- civilian spawn configured yet, a transient role or
+									-- spawn failure -- and the alternative is a prisoner
+									-- stuck in custody forever with a clock reading zero,
+									-- since the `remaining > 0` gate above never lets this
+									-- branch run again once it is.
+									local retrySeconds = 5
+									sentence.RemainingSeconds = retrySeconds
+									sentence.ReleaseAt = 0
+									sentence.UpdatedAt = now
+									player:SetAttribute(
+										"RoleplayOSCustodyReleaseAt",
+										now + retrySeconds
+									)
+									player:SetAttribute("RoleplayOSCustodyRemaining", retrySeconds)
+									self.context.Logger:Warning(
+										"Custody release on time served failed, retrying",
+										{ UserId = player.UserId, Reason = completeReason }
+									)
+								end
 							elseif remaining % 10 == 0 then
 								self.context.Services:Get("DataService"):MarkDirty(player)
 							end

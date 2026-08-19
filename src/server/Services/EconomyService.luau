@@ -92,50 +92,63 @@ function EconomyService:ReconcilePendingTransfers()
 		return
 	end
 	self.reconciling = true
-	local data = self.context.Services:Get("DataService")
-	local index = data:GetSharedRecord("pending-transfer-index")
-	if type(index) ~= "table" then
-		self.reconciling = false
-		return
-	end
-	local remaining = {}
-	for _, id in index do
-		local record = data:GetSharedRecord(id)
-		local player = type(record) == "table" and Players:GetPlayerByUserId(record.SenderUserId)
-		local session = player and data:GetSession(player)
-		local character = session
-			and session.ActiveCharacterId == record.SenderCharacterId
-			and session.Profile.Characters[record.SenderCharacterId]
-		if not character then
-			table.insert(remaining, id)
-			continue
+	-- Wrapped so an error partway through -- a transient DataStore failure is
+	-- the obvious one -- cannot leave the guard stuck true. Without this, one
+	-- bad call here silently disabled reconciliation for the rest of the
+	-- server's life: every later call from PlayerAdded, the initial-players
+	-- loop, and the fallback timer would return at the guard above and never
+	-- try again.
+	local ok, problem = pcall(function()
+		local data = self.context.Services:Get("DataService")
+		local index = data:GetSharedRecord("pending-transfer-index")
+		if type(index) ~= "table" then
+			return
 		end
-		local applied = self:Apply(player, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = record.SenderCharacterId,
-			Amount = record.Amount,
-			Direction = "Credit",
-			ReasonCode = "PLAYER_TRANSFER_REFUND_RECONCILE",
-			Description = "Recovered transfer refund",
-			RelatedEntityId = record.TransferId,
-			Metadata = {},
-		})
-		if applied then
-			data:Save(player)
-			data:UpdateSharedRecord(id, function(existing)
-				if type(existing) == "table" then
-					existing.Status = "Reconciled"
-				end
-				return existing
-			end)
-		else
-			table.insert(remaining, id)
+		local remaining = {}
+		for _, id in index do
+			local record = data:GetSharedRecord(id)
+			local player = type(record) == "table"
+				and Players:GetPlayerByUserId(record.SenderUserId)
+			local session = player and data:GetSession(player)
+			local character = session
+				and session.ActiveCharacterId == record.SenderCharacterId
+				and session.Profile.Characters[record.SenderCharacterId]
+			if not character then
+				table.insert(remaining, id)
+				continue
+			end
+			local applied = self:Apply(player, {
+				TransactionId = HttpService:GenerateGUID(false),
+				CharacterId = record.SenderCharacterId,
+				Amount = record.Amount,
+				Direction = "Credit",
+				ReasonCode = "PLAYER_TRANSFER_REFUND_RECONCILE",
+				Description = "Recovered transfer refund",
+				RelatedEntityId = record.TransferId,
+				Metadata = {},
+			})
+			if applied then
+				data:Save(player)
+				data:UpdateSharedRecord(id, function(existing)
+					if type(existing) == "table" then
+						existing.Status = "Reconciled"
+					end
+					return existing
+				end)
+			else
+				table.insert(remaining, id)
+			end
 		end
-	end
-	data:UpdateSharedRecord("pending-transfer-index", function()
-		return remaining
+		data:UpdateSharedRecord("pending-transfer-index", function()
+			return remaining
+		end)
 	end)
 	self.reconciling = false
+	if not ok then
+		self.context.Logger:Error("Pending transfer reconciliation failed", {
+			Error = tostring(problem),
+		})
+	end
 end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
