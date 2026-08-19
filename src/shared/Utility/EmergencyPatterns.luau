@@ -165,6 +165,32 @@ local function readColours(remote: Instance): { [string]: Color3 }
 	return settings.brickLightColors
 end
 
+-- The transparency a lamp is shown at once it is lit.
+--
+-- EasyLS ships every lamp fully transparent -- its own initialize() runs
+-- lightOff on the whole bar before anything else, as the resting state a
+-- pattern lights it out of -- so a lamp this engine merely recolours and
+-- never un-hides stays invisible regardless of what colour it was set to.
+-- Each kit tunes its own value, generally short of fully opaque so the lens
+-- keeps some glow rather than reading as a solid disc.
+EmergencyPatterns.DefaultOnTransparency = 0.2
+
+local function readOnTransparency(remote: Instance): number
+	local config = remote:FindFirstChild("EasyLS_Config")
+	if not config or not config:IsA("ModuleScript") then
+		return EmergencyPatterns.DefaultOnTransparency
+	end
+	local ok, settings = pcall(require, config)
+	if
+		not ok
+		or type(settings) ~= "table"
+		or type(settings.neonLightOnTransparency) ~= "number"
+	then
+		return EmergencyPatterns.DefaultOnTransparency
+	end
+	return settings.neonLightOnTransparency
+end
+
 -- Every lamp name any stage on this vehicle refers to, matched against a
 -- physical part under LightsParent.
 --
@@ -202,6 +228,8 @@ export type Kit = {
 	-- A name with no match here belongs to a stage that cannot be driven --
 	-- see canAdopt.
 	Lamps: { [string]: BasePart },
+	-- Transparency a lamp is painted at while lit. See readOnTransparency.
+	OnTransparency: number,
 }
 
 -- Everything one vehicle's lightbar was authored with.
@@ -236,6 +264,7 @@ function EmergencyPatterns.read(vehicle: Instance): Kit?
 		Stages = stages,
 		Colours = readColours(remote),
 		Lamps = collectLampParts(lightsParent, stages),
+		OnTransparency = readOnTransparency(remote),
 	}
 end
 

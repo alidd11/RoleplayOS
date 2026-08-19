@@ -731,6 +731,7 @@ H.test("a kit is only adopted whole", function()
 		Stages = { Stage1 = stage },
 		Colours = EmergencyPatterns.DefaultColours,
 		Lamps = {},
+		OnTransparency = EmergencyPatterns.DefaultOnTransparency,
 	}), "a kit with no lights parent was adopted")
 	H.expect(not EmergencyPatterns.canAdopt({
 		Remote = workspace,
@@ -738,6 +739,7 @@ H.test("a kit is only adopted whole", function()
 		Stages = { Stage1 = stage },
 		Colours = EmergencyPatterns.DefaultColours,
 		Lamps = {},
+		OnTransparency = EmergencyPatterns.DefaultOnTransparency,
 	}), "a kit whose lamp names matched nothing was adopted")
 	H.expect(
 		EmergencyPatterns.canAdopt({
@@ -746,6 +748,7 @@ H.test("a kit is only adopted whole", function()
 			Stages = { Stage1 = stage },
 			Colours = EmergencyPatterns.DefaultColours,
 			Lamps = { F1 = part },
+			OnTransparency = EmergencyPatterns.DefaultOnTransparency,
 		}),
 		"a complete kit was refused"
 	)

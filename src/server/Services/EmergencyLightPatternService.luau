@@ -64,7 +64,8 @@ function EmergencyLightPatternService:Adopt(vehicle: Instance)
 	-- colour.
 	local original = {}
 	for name, part in kit.Lamps do
-		original[name] = { Color = part.Color, Material = part.Material }
+		original[name] =
+			{ Color = part.Color, Material = part.Material, Transparency = part.Transparency }
 	end
 	-- Which of the kit's own Stage1/Stage2/Stage3 this vehicle actually
 	-- authored, in order. Most of the fleet has only Stage1 -- the framework's
@@ -166,11 +167,16 @@ function EmergencyLightPatternService:_paint(vehicle: Instance)
 				if rgb then
 					part.Color = rgb
 					part.Material = Enum.Material.Neon
+					-- EasyLS ships every lamp fully transparent as the rest
+					-- state a pattern lights it out of. Recolouring alone
+					-- left it invisible: this is what actually shows it.
+					part.Transparency = state.Kit.OnTransparency
 				end
 			else
 				local original = state.Original[name]
 				part.Color = original.Color
 				part.Material = original.Material
+				part.Transparency = original.Transparency
 			end
 			local light = part:FindFirstChildWhichIsA("Light")
 			if light and light.Enabled ~= (colour ~= nil) then
