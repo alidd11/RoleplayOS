@@ -716,7 +716,13 @@ function EmergencyLightsController:_mount()
 		self.connections,
 		horn.MouseButton1Down:Connect(function()
 			self:_setHorn(true)
-			self:_lamp("Airhorn", true, LAMP_RED)
+			-- Amber, not red. LAMP_RED sits almost on top of HORN_CAP's own resting
+			-- colour -- both are dark reds -- so the only change on press was a 4px
+			-- strip going from one near-identical red to another, which read as the
+			-- button doing nothing. Every other cap here is pale enough that its lit
+			-- colour pops regardless of what it is; the siren and horn caps are the
+			-- one place the lamp colour has to actually fight the face it sits on.
+			self:_lamp("Airhorn", true, LAMP_ON)
 		end)
 	)
 	local function hornUp()
@@ -929,7 +935,10 @@ function EmergencyLightsController:_paint()
 	local tone = self:_playingTone()
 	if self.buttons.Sirens then
 		self.buttons.Sirens.Legend.Text = if tone ~= "" then string.upper(tone) else "SIRENS"
-		self:_lamp("Sirens", tone ~= "", LAMP_RED)
+		-- Amber against SIREN_CAP's own dark red for the same reason as Airhorn
+		-- below: LAMP_RED barely distinguished itself from the face it sits on, so
+		-- an engaged siren still read as an idle button.
+		self:_lamp("Sirens", tone ~= "", LAMP_ON)
 	end
 
 	local stage = state.Stage or 0
@@ -1143,7 +1152,7 @@ function EmergencyLightsController:_bindControls(available: boolean)
 			self:Toggle()
 			if inputObject.KeyCode == Enum.KeyCode.F then
 				self:_setHorn(true)
-				self:_lamp("Airhorn", true, LAMP_RED)
+				self:_lamp("Airhorn", true, LAMP_ON)
 			end
 		elseif state == Enum.UserInputState.End or state == Enum.UserInputState.Cancel then
 			if inputObject.KeyCode == Enum.KeyCode.F then
