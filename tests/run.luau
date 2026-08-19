@@ -24,6 +24,7 @@ local PayloadInspector = require(Shared.PayloadInspector)
 local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Coalescer = require(Shared.Coalescer)
 local Fuel = require(Shared.FuelConsumption)
+local Gangs = require(Shared.GangRules)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("cash drops require bounded whole pound amounts", function()
@@ -559,6 +560,105 @@ H.test("the empty threshold stops the engine before the tank reads zero", functi
 	local settings = Config.VehicleData
 	H.expect(settings.EmptyFuelPercent > 0, "the engine only cuts at exactly zero")
 	H.expect(settings.EmptyFuelPercent < 5, "the engine cuts while the gauge still shows fuel")
+end)
+
+H.test("gang names are shaped before they reach a filter or a datastore", function()
+	local ok = Gangs.validateName("Bridge 42")
+	H.expect(ok == "Bridge 42", "a plain name was refused")
+	H.expect(
+		select(1, Gangs.validateName("  Bridge 42  ")) == "Bridge 42",
+		"the cleaned name is not returned"
+	)
+	H.expect(
+		select(2, Gangs.validateName("ab")) == "NAME_LENGTH",
+		"a two character name was allowed"
+	)
+	H.expect(
+		select(2, Gangs.validateName(string.rep("a", 25))) == "NAME_LENGTH",
+		"an overlong name was allowed"
+	)
+	H.expect(select(2, Gangs.validateName("  ")) == "NAME_REQUIRED", "whitespace passed as a name")
+	H.expect(select(2, Gangs.validateName(42)) == "NAME_REQUIRED", "a number passed as a name")
+	-- The shapes people actually use to game a list.
+	H.expect(
+		select(2, Gangs.validateName("-Bridge")) == "NAME_CHARACTERS",
+		"a leading hyphen was allowed"
+	)
+	H.expect(
+		select(2, Gangs.validateName("Bridge  42")) == "NAME_CHARACTERS",
+		"a double space was allowed"
+	)
+	H.expect(
+		select(2, Gangs.validateName("<<Bridge>>")) == "NAME_CHARACTERS",
+		"punctuation drawing was allowed"
+	)
+end)
+
+H.test("two gangs cannot be visibly identical", function()
+	H.expect(
+		Gangs.nameKey("Bridge 42") == Gangs.nameKey("bridge42"),
+		"case and spacing distinguish two names"
+	)
+	H.expect(Gangs.nameKey("Bridge 42") ~= Gangs.nameKey("Bridge 43"), "different names collided")
+end)
+
+H.test("invites respect the leader, the cap and existing membership", function()
+	local gang = {
+		Id = "g",
+		Name = "Bridge 42",
+		LeaderUserId = 1,
+		MemberUserIds = { 2, 3 },
+		TerritoryId = nil,
+	}
+	H.expect(Gangs.canInvite(gang, 1, 9), "the leader could not invite")
+	H.expect(select(2, Gangs.canInvite(gang, 2, 9)) == "NOT_THE_LEADER", "a member could invite")
+	H.expect(
+		select(2, Gangs.canInvite(gang, 1, 2)) == "ALREADY_A_MEMBER",
+		"an existing member was re-invited"
+	)
+	H.expect(
+		select(2, Gangs.canInvite(gang, 1, 1)) == "ALREADY_A_MEMBER",
+		"the leader invited themselves"
+	)
+	-- The leader occupies a place, so the cap is reached one member early.
+	local full = { Id = "g", Name = "n", LeaderUserId = 1, MemberUserIds = {}, TerritoryId = nil }
+	for i = 2, Gangs.MaximumMembers do
+		table.insert(full.MemberUserIds, i)
+	end
+	H.expect(select(2, Gangs.canInvite(full, 1, 99)) == "GANG_FULL", "a gang went over its cap")
+end)
+
+H.test("a territory does not change hands on a tie, and police suppress a contest", function()
+	-- A strict majority only: an equal showing leaves the holder alone.
+	local holder, why = Gangs.contestOutcome("a", { a = 3, b = 3 }, 0)
+	H.expect(holder == "a" and why == "NO_CHANGE", "a tie flipped the zone")
+	holder, why = Gangs.contestOutcome("a", { a = 2, b = 4 }, 0)
+	H.expect(holder == "b" and why == "CONTESTED", "a majority did not take the zone")
+	holder, why = Gangs.contestOutcome("a", { a = 4, b = 2 }, 0)
+	H.expect(holder == "a" and why == "HELD", "the holder lost while winning")
+	-- An officer stops the contest without taking the ground.
+	holder, why = Gangs.contestOutcome("a", { b = 9 }, 1)
+	H.expect(holder == "a" and why == "SUPPRESSED_BY_POLICE", "police did not suppress a contest")
+	-- An empty zone belongs to whoever held it.
+	holder, why = Gangs.contestOutcome("a", {}, 0)
+	H.expect(holder == "a" and why == "NO_CHANGE", "an empty zone changed hands")
+	H.expect(
+		select(1, Gangs.contestOutcome(nil, {}, 0)) == nil,
+		"an unheld empty zone gained an owner"
+	)
+end)
+
+H.test("contest timings leave room for a fight and for it to settle", function()
+	H.expect(Gangs.ContestSeconds > 30, "a zone flips faster than anybody can respond")
+	H.expect(Gangs.PoliceClearSeconds < Gangs.ContestSeconds, "clearing takes longer than taking")
+	H.expect(
+		Gangs.ClaimCooldownSeconds > Gangs.ContestSeconds,
+		"a zone can be traded back immediately"
+	)
+	H.expect(
+		Gangs.MaximumMembers > 1 and Gangs.MaximumMembers <= 30,
+		"the member cap is not a sane size"
+	)
 end)
 
 H.finish()
