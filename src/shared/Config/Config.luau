@@ -498,7 +498,17 @@ local Config = {
 		VehicleAnchorY = 0.52,
 	},
 	Locations = {
-		Enabled = true,
+		-- Off. The banner is meant to sit under Roblox's own top bar, and it was
+		-- landing in the middle of the screen instead -- across the player, the
+		-- vehicle and the cluster, reading as something stuck to the character
+		-- rather than a place name. Turned off rather than repositioned because
+		-- the placement is the thing that needs working out, and a wrong banner in
+		-- the centre of the view is worse than none.
+		--
+		-- Everything behind it is intact: the zone tags, the spatial query and the
+		-- resolver all still work, so this is one word away from returning once the
+		-- anchoring is right.
+		Enabled = false,
 		-- Streets and districts are invisible parts in the map carrying this tag.
 		-- Each holds a StreetName attribute, optionally a DistrictName, and
 		-- optionally a numeric Priority so an enclosing district does not mask

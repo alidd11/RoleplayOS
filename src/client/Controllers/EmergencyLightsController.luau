@@ -30,7 +30,13 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 -- above or below. That is what read as squashed. 300 gives 88px cells, which
 -- holds those legends on one line, and the extra key height gives the ones that
 -- still wrap somewhere to go.
-local FULL_PANEL = Vector2.new(300, 402)
+-- Two keys to a row, in a narrower box.
+--
+-- Three across needed 300 of width to hold a legend like "RUN LOCK" on one line,
+-- which made the panel a wide slab down the side of the screen. Two across holds
+-- the same legends in a box two thirds the width, and the keys come out closer to
+-- square rather than wide and flat.
+local FULL_PANEL = Vector2.new(232, 402)
 local COMPACT_PANEL = Vector2.new(468, 206)
 
 -- The moulding the keys are set into. Three greys, so the caps carry the colour.
@@ -725,7 +731,7 @@ function EmergencyLightsController:_layout()
 	local inset, gap = 12, 8
 	local width = size.X - inset * 2
 
-	local columns = if compact then 6 else 3
+	local columns = if compact then 6 else 2
 	local cellWidth = math.floor((width - (columns - 1) * gap) / columns)
 	local cellHeight = if compact then 44 else 54
 	self.gridLayout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)

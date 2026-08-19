@@ -791,6 +791,28 @@ function SpeedometerController:_paintSweep(fraction: number)
 	end
 end
 
+-- The chassis's own gauge, removed wherever it turns up.
+--
+-- The spawner already takes this frame out of the vehicle, and that ought to be
+-- the end of it. It is done again here because the kit hands its interface to the
+-- driver at seat time and the two are not reliably ordered: whichever copy the
+-- client ends up holding, this catches it. Destroyed rather than hidden -- hiding
+-- was the old workaround and it left the script behind it running, writing a
+-- needle and a speed into an invisible frame for the whole drive.
+local STOCK_GAUGE_FRAMES = { "AC6_Stock_Gauges", "AC6C_Style_Gauges", "FH5_Gauge" }
+
+function SpeedometerController:_stripStockGauges()
+	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if not playerGui then
+		return
+	end
+	for _, descendant in playerGui:GetDescendants() do
+		if descendant:IsA("GuiObject") and table.find(STOCK_GAUGE_FRAMES, descendant.Name) then
+			descendant:Destroy()
+		end
+	end
+end
+
 function SpeedometerController:_watch(character: Model)
 	local humanoid = character:WaitForChild("Humanoid", 10)
 	if not humanoid or not humanoid:IsA("Humanoid") then
@@ -803,6 +825,16 @@ function SpeedometerController:_watch(character: Model)
 				then humanoid.SeatPart
 				else nil
 			self.frame.Visible = self.seat ~= nil
+			-- Deferred, because the kit parents its interface after the seat change.
+			if self.seat then
+				self:_stripStockGauges()
+				task.delay(0.4, function()
+					self:_stripStockGauges()
+				end)
+				task.delay(1.5, function()
+					self:_stripStockGauges()
+				end)
+			end
 			-- Discards the previous vehicle's needle position, so the first sample
 			-- in this one is adopted rather than swept to.
 			self:_snapToSeat()
