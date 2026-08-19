@@ -184,7 +184,18 @@ function MinimapController:_drawPoint(item: Instance, centre: Vector3, radius: n
 	local text = item:GetAttribute("MinimapLabel")
 	if typeof(text) == "string" and text ~= "" then
 		local caption = makeLabel(dot, text, 9)
-		caption.Position = UDim2.fromOffset(8, -4)
+		-- Flipped to the marker's left once past the halfway point, the same
+		-- fix the waypoint label below needs: fixed at (8, -4) unconditionally,
+		-- a caption on any point in roughly the right half of the map ran
+		-- straight into the viewport's own ClipsDescendants edge, with nothing
+		-- past it ever visible -- not even truncated, just gone.
+		if point.X > 0.5 then
+			caption.AnchorPoint = Vector2.new(1, 0)
+			caption.Position = UDim2.fromOffset(-8, -4)
+			caption.TextXAlignment = Enum.TextXAlignment.Right
+		else
+			caption.Position = UDim2.fromOffset(8, -4)
+		end
 		caption.Size = UDim2.fromOffset(140, 16)
 		caption.ZIndex = 4
 		TooltipSystem:Attach(caption, text)
@@ -276,18 +287,37 @@ function MinimapController:_redraw(centre: Vector3)
 			marker.Parent = self.viewport
 			corner(marker, 12)
 			local distance = math.floor((self.waypoint.Position - centre).Magnitude)
+			-- The distance readout is the most useful number on the panel and
+			-- was the one most often lost: caption and distance together reach
+			-- 130px to the right of the marker unconditionally, which any
+			-- waypoint past roughly a third of the map's width pushed straight
+			-- into the viewport's ClipsDescendants edge. Mirrored to the
+			-- marker's left past the halfway point instead.
+			local mirrored = point.X > 0.5
 			local caption = makeLabel(marker, self.waypoint.Caption, 8)
-			caption.Position = UDim2.fromOffset(17, 2)
 			caption.Size = UDim2.fromOffset(78, 18)
 			caption.TextColor3 = C.Text
 			caption.ZIndex = 8
+			if mirrored then
+				caption.AnchorPoint = Vector2.new(1, 0)
+				caption.Position = UDim2.fromOffset(-17, 2)
+				caption.TextXAlignment = Enum.TextXAlignment.Right
+			else
+				caption.Position = UDim2.fromOffset(17, 2)
+			end
 			TooltipSystem:Attach(caption, self.waypoint.Caption)
 			local distanceLabel = makeLabel(marker, string.format("%dm", distance), 8)
-			distanceLabel.Position = UDim2.fromOffset(94, 2)
 			distanceLabel.Size = UDim2.fromOffset(36, 18)
 			distanceLabel.TextColor3 = C.Muted
-			distanceLabel.TextXAlignment = Enum.TextXAlignment.Right
 			distanceLabel.ZIndex = 8
+			if mirrored then
+				distanceLabel.AnchorPoint = Vector2.new(1, 0)
+				distanceLabel.Position = UDim2.fromOffset(-94, 2)
+				distanceLabel.TextXAlignment = Enum.TextXAlignment.Left
+			else
+				distanceLabel.Position = UDim2.fromOffset(94, 2)
+				distanceLabel.TextXAlignment = Enum.TextXAlignment.Right
+			end
 		end
 	end
 	self.drawnAt = centre
