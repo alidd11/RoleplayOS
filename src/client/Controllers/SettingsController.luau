@@ -18,25 +18,48 @@ function SettingsController:Init(context: any)
 	self.effectStates = setmetatable({}, { __mode = "k" })
 end
 
+-- SCALE and NATIVE_TEXT_SCALE together already bound the multiplier to
+-- 0.9-1.265, so an absolute per-element floor/ceiling on top of that only
+-- overrides sizes the multiplier was never going to threaten: an 8px
+-- PhoneController label at Small got bumped to a 10px floor - a 25%
+-- *increase* when the player asked for smaller - and the dashboard's 42px
+-- monogram was shrunk to a 36px ceiling at every setting, authored size or
+-- not. Scaling the authored size directly needs no rescue clamp.
+function SettingsController:_scaleValue(): number
+	return (SCALE[self.settings.InterfaceScale] or 1)
+		* (NATIVE_TEXT_SCALE[GuiService.PreferredTextSize] or 1)
+end
+
+function SettingsController:_applyScaleToItem(item: Instance)
+	if not self.settings then
+		return
+	end
+	if not (item:IsA("TextLabel") or item:IsA("TextButton") or item:IsA("TextBox")) then
+		return
+	end
+	local screenGui = item:FindFirstAncestorWhichIsA("ScreenGui")
+	if not screenGui or not screenGui:GetAttribute("RoleplayOSManagedUI") then
+		return
+	end
+	local textItem = item :: TextLabel | TextButton | TextBox
+	local baseSize = textItem:GetAttribute("RoleplayOSBaseTextSize")
+	if type(baseSize) ~= "number" then
+		baseSize = textItem.TextSize
+		textItem:SetAttribute("RoleplayOSBaseTextSize", baseSize)
+	end
+	textItem.TextSize = math.floor(baseSize * self:_scaleValue() + 0.5)
+end
+
 function SettingsController:_applyInterfaceScale()
 	local playerGui = Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if not playerGui or not self.settings then
 		return
 	end
-	local scaleValue = (SCALE[self.settings.InterfaceScale] or 1)
-		* (NATIVE_TEXT_SCALE[GuiService.PreferredTextSize] or 1)
 	for _, gui in playerGui:GetChildren() do
 		if gui:IsA("ScreenGui") and gui:GetAttribute("RoleplayOSManagedUI") then
 			gui:SetAttribute("RoleplayOSInterfaceMotion", self.settings.InterfaceMotion)
 			for _, item in gui:GetDescendants() do
-				if item:IsA("TextLabel") or item:IsA("TextButton") or item:IsA("TextBox") then
-					local baseSize = item:GetAttribute("RoleplayOSBaseTextSize")
-					if type(baseSize) ~= "number" then
-						baseSize = item.TextSize
-						item:SetAttribute("RoleplayOSBaseTextSize", baseSize)
-					end
-					item.TextSize = math.clamp(math.floor(baseSize * scaleValue + 0.5), 10, 36)
-				end
+				self:_applyScaleToItem(item)
 			end
 		end
 	end
@@ -124,6 +147,18 @@ function SettingsController:Start()
 		self.connections,
 		GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(function()
 			self:_applyInterfaceScale()
+		end)
+	)
+	-- _applyInterfaceScale only ever walked what already existed, so anything
+	-- built lazily after that walk - toasts, modal cards, tooltips, minimap
+	-- captions, MDT rows, phone pages, dispatch rows - kept its authored size
+	-- regardless of the setting. Applying the current scale to each new text
+	-- item as it is added catches those without re-walking the whole tree.
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	table.insert(
+		self.connections,
+		playerGui.DescendantAdded:Connect(function(item)
+			self:_applyScaleToItem(item)
 		end)
 	)
 	-- Deferred so a not-yet-registered endpoint cannot stall the serial client
