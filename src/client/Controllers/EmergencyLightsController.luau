@@ -54,6 +54,12 @@ local EmergencyLightsController = { connections = {}, tracked = {} }
 local HIDDEN_CONTROLS = {
 	RunLock = true,
 	LowPower = true,
+	-- Director cycles the kit's director patterns, so unlike the two above it is
+	-- wired to something -- but it is a rear-facing arrow board for closing a
+	-- lane, which almost nothing in this fleet actually carries. It cost a row on
+	-- every panel to be useful on a handful of vehicles. Hidden on the same terms
+	-- as the others: the control and its cycling are intact behind this.
+	Director = true,
 }
 
 local FULL_PANEL = Vector2.new(232, 402)
@@ -619,10 +625,10 @@ function EmergencyLightsController:_mount()
 	panel.Visible = false
 	panel.SelectionGroup = true
 	panel.Parent = gui
-	corner(panel, 14)
+	corner(panel, 10)
 	local panelStroke = Instance.new("UIStroke")
 	panelStroke.Color = BEZEL
-	panelStroke.Thickness = 2
+	panelStroke.Thickness = 1.5
 	panelStroke.Parent = panel
 	self.panel = panel
 	local panelScale = Instance.new("UIScale")
@@ -635,8 +641,8 @@ function EmergencyLightsController:_mount()
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.fromOffset(12, 8)
-	title.Size = UDim2.new(1, -100, 0, 16)
+	title.Position = UDim2.fromOffset(12, 7)
+	title.Size = UDim2.new(1, -96, 0, 14)
 	title.Font = Enum.Font.GothamMedium
 	title.Text = "EMERGENCY CONTROLS"
 	title.TextColor3 = ENGRAVED
@@ -648,8 +654,8 @@ function EmergencyLightsController:_mount()
 	local readout = Instance.new("TextLabel")
 	readout.Name = "Readout"
 	readout.AnchorPoint = Vector2.new(1, 0)
-	readout.Position = UDim2.new(1, -12, 0, 8)
-	readout.Size = UDim2.fromOffset(84, 16)
+	readout.Position = UDim2.new(1, -12, 0, 7)
+	readout.Size = UDim2.fromOffset(80, 14)
 	readout.BackgroundTransparency = 1
 	readout.Font = Enum.Font.GothamMedium
 	readout.Text = "STANDBY"
@@ -748,7 +754,11 @@ function EmergencyLightsController:_layout()
 	end
 	local compact = self.compactShape == true
 	local size = if compact then COMPACT_PANEL else FULL_PANEL
-	local inset, gap = 12, 8
+	-- Tighter than it was. The header is a single 11px line and was given thirty
+	-- pixels of room above the first key, and the gutters were the same eight
+	-- pixels as the gaps between keys, which made the box read as padding with
+	-- some buttons in it rather than a control head.
+	local inset, gap = 10, 6
 	local width = size.X - inset * 2
 
 	local columns = if compact then 6 else 2
@@ -764,7 +774,7 @@ function EmergencyLightsController:_layout()
 	end
 	local rows = math.max(math.ceil(circuits / columns), 1)
 	local gridHeight = rows * cellHeight + (rows - 1) * gap
-	self.grid.Position = UDim2.fromOffset(inset, 30)
+	self.grid.Position = UDim2.fromOffset(inset, 26)
 	self.grid.Size = UDim2.fromOffset(width, gridHeight)
 
 	-- The coloured row, laid out by hand because a lone key on the last line
@@ -780,7 +790,7 @@ function EmergencyLightsController:_layout()
 	end)
 	local across = if compact then 5 else 2
 	local keyWidth = math.floor((width - (across - 1) * gap) / across)
-	local top = 30 + gridHeight + 10
+	local top = 26 + gridHeight + 8
 	self.modeRow.Position = UDim2.fromOffset(inset, top)
 	self.modeRow.Size = UDim2.fromOffset(width, 1)
 	local keyHeight = if compact then 44 else 54

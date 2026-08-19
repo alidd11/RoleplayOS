@@ -1,5 +1,13 @@
+# Pinned to the versions this repo is actually developed and verified against.
+#
+# These had drifted badly. Rojo was pinned at 7.5.1 while every local build ran
+# 7.7.0, and 7.5.1 cannot parse the Tags property that a current Studio writes
+# into an .rbxm -- so CI failed on Knife.rbxm on every push since the tools
+# folder was last re-exported, while the same build succeeded on the machine it
+# was made on. StyLua and selene had drifted the same way, which meant a clean
+# local run proved nothing about CI.
 [tools]
-rojo = "rojo-rbx/rojo@7.5.1"
-stylua = "JohnnyMorganz/StyLua@2.0.2"
-selene = "Kampfkarren/selene@0.29.0"
+rojo = "rojo-rbx/rojo@7.7.0"
+stylua = "JohnnyMorganz/StyLua@2.5.2"
+selene = "Kampfkarren/selene@0.31.0"
 wally = "UpliftGames/wally@0.3.2"
