@@ -2,7 +2,9 @@
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local GangRules = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.GangRules)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GangRules = require(ReplicatedStorage.RoleplayOS.Shared.GangRules)
+local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 
 -- Territory zones, and claiming and contesting them: the second and third
 -- pieces of docs/GANG_SYSTEM_SPEC.md, on top of the membership GangService
@@ -35,12 +37,16 @@ local GangRules = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared
 -- that lead has held long enough, and what enforces the cooldown after a
 -- change so two gangs of similar size cannot trade a zone indefinitely.
 --
--- Police clearing -- holding a suppressed contest long enough to reset the
--- claim to unowned, and raising a dispatch call when a contest starts -- is
--- the next piece and is not built here. Suppression already stops a contest
--- from progressing; turning that suppression into an active clear is a
--- separate act, the same way accepting a gang invite was a separate act from
--- GangRules validating that one could be sent.
+-- Police clearing is the same shape as a contest, aimed the other way: a
+-- contest is a continuous lead building toward a flip, a clear is continuous
+-- police suppression building toward a reset to unowned. Both live in memory
+-- for the same reason -- a server restart losing progress on either is
+-- correct, since nobody has held anything long enough yet for it to mean
+-- something.
+--
+-- A dispatch call is raised the moment a contest starts, once per attempt,
+-- the same way ANPRService raises one on a wanted-plate hit: an automated
+-- caller, not a player at a console.
 local GangTerritoryService = {
 	connections = {},
 	running = false,
@@ -48,11 +54,12 @@ local GangTerritoryService = {
 	-- part's own attributes are the live mirror, so this table cannot go
 	-- stale by holding a second copy of it.
 	territories = {},
-	-- TerritoryId -> { ChallengerGangId, StartedAt }. In memory only. A
-	-- server restart losing an in-progress challenge is correct, not a bug:
-	-- nobody has actually held the zone long enough yet for it to mean
-	-- anything, the same as a debounce timer resetting on a restart.
+	-- TerritoryId -> { ChallengerGangId, StartedAt }. In memory only.
 	contests = {},
+	-- TerritoryId -> { StartedAt }. In memory only. Separate from contests
+	-- because a clear can run while nobody is contesting at all -- police
+	-- suppress and hold an already-quiet, already-owned zone just the same.
+	policeClears = {},
 }
 
 local TERRITORY_OWNERS_RECORD = "gang-territory-owners"
@@ -109,6 +116,7 @@ function GangTerritoryService:_adopt(part: Instance)
 		if self.territories[id] and self.territories[id].Part == part then
 			self.territories[id] = nil
 			self.contests[id] = nil
+			self.policeClears[id] = nil
 		end
 	end)
 	self:_seedMirror(id)
@@ -212,6 +220,22 @@ function GangTerritoryService:_presence(part: BasePart): ({ [string]: number }, 
 	return presentByGang, policePresent
 end
 
+-- Raises a dispatch call for a contest that has just started, the same
+-- automated-caller shape ANPRService uses for a wanted-plate hit: no player
+-- at a console, a real CallService record so it shows up on the same board.
+function GangTerritoryService:_raiseContestCall(territory: any)
+	self.context.Services:Get("CallService"):Create({
+		Summary = "Gang activity reported at " .. territory.Name,
+		Location = territory.Name,
+		Position = MapProjection.serialise(territory.Part.Position),
+		Priority = "Prompt",
+		IncidentType = "Crime in progress",
+		DepartmentIds = { "Police", "Control" },
+		Source = "GangTerritory",
+		CallerName = "Automatic gang activity report",
+	})
+end
+
 function GangTerritoryService:_tick(territoryId: string)
 	local territory = self.territories[territoryId]
 	if not territory then
@@ -225,17 +249,41 @@ function GangTerritoryService:_tick(territoryId: string)
 	local changedAt = part:GetAttribute("OwnerChangedAt")
 	changedAt = if type(changedAt) == "number" then changedAt else 0
 	if os.time() - changedAt < GangRules.ClaimCooldownSeconds then
-		-- In cooldown: no contest can progress here at all. Any lead being
-		-- built is dropped rather than left to complete the instant the
-		-- cooldown ends on a presence count that may no longer be current.
+		-- In cooldown: no contest and no clear can progress here at all. Any
+		-- lead being built is dropped rather than left to complete the instant
+		-- the cooldown ends on a presence count that may no longer be current.
 		self.contests[territoryId] = nil
+		self.policeClears[territoryId] = nil
 		return
 	end
 	local presentByGang, policePresent = self:_presence(part)
 	local leaderId, reason = GangRules.contestOutcome(holderGangId, presentByGang, policePresent)
+	if reason == "SUPPRESSED_BY_POLICE" then
+		self.contests[territoryId] = nil
+		if not holderGangId then
+			-- Nothing to clear: an unowned zone is already the outcome a clear
+			-- would produce.
+			self.policeClears[territoryId] = nil
+			return
+		end
+		local clear = self.policeClears[territoryId]
+		if not clear then
+			self.policeClears[territoryId] = { StartedAt = os.time() }
+			return
+		end
+		if os.time() - clear.StartedAt < GangRules.PoliceClearSeconds then
+			return
+		end
+		self.policeClears[territoryId] = nil
+		self:SetOwner(territoryId, nil)
+		return
+	end
+	-- Any outcome other than sustained police suppression breaks a clear in
+	-- progress, the same as a broken lead breaks a contest in progress: the
+	-- continuous hold is the whole requirement.
+	self.policeClears[territoryId] = nil
 	if reason ~= "CONTESTED" or not leaderId then
-		-- HELD, NO_CHANGE or SUPPRESSED_BY_POLICE: nothing is currently
-		-- building toward a flip.
+		-- HELD or NO_CHANGE: nothing is currently building toward a flip.
 		self.contests[territoryId] = nil
 		return
 	end
@@ -247,6 +295,7 @@ function GangTerritoryService:_tick(territoryId: string)
 			ChallengerGangId = leaderId,
 			HolderGangId = holderGangId,
 		})
+		self:_raiseContestCall(territory)
 		return
 	end
 	if os.time() - challenge.StartedAt < GangRules.ContestSeconds then
@@ -282,8 +331,8 @@ function GangTerritoryService:OwnerOf(territoryId: string): string?
 end
 
 -- Moves a territory to a new owner, or to nobody. The one mutation primitive:
--- what decides to call it with what is the contest tick above, or, once it
--- exists, a police clear.
+-- what decides to call it with what is the contest and police-clear tick
+-- above.
 --
 -- Keeps four things in step: the territory-owners record, which is the
 -- persisted source of truth; the part's own mirrored attributes, which is
@@ -353,6 +402,7 @@ function GangTerritoryService:Destroy()
 	table.clear(self.connections)
 	table.clear(self.territories)
 	table.clear(self.contests)
+	table.clear(self.policeClears)
 end
 
 return GangTerritoryService
