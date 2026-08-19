@@ -732,6 +732,7 @@ local function input(parent: Instance, placeholder: string): TextBox
 end
 
 return {
+	setAudioFeedback = Widgets.setAudioFeedback,
 	colours = COLOURS,
 	civilianJobRoleIds = CIVILIAN_JOB_ROLE_IDS,
 	roleDisplayOrder = ROLE_DISPLAY_ORDER,

@@ -10,8 +10,8 @@ local TooltipSystem = require(script.Parent.TooltipSystem)
 local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
 local AudioFeedback = require(script.Parent.Parent.Systems.AudioFeedback)
 local Widgets = require(script.Parent.DeveloperDashboardWidgets)
-local StorePanel = require(script.Parent.DeveloperDashboard.StorePanel)
-local TutorialsPanel = require(script.Parent.DeveloperDashboard.TutorialsPanel)
+local StorePanel = require(script.StorePanel)
+local TutorialsPanel = require(script.TutorialsPanel)
 
 local COLOURS = Widgets.colours
 local CIVILIAN_JOB_ROLE_IDS = Widgets.civilianJobRoleIds
