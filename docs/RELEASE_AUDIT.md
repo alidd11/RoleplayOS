@@ -1,134 +1,165 @@
 # Production test release — audit
 
-State of the tree at `1759761`. Every claim below was re-checked against the
+State of the tree at `109a210`. Every claim below was re-checked against the
 working tree at the time of writing rather than carried over from an earlier
-pass. Verdict at the bottom.
+pass. This supersedes `RELEASE_AUDIT_2026-08-07.md` and `AUDIT_2026_08_18.md`,
+both removed alongside this update — their live findings are folded in below
+and their stale ones are corrected, so there is one current document instead
+of three that can silently disagree. Verdict at the bottom.
 
 ## Blockers
 
-### 1. Two firearm gamepasses take Robux and give nothing
+### 1. Three firearm gamepasses take Robux and give nothing
 
-| Pass | Gamepass id |
-| --- | --- |
-| `CivilianShotgun` | 1934518052 |
-| `CivilianRifle` | 1934955986 |
+| Pass | Gamepass id | Price |
+| --- | --- | --- |
+| `CivilianHandgun` | 1937822271 | 125 Robux |
+| `CivilianShotgun` | 1934518052 | 175 Robux |
+| `CivilianRifle` | 1934955986 | 225 Robux |
 
-`Config.EquipmentPasses` contains three entries and neither of these is among
-them:
+This is a bigger list than it used to be. Weapon claiming no longer goes
+through the old `Config.EquipmentPasses` table — that table and the
+`LoadoutService:ApplyEquipmentPasses` function that read it were both deleted
+this cycle, since gamepass owners now have to visit a dealer like everyone
+else. The dealer is `Config.Vendors.Definitions.StreetDealer`, and its `Items`
+list only offers three tools: `Knife` (900 cash or `CivilianKnife`,
+1937446295), `Machete` (`ZKnife`'s and Machete's own passes). Handgun, Shotgun
+and Rifle appear nowhere in `Vendors`, nowhere in `Config.Tools` (the full tool
+list is `Knife`, `Machete`, `ZKnife`, `Handcuffs`, `Taser`, `MedicalBag`,
+`PoliceWarrantCard`, `PAVA` — no firearm of any kind), and nowhere under
+`server-assets/Tools`. A player who buys any of the three receives nothing to
+show for it.
 
-```lua
-Knife   = { GamepassId = 1937446295, ToolNames = { "Knife" } },
-ZKnife  = { GamepassId = 1949486956, ToolNames = { "ZKnife" } },
-Machete = { GamepassId = 1949228959, ToolNames = { "Machete" } },
-```
+**Cannot ship with these on sale.** Delisting needs the account holder;
+building the tools is not a test-release-sized job. The account holder has
+said they will handle this directly.
 
-That table is what `LoadoutService:ApplyEquipmentPasses` reads to decide what a
-pass hands over, so a pass absent from it is skipped silently. Neither has a
-`Config.Tools` entry either, there is no firearm in the tool list at all, and no
-firearm asset under `server-assets/Tools`.
+### 2. Production validator still fails four checks
 
-A player who buys either receives an empty backpack. The comment above
-`EquipmentPasses` records this exact fault being found once already, for the
-ZKnife and machete passes, which "took 149 Robux for an empty backpack".
+Running `./scripts/validate-structure.sh` (non-production mode) currently
+warns:
 
-**Cannot ship with these on sale.** Delisting needs the account holder; building
-the tools is not a test-release-sized job.
+- `Framework.Environment` is not `"Production"`
+- `UseMockDataInStudio` is not `false`
+- `GrantMockEmergencyAccessInStudio` is not `false`
+- one or more uniform template IDs are empty
 
-### 2. Three vehicle assets are untracked in git
+The first three are deliberate development switches, not defects — flipping
+them is a deploy-time decision for whoever publishes the build, not something
+to change in the working tree ahead of time. The fourth is real: shirt and
+trouser template IDs are empty for Police, Ambulance, Fire, Transport,
+Highways and Prison in `EDIT_HERE/04_Uniforms.luau`. Only the base civilian
+outfit has real IDs. This needs actual catalog asset IDs from the group's own
+uniform assets — it isn't something that can be filled in from the code.
 
-```
-server-assets/Vehicles/Civilian/Premium/72' BMW 545e.rbxm
-server-assets/Vehicles/Civilian/Standard/23' Toyota Corolla HB.rbxm
-server-assets/Vehicles/Civilian/Standard/24' Volvo V90.rbxm
-```
+## Closed since the last pass
 
-Confirmed still untracked. Rojo maps `server-assets/Vehicles`, so all three sync
-into the place and ship in the build, while being absent from version control. A
-fresh clone therefore builds a different place than this one.
+### 3. The three untracked vehicle assets are now committed
 
-None has an entry in `EDIT_HERE/06_Vehicles.luau`, so none is reachable in game:
-they are weight in the place file and nothing else. Either commit and wire them,
-or move them out of `server-assets` until they are ready.
+Previously flagged as present in `server-assets/Vehicles` but absent from git
+(the 72' BMW 545e, 23' Toyota Corolla HB, and 24' Volvo V90). All three are
+now tracked (`git ls-files` confirms it). A fresh clone builds the same place
+as this one for these three files.
 
-## Known defects, shipping unfixed
+### 4. `NetworkService.luau` split into per-domain modules
 
-### 3. Vehicles launch on first dismount
+Was a single 1,709-line file of 78 `RegisterFunction`/`RegisterEvent` calls.
+Every endpoint only ever touched `self` and its own locals, so it split
+cleanly with no behaviour change: it's now `NetworkService/init.luau` plus
+eleven domain modules (Core, Vehicle, Duty, Character, Gang, MDT, Dispatch,
+Phone, Taxi, Custody, Radio) and a shared `Validators` module, using Rojo's
+`init.luau` folder convention. Verified by `rojo build`, the 78-endpoint
+rate-limit coverage check, and a live Play-mode boot reaching
+`Network:MarkReady()` with no errors.
+
+### 5. `VendorController.luau` formatting
+
+`stylua --check` was failing on two lines over the wrap width. Fixed and
+clean.
+
+### 6. `renderCareers` dead code — already removed
+
+Confirmed gone; not re-litigated here.
+
+## In progress
+
+### 7. `DeveloperDashboard.luau` split
+
+Still the largest single file at 3,665 lines before this pass started. A
+split is underway: the stateless UI helper functions (`tileGrid`, `button`,
+`card`, `posterTile`, etc.) have already been extracted into a sibling
+widgets module. The five panel renderers (Play, Civilian Jobs, Store, Servers,
+Help) are being split out next. Not yet complete or verified at the time of
+this document — check `git log` on `src/client/UI/DeveloperDashboard/` for
+current status before relying on this section.
+
+## Known defects, not re-verified live this pass
+
+### 8. Vehicles may still launch on first dismount
 
 Reported on the Peugeot van: it rises sharply and drops back.
+`VehicleSpawnerService:_place` still sets a vehicle down 0.75 studs above the
+bay (unchanged since last checked), and A-Chassis still unanchors every part
+at initialise, so a rigid multi-part body is still released into freefall as
+a unit on the reported mechanism. That clearance is deliberate — a comment
+above it records that placing an imported pivot flat on the surface put
+wheels under the map and got assemblies deleted — so it should not simply be
+zeroed. The underlying code path is unchanged; this has not been re-observed
+live since it was first reported, and this pass did not re-test it either.
 
-All 163 of the van's parts are anchored in the template, with none free.
-A-Chassis unanchors every one of them at initialise, and
-`VehicleSpawnerService:_place` sets the vehicle down 0.75 studs above the bay, so
-a rigid 163-part body is released into freefall as a single unit.
+### 9. The Sur-Ron's air horn
 
-That clearance is deliberate. The comment above it records that placing an
-imported pivot flat on the surface put wheels under the map and got assemblies
-deleted, so it must not simply be set to zero.
-
-Not diagnosed to conclusion, and specifically not explained why it happens on the
-first dismount rather than at spawn. It will affect every A-Chassis vehicle,
-since they share the unanchor path.
-
-### 4. The Sur-Ron's air horn is a 113ms blip
-
-Asset `691472063` at 0.113s, against the van's `416079906` at 2.46s. It is the
-vehicle's own sound. The panel loops it while held so it sustains, but it still
-sounds like a horn rather than an airhorn. Fixing it properly means swapping the
-sound in the model and re-exporting.
-
-Separately, both Sur-Rons carry siren volumes of 0.2 against the van's 1 to 8, so
-the bikes are drastically quieter than the cars.
-
-## Closed since the first pass
-
-### 5. `renderCareers` — removed
-
-Was an unreachable 240-line page with no `addNav` entry. Removing it uncovered
-`narrowViewport`, a helper only that page used, which went with it. 256 lines
-total.
-
-`selene` now reports **0 errors and 0 warnings** on the tree, which it had not
-done at any point during this work.
+Previously found to be a 113ms blip (asset `691472063`) against the van's
+2.46s horn, baked into the vehicle model rather than referenced from `src`,
+so it isn't independently checkable by reading source. Not re-verified this
+pass.
 
 ## Checked and sound
 
 - **Rate limiting.** A global bucket at 30 capacity refilling 10/s, plus
-  per-request buckets. `SetEmergencyLights` is 8 capacity refilling 3/s against a
-  worst case of two requests per panel press, so the ELS paths sit inside it.
-- **Remote validation.** 120 `type(payload...)` guards across `NetworkService`.
+  per-request buckets. `SetEmergencyLights` is 8 capacity refilling 8/s (see
+  `Config.Network.RateLimits`) against a worst case of two requests per panel
+  press.
+- **Remote validation and rate-limit coverage.** All 78 currently registered
+  client-callable endpoints have explicit rate limits (up from 48 at the last
+  full audit — 30 more endpoints have shipped since).
 - **Persistence.** `DataService` uses `UpdateAsync` for shared keys and wraps
   DataStore and player calls in `pcall`.
-- **ToS.** No references to controlled substances or alcohol anywhere in `src`.
-  The offence and search-power checks grep for both by name, so neither can creep
-  back silently.
-- **Hygiene.** No `TODO`, `FIXME`, "not implemented" or "coming soon" markers.
-  `stylua`, `selene` and `rojo build` all clean.
+- **ToS.** No references to controlled substances or alcohol anywhere in
+  `src`.
+- **Hygiene.** No `TODO`, `FIXME`, "not implemented" or "coming soon" markers
+  anywhere in `src`. `stylua`, `selene` (0 errors, 0 warnings across `src` and
+  `tests`) and `rojo build` are all clean as of this pass.
 - **Tests.** An acceptance runner and harness exist under `tests/`.
 
 ## Not verified in play
 
-Everything committed in this work was verified by build, lint, template sweep or
-synthetic test. The following have never been observed running:
+Everything in this document was checked by reading source, running the
+linters/build, or (where noted) an isolated-render UI test in Studio — never
+a real two-player session. The following still need a genuine multiplayer
+pass, and no amount of further static checking will resolve them:
 
 - ELS: `OFF` killing lights and siren, `999` starting the wail, `AT SCENE`
-  lighting the work lamps
-- The rebuilt panel rendering at its new size
-- Accessories staying on the rider's head while mounted
-- The R6 rig repair firing on a real dismount
-
-The rig repair is the only one with a controlled test behind it: a synthetic R6
-rig broken exactly as the moped breaks one, repaired, with a tool grip surviving.
+  lighting the work lamps.
+- Custody: the full cuff → seat-in-chair → book → cell → sentence → release
+  chain with two real players. The chair-triggered booking terminal and the
+  player list have been confirmed to render correctly via isolated-instance
+  screenshots, which proves the UI builds and opens the right screen but not
+  that the underlying multiplayer flow (a real ProximityPrompt trigger, a
+  real second player being cuffed by someone other than themselves) works
+  end-to-end.
+- Gang territory contests, vehicle spawning/dismounting, dispatch/MDT
+  interaction, and purchase/refund flows under real concurrent load.
+- Mobile and desktop UI on real devices rather than a resized Studio window.
 
 ## Verdict
 
-**Not ready as it stands, for one reason:** the two firearm passes are on sale and
-deliver nothing. That is a live monetisation fault and it needs the account
-holder, not code.
+**Not ready as it stands, for one reason:** three firearm passes are on sale
+and deliver nothing. That is a live monetisation fault; the account holder is
+handling it directly.
 
-With those delisted and the three loose vehicle assets resolved, the build is
-sound enough for a test release. Items 3 and 4 are real but survivable: a vehicle
-that jumps once on dismount is embarrassing rather than dangerous, and nothing
-outstanding risks player data.
-
-What a test release should actually be used for is the unverified list above. No
-further static checking will resolve it.
+With those resolved, the two structural blockers from the previous pass
+(untracked vehicle assets, `NetworkService` size) are closed, and hygiene
+checks are all clean. What remains before a real release is the "not verified
+in play" list above — that needs a staged two-player session, not more static
+analysis.
