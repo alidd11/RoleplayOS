@@ -10,6 +10,8 @@ local TooltipSystem = require(script.Parent.TooltipSystem)
 local AssetPreloader = require(script.Parent.Parent.Systems.AssetPreloader)
 local AudioFeedback = require(script.Parent.Parent.Systems.AudioFeedback)
 local Widgets = require(script.Parent.DeveloperDashboardWidgets)
+local StorePanel = require(script.Parent.DeveloperDashboard.StorePanel)
+local TutorialsPanel = require(script.Parent.DeveloperDashboard.TutorialsPanel)
 
 local COLOURS = Widgets.colours
 local CIVILIAN_JOB_ROLE_IDS = Widgets.civilianJobRoleIds
@@ -628,7 +630,7 @@ function App.mount(context: any): ScreenGui
 	-- for one thing here: whether a territory it holds should offer an
 	-- additional civilian spawn option alongside the ordinary one.
 	local gangStatus: any = nil
-	local selectedStoreCategory: string? = nil
+	local storeState = { selectedStoreCategory = nil :: string? }
 	-- Seeded from the character the player last used, which the server already
 	-- sends and nothing read. Without it a returning player picks the same
 	-- character again on every join before they can do anything else.
@@ -1812,236 +1814,27 @@ function App.mount(context: any): ScreenGui
 		end
 	end
 
-	renderStore = function()
-		renderGeneration += 1
-		clear(scroll)
-		pageTitle.Text = "Store"
-		pageDescription.Text = "Optional access and upgrades for this experience."
-		sectionHeading(
-			"RoleplayOS passes",
-			"Purchases are handled by Roblox. Your access refreshes automatically."
-		)
-		if not menuData or not menuData.Gamepasses then
-			local loading = card(scroll, 90)
-			local loadingCopy = text(loading, "Loading available passes…", 14, COLOURS.Muted)
-			loadingCopy.Position = UDim2.fromOffset(20, 0)
-			loadingCopy.Size = UDim2.new(1, -40, 1, 0)
-			return
-		end
-
-		local safeWidth = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X
-		local columns = if safeWidth >= 1180
-			then 4
-			else if safeWidth >= 840 then 3 else if safeWidth >= 560 then 2 else 1
-		local categories = {}
-		local categoryOrder = {}
-		for _, pass in menuData.Gamepasses do
-			if not categories[pass.Category] then
-				categories[pass.Category] = {}
-				table.insert(categoryOrder, pass.Category)
-			end
-			table.insert(categories[pass.Category], pass)
-		end
-		if selectedStoreCategory and not categories[selectedStoreCategory] then
-			selectedStoreCategory = nil
-		end
-		local categoryBar = Instance.new("ScrollingFrame")
-		categoryBar.Name = "ProductCategories"
-		categoryBar.BackgroundColor3 = COLOURS.Surface
-		categoryBar.BorderSizePixel = 0
-		categoryBar.Size = UDim2.new(1, 0, 0, 58)
-		categoryBar.AutomaticCanvasSize = Enum.AutomaticSize.X
-		categoryBar.CanvasSize = UDim2.new()
-		-- The row does scroll, and with no scrollbar there was nothing to say so.
-		-- The last category simply appeared sliced off at the panel edge, which
-		-- reads as a broken layout rather than as more to reach.
-		categoryBar.ScrollBarThickness = 6
-		categoryBar.ScrollBarImageTransparency = 0.4
-		categoryBar.ScrollingDirection = Enum.ScrollingDirection.X
-		categoryBar.Parent = scroll
-		local categoryOrderIndex = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
-		scroll:SetAttribute("RoleplayOSNextLayoutOrder", categoryOrderIndex)
-		categoryBar.LayoutOrder = categoryOrderIndex
-		corner(categoryBar, 12)
-		stroke(categoryBar)
-		local categoryPadding = Instance.new("UIPadding")
-		categoryPadding.PaddingLeft = UDim.new(0, 8)
-		categoryPadding.PaddingRight = UDim.new(0, 8)
-		categoryPadding.PaddingTop = UDim.new(0, 7)
-		categoryPadding.PaddingBottom = UDim.new(0, 7)
-		categoryPadding.Parent = categoryBar
-		local categoryLayout = Instance.new("UIListLayout")
-		categoryLayout.FillDirection = Enum.FillDirection.Horizontal
-		categoryLayout.Padding = UDim.new(0, 8)
-		categoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
-		categoryLayout.Parent = categoryBar
-		local tabs = { "All" }
-		for _, category in categoryOrder do
-			table.insert(tabs, tostring(category))
-		end
-		for _, category in tabs do
-			local selected = (category == "All" and selectedStoreCategory == nil)
-				or selectedStoreCategory == category
-			local tab = button(categoryBar, category, selected)
-			tab.Size = UDim2.fromOffset(math.max(116, 32 + #category * 8), 44)
-			tab.Activated:Connect(function()
-				selectedStoreCategory = if category == "All" then nil else category
-				renderStore()
-			end)
-		end
-		for _, category in categoryOrder do
-			if selectedStoreCategory and tostring(category) ~= selectedStoreCategory then
-				continue
-			end
-			local passes = categories[category]
-			local section = Instance.new("Frame")
-			section.Name = "StoreSection_" .. tostring(category)
-			section.BackgroundTransparency = 1
-			section.Size = UDim2.new(1, 0, 0, 54)
-			section.Parent = scroll
-			local nextOrder = (scroll:GetAttribute("RoleplayOSNextLayoutOrder") or 0) + 1
-			scroll:SetAttribute("RoleplayOSNextLayoutOrder", nextOrder)
-			section.LayoutOrder = nextOrder
-			local categoryTitle = text(section, tostring(category), 18, COLOURS.Text, true)
-			categoryTitle.Position = UDim2.fromOffset(2, 0)
-			categoryTitle.Size = UDim2.new(1, -4, 0, 26)
-			local categoryCopy = text(
-				section,
-				string.format("%d %s", #passes, if #passes == 1 then "option" else "options"),
-				11,
-				COLOURS.Muted
-			)
-			categoryCopy.Position = UDim2.fromOffset(2, 25)
-			categoryCopy.Size = UDim2.new(1, -4, 0, 18)
-			local passGrid = Instance.new("Frame")
-			passGrid.Name = "Products"
-			passGrid.BackgroundTransparency = 1
-			passGrid.Position = UDim2.fromOffset(0, 52)
-			passGrid.Size = UDim2.fromScale(1, 0)
-			passGrid.Parent = section
-			local passLayout = Instance.new("UIGridLayout")
-			passLayout.SortOrder = Enum.SortOrder.LayoutOrder
-			passLayout.CellPadding = UDim2.fromOffset(14, 14)
-			passLayout.CellSize = UDim2.new(1 / columns, -14 * (columns - 1) / columns, 0, 250)
-			passLayout.Parent = passGrid
-			local function updateSectionHeight()
-				local contentHeight = passLayout.AbsoluteContentSize.Y
-				passGrid.Size = UDim2.new(1, 0, 0, contentHeight)
-				section.Size = UDim2.new(1, 0, 0, 52 + contentHeight)
-			end
-			passLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSectionHeight)
-			for _, pass in passes do
-				local item = card(passGrid, 250)
-				item.ClipsDescendants = true
-				local artwork = Instance.new("Frame")
-				artwork.Position = UDim2.fromOffset(12, 12)
-				artwork.Size = UDim2.new(1, -24, 0, 78)
-				-- Owned reads green, unowned reads as an ordinary raised surface.
-				artwork.BackgroundColor3 = if pass.Owned
-					then COLOURS.Success:Lerp(COLOURS.Surface, 0.72)
-					else COLOURS.SurfaceRaised
-				artwork.BorderSizePixel = 0
-				artwork.Parent = item
-				corner(artwork, 10)
-				local artworkGradient = Instance.new("UIGradient")
-				artworkGradient.Color = ColorSequence.new({
-					ColorSequenceKeypoint.new(0, artwork.BackgroundColor3),
-					ColorSequenceKeypoint.new(1, COLOURS.SurfaceRaised),
-				})
-				artworkGradient.Rotation = 18
-				artworkGradient.Parent = artwork
-				local imageId = tonumber(
-					pass.ImageAssetId or pass.IconAssetId or pass.ImageId or pass.IconImageId
-				)
-				if imageId and imageId > 0 then
-					local image = Instance.new("ImageLabel")
-					image.BackgroundTransparency = 1
-					image.Size = UDim2.fromScale(1, 1)
-					image.Image = "rbxassetid://" .. tostring(imageId)
-					image.ScaleType = Enum.ScaleType.Crop
-					image.Parent = artwork
-					corner(image, 10)
-				else
-					local shape = Instance.new("Frame")
-					shape.AnchorPoint = Vector2.new(0.5, 0.5)
-					shape.Position = UDim2.fromScale(0.5, 0.5)
-					shape.Size = UDim2.fromOffset(42, 42)
-					shape.Rotation = -12
-					shape.BackgroundColor3 = if pass.Owned then COLOURS.Success else COLOURS.Accent
-					shape.BackgroundTransparency = 0.28
-					shape.BorderSizePixel = 0
-					shape.Parent = artwork
-					corner(shape, 12)
-					local detail = Instance.new("Frame")
-					detail.AnchorPoint = Vector2.new(0.5, 0.5)
-					detail.Position = UDim2.fromScale(0.5, 0.5)
-					detail.Size = UDim2.fromOffset(68, 2)
-					detail.Rotation = 35
-					detail.BackgroundColor3 = COLOURS.Text
-					detail.BackgroundTransparency = 0.7
-					detail.BorderSizePixel = 0
-					detail.Parent = artwork
-				end
-				local name = text(item, pass.Name, 17, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(16, 98)
-				name.Size = UDim2.new(1, -32, 0, 25)
-				name.TextWrapped = true
-				name.TextWrapped = false
-				name.TextTruncate = Enum.TextTruncate.AtEnd
-				TooltipSystem:Attach(name, pass.Name)
-				local description = text(item, pass.Description, 12, COLOURS.Muted)
-				description.Position = UDim2.fromOffset(16, 126)
-				description.Size = UDim2.new(1, -32, 0, 40)
-				description.TextWrapped = true
-				description.TextYAlignment = Enum.TextYAlignment.Top
-				description.TextTruncate = Enum.TextTruncate.AtEnd
-				TooltipSystem:Attach(description, pass.Description)
-				local price = tonumber(pass.PriceInRobux or pass.Price)
-				local stateCopy = if pass.Owned
-					then "OWNED"
-					elseif price and price > 0 then string.format("R$ %d", price)
-					elseif pass.Configured then "VIEW PRICE"
-					else "NOT CONFIGURED"
-				local state = text(
-					item,
-					stateCopy,
-					10,
-					if pass.Owned then COLOURS.Success else COLOURS.Accent,
-					true
-				)
-				state.Position = UDim2.fromOffset(16, 170)
-				state.Size = UDim2.new(1, -32, 0, 18)
-				local actionLabel = if pass.Owned
-					then "Owned"
-					elseif not pass.Configured then "Unavailable"
-					elseif not pass.AvailableInServer then "Public servers only"
-					else "View pass"
-				local purchase =
-					button(item, actionLabel, not pass.Owned and pass.AvailableInServer)
-				purchase.AnchorPoint = Vector2.new(0, 1)
-				purchase.Position = UDim2.new(0, 16, 1, -14)
-				purchase.Size = UDim2.new(1, -32, 0, 40)
-				purchase.Selectable = pass.Configured and pass.AvailableInServer and not pass.Owned
-				purchase.Active = purchase.Selectable
-				if purchase.Active then
-					purchase.Activated:Connect(function()
-						if pass.PurchaseType == "DeveloperProduct" then
-							MarketplaceService:PromptProductPurchase(
-								Players.LocalPlayer,
-								pass.ProductId
-							)
-						else
-							context.Controllers.GamepassController:Prompt(pass.GamepassId)
-						end
-					end)
-				else
-					purchase.BackgroundColor3 = COLOURS.SurfaceRaised
-					purchase.TextColor3 = if pass.Owned then COLOURS.Success else COLOURS.Muted
-				end
-			end
-			updateSectionHeight()
-		end
-	end
+	renderStore = StorePanel.create({
+		context = context,
+		scroll = scroll,
+		pageTitle = pageTitle,
+		pageDescription = pageDescription,
+		sectionHeading = sectionHeading,
+		state = storeState,
+		colours = COLOURS,
+		nextGeneration = function()
+			renderGeneration += 1
+		end,
+		clear = clear,
+		card = card,
+		text = text,
+		button = button,
+		corner = corner,
+		stroke = stroke,
+		TooltipSystem = TooltipSystem,
+		Players = Players,
+		MarketplaceService = MarketplaceService,
+	})
 
 	local tutorials = {
 		{
@@ -2071,245 +1864,31 @@ function App.mount(context: any): ScreenGui
 		},
 	}
 
-	renderTutorials = function()
-		renderGeneration += 1
-		clear(scroll)
-		pageTitle.Text = "Tutorials"
-		pageDescription.Text = "Learn each system before starting your roleplay."
-		sectionHeading("Game guides", "Short, practical explanations of the live systems.")
-		local utilities = card(scroll, 78)
-		local controls = button(utilities, "Controls", false)
-		controls.Position = UDim2.fromOffset(18, 17)
-		controls.Size = UDim2.new(0.5, -27, 0, 44)
-		controls.Activated:Connect(renderControls)
-		local settings = button(utilities, "Settings", false)
-		settings.Position = UDim2.new(0.5, 9, 0, 17)
-		settings.Size = UDim2.new(0.5, -27, 0, 44)
-		settings.Activated:Connect(renderSettings)
-		local compactTutorials = context.Controllers.UIOrchestrator:GetLayout().SafeViewport.X < 650
-		for index, tutorial in tutorials do
-			local item = card(scroll, if compactTutorials then 166 else 124)
-			local number = text(item, string.format("%02d", index), 13, COLOURS.Accent, true)
-			number.Position = UDim2.fromOffset(20, 18)
-			number.Size = UDim2.fromOffset(34, 24)
-			local titleItem = text(item, tutorial.Title, 18, COLOURS.Text, true)
-			titleItem.Position = UDim2.fromOffset(58, 16)
-			titleItem.Size = UDim2.new(1, if compactTutorials then -76 else -230, 0, 28)
-			local summary = text(item, tutorial.Summary, 13, COLOURS.Muted)
-			summary.Position = UDim2.fromOffset(58, 44)
-			summary.Size = UDim2.new(1, if compactTutorials then -76 else -250, 0, 54)
-			summary.TextWrapped = true
-			local open = button(item, "Open guide", false)
-			open.AnchorPoint = if compactTutorials then Vector2.new(0, 1) else Vector2.new(1, 0.5)
-			open.Position = if compactTutorials
-				then UDim2.new(0, 18, 1, -14)
-				else UDim2.new(1, -18, 0.5, 0)
-			open.Size = if compactTutorials
-				then UDim2.new(1, -36, 0, 40)
-				else UDim2.fromOffset(150, 42)
-			open.Activated:Connect(function()
-				local guideViewport = context.Controllers.UIOrchestrator:GetLayout().SafeViewport
-				modalSystem:Open({
-					Title = tutorial.Title,
-					Body = tutorial.Body,
-					Actions = { { Label = "Close", Primary = true, Callback = function() end } },
-					Width = math.min(520, guideViewport.X - 32),
-					Height = math.min(300, guideViewport.Y - 32),
-					Dismissable = true,
-				})
-			end)
-		end
-	end
-
-	renderSettings = function()
-		renderGeneration += 1
-		clear(scroll)
-		pageTitle.Text = "Advanced settings"
-		pageDescription.Text = "Accessible, responsive controls for this experience."
-		sectionHeading(
-			"Interface and accessibility",
-			"Roblox-native volume, graphics and controls remain in the Roblox menu."
-		)
-		local settings = context.Controllers.SettingsController:Get()
-		if not settings then
-			local unavailable = card(scroll, 80)
-			local message = text(unavailable, "Settings are still loading.", 14, COLOURS.Muted)
-			message.Position = UDim2.fromOffset(18, 18)
-			message.Size = UDim2.new(1, -36, 0, 40)
-			return
-		end
-		local function settingRow(
-			titleValue: string,
-			description: string,
-			buttonText: string,
-			onActivate: () -> ()
-		)
-			local row = card(scroll, 88)
-			local titleItem = text(row, titleValue, 15, COLOURS.Text, true)
-			titleItem.Position = UDim2.fromOffset(18, 12)
-			titleItem.Size = UDim2.new(1, -210, 0, 25)
-			local detail = text(row, description, 12, COLOURS.Muted)
-			detail.Position = UDim2.fromOffset(18, 39)
-			detail.Size = UDim2.new(1, -210, 0, 32)
-			detail.TextWrapped = true
-			local action = button(row, buttonText, false)
-			action.AnchorPoint = Vector2.new(1, 0.5)
-			action.Position = UDim2.new(1, -16, 0.5, 0)
-			action.Size = UDim2.fromOffset(160, 40)
-			action.Activated:Connect(onActivate)
-		end
-		settingRow(
-			"Interface scale",
-			"Combines with your Roblox preferred text size.",
-			settings.InterfaceScale,
-			function()
-				local nextValue = if settings.InterfaceScale == "Small"
-					then "Standard"
-					elseif settings.InterfaceScale == "Standard" then "Large"
-					else "Small"
-				context.Controllers.SettingsController:Update("InterfaceScale", nextValue)
-				renderSettings()
-			end
-		)
-		for _, definition in
-			{
-				{
-					"Interface motion",
-					"Interface transitions and button motion.",
-					"InterfaceMotion",
-				},
-				{
-					"High contrast",
-					"Increases scene contrast and reduces colour wash.",
-					"HighContrast",
-				},
-				{
-					"Reduced effects",
-					"Disables decorative particles, trails and beams locally.",
-					"ReducedEffects",
-				},
-				{
-					"Camera shake",
-					"Allows game camera shake effects when implemented.",
-					"CameraShake",
-				},
-				{ "Gameplay hints", "Shows contextual help and onboarding prompts.", "ShowHints" },
-			}
-		do
-			local key = definition[3]
-			settingRow(
-				definition[1],
-				definition[2],
-				settings[key] and "Enabled" or "Disabled",
-				function()
-					context.Controllers.SettingsController:Update(key, not settings[key])
-					renderSettings()
-				end
-			)
-		end
-	end
-
-	-- Controls as an ordinary page rather than an overlay. It was the one item in
-	-- the sidebar that opened something else entirely, which made it read as a
-	-- different product from the four either side of it.
-	renderControls = function()
-		renderGeneration += 1
-		clear(scroll)
-		pageTitle.Text = "Controls"
-		pageDescription.Text = "Every action, and what it is bound to on your device."
-		local controller = context.Controllers.ControlsController
-		local data = controller:List()
-		local order = data.ModeOrder
-		local labels = data.ModeLabels
-		local selected = controller:DetectedMode()
-
-		local rowsHolder: Frame
-		local modeButtons: { [string]: TextButton } = {}
-
-		local function paint()
-			for mode, item in modeButtons do
-				local active = mode == selected
-				item.BackgroundColor3 = if active then COLOURS.Accent else COLOURS.Canvas
-				item.TextColor3 = if active then COLOURS.Text else COLOURS.Muted
-			end
-			for _, child in rowsHolder:GetChildren() do
-				if child:IsA("Frame") then
-					child:Destroy()
-				end
-			end
-			for index, control in data.Controls do
-				local row = Instance.new("Frame")
-				row.LayoutOrder = index
-				row.Size = UDim2.new(1, 0, 0, 42)
-				-- Banded rather than bordered. A list this long reads faster when
-				-- the eye can follow a stripe across to the binding.
-				row.BackgroundColor3 = if index % 2 == 0 then COLOURS.Canvas else COLOURS.Surface
-				row.BorderSizePixel = 0
-				row.Parent = rowsHolder
-				corner(row, 8)
-				local action = text(row, tostring(control.Action), 14, COLOURS.Text)
-				action.Position = UDim2.fromOffset(16, 0)
-				action.Size = UDim2.new(0.5, -16, 1, 0)
-				local binding =
-					text(row, tostring(control[selected] or "—"), 14, COLOURS.Accent, true)
-				binding.Position = UDim2.new(0.5, 4, 0, 0)
-				binding.Size = UDim2.new(0.5, -20, 1, 0)
-			end
-		end
-
-		sectionHeading("Your device", "Bindings change with what you are playing on.")
-		local switcher = card(scroll, 62)
-		local switcherLayout = Instance.new("UIListLayout")
-		switcherLayout.FillDirection = Enum.FillDirection.Horizontal
-		switcherLayout.Padding = UDim.new(0, 8)
-		switcherLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		switcherLayout.Parent = switcher
-		local switcherPadding = Instance.new("UIPadding")
-		switcherPadding.PaddingLeft = UDim.new(0, 12)
-		switcherPadding.PaddingRight = UDim.new(0, 12)
-		switcherPadding.Parent = switcher
-		for index, mode in order do
-			local item = Instance.new("TextButton")
-			item.AutoButtonColor = false
-			item.BackgroundColor3 = COLOURS.Canvas
-			item.BorderSizePixel = 0
-			item.Font = Enum.Font.GothamBold
-			item.LayoutOrder = index
-			item.Text = tostring(labels[mode] or mode)
-			item.TextColor3 = COLOURS.Muted
-			item.TextSize = 11
-			item.Size = UDim2.new(1 / #order, -6, 0, 38)
-			item.Parent = switcher
-			corner(item, 9)
-			pressable(item)
-			modeButtons[mode] = item
-			item.Activated:Connect(function()
-				selected = mode
-				paint()
-			end)
-		end
-
-		sectionHeading("Controls", "Held actions are marked where they differ.")
-		local listCard = card(scroll, 0)
-		listCard.AutomaticSize = Enum.AutomaticSize.Y
-		local listPadding = Instance.new("UIPadding")
-		listPadding.PaddingTop = UDim.new(0, 10)
-		listPadding.PaddingBottom = UDim.new(0, 10)
-		listPadding.PaddingLeft = UDim.new(0, 10)
-		listPadding.PaddingRight = UDim.new(0, 10)
-		listPadding.Parent = listCard
-		rowsHolder = Instance.new("Frame")
-		rowsHolder.BackgroundTransparency = 1
-		rowsHolder.Size = UDim2.fromScale(1, 0)
-		rowsHolder.AutomaticSize = Enum.AutomaticSize.Y
-		rowsHolder.Parent = listCard
-		local rowsLayout = Instance.new("UIListLayout")
-		rowsLayout.Padding = UDim.new(0, 4)
-		rowsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-		rowsLayout.Parent = rowsHolder
-
-		paint()
-	end
+	renderTutorials = TutorialsPanel.create({
+		context = context,
+		scroll = scroll,
+		pageTitle = pageTitle,
+		pageDescription = pageDescription,
+		sectionHeading = sectionHeading,
+		colours = COLOURS,
+		tutorials = tutorials,
+		nextGeneration = function()
+			renderGeneration += 1
+		end,
+		clear = clear,
+		card = card,
+		text = text,
+		button = button,
+		pressable = pressable,
+		corner = corner,
+		modalSystem = modalSystem,
+		renderControls = function()
+			renderControls()
+		end,
+		renderSettings = function()
+			renderSettings()
+		end,
+	})
 
 	-- Three questions, in the order somebody actually asks them: where am I, where
 	-- else can I go, and what about my own community.
@@ -2871,6 +2450,7 @@ function App.mount(context: any): ScreenGui
 
 	context.Events.StartMenuChanged.Event:Connect(function(data)
 		menuData = data
+		storeState.menuData = data
 		if not selectedCharacterId and type(data.LastCharacterId) == "string" then
 			-- Only when nothing is chosen yet, so a refresh never moves a choice
 			-- the player has just made out from under them.
