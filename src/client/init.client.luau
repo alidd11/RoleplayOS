@@ -49,6 +49,7 @@ local controllers = {
 	TaserPoseController = require(script.Controllers.TaserPoseController),
 	CustodyController = require(script.Controllers.CustodyController),
 	DutyController = require(script.Controllers.DutyController),
+	GangController = require(script.Controllers.GangController),
 	StartMenuController = require(script.Controllers.StartMenuController),
 	StartMenuAccessibilityController = require(script.Controllers.StartMenuAccessibilityController),
 }
@@ -107,6 +108,7 @@ local ORDER = {
 	"TaserPoseController",
 	"CustodyController",
 	"DutyController",
+	"GangController",
 	"AccessPromptsController",
 	"JobsController",
 	"VehiclesController",
