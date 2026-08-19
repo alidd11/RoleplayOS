@@ -37,18 +37,28 @@ local LEVELS = {
 local NotificationSystem = {}
 NotificationSystem.__index = NotificationSystem
 
+-- Read when the animation is about to run, not when the system is built.
+--
+-- Both of these latched a value at construction and never looked again, which
+-- meant the setting did nothing. The modal guarded on settings.GetSetting, a
+-- method SettingsController does not have -- it exposes Get and Update -- so the
+-- branch never ran and motion stayed on forever. The toast called the right
+-- method, but it is built before SettingsController is even initialised and the
+-- values arrive asynchronously afterwards, so Get returned nil and nothing
+-- re-read it.
+--
+-- Asking at animation time also means changing the setting takes effect on the
+-- next modal rather than the next session.
+function NotificationSystem:_motionEnabled(): boolean
+	local controllers = self.context and self.context.Controllers
+	local settings = controllers and controllers.SettingsController
+	local values = settings and settings:Get()
+	return not values or values.InterfaceMotion ~= false
+end
+
 function NotificationSystem.new(context)
 	local self = setmetatable({}, NotificationSystem)
 	self.context = context
-	self.interfaceMotion = true
-
-	if context and context.Controllers and context.Controllers.SettingsController then
-		local settings = context.Controllers.SettingsController
-		local values = settings:Get()
-		if values then
-			self.interfaceMotion = values.InterfaceMotion ~= false
-		end
-	end
 
 	self.activeToasts = {}
 	self.maxToasts = 4
@@ -88,7 +98,11 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 
 	local toast = Instance.new("Frame")
 	toast.Name = "Toast_" .. level
+	-- Height follows the text now. toastHeight is the floor rather than the size,
+	-- so a one line toast looks exactly as it did and a longer one grows instead
+	-- of hiding the rest of itself.
 	toast.Size = UDim2.fromOffset(360, self.toastHeight)
+	toast.AutomaticSize = Enum.AutomaticSize.Y
 	toast.BackgroundColor3 = COLOURS.SurfaceRaised
 	toast.BackgroundTransparency = 0
 	toast.BorderSizePixel = 0
@@ -143,7 +157,18 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 
 	local bodyLabel = Instance.new("TextLabel")
 	bodyLabel.Name = "Body"
-	bodyLabel.Size = UDim2.new(1, -44, 0, 16)
+	-- Wrapped and grown, rather than one line cut at the end.
+	--
+	-- This was a fixed sixteen pixels tall with TextTruncate.AtEnd, which gave
+	-- about forty eight characters of Gotham 12 in the space available. Ten of the
+	-- two dozen messages the client sends are longer than that, as is most of what
+	-- the server puts in a response, and the part that gets cut is the end -- which
+	-- is where the instruction lives. "Reopen the menu to retry, or rejoin if it
+	-- keeps failing" was arriving as "Reopen the menu to r". Tapping a toast
+	-- dismisses it, so there was no way to read the rest.
+	bodyLabel.Size = UDim2.new(1, -44, 0, 0)
+	bodyLabel.AutomaticSize = Enum.AutomaticSize.Y
+	bodyLabel.TextWrapped = true
 	bodyLabel.Position = UDim2.fromOffset(36, 28)
 	bodyLabel.BackgroundTransparency = 1
 	bodyLabel.Text = message
@@ -151,7 +176,6 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 	bodyLabel.Font = Enum.Font.Gotham
 	bodyLabel.TextSize = 12
 	bodyLabel.TextXAlignment = Enum.TextXAlignment.Left
-	bodyLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	bodyLabel.Parent = toast
 
 	local progressBar = Instance.new("Frame")
@@ -172,7 +196,7 @@ function NotificationSystem:_createToast(title: string, message: string, level: 
 end
 
 function NotificationSystem:_animateIn(toast: Frame)
-	if not self.interfaceMotion then
+	if not self:_motionEnabled() then
 		toast.Position = UDim2.fromOffset(0, 0)
 		toast.BackgroundTransparency = 0
 		return
@@ -189,7 +213,7 @@ function NotificationSystem:_animateIn(toast: Frame)
 end
 
 function NotificationSystem:_animateOut(toast: Frame, callback: () -> ())
-	if not self.interfaceMotion then
+	if not self:_motionEnabled() then
 		if callback then
 			callback()
 		end

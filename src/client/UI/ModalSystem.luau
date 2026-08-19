@@ -26,17 +26,28 @@ local COLOURS = {
 local ModalSystem = {}
 ModalSystem.__index = ModalSystem
 
+-- Read when the animation is about to run, not when the system is built.
+--
+-- Both of these latched a value at construction and never looked again, which
+-- meant the setting did nothing. The modal guarded on settings.GetSetting, a
+-- method SettingsController does not have -- it exposes Get and Update -- so the
+-- branch never ran and motion stayed on forever. The toast called the right
+-- method, but it is built before SettingsController is even initialised and the
+-- values arrive asynchronously afterwards, so Get returned nil and nothing
+-- re-read it.
+--
+-- Asking at animation time also means changing the setting takes effect on the
+-- next modal rather than the next session.
+function ModalSystem:_motionEnabled(): boolean
+	local controllers = self.context and self.context.Controllers
+	local settings = controllers and controllers.SettingsController
+	local values = settings and settings:Get()
+	return not values or values.InterfaceMotion ~= false
+end
+
 function ModalSystem.new(context)
 	local self = setmetatable({}, ModalSystem)
 	self.context = context
-	self.interfaceMotion = true
-
-	if context and context.Controllers and context.Controllers.SettingsController then
-		local settings = context.Controllers.SettingsController
-		if settings.GetSetting then
-			self.interfaceMotion = settings:GetSetting("InterfaceMotion") ~= false
-		end
-	end
 
 	self.activeModal = nil
 	self.backdropConnection = nil
@@ -63,7 +74,7 @@ function ModalSystem:_createBackdrop()
 	backdrop.Active = true
 	backdrop.ZIndex = 1
 
-	if self.interfaceMotion then
+	if self:_motionEnabled() then
 		TweenService:Create(
 			backdrop,
 			TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
@@ -131,6 +142,25 @@ function ModalSystem:_createCard(config)
 	bodyContainer.AutomaticSize = Enum.AutomaticSize.Y
 	bodyContainer.Parent = card
 
+	-- The body and the buttons are stacked, so the card can measure both.
+	--
+	-- The action row used to hang off this frame at UDim2.new(0, 0, 1, 16) -- scale
+	-- one in Y. AutomaticSize does not measure a child positioned by scale, so
+	-- neither this frame nor the card knew the buttons were there, and thirty two
+	-- of the row's forty pixels were drawn below the bottom edge of the card,
+	-- floating on the dimmed backdrop behind it. Three of the four things that
+	-- open a modal hit that path, and one of them is the character creator, which
+	-- is the first modal anybody sees.
+	--
+	-- A list layout is the fix rather than more arithmetic: the row is simply the
+	-- last item in the stack, its height counts toward the frame, and the frame
+	-- counts toward the card.
+	local bodyLayout = Instance.new("UIListLayout")
+	bodyLayout.FillDirection = Enum.FillDirection.Vertical
+	bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	bodyLayout.Padding = UDim.new(0, 16)
+	bodyLayout.Parent = bodyContainer
+
 	if typeof(config.Body) == "string" then
 		local bodyText = Instance.new("TextLabel")
 		bodyText.Name = "BodyText"
@@ -144,8 +174,10 @@ function ModalSystem:_createCard(config)
 		bodyText.TextYAlignment = Enum.TextYAlignment.Top
 		bodyText.TextWrapped = true
 		bodyText.AutomaticSize = Enum.AutomaticSize.Y
+		bodyText.LayoutOrder = 1
 		bodyText.Parent = bodyContainer
 	elseif typeof(config.Body) == "Instance" then
+		config.Body.LayoutOrder = 1
 		config.Body.Parent = bodyContainer
 	end
 
@@ -153,8 +185,9 @@ function ModalSystem:_createCard(config)
 	local actionsContainer = Instance.new("Frame")
 	actionsContainer.Name = "Actions"
 	actionsContainer.Size = UDim2.new(1, 0, 0, 40)
-	actionsContainer.Position = UDim2.new(0, 0, 1, 16)
-	actionsContainer.AnchorPoint = Vector2.new(0, 0)
+	-- Placed by the stack above rather than by its own position, which is what
+	-- put it outside the card.
+	actionsContainer.LayoutOrder = 2
 	actionsContainer.BackgroundTransparency = 1
 	actionsContainer.BorderSizePixel = 0
 	actionsContainer.Parent = bodyContainer
@@ -196,7 +229,7 @@ function ModalSystem:_createCard(config)
 			btnScale.Parent = btn
 			local function setPressed(pressed: boolean)
 				local scale = if pressed then 0.97 else 1
-				if self.interfaceMotion then
+				if self:_motionEnabled() then
 					TweenService:Create(
 						btnScale,
 						TweenInfo.new(0.12, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
@@ -235,7 +268,7 @@ function ModalSystem:_createCard(config)
 	end
 
 	-- Animate in
-	if self.interfaceMotion then
+	if self:_motionEnabled() then
 		card.Size = UDim2.fromOffset(width, height or 0)
 		card.BackgroundTransparency = 0.2
 
@@ -308,7 +341,7 @@ function ModalSystem:Close()
 		local modal = self.activeModal
 		self.activeModal = nil
 
-		if self.interfaceMotion then
+		if self:_motionEnabled() then
 			TweenService:Create(
 				modal.card,
 				TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
