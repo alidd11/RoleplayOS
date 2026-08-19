@@ -3333,7 +3333,16 @@ function App.mount(context: any): ScreenGui
 		local safeTop = layout.NativeTop
 		local navItems = navCount()
 		bleedBackdrop.Position = UDim2.fromOffset(0, -safeTop)
-		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop)
+		-- Measured live: AbsolutePosition.Y lands at -2*safeTop even though
+		-- Position is authored at -safeTop, on whatever produces that extra
+		-- shift here (Studio's own Play viewport, observed while testing this).
+		-- The backdrop's height only ever grew by the single safeTop, so its
+		-- bottom edge fell exactly safeTop short of the true screen bottom --
+		-- a real gap, and the speedometer's bottom-anchored HUD sat in it,
+		-- read through the open menu as a second, unrelated gauge. Growing the
+		-- height by the same amount the position already shifted keeps the
+		-- bottom edge flush regardless of where that extra shift comes from.
+		bleedBackdrop.Size = UDim2.new(1, 0, 1, safeTop * 2)
 		-- Size the toggle from the band Roblox actually reports. Its position is
 		-- deliberately relative to TopbarSafeInsets above, never to the gameplay
 		-- viewport or a guessed native-cluster width.
