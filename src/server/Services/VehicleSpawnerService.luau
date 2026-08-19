@@ -267,8 +267,18 @@ local function anchorAccessoriesToProxy(character: Model, vehicle: Instance): nu
 		end
 		-- Only the ones still on the rider's real head. Anything the kit already
 		-- moved, or that hangs off a limb it does not pose, is left alone.
+		--
+		-- Checked on both ends, not just Part1: Roblox's own AddAccessory puts
+		-- the body part on Part1, but reattachAccessories below rebuilds a weld
+		-- the other way round when it restores one from a stray join. An
+		-- accessory that went through that rebuild once and then mounted a
+		-- second vehicle has Head on Part0, and a Part1-only check would leave
+		-- it welded to a head this proxy is about to hide.
 		if weld.Part1 == head then
 			weld.Part1 = proxy
+			moved += 1
+		elseif weld.Part0 == head then
+			weld.Part0 = proxy
 			moved += 1
 		end
 	end
