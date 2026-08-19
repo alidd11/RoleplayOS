@@ -6,7 +6,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
 local HttpService = game:GetService("HttpService")
 
-local EconomyService = { seen = {}, order = {}, transferring = {}, connections = {} }
+local EconomyService =
+	{ seen = {}, order = {}, transferring = {}, connections = {}, reconciling = false }
 
 local function transactionScope(userId: number, characterId: string): string
 	return tostring(userId) .. ":" .. characterId
@@ -32,8 +33,29 @@ function EconomyService:Start()
 			end
 		end)
 	)
-	task.spawn(function()
-		self:ReconcilePendingTransfers()
+	local function reconcileWhenReady(player: Player)
+		task.spawn(function()
+			local deadline = os.clock() + 15
+			while
+				player.Parent
+				and not self.context.Services:Get("DataService"):GetSession(player)
+				and os.clock() < deadline
+			do
+				task.wait(0.25)
+			end
+			if player.Parent then
+				self:ReconcilePendingTransfers()
+			end
+		end)
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(reconcileWhenReady))
+	for _, player in Players:GetPlayers() do
+		reconcileWhenReady(player)
+	end
+	task.delay(15, function()
+		if self.context and self.context.Services then
+			self:ReconcilePendingTransfers()
+		end
 	end)
 end
 
@@ -66,9 +88,14 @@ function EconomyService:_queuePendingRefund(record: any)
 end
 
 function EconomyService:ReconcilePendingTransfers()
+	if self.reconciling then
+		return
+	end
+	self.reconciling = true
 	local data = self.context.Services:Get("DataService")
 	local index = data:GetSharedRecord("pending-transfer-index")
 	if type(index) ~= "table" then
+		self.reconciling = false
 		return
 	end
 	local remaining = {}
@@ -108,6 +135,7 @@ function EconomyService:ReconcilePendingTransfers()
 	data:UpdateSharedRecord("pending-transfer-index", function()
 		return remaining
 	end)
+	self.reconciling = false
 end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)

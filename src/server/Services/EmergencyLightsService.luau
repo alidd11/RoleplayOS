@@ -23,6 +23,21 @@ local VehicleLights = require(game:GetService("ReplicatedStorage").RoleplayOS.Sh
 -- costs nothing at all.
 local EmergencyLightsService = { connections = {} }
 
+local function silenceEasyLS(model: Instance): number
+	local remote = model:FindFirstChild("EasyLS_Remote", true)
+	if not remote then
+		return 0
+	end
+	local silenced = 0
+	for _, descendant in remote:GetDescendants() do
+		if descendant:IsA("BaseScript") and not descendant.Disabled then
+			descendant.Disabled = true
+			silenced += 1
+		end
+	end
+	return silenced
+end
+
 function EmergencyLightsService:Init(context: any)
 	self.context = context
 end
@@ -78,6 +93,11 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 		-- defaulting to blue and putting them on a prison van.
 		return
 	end
+	-- Keep the imported EasyLS hierarchy available for inspection and pattern
+	-- migration, but stop its scripts from competing with the framework renderer.
+	-- The live clone is the only thing changed; the ServerStorage template remains
+	-- untouched and can still be re-exported or inspected by an asset owner.
+	local silencedEasyLS = silenceEasyLS(model)
 	model:SetAttribute(settings.StateAttribute, false)
 	model:SetAttribute(settings.StageAttribute, 0)
 	model:SetAttribute(settings.SirenAttribute, "")
@@ -89,6 +109,12 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 	model:SetAttribute("RoleplayOSLightPrimary", department.Primary)
 	model:SetAttribute("RoleplayOSLightSecondary", department.Secondary)
 	CollectionService:AddTag(model, settings.Tag)
+	if silencedEasyLS > 0 then
+		self.context.Logger:Info("EasyLS scripts silenced; RoleplayOS owns emergency lighting", {
+			Vehicle = model.Name,
+			Scripts = silencedEasyLS,
+		})
+	end
 end
 
 function EmergencyLightsService:_authorised(player: Player): boolean
@@ -260,7 +286,9 @@ function EmergencyLightsService:GetState(player: Player): any
 		-- publishes no per-circuit control and no way to read its state back, so
 		-- the panel drives it as the two cycles it is rather than pretending it is
 		-- nine switches.
-		Kit = if model:FindFirstChild("EasyLS_Remote", true) then "EasyLS" else nil,
+		-- Imported EasyLS is intentionally not exposed as an active kit. The
+		-- hierarchy remains on the clone only so its patterns can be migrated.
+		Kit = nil,
 		Stage = model:GetAttribute(settings.StageAttribute) or 0,
 		Lights = model:GetAttribute(settings.StateAttribute) == true,
 		Siren = model:GetAttribute(settings.SirenAttribute) or "",

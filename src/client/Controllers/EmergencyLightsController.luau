@@ -841,14 +841,13 @@ end
 function EmergencyLightsController:_applyAvailability()
 	local state = self.state
 	local available = state.AvailableCircuits or {}
-	local hasKit = state.Kit ~= nil
 	local shown = 0
 	for _, control in CIRCUIT_CONTROLS do
 		local item = self.buttons[control.Id]
 		if item then
 			local visible = if HIDDEN_CONTROLS[control.Id]
 				then false
-				elseif control.Id == "Director" then hasKit
+				elseif control.Id == "Director" then false
 				elseif ALWAYS_AVAILABLE[control.Id] then true
 				else available[control.Id] == true
 			item.Visible = visible
@@ -994,55 +993,6 @@ end
 -- attributes reach none of it. Asking the kit is what actually makes a light
 -- come on; the framework request beside it is what keeps the server's idea of
 -- the vehicle - the blue light exemption, what dispatch sees - in step.
-function EmergencyLightsController:_kitRemote(): RemoteFunction?
-	local character = Players.LocalPlayer.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local seat = humanoid and humanoid.SeatPart
-	local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
-	if not vehicle then
-		return nil
-	end
-	local remote = vehicle:FindFirstChild("EasyLS_Remote", true)
-	return if remote and remote:IsA("RemoteFunction") then remote else nil
-end
-
--- One step through the kit's main patterns, counted.
---
--- EasyLS keeps its stage in a local and its remote answers only GetBinds, so
--- there is no way to ask where it is. Counting presses tracks it exactly, for
--- the same reason the director count does: nothing else in this fleet is bound
--- to the kit's main key, so this is the only thing moving it.
-function EmergencyLightsController:_cycleMain()
-	self.kitStep = ((self.kitStep or 0) + 1) % (self.settings.Stages + 1)
-	self:_cycleKit("MainELS")
-end
-
--- Steps the kit round to dark, however many presses that takes.
---
--- The kit cycles rather than switches, so "off" is not one press from anywhere
--- except the last pattern. Bounded by the number of patterns so a count that has
--- somehow drifted cannot spin here.
-function EmergencyLightsController:_kitOff()
-	local guard = self.settings.Stages + 1
-	while (self.kitStep or 0) ~= 0 and guard > 0 do
-		self:_cycleMain()
-		guard -= 1
-	end
-	self.kitStep = 0
-end
-
-function EmergencyLightsController:_cycleKit(action: string)
-	local remote = self:_kitRemote()
-	if not remote then
-		return
-	end
-	-- The kit refuses anybody who is not in its drive seat, and a failure here
-	-- must not take the panel down with it.
-	pcall(function()
-		remote:InvokeServer(action)
-	end)
-end
-
 function EmergencyLightsController:_activate(id: string)
 	-- The three modes, handled before anything else.
 	--
@@ -1065,7 +1015,6 @@ function EmergencyLightsController:_activate(id: string)
 		-- The kit's stage is a local it will not report, so it is counted here the
 		-- way the director stage already is, and RESET steps it round to zero
 		-- however many presses that takes.
-		self:_kitOff()
 		self:_setTone("")
 		self:_setHorn(false)
 		self:_request({ Reset = true })
@@ -1077,9 +1026,6 @@ function EmergencyLightsController:_activate(id: string)
 		self:_paint()
 		return
 	elseif id == "Response" then
-		if (self.state.Stage or 0) < self.settings.Stages then
-			self:_cycleMain()
-		end
 		self:_request({ Stage = self.settings.Stages })
 		self:_setTone("Wail")
 		self:_paint()
@@ -1097,13 +1043,12 @@ function EmergencyLightsController:_activate(id: string)
 		-- it - and it is, because the kit's own key for it is not bound anywhere in
 		-- this fleet. Reset whenever the vehicle changes, so a stale count cannot
 		-- follow the officer into the next car.
-		self.directorStep = ((self.directorStep or 0) + 1) % (self.settings.DirectorStages + 1)
-		self:_cycleKit("DirectorELS")
-		self:_paint()
+		-- Director patterns remain hidden until the native renderer has an explicit
+		-- arrow-board circuit. Imported kits are no longer invoked from here.
+		self:_request({ Circuit = "Director", Enabled = true })
 	elseif id == "Master" then
 		-- Cycles the kit's pattern and tells the server the lights are on, so the
 		-- two agree about a vehicle that is now visibly lit.
-		self:_cycleMain()
 		self:_request({
 			Stage = if self.state.Stage == self.settings.Stages then 0 else self.settings.Stages,
 		})

@@ -82,6 +82,12 @@ end
 function CustodyService:GetPolicy(player: Player?): any
 	local mode = self.context.Services:Get("ServerModeService"):Kind()
 	local earlyRelease = self.context.Configuration.Custody.PublicEarlyRelease
+	local configuredProducts = {}
+	for _, product in earlyRelease.Products do
+		if type(product.ProductId) == "number" and product.ProductId > 0 then
+			table.insert(configuredProducts, table.clone(product))
+		end
+	end
 	local session = player and self.context.Services:Get("DataService"):GetSession(player)
 	local credits = if session and session.Profile.Consumables
 		then math.max(0, math.floor(tonumber(session.Profile.Consumables.EarlyReleaseCredits) or 0))
@@ -93,7 +99,7 @@ function CustodyService:GetPolicy(player: Player?): any
 		ServerKind = mode,
 		BookingDeskRequired = mode == "Whitelisted",
 		EarlyReleaseCredits = if mode == "Public" then credits else 0,
-		EarlyReleaseProducts = if mode == "Public" then earlyRelease.Products else {},
+		EarlyReleaseProducts = if mode == "Public" then configuredProducts else {},
 	}
 end
 
@@ -875,6 +881,45 @@ function CustodyService:_completeSentence(
 	source: string,
 	receiptId: string?
 ): (boolean, string?)
+	local civilianSpawnId = nil
+	local civilianStationId = nil
+	for spawnId, definition in self.context.Configuration.Spawns do
+		if definition.TeamName == "Civilian" then
+			civilianSpawnId = spawnId
+			civilianStationId = definition.StationId
+			break
+		end
+	end
+	if not civilianSpawnId or not civilianStationId then
+		return false, "CIVILIAN_SPAWN_NOT_CONFIGURED"
+	end
+	if not player.Parent then
+		return false, "PLAYER_LEFT"
+	end
+	local previousTeam = player.Team
+	local previousRespawnLocation = player.RespawnLocation
+	local assigned, assignReason =
+		self.context.Services:Get("RoleService"):Assign(player, "Civilian")
+	if not assigned then
+		return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
+	end
+	if not player.Parent then
+		player.Team = previousTeam
+		return false, "PLAYER_LEFT"
+	end
+	local spawned, spawnReason = self.context.Services:Get("SpawnService"):Spawn(player, {
+		RoleId = "Civilian",
+		StationId = civilianStationId,
+		SpawnId = civilianSpawnId,
+	})
+	if not spawned then
+		player.Team = previousTeam
+		player.RespawnLocation = previousRespawnLocation
+		return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
+	end
+	if not player.Parent then
+		return false, "PLAYER_LEFT"
+	end
 	local sentence = self:_sentence(player)
 	if sentence then
 		sentence.RemainingSeconds = 0
@@ -891,31 +936,6 @@ function CustodyService:_completeSentence(
 		Target = tostring(player.UserId),
 		Metadata = { Source = source, ReceiptId = receiptId },
 	})
-	local civilianSpawnId = nil
-	local civilianStationId = nil
-	for spawnId, definition in self.context.Configuration.Spawns do
-		if definition.TeamName == "Civilian" then
-			civilianSpawnId = spawnId
-			civilianStationId = definition.StationId
-			break
-		end
-	end
-	if not civilianSpawnId or not civilianStationId then
-		return false, "CIVILIAN_SPAWN_NOT_CONFIGURED"
-	end
-	local assigned, assignReason =
-		self.context.Services:Get("RoleService"):Assign(player, "Civilian")
-	if not assigned then
-		return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
-	end
-	local spawned, spawnReason = self.context.Services:Get("SpawnService"):Spawn(player, {
-		RoleId = "Civilian",
-		StationId = civilianStationId,
-		SpawnId = civilianSpawnId,
-	})
-	if not spawned then
-		return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
-	end
 	return true, nil
 end
 

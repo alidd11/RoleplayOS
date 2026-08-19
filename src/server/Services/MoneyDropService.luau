@@ -271,7 +271,7 @@ function MoneyDropService:Destroy()
 		table.insert(ids, dropId)
 	end
 	for _, dropId in ids do
-		self:_remove(dropId)
+		self:_remove(dropId, "Shutdown")
 	end
 end
 

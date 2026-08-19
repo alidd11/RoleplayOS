@@ -267,6 +267,10 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	-- shift in this service. An explicitly set callsign on the profile still wins,
 	-- so a unit given a bespoke one by staff keeps it.
 	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
+	if not playerIsPresent(player) then
+		self.active[player.UserId] = nil
+		return false, "PLAYER_LEFT"
+	end
 	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
 		then profile.Callsign
 		elseif type(shoulder) == "string" and #shoulder >= 2 then shoulder
@@ -281,6 +285,11 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		self.active[player.UserId] = nil
 		player.Team = previousTeam
 		return false, unitReason
+	end
+	if not playerIsPresent(player) then
+		self.context.Services:Get("UnitService"):Unregister(player)
+		self.active[player.UserId] = nil
+		return false, "PLAYER_LEFT"
 	end
 	self.active[player.UserId].Callsign = callsign
 	task.spawn(function()

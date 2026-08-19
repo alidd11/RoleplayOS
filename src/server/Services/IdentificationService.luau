@@ -4,7 +4,7 @@ local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 
-local IdentificationService = { connections = {} }
+local IdentificationService = { connections = {}, playerConnections = {} }
 
 local FORBIDDEN_ASSET_CLASSES: { [string]: boolean } = {
 	Script = true,
@@ -262,9 +262,18 @@ function IdentificationService:RefreshWithRetry(player: Player)
 end
 
 function IdentificationService:Start()
+	self.playerConnections = {}
 	local function watch(player: Player)
+		local existing = self.playerConnections[player.UserId]
+		if existing then
+			for _, connection in existing do
+				connection:Disconnect()
+			end
+		end
+		local connections = {}
+		self.playerConnections[player.UserId] = connections
 		table.insert(
-			self.connections,
+			connections,
 			player.CharacterAdded:Connect(function()
 				task.delay(1, function()
 					if player.Parent then
@@ -274,7 +283,7 @@ function IdentificationService:Start()
 			end)
 		)
 		table.insert(
-			self.connections,
+			connections,
 			player:GetPropertyChangedSignal("Team"):Connect(function()
 				task.defer(function()
 					if player.Parent then
@@ -288,6 +297,18 @@ function IdentificationService:Start()
 		end
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			local connections = self.playerConnections[player.UserId]
+			if connections then
+				for _, connection in connections do
+					connection:Disconnect()
+				end
+				self.playerConnections[player.UserId] = nil
+			end
+		end)
+	)
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
@@ -347,6 +368,12 @@ function IdentificationService:Present(
 end
 
 function IdentificationService:Destroy()
+	for _, connections in self.playerConnections do
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(self.playerConnections)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end

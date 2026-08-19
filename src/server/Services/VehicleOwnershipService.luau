@@ -231,7 +231,32 @@ function VehicleOwnershipService:Purchase(
 		return nil, reason
 	end
 	local garageId = definition.GarageId or self.context.Configuration.VehicleData.StarterGarageId
-	return self:Create(player, characterId, definitionId, colour, garageId)
+	local vehicle, createReason = self:Create(player, characterId, definitionId, colour, garageId)
+	if vehicle then
+		return vehicle, nil
+	end
+	local refunded, refundReason = self.context.Services:Get("EconomyService"):Apply(player, {
+		TransactionId = HttpService:GenerateGUID(false),
+		CharacterId = characterId,
+		Amount = price,
+		Direction = "Credit",
+		ReasonCode = "VEHICLE_PURCHASE_REFUND",
+		Description = "Refund for an undelivered vehicle purchase",
+		RelatedEntityId = definitionId,
+		Metadata = { PurchaseFailure = createReason },
+	})
+	if not refunded then
+		self.context.Logger:Error("Vehicle purchase refund failed", {
+			UserId = player.UserId,
+			CharacterId = characterId,
+			DefinitionId = definitionId,
+			Amount = price,
+			PurchaseFailure = createReason,
+			RefundFailure = refundReason,
+		})
+		return nil, "VEHICLE_PURCHASE_REFUND_FAILED"
+	end
+	return nil, createReason or "VEHICLE_CREATION_FAILED"
 end
 
 function VehicleOwnershipService:GetOrCreateTeamRegistration(

@@ -2,7 +2,8 @@
 
 local Players = game:GetService("Players")
 
-local MeleeWeaponService = { connections = {}, lastStrike = {}, running = false }
+local MeleeWeaponService =
+	{ connections = {}, playerConnections = {}, lastStrike = {}, running = false }
 
 local function root(player: Player): BasePart?
 	local character = player.Character
@@ -135,15 +136,24 @@ end
 
 function MeleeWeaponService:Start()
 	self.running = true
+	self.playerConnections = {}
 	local function watch(player: Player)
+		local existing = self.playerConnections[player.UserId]
+		if existing then
+			for _, connection in existing do
+				connection:Disconnect()
+			end
+		end
+		local connections = {}
+		self.playerConnections[player.UserId] = connections
 		table.insert(
-			self.connections,
+			connections,
 			player.CharacterAdded:Connect(function(character)
 				self.lastStrike[player.UserId] = nil
 				local death = character:FindFirstChildOfClass("Humanoid")
 				if death then
 					table.insert(
-						self.connections,
+						connections,
 						death.Died:Connect(function()
 							self:_clear(player)
 						end)
@@ -155,7 +165,7 @@ function MeleeWeaponService:Start()
 			local death = player.Character:FindFirstChildOfClass("Humanoid")
 			if death then
 				table.insert(
-					self.connections,
+					connections,
 					death.Died:Connect(function()
 						self:_clear(player)
 					end)
@@ -171,11 +181,24 @@ function MeleeWeaponService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.lastStrike[player.UserId] = nil
+			local connections = self.playerConnections[player.UserId]
+			if connections then
+				for _, connection in connections do
+					connection:Disconnect()
+				end
+				self.playerConnections[player.UserId] = nil
+			end
 		end)
 	)
 end
 
 function MeleeWeaponService:Destroy()
+	for _, connections in self.playerConnections do
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(self.playerConnections)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
