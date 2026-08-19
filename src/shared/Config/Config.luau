@@ -2763,6 +2763,7 @@ local Config = {
 			JoinOfficialServer = { Capacity = 2, RefillPerSecond = 0.1 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
+			EnterCivilianAtGangTerritory = { Capacity = 2, RefillPerSecond = 0.2 },
 		},
 	},
 }

@@ -35,6 +35,20 @@ function DutyController:EnterCivilian(characterId: string, spawnId: string): any
 	return response
 end
 
+function DutyController:EnterCivilianAtTerritory(characterId: string): any
+	local response = self.context.Controllers.NetworkController:Request(
+		"EnterCivilianAtGangTerritory",
+		{ CharacterId = characterId }
+	)
+	if response.Success then
+		self.active = nil
+		self.context.Events.DutyChanged:Fire(nil)
+	else
+		self.context.Controllers.NotificationController:Show(response.Message, "Spawn unavailable")
+	end
+	return response
+end
+
 function DutyController:Destroy() end
 
 return DutyController

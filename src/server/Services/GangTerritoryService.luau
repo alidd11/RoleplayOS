@@ -352,6 +352,19 @@ function GangTerritoryService:OwnerOf(territoryId: string): string?
 	return if type(ownerGangId) == "string" and ownerGangId ~= "" then ownerGangId else nil
 end
 
+-- The part a territory's ground actually is, for anything that needs to
+-- position something there -- a member spawning in rather than at the
+-- civilian spawn, most immediately.
+function GangTerritoryService:PartOf(territoryId: string): BasePart?
+	local territory = self.territories[territoryId]
+	return territory and territory.Part
+end
+
+function GangTerritoryService:NameOf(territoryId: string): string?
+	local territory = self.territories[territoryId]
+	return territory and territory.Name
+end
+
 -- Moves a territory to a new owner, or to nobody. The one mutation primitive:
 -- what decides to call it with what is the contest and police-clear tick
 -- above.

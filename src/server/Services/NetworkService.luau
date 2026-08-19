@@ -320,6 +320,34 @@ function NetworkService:Start()
 			RequestId = requestId,
 		}
 	end)
+	self.context.Network:RegisterFunction("EnterCivilianAtGangTerritory", function(payload)
+		return type(payload) == "table" and type(payload.CharacterId) == "string"
+	end, function(player, payload, requestId)
+		self.context.Services:Get("DutyService"):End(player)
+		local entered, reason = self.context.Services
+			:Get("SpawnService")
+			:EnterCivilianAtTerritory(player, payload.CharacterId)
+		if not entered then
+			local messages = {
+				NOT_IN_A_GANG = "You are not in a gang.",
+				GANG_HAS_NO_TERRITORY = "Your gang does not hold a territory.",
+				TERRITORY_UNAVAILABLE = "That territory is not available right now.",
+			}
+			return {
+				Success = false,
+				Code = reason,
+				Message = (reason and messages[reason])
+					or "Could not spawn at your gang's territory.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Welcome to your turf.",
+			RequestId = requestId,
+		}
+	end)
 	self.context.Network:RegisterFunction(
 		"GetSettings",
 		tablePayload,
@@ -601,7 +629,15 @@ function NetworkService:Start()
 				RequestId = requestId,
 			}
 		end
-		return { Success = true, Code = "OK", Message = "", Data = status, RequestId = requestId }
+		-- The territory's display name travels alongside the gang record so the
+		-- client can label a spawn option without a second round trip.
+		local territoryId = status.Gang and status.Gang.TerritoryId
+		local territoryName = if type(territoryId) == "string"
+			then self.context.Services:Get("GangTerritoryService"):NameOf(territoryId)
+			else nil
+		local data = table.clone(status)
+		data.TerritoryName = territoryName
+		return { Success = true, Code = "OK", Message = "", Data = data, RequestId = requestId }
 	end)
 	local gangMessages = {
 		PROFILE_UNAVAILABLE = "Your profile is still loading. Try again in a moment.",

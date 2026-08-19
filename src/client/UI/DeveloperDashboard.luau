@@ -1325,6 +1325,10 @@ function App.mount(context: any): ScreenGui
 	flow.Parent = scroll
 
 	local menuData: any = nil
+	-- The player's own gang, refreshed alongside menuData. Only ever consulted
+	-- for one thing here: whether a territory it holds should offer an
+	-- additional civilian spawn option alongside the ordinary one.
+	local gangStatus: any = nil
 	local selectedStoreCategory: string? = nil
 	-- Seeded from the character the player last used, which the server already
 	-- sends and nothing read. Without it a returning player picks the same
@@ -2195,6 +2199,34 @@ function App.mount(context: any): ScreenGui
 							if audioFeedback then
 								audioFeedback:Error()
 							end
+						end
+					end)
+				elseif
+					selected
+					and gangStatus
+					and gangStatus.Gang
+					and type(gangStatus.Gang.TerritoryId) == "string"
+					and gangStatus.Gang.TerritoryId ~= ""
+				then
+					-- An additional way in, not a replacement for the ordinary
+					-- one above: a gang holding a territory gets a second
+					-- button here, the civilian spawn stays exactly as it was.
+					choose.Position = UDim2.new(0, textLeft, 1, -12)
+					choose.Size = UDim2.new(1, textInset, 0, if landscape then 30 else 36)
+					local territoryName = gangStatus.TerritoryName or "your territory"
+					local spawnAtTerritory = button(item, "Spawn at " .. territoryName, false)
+					spawnAtTerritory.AnchorPoint = Vector2.new(0, 1)
+					spawnAtTerritory.Position =
+						UDim2.new(0, textLeft, 1, if landscape then -46 else -56)
+					spawnAtTerritory.Size = UDim2.new(1, textInset, 0, if landscape then 28 else 30)
+					spawnAtTerritory.TextSize = 11
+					spawnAtTerritory.Activated:Connect(function()
+						local response =
+							context.Controllers.DutyController:EnterCivilianAtTerritory(
+								character.CharacterId
+							)
+						if response.Success and audioFeedback then
+							audioFeedback:Success()
 						end
 					end)
 				end
@@ -3601,6 +3633,18 @@ function App.mount(context: any): ScreenGui
 		if currentRender then
 			currentRender()
 		end
+		-- Fetched alongside menuData rather than on every render: a gang's
+		-- territory does not change fast enough to need refreshing more often
+		-- than the rest of the menu already does.
+		task.spawn(function()
+			local response = context.Controllers.NetworkController:Request("GetGangStatus", {})
+			if response.Success then
+				gangStatus = response.Data
+				if currentRender then
+					currentRender()
+				end
+			end
+		end)
 	end)
 	context.Events.CharacterChanged.Event:Connect(function(characterId)
 		if type(characterId) ~= "string" or characterId == "" then
