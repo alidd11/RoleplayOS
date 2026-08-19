@@ -30,6 +30,13 @@ local function bar(parent: Instance, name: string, colour: Color3, x: number): F
 	label.Font = Enum.Font.GothamBold
 	label.Text = name
 	label.TextColor3 = Color3.new(1, 1, 1)
+	-- White-on-fill measured under 3:1 on both bars, and worsens further as the
+	-- fill drains and the label sits partly over the empty track colour instead.
+	-- A dark stroke keeps the label readable regardless of what colour or how
+	-- much fill happens to be under it, rather than chasing a text colour that
+	-- would only work for one fill level.
+	label.TextStrokeColor3 = Color3.new(0, 0, 0)
+	label.TextStrokeTransparency = 0.25
 	label.TextSize = 9
 	label.TextXAlignment = Enum.TextXAlignment.Center
 	label.TextYAlignment = Enum.TextYAlignment.Center
