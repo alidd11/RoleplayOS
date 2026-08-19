@@ -2006,6 +2006,12 @@ local Config = {
 		-- can stay short enough that a contest feels responsive without
 		-- risking DataStore throttling.
 		ContestCheckSeconds = 3,
+		-- Flat total paid per owned territory each Payroll.IntervalSeconds
+		-- period, split evenly across the gang's online members. Flat rather
+		-- than per-member, so a larger gang does not simply earn more for
+		-- existing -- the spec's warning about this inflating faster than
+		-- payroll if it is not held to the same discipline.
+		TerritoryIncomePerInterval = 150,
 	},
 	Spawning = {
 		-- Tag applied to the SpawnLocation pads the framework manages. Tagging

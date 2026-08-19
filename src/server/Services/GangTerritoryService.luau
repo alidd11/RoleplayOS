@@ -1,6 +1,7 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GangRules = require(ReplicatedStorage.RoleplayOS.Shared.GangRules)
@@ -47,6 +48,13 @@ local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 -- A dispatch call is raised the moment a contest starts, once per attempt,
 -- the same way ANPRService raises one on a wanted-plate hit: an automated
 -- caller, not a player at a console.
+--
+-- Income runs on its own loop, on Payroll's own interval rather than a new
+-- one, per the spec. It pays a flat total per owned territory, split across
+-- whichever of the gang's members are online with an active character right
+-- now -- not accrued, not queued. A period with nobody online simply pays
+-- nothing: the alternative, banking a debt to be settled later, is exactly
+-- the repeatable-by-rejoining shape the spec warns against.
 local GangTerritoryService = {
 	connections = {},
 	running = false,
@@ -175,6 +183,20 @@ function GangTerritoryService:Start()
 						Error = tostring(problem),
 					})
 				end
+			end
+		end
+	end)
+	task.spawn(function()
+		while self.running do
+			task.wait(self.context.Configuration.Payroll.IntervalSeconds)
+			local ok, problem = pcall(function()
+				self:_payIncome()
+			end)
+			if not ok then
+				self.context.Logger:Error(
+					"Gang territory income failed",
+					{ Error = tostring(problem) }
+				)
 			end
 		end
 	end)
@@ -392,6 +414,73 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 		Metadata = { From = previousGangId, To = newGangId },
 	})
 	return true, nil
+end
+
+-- Pays every owned territory's income for one period. Reads the owning gang's
+-- record once per owned territory -- at Payroll's interval rather than the
+-- contest tick's, this is nowhere near the read volume that DataStore
+-- throttling would care about.
+function GangTerritoryService:_payIncome()
+	local income = self.context.Configuration.Gangs.TerritoryIncomePerInterval
+	if not income or income <= 0 then
+		return
+	end
+	local dataService = self.context.Services:Get("DataService")
+	for territoryId, territory in self.territories do
+		local ownerGangId = territory.Part:GetAttribute("OwnerGangId")
+		if type(ownerGangId) == "string" and ownerGangId ~= "" then
+			local gang = dataService:GetSharedRecord(gangKey(ownerGangId))
+			if type(gang) == "table" then
+				self:_payGangShare(gang, income, territoryId)
+			end
+		end
+	end
+end
+
+-- Splits one territory's income across whichever of the gang's members are
+-- online right now with an active character. Flat total, not per member: a
+-- twelve-member gang and a two-member gang holding the same ground earn the
+-- same total, split thinner or thicker.
+function GangTerritoryService:_payGangShare(gang: any, income: number, territoryId: string)
+	local roster = {}
+	if type(gang.LeaderUserId) == "number" then
+		table.insert(roster, gang.LeaderUserId)
+	end
+	if type(gang.MemberUserIds) == "table" then
+		for _, userId in gang.MemberUserIds do
+			if userId ~= gang.LeaderUserId then
+				table.insert(roster, userId)
+			end
+		end
+	end
+	local dataService = self.context.Services:Get("DataService")
+	local recipients = {}
+	for _, userId in roster do
+		local player = Players:GetPlayerByUserId(userId)
+		local session = player and dataService:GetSession(player)
+		local characterId = session and session.ActiveCharacterId
+		if player and characterId then
+			table.insert(recipients, { Player = player, CharacterId = characterId })
+		end
+	end
+	if #recipients == 0 then
+		return
+	end
+	local share = math.floor(income / #recipients)
+	if share <= 0 then
+		return
+	end
+	local economyService = self.context.Services:Get("EconomyService")
+	for _, recipient in recipients do
+		economyService:Apply(recipient.Player, {
+			TransactionId = HttpService:GenerateGUID(false),
+			CharacterId = recipient.CharacterId,
+			Direction = "Credit",
+			Amount = share,
+			ReasonCode = "GangTerritoryIncome",
+			Metadata = { TerritoryId = territoryId, GangId = gang.Id },
+		})
+	end
 end
 
 function GangTerritoryService:Destroy()
