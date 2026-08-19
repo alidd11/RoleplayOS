@@ -825,6 +825,13 @@ function PublicSafetyController:Start()
 	-- the trigger itself, so this is a read-only reply naming who is in the
 	-- chair (or why there is nobody to process) rather than a request this
 	-- client makes - the same shape VendorOpened already uses.
+	--
+	-- Goes straight to the booking terminal, not the roadside actions panel.
+	-- Caution, search and the rest happen at the point of arrest and are still
+	-- reached by using the cuffs again on a detainee stood in front of an
+	-- officer; sitting someone down in a custody chair is specifically the
+	-- booking-desk moment, and putting the same roadside panel behind it would
+	-- have made the chair nothing but a second way to open the first screen.
 	local chairEvent =
 		self.context.Controllers.NetworkController:ResolveEvent("CustodyChairProcessed")
 	if chairEvent then
@@ -835,7 +842,7 @@ function PublicSafetyController:Start()
 					return
 				end
 				if result.Success and type(result.Data) == "table" then
-					self:_showActions(result.Data.TargetUserId, result.Data)
+					self.context.Controllers.CustodyController:Open(result.Data.TargetUserId)
 					return
 				end
 				self.context.Controllers.NotificationController:Show(
