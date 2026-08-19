@@ -1985,6 +1985,16 @@ local Config = {
 			},
 		},
 	},
+	-- Naming, membership and contest limits live on GangRules itself, not here:
+	-- it is a pure module with no service and no state, and keeping its numbers
+	-- in one place with the checks that enforce them was the point of writing
+	-- it first. This is only what GangService needs beyond those rules.
+	Gangs = {
+		-- Bounded so a player cannot be buried in invites from gangs that will
+		-- never be answered. Declining or accepting one clears it either way, so
+		-- this only ever limits how many can be outstanding at once.
+		MaximumPendingInvites = 5,
+	},
 	Spawning = {
 		-- Tag applied to the SpawnLocation pads the framework manages. Tagging
 		-- lets startup ask for the pads directly; without it every descendant of
@@ -2673,6 +2683,14 @@ local Config = {
 			-- more than a couple in a row.
 			SetAuthoredAppearance = { Capacity = 2, RefillPerSecond = 0.1 },
 			SubmitApplication = { Capacity = 1, RefillPerSecond = 0.02 },
+			-- Creating and inviting both write to a shared record and, for an
+			-- invite, to another player's profile, so both stay as tight as the
+			-- application submission above.
+			CreateGang = { Capacity = 1, RefillPerSecond = 0.02 },
+			InviteToGang = { Capacity = 3, RefillPerSecond = 0.1 },
+			RespondToGangInvite = { Capacity = 4, RefillPerSecond = 0.2 },
+			LeaveGang = { Capacity = 2, RefillPerSecond = 0.05 },
+			GetGangStatus = { Capacity = 6, RefillPerSecond = 1 },
 			MDTSearch = { Capacity = 5, RefillPerSecond = 0.5 },
 			MDTCreateWarrant = { Capacity = 2, RefillPerSecond = 0.05 },
 			MDTRevokeWarrant = { Capacity = 2, RefillPerSecond = 0.05 },

@@ -82,6 +82,7 @@ local serviceOrder = {
 	"MoneyDropService",
 	"ProgressionService",
 	"ApplicationService",
+	"GangService",
 	"EmploymentService",
 	"PayrollService",
 	"JobService",

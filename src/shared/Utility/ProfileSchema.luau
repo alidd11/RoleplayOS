@@ -4,11 +4,11 @@ local SettingsValidator = require(script.Parent.SettingsValidator)
 local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 12
+ProfileSchema.CURRENT_VERSION = 13
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 12,
+		SchemaVersion = 13,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -19,6 +19,21 @@ function ProfileSchema.default(userId: number): any
 		Qualifications = {},
 		GamepassCache = {},
 		TeamVehicleRegistrations = {},
+		-- GangId is deliberately not defaulted here. It is the gang this account
+		-- belongs to, and nil already means "not in a gang" -- storing that
+		-- explicitly would be indistinguishable from the key being absent, since
+		-- a nil value in a table constructor never becomes a key at all.
+		--
+		-- It is a pointer rather than the gang record itself: the record is
+		-- shared between every member and the leader, so it lives in
+		-- DataService's shared records under "gang:" .. GangId, keyed by an id
+		-- rather than by any one member's profile.
+		--
+		-- Invites this account has been sent and has not yet answered. Pending on
+		-- the invitee's own profile, not the gang record, so it survives them
+		-- logging off between the invite and the accept, and so answering it
+		-- never needs the inviter to be online a second time.
+		GangInvites = {},
 		CustodySentence = {
 			ReleaseAt = 0,
 			RemainingSeconds = 0,
@@ -223,6 +238,15 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 			end
 		end
 		data.SchemaVersion = 12
+	end
+	if data.SchemaVersion == 12 then
+		-- GangId is left alone: an absent key already means "not in a gang", and
+		-- there is nothing to migrate an old profile to besides that. Only the
+		-- invite list needs a container, since GangService iterates it directly.
+		if type(data.GangInvites) ~= "table" then
+			data.GangInvites = {}
+		end
+		data.SchemaVersion = 13
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))
