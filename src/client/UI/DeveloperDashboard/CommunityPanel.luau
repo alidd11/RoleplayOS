@@ -2,6 +2,23 @@
 
 local CommunityPanel = {}
 
+-- "2h 14m", "8m", or "Just started" for anything under a minute. Minutes only
+-- below an hour and hours-and-minutes above it, since a server's uptime is
+-- read at a glance rather than measured - nobody needs to know it has been up
+-- for 8,340 seconds.
+local function formatUptime(startedAt: number): string
+	local elapsed = math.max(0, os.time() - startedAt)
+	if elapsed < 60 then
+		return "Just started"
+	end
+	local hours = math.floor(elapsed / 3600)
+	local minutes = math.floor((elapsed % 3600) / 60)
+	if hours > 0 then
+		return string.format("Up %dh %dm", hours, minutes)
+	end
+	return string.format("Up %dm", minutes)
+end
+
 function CommunityPanel.create(deps: any): () -> ()
 	local context = deps.context
 	local scroll = deps.scroll
@@ -60,13 +77,14 @@ function CommunityPanel.create(deps: any): () -> ()
 				"Choose the environment that matches how you want to play."
 			)
 			for _, entry in officialRows do
-				local row = card(scroll, 118)
+				local row = card(scroll, 132)
 				local here = entry.Current == true
+				local hasInstance = type(entry.InstanceIndex) == "number"
 				local marker = Instance.new("Frame")
 				marker.BackgroundColor3 = if here then COLOURS.Success else COLOURS.Accent
 				marker.BorderSizePixel = 0
 				marker.Position = UDim2.fromOffset(0, 16)
-				marker.Size = UDim2.fromOffset(5, 86)
+				marker.Size = UDim2.fromOffset(5, 100)
 				marker.Parent = row
 				local tier = text(
 					row,
@@ -75,15 +93,42 @@ function CommunityPanel.create(deps: any): () -> ()
 					if here then COLOURS.Success else COLOURS.Accent,
 					true
 				)
-				tier.Position = UDim2.fromOffset(22, 16)
+				tier.Position = UDim2.fromOffset(22, 14)
 				tier.Size = UDim2.new(1, -190, 0, 16)
-				local name = text(row, tostring(entry.Name), 21, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(22, 34)
-				name.Size = UDim2.new(1, -190, 0, 28)
+				local name = text(
+					row,
+					tostring(entry.Name)
+						.. (if hasInstance then " #" .. entry.InstanceIndex else ""),
+					20,
+					COLOURS.Text,
+					true
+				)
+				name.Position = UDim2.fromOffset(22, 32)
+				name.Size = UDim2.new(1, -190, 0, 26)
 				local blurb = text(row, tostring(entry.Description or ""), 12, COLOURS.Muted)
-				blurb.Position = UDim2.fromOffset(22, 66)
-				blurb.Size = UDim2.new(1, -210, 0, 38)
+				blurb.Position = UDim2.fromOffset(22, 60)
+				blurb.Size = UDim2.new(1, -210, 0, 26)
 				blurb.TextWrapped = true
+				-- Live headcount and uptime, or a note that nobody has opened this
+				-- server yet - the two states an instance can be in from a player's
+				-- side, both worth saying plainly rather than showing blank space.
+				local statsColour = if type(entry.PlayerCount) == "number"
+						and type(entry.MaximumPlayers) == "number"
+						and entry.PlayerCount >= entry.MaximumPlayers
+					then COLOURS.Warning
+					else COLOURS.Accent
+				local statsText = if type(entry.PlayerCount) == "number"
+						and type(entry.MaximumPlayers) == "number"
+					then string.format("%d / %d online", entry.PlayerCount, entry.MaximumPlayers)
+						.. (
+							if type(entry.StartedAt) == "number"
+								then "  ·  " .. formatUptime(entry.StartedAt)
+								else ""
+						)
+					else "Not yet open — the first to join starts it"
+				local stats = text(row, statsText, 12, statsColour, true)
+				stats.Position = UDim2.fromOffset(22, 92)
+				stats.Size = UDim2.new(1, -210, 0, 18)
 				local join = Instance.new("TextButton")
 				join.AutoButtonColor = false
 				join.AnchorPoint = Vector2.new(1, 0.5)
@@ -109,7 +154,7 @@ function CommunityPanel.create(deps: any): () -> ()
 					join.Text = "CONNECTING…"
 					local response = context.Controllers.NetworkController:Request(
 						"JoinOfficialServer",
-						{ ServerId = entry.Id }
+						{ ServerId = entry.Id, InstanceIndex = entry.InstanceIndex }
 					)
 					-- A teleport that works never comes back here, so anything
 					-- arriving at this point is a refusal worth showing.

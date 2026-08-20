@@ -97,10 +97,13 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("JoinOfficialServer", function(payload)
-		return type(payload) == "table" and type(payload.ServerId) == "string"
+		return type(payload) == "table"
+			and type(payload.ServerId) == "string"
+			and (payload.InstanceIndex == nil or type(payload.InstanceIndex) == "number")
 	end, function(player, payload, requestId)
-		local result, reason =
-			self.context.Services:Get("OfficialServerService"):Join(player, payload.ServerId)
+		local result, reason = self.context.Services
+			:Get("OfficialServerService")
+			:Join(player, payload.ServerId, payload.InstanceIndex)
 		if not result then
 			return {
 				Success = false,
@@ -112,7 +115,10 @@ return function(self: any)
 					then "Your progress is still saving. Try again in a moment."
 					elseif
 						reason == "OFFICIAL_SERVER_FULL"
-					then "Every instance of that server is full. Try again shortly."
+					then "That server is full. Try another instance."
+					elseif
+						reason == "OFFICIAL_SERVER_INSTANCE_NOT_FOUND"
+					then "That instance is no longer open. Refresh the list and try again."
 					else "That server could not be joined right now.",
 				RequestId = requestId,
 			}

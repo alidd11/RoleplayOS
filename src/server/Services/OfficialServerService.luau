@@ -29,6 +29,9 @@ function OfficialServerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.OfficialServers
 	self.instances = {}
+	-- Captured once, at process start, and republished unchanged - see
+	-- _publishOccupancy. This server's own uptime, not a shared clock.
+	self.startedAt = os.time()
 	local ok, map = pcall(MemoryStoreService.GetHashMap, MemoryStoreService, OCCUPANCY_MAP)
 	self.occupancy = if ok then map else nil
 	if not self.occupancy then
@@ -54,6 +57,45 @@ function OfficialServerService:_occupantsOf(serverId: string, index: number): nu
 	local ok, value =
 		pcall(self.occupancy.GetAsync, self.occupancy, self:_occupancyKey(serverId, index))
 	return if ok and type(value) == "number" then value else 0
+end
+
+function OfficialServerService:_startedAtKey(serverId: string, index: number): string
+	return serverId .. ":" .. tostring(index) .. ":started"
+end
+
+-- When this instance first came up, or nil when nobody has said. Read from the
+-- same disposable store as occupancy and on the same refresh, so the two never
+-- disagree about which instances currently exist.
+function OfficialServerService:_startedAtOf(serverId: string, index: number): number?
+	if not self.occupancy then
+		return nil
+	end
+	local ok, value =
+		pcall(self.occupancy.GetAsync, self.occupancy, self:_startedAtKey(serverId, index))
+	return if ok and type(value) == "number" then value else nil
+end
+
+-- The reserved-server access codes an entry currently has open, read from the
+-- shared record both _pickInstance and List() need to agree on.
+function OfficialServerService:_storedInstanceCodes(serverId: string): ({ string }, string?)
+	local data = self.context.Services:Get("DataService")
+	local stored, storeError = data:GetSharedRecord(self:_storageKey(serverId))
+	if storeError then
+		self.context.Logger:Warning(
+			"Could not read the official server record",
+			{ ServerId = serverId, Error = tostring(storeError) }
+		)
+		return {}, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
+	if type(stored) == "table" then
+		if type(stored.Instances) == "table" then
+			return stored.Instances, nil
+		elseif type(stored.AccessCode) == "string" then
+			-- Written before instances existed. The single code is instance one.
+			return { stored.AccessCode }, nil
+		end
+	end
+	return {}, nil
 end
 
 -- Stored beside the communities rather than in a store of its own. The key is
@@ -98,33 +140,36 @@ end
 -- playerbase most wanted to play. Instances are tried in order, so everybody
 -- gathers in the first one and later ones open only under real pressure rather
 -- than scattering people across half empty worlds.
-function OfficialServerService:_pickInstance(serverId: string): (string?, number?, string?)
+-- `preferredIndex` is set when the player chose a specific instance off the
+-- server list rather than just pressing JOIN on the server as a whole - the
+-- list shows a live headcount precisely so that choice can be informed, and
+-- silently placing them somewhere else would make the number they read
+-- meaningless. A preferred instance that has since filled or disappeared is
+-- refused rather than redirected.
+function OfficialServerService:_pickInstance(
+	serverId: string,
+	preferredIndex: number?
+): (string?, number?, string?)
 	local entry = self.settings.Entries[serverId]
 	local placeId = self:_placeIdFor(entry)
 	local data = self.context.Services:Get("DataService")
-	local stored, storeError = data:GetSharedRecord(self:_storageKey(serverId))
-	if storeError then
-		-- "No record" and "could not read" arrive the same way, and treating an
-		-- outage as the former reserves a brand new server that nobody else can
-		-- find. Several servers doing that at once is exactly the scattering this
-		-- whole mechanism exists to prevent.
-		self.context.Logger:Warning(
-			"Could not read the official server record",
-			{ ServerId = serverId, Error = tostring(storeError) }
-		)
-		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
-	end
-	local codes = {}
-	if type(stored) == "table" then
-		if type(stored.Instances) == "table" then
-			codes = stored.Instances
-		elseif type(stored.AccessCode) == "string" then
-			-- Written before instances existed. The single code is instance one.
-			codes = { stored.AccessCode }
-		end
+	local codes, codesError = self:_storedInstanceCodes(serverId)
+	if codesError then
+		return nil, nil, codesError
 	end
 
 	local capacity = self.settings.MaximumPlayersPerInstance or 50
+	if preferredIndex then
+		local code = codes[preferredIndex]
+		if type(code) ~= "string" or code == "" then
+			return nil, nil, "OFFICIAL_SERVER_INSTANCE_NOT_FOUND"
+		end
+		if self:_occupantsOf(serverId, preferredIndex) >= capacity then
+			return nil, nil, "OFFICIAL_SERVER_FULL"
+		end
+		self.codes[serverId] = code
+		return code, preferredIndex, nil
+	end
 	for index, code in codes do
 		if type(code) == "string" and code ~= "" then
 			if self:_occupantsOf(serverId, index) < capacity then
@@ -183,28 +228,74 @@ end
 -- The player is not consulted: every official server is open to anyone the
 -- experience already let in, and the whitelist is the front door rather than a
 -- gate on each entry.
+--
+-- One row per live instance rather than one per entry, so a player choosing
+-- between a busy instance and a quiet one can actually see the difference
+-- instead of pressing JOIN on a name and being routed blind. An entry that
+-- uses ordinary matchmaking rather than reserved instances (see
+-- _usesReservedServers) has no per-instance headcount to show, and an entry
+-- nobody has opened yet gets a single placeholder row rather than nothing, so
+-- it stays visible and joinable.
 function OfficialServerService:List(): { any }
 	local rows = {}
 	if self.settings.Enabled ~= true then
 		return rows
 	end
 	for _, entry in self.settings.Entries do
-		table.insert(rows, {
-			Id = entry.Id,
-			Name = entry.Name,
-			Description = entry.Description,
-			Order = entry.Order or 100,
-			-- Whether this is the world the player is already standing in. Not
-			-- gated on being a private server any more: a place of its own is
-			-- matchmade normally and has no private server id at all.
-			Current = self:_isHere(entry.Id),
-		})
+		if not self:_usesReservedServers(entry) then
+			table.insert(rows, {
+				Id = entry.Id,
+				InstanceIndex = nil,
+				Name = entry.Name,
+				Description = entry.Description,
+				Order = entry.Order or 100,
+				Current = self:_isHere(entry.Id),
+				PlayerCount = nil,
+				MaximumPlayers = nil,
+				StartedAt = nil,
+			})
+			continue
+		end
+		local codes = self:_storedInstanceCodes(entry.Id)
+		local openInstances = 0
+		for index, code in codes do
+			if type(code) == "string" and code ~= "" then
+				openInstances += 1
+				table.insert(rows, {
+					Id = entry.Id,
+					InstanceIndex = index,
+					Name = entry.Name,
+					Description = entry.Description,
+					Order = entry.Order or 100,
+					Current = self:_isHere(entry.Id) and self.currentInstanceIndex == index,
+					PlayerCount = self:_occupantsOf(entry.Id, index),
+					MaximumPlayers = self.settings.MaximumPlayersPerInstance or 50,
+					StartedAt = self:_startedAtOf(entry.Id, index),
+				})
+			end
+		end
+		if openInstances == 0 then
+			table.insert(rows, {
+				Id = entry.Id,
+				InstanceIndex = nil,
+				Name = entry.Name,
+				Description = entry.Description,
+				Order = entry.Order or 100,
+				Current = false,
+				PlayerCount = nil,
+				MaximumPlayers = self.settings.MaximumPlayersPerInstance or 50,
+				StartedAt = nil,
+			})
+		end
 	end
 	table.sort(rows, function(a, b)
-		if a.Order == b.Order then
+		if a.Order ~= b.Order then
+			return a.Order < b.Order
+		end
+		if a.Name ~= b.Name then
 			return a.Name < b.Name
 		end
-		return a.Order < b.Order
+		return (a.InstanceIndex or 0) < (b.InstanceIndex or 0)
 	end)
 	return rows
 end
@@ -253,7 +344,11 @@ function OfficialServerService:_isHere(serverId: string): boolean
 	return entry ~= nil and entry.Id == serverId
 end
 
-function OfficialServerService:Join(player: Player, serverId: any): (any?, string?)
+function OfficialServerService:Join(
+	player: Player,
+	serverId: any,
+	instanceIndex: any
+): (any?, string?)
 	if self.settings.Enabled ~= true then
 		return nil, "OFFICIAL_SERVERS_DISABLED"
 	end
@@ -265,9 +360,12 @@ function OfficialServerService:Join(player: Player, serverId: any): (any?, strin
 	end
 	local entry = self.settings.Entries[serverId]
 	local placeId = self:_placeIdFor(entry)
+	-- The list shows a specific instance's headcount, so a player choosing one
+	-- expects to land on that instance rather than wherever has room.
+	local preferredIndex = if type(instanceIndex) == "number" then instanceIndex else nil
 	local code, index, reason = nil, nil, nil
 	if self:_usesReservedServers(entry) then
-		code, index, reason = self:_pickInstance(serverId)
+		code, index, reason = self:_pickInstance(serverId, preferredIndex)
 		if not code then
 			return nil, reason
 		end
@@ -383,6 +481,23 @@ function OfficialServerService:_publishOccupancy()
 					self.context.Logger:Warning(
 						"Could not publish occupancy",
 						{ ServerId = entry.Id, Instance = index, Error = tostring(problem) }
+					)
+				end
+				-- The value never changes once this server has started - only the
+				-- lifetime is refreshed, on the same beat as occupancy, so the two
+				-- expire together rather than uptime outliving the headcount that
+				-- says the instance is still here.
+				local startedOk, startedProblem = pcall(
+					self.occupancy.SetAsync,
+					self.occupancy,
+					self:_startedAtKey(entry.Id, index),
+					self.startedAt,
+					self.settings.OccupancyLifetimeSeconds or 45
+				)
+				if not startedOk then
+					self.context.Logger:Warning(
+						"Could not publish start time",
+						{ ServerId = entry.Id, Instance = index, Error = tostring(startedProblem) }
 					)
 				end
 			end
