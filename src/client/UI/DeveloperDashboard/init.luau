@@ -12,6 +12,8 @@ local AudioFeedback = require(script.Parent.Parent.Systems.AudioFeedback)
 local Widgets = require(script.Parent.DeveloperDashboardWidgets)
 local StorePanel = require(script.StorePanel)
 local TutorialsPanel = require(script.TutorialsPanel)
+local JobsPanel = require(script.JobsPanel)
+local CommunityPanel = require(script.CommunityPanel)
 
 local COLOURS = Widgets.colours
 local CIVILIAN_JOB_ROLE_IDS = Widgets.civilianJobRoleIds
@@ -1626,193 +1628,38 @@ function App.mount(context: any): ScreenGui
 		end
 	end
 
-	renderJobs = function()
-		renderGeneration += 1
-		clear(scroll)
-		pageTitle.Text = "Civilian jobs"
-		pageDescription.Text = "Pick up work that is available in the city today."
-		sectionHeading("Civilian jobs", "Only fully connected civilian jobs appear here.")
-		-- Civilian work that is built as a role rather than as a Job entry.
-		--
-		-- These join through the same duty flow as any service, so they are drawn
-		-- from menuData.Roles and handed to activateRole exactly as the Play page
-		-- would have. Listing them here is a statement about what they are, not a
-		-- second way of joining them.
-		local jobRoles = {}
-		for _, role in menuData and menuData.Roles or {} do
-			if role.Visible and CIVILIAN_JOB_ROLE_IDS[role.Id] then
-				table.insert(jobRoles, role)
-			end
-		end
-		local jobs = {}
-		for _, job in pairs(menuData and menuData.Jobs or {}) do
-			-- A catalogue entry is a promise: it must have a working join path.
-			-- Do not show future/application placeholders as if they were playable.
-			if tostring(job.Id) == "TaxiDriver" then
-				table.insert(jobs, job)
-			end
-		end
-		-- One grid of one tile, whichever of the two payloads the work arrived in.
-		--
-		-- A player weighing up driving a bus against driving a taxi is choosing
-		-- between two jobs. That one is configured as a role with a team and the
-		-- other as a catalogue entry is a fact about the configuration, and
-		-- letting it show had turned this page into a card followed by a list of
-		-- rows, sharing nothing with each other or with the Play grid the same
-		-- player had just come from.
-		local entryCount = #jobRoles + #jobs
-		if entryCount == 0 then
-			local empty = card(scroll, if shortLandscape() then 110 else 132)
-			local title = text(empty, "No work is available yet", 17, COLOURS.Text, true)
-			title.Position = UDim2.fromOffset(20, 18)
-			title.Size = UDim2.new(1, -40, 0, 26)
-			local copy = text(
-				empty,
-				"New civilian systems will appear here when they are ready to play.",
-				13,
-				COLOURS.Muted
-			)
-			copy.Position = UDim2.fromOffset(20, 50)
-			copy.Size = UDim2.new(1, -40, 0, 42)
-			copy.TextWrapped = true
-			return
-		end
-		local actionHeight = posterActionHeight()
-		local jobGrid = tileGrid(scroll, {
-			Name = "CivilianJobGrid",
-			Count = entryCount,
-			Columns = posterColumns(),
-			MinHeight = posterMinimumHeight(),
-		})
-		for _, role in jobRoles do
-			local presentation = rolePresentation(role)
-			local _, join = posterTile(jobGrid, {
-				Id = tostring(role.Id),
-				Image = roleTileImageUri(role),
-				Monogram = presentation.Icon,
-				Title = tostring(role.Name),
-				Detail = if role.Locked
-					then tostring(role.LockMessage or "Requirements not met")
-					else presentation.Label,
-				Accent = presentation.Colour,
-				ActionLabel = if role.Locked then "REQUIREMENTS" else "JOIN",
-				ActionMuted = role.Locked,
-				ActionHeight = actionHeight,
-			})
-			join.Activated:Connect(function()
-				activateRole(role)
-			end)
-		end
-		for _, job in jobs do
-			local isTaxi = tostring(job.Id) == "TaxiDriver"
-			local access = if tostring(job.Class) == "Public"
-				then "PUBLIC EMPLOYMENT"
-				else "APPLICATION ROLE"
-			local hasActiveCharacter = type(menuData and menuData.ActiveCharacterId) == "string"
-				and menuData.ActiveCharacterId ~= ""
-			-- What the button says when it is not mid-flight. Every path that
-			-- gives up puts this back, so a refused shift never leaves the tile
-			-- offering a different action from the one it opened with.
-			local idleActionText = if hasActiveCharacter then "START SHIFT" else "ENTER CITY"
-			local _, action = posterTile(jobGrid, {
-				Id = tostring(job.Id),
-				Image = roleTileImageUri(job),
-				-- Catalogue work has no uploaded artwork, so the tile carries the
-				-- opening of the job's own name where a department mark would sit.
-				Monogram = string.upper(string.sub(tostring(job.Name), 1, 4)),
-				Title = tostring(job.Name),
-				Detail = access .. "  ·  £" .. tostring(job.BaseWage or 0) .. " base wage",
-				Accent = COLOURS.Success,
-				ActionLabel = idleActionText,
-				ActionMuted = not isTaxi,
-				ActionHeight = actionHeight,
-			})
-			action.Selectable = isTaxi
-			if isTaxi then
-				action.Activated:Connect(function()
-					action.Active = false
-					action.Text = if hasActiveCharacter then "STARTING…" else "ENTERING CITY…"
-					if not hasActiveCharacter then
-						local characterId = selectedCharacterId
-							or (menuData and menuData.LastCharacterId)
-						if
-							not characterId
-							and menuData
-							and menuData.Characters
-							and #menuData.Characters == 1
-						then
-							characterId = menuData.Characters[1].CharacterId
-						end
-						if not characterId then
-							context.Controllers.NotificationController:Show(
-								"Create a civilian character before starting work.",
-								"Taxi unavailable"
-							)
-							if audioFeedback then
-								audioFeedback:Error()
-							end
-							action.Active = true
-							action.Text = idleActionText
-							return
-						end
-						local selected = context.Controllers.CharacterController:Select(characterId)
-						local entered = if selected.Success
-							then (function()
-								local civilianSpawnId: string? = nil
-								for _, role in menuData and menuData.Roles or {} do
-									if role.Id == "Civilian" or role.DepartmentId == "Civilian" then
-										for _, spawn in role.Spawns or {} do
-											if
-												type(spawn.SpawnId) == "string"
-												and spawn.SpawnId ~= ""
-											then
-												civilianSpawnId = spawn.SpawnId
-												break
-											end
-										end
-									end
-									if civilianSpawnId then
-										break
-									end
-								end
-								if not civilianSpawnId then
-									return { Success = false }
-								end
-								return context.Controllers.DutyController:EnterCivilian(
-									characterId,
-									civilianSpawnId
-								)
-							end)()
-							else selected
-						if not entered.Success then
-							context.Controllers.NotificationController:Show(
-								"Select a civilian character before starting work.",
-								"Taxi unavailable"
-							)
-							if audioFeedback then
-								audioFeedback:Error()
-							end
-							action.Active = true
-							action.Text = idleActionText
-							return
-						end
-					end
-					local response =
-						context.Controllers.NetworkController:Request("TaxiStartShift", {})
-					context.Controllers.NotificationController:Show(response.Message, "Taxi")
-					if response.Success then
-						dismissToWorld()
-					else
-						action.Active = true
-						action.Text = idleActionText
-						if audioFeedback then
-							audioFeedback:Error()
-						end
-					end
-				end)
-			end
-		end
-	end
+	renderJobs = JobsPanel.create({
+		context = context,
+		scroll = scroll,
+		pageTitle = pageTitle,
+		pageDescription = pageDescription,
+		sectionHeading = sectionHeading,
+		getMenuData = function()
+			return menuData
+		end,
+		getSelectedCharacterId = function()
+			return selectedCharacterId
+		end,
+		civilianJobRoleIds = CIVILIAN_JOB_ROLE_IDS,
+		colours = COLOURS,
+		clear = clear,
+		card = card,
+		text = text,
+		shortLandscape = shortLandscape,
+		posterActionHeight = posterActionHeight,
+		posterColumns = posterColumns,
+		posterMinimumHeight = posterMinimumHeight,
+		tileGrid = tileGrid,
+		posterTile = posterTile,
+		rolePresentation = rolePresentation,
+		roleTileImageUri = roleTileImageUri,
+		activateRole = activateRole,
+		audioFeedback = audioFeedback,
+		dismissToWorld = dismissToWorld,
+		nextGeneration = function()
+			renderGeneration += 1
+		end,
+	})
 
 	renderStore = StorePanel.create({
 		context = context,
@@ -1898,140 +1745,30 @@ function App.mount(context: any): ScreenGui
 	-- join below the fold. Nothing here is decoration: the status strip answers
 	-- the first question in one line so the rest of the page can be the answer to
 	-- the second.
-	renderCommunity = function()
-		renderGeneration += 1
-		local generation = renderGeneration
-		clear(scroll)
-		pageTitle.Text = "Servers"
-		pageDescription.Text = "Move between official sessions without losing your place."
-		local server = menuData and menuData.Server
-		local kind = server and server.Kind or "Public"
-		local community = server and server.Community
-
-		local KIND_LABEL = {
-			Public = "PUBLIC SERVER",
-			Whitelisted = "WHITELISTED SERVER",
-			Private = "PRIVATE SERVER",
-			Reserved = "RESERVED SERVER",
-		}
-		local KIND_BLURB = {
-			Public = "Open to everyone. Teams and passes are available here.",
-			Whitelisted = "Entry is restricted, and services are held by group rank.",
-			Private = "Run by its owner, to their own standards.",
-			Reserved = "A dedicated instance of this experience.",
-		}
-
-		-- The servers the team runs, at the top. This is what almost everybody
-		-- opens this page for, so nothing goes above it: not a status strip, not
-		-- an explanation of what a community is.
-		local officialResponse =
-			context.Controllers.NetworkController:Request("GetOfficialServers", {})
-		-- Another page was opened while that was in flight, so this one is stale
-		-- and its container now belongs to whatever replaced it.
-		if generation ~= renderGeneration then
-			return
-		end
-		local officialRows = if officialResponse.Success
-				and type(officialResponse.Data) == "table"
-			then officialResponse.Data.Servers
-			else nil
-		if type(officialRows) == "table" and #officialRows > 0 then
-			sectionHeading(
-				"Official servers",
-				"Choose the environment that matches how you want to play."
-			)
-			for _, entry in officialRows do
-				local row = card(scroll, 118)
-				local here = entry.Current == true
-				local marker = Instance.new("Frame")
-				marker.BackgroundColor3 = if here then COLOURS.Success else COLOURS.Accent
-				marker.BorderSizePixel = 0
-				marker.Position = UDim2.fromOffset(0, 16)
-				marker.Size = UDim2.fromOffset(5, 86)
-				marker.Parent = row
-				local tier = text(
-					row,
-					if here then "CURRENT SESSION" else "OFFICIAL SERVER",
-					11,
-					if here then COLOURS.Success else COLOURS.Accent,
-					true
-				)
-				tier.Position = UDim2.fromOffset(22, 16)
-				tier.Size = UDim2.new(1, -190, 0, 16)
-				local name = text(row, tostring(entry.Name), 21, COLOURS.Text, true)
-				name.Position = UDim2.fromOffset(22, 34)
-				name.Size = UDim2.new(1, -190, 0, 28)
-				local blurb = text(row, tostring(entry.Description or ""), 12, COLOURS.Muted)
-				blurb.Position = UDim2.fromOffset(22, 66)
-				blurb.Size = UDim2.new(1, -210, 0, 38)
-				blurb.TextWrapped = true
-				local join = Instance.new("TextButton")
-				join.AutoButtonColor = false
-				join.AnchorPoint = Vector2.new(1, 0.5)
-				join.Position = UDim2.new(1, -20, 0.5, 0)
-				join.Size = UDim2.fromOffset(140, 48)
-				join.BackgroundColor3 = if here then COLOURS.SurfaceRaised else COLOURS.AccentFill
-				join.BorderSizePixel = 0
-				join.Font = Enum.Font.GothamBold
-				join.Text = if here then "YOU ARE HERE" else "JOIN"
-				join.TextColor3 = if here then COLOURS.Muted else COLOURS.Text
-				join.TextSize = 13
-				join.Active = not here
-				join.Parent = row
-				corner(join, 10)
-				if not here then
-					pressable(join)
-				end
-				join.Activated:Connect(function()
-					if here then
-						return
-					end
-					join.Active = false
-					join.Text = "CONNECTING…"
-					local response = context.Controllers.NetworkController:Request(
-						"JoinOfficialServer",
-						{ ServerId = entry.Id }
-					)
-					-- A teleport that works never comes back here, so anything
-					-- arriving at this point is a refusal worth showing.
-					join.Active = true
-					join.Text = "JOIN"
-					context.Controllers.NotificationController:Show(response.Message, "Servers")
-					if not response.Success and audioFeedback then
-						audioFeedback:Error()
-					end
-				end)
-			end
-		end
-
-		-- Where you are now, below the servers you might go to instead. It is
-		-- context rather than an action, so it does not take the top of the page.
-		sectionHeading("This server", "What you have joined, and what that allows.")
-		local whereCard = card(scroll, 96)
-		local accent = Instance.new("Frame")
-		accent.BackgroundColor3 = if kind == "Public" then COLOURS.Accent else COLOURS.Success
-		accent.BorderSizePixel = 0
-		accent.Position = UDim2.fromOffset(0, 18)
-		accent.Size = UDim2.fromOffset(4, 60)
-		accent.Parent = whereCard
-		local kindLabel = text(whereCard, KIND_LABEL[kind] or "SERVER", 11, COLOURS.Accent, true)
-		kindLabel.Position = UDim2.fromOffset(20, 18)
-		kindLabel.Size = UDim2.new(1, -40, 0, 18)
-		local whereName = text(
-			whereCard,
-			(community and community.Name)
-				or (server and server.AccessGroupName)
-				or "Emergency Response: Portsmouth",
-			19,
-			COLOURS.Text,
-			true
-		)
-		whereName.Position = UDim2.fromOffset(20, 38)
-		whereName.Size = UDim2.new(1, -40, 0, 26)
-		local whereBlurb = text(whereCard, KIND_BLURB[kind] or "", 12, COLOURS.Muted)
-		whereBlurb.Position = UDim2.fromOffset(20, 64)
-		whereBlurb.Size = UDim2.new(1, -40, 0, 18)
-	end
+	renderCommunity = CommunityPanel.create({
+		context = context,
+		scroll = scroll,
+		pageTitle = pageTitle,
+		pageDescription = pageDescription,
+		sectionHeading = sectionHeading,
+		getMenuData = function()
+			return menuData
+		end,
+		colours = COLOURS,
+		clear = clear,
+		card = card,
+		text = text,
+		corner = corner,
+		pressable = pressable,
+		audioFeedback = audioFeedback,
+		nextGeneration = function()
+			renderGeneration += 1
+			return renderGeneration
+		end,
+		currentGeneration = function()
+			return renderGeneration
+		end,
+	})
 
 	local activeNav: TextButton? = nil
 	-- isAction entries run their callback without taking the selected-page
