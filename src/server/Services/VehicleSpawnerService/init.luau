@@ -23,6 +23,10 @@ local VehicleSpawnerService = {
 	-- previous position to integrate distance, and that is working state rather
 	-- than something a client should be able to read.
 	telemetry = {},
+	-- Showroom previews are stripped geometry kept in ReplicatedStorage so the
+	-- client can build its ViewportFrames. They are an idle cache, not gameplay
+	-- state, and are expired by Authorisation after a long quiet period.
+	previewLastUsed = {},
 }
 require(script.Authorisation)(VehicleSpawnerService)
 require(script.Spawning)(VehicleSpawnerService)
@@ -32,6 +36,7 @@ require(script.SeatLifecycle)(VehicleSpawnerService)
 function VehicleSpawnerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.VehicleSpawners
+	self.previewCleaning = true
 end
 
 function VehicleSpawnerService:Start()
@@ -133,10 +138,24 @@ function VehicleSpawnerService:Start()
 			end
 		end
 	end)
+	-- Preview models are useful while a catalogue is being browsed, but retaining
+	-- every vehicle's stripped geometry for the whole server lifetime needlessly
+	-- raises the server and replication footprint on quiet long-running servers.
+	-- The expiry is deliberately long: ordinary dealership use never notices it,
+	-- while an abandoned catalogue eventually releases its cache.
+	task.spawn(function()
+		while self.previewCleaning do
+			task.wait(300)
+			if self.previewCleaning then
+				self:_prunePreviews()
+			end
+		end
+	end)
 end
 
 function VehicleSpawnerService:Destroy()
 	self.consuming = false
+	self.previewCleaning = false
 	-- Bank every drive in progress before the server goes.
 	for userId in self.telemetry do
 		pcall(function()
@@ -161,6 +180,7 @@ function VehicleSpawnerService:Destroy()
 	end
 	table.clear(self.active)
 	table.clear(self.spawning)
+	table.clear(self.previewLastUsed)
 end
 
 return VehicleSpawnerService

@@ -4,6 +4,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local RigMechanics = require(script.Parent.RigMechanics)
 
+local PREVIEW_IDLE_SECONDS = 60 * 60
+
 return function(VehicleSpawnerService)
 	function VehicleSpawnerService:_vehicleDefinitions(): { [string]: any }
 		local validator = self.context.Services:Get("ContentValidationService")
@@ -175,6 +177,7 @@ return function(VehicleSpawnerService)
 		end
 		local existing = root:FindFirstChild(definitionId)
 		if existing then
+			self.previewLastUsed[definitionId] = os.clock()
 			return existing
 		end
 		local template = self:_template(definition)
@@ -209,7 +212,32 @@ return function(VehicleSpawnerService)
 			end
 		end
 		preview.Parent = root
+		self.previewLastUsed[definitionId] = os.clock()
 		return preview
+	end
+
+	-- Showroom previews contain only anchored geometry, but a long-running full
+	-- server can still accumulate one copy for every vehicle ever browsed. They
+	-- are rebuilt on demand, so expiring an idle entry releases memory without
+	-- affecting ownership, spawned vehicles or persistent data.
+	function VehicleSpawnerService:_prunePreviews()
+		local root = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
+		if not root then
+			return
+		end
+		local now = os.clock()
+		for definitionId, lastUsed in self.previewLastUsed do
+			if now - lastUsed >= PREVIEW_IDLE_SECONDS then
+				local preview = root:FindFirstChild(definitionId)
+				if preview then
+					preview:Destroy()
+				end
+				self.previewLastUsed[definitionId] = nil
+			end
+		end
+		if #root:GetChildren() == 0 then
+			root:Destroy()
+		end
 	end
 
 	function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, string?)
