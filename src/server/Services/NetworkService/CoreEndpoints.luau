@@ -86,13 +86,41 @@ return function(self: any)
 	self.context.Network:RegisterFunction("GetOfficialServers", function(payload)
 		return payload == nil or type(payload) == "table"
 	end, function(_, _, requestId)
+		local officialService = self.context.Services:Get("OfficialServerService")
 		return {
 			Success = true,
 			Code = "OK",
 			Message = "",
 			Data = {
-				Servers = self.context.Services:Get("OfficialServerService"):List(),
+				Servers = officialService:List(),
+				PublicServers = officialService:ListPublicInstances(),
 			},
+			RequestId = requestId,
+		}
+	end)
+	self.context.Network:RegisterFunction("JoinPublicServer", function(payload)
+		return type(payload) == "table" and type(payload.JobId) == "string"
+	end, function(player, payload, requestId)
+		local result, reason =
+			self.context.Services:Get("OfficialServerService"):JoinPublic(player, payload.JobId)
+		if not result then
+			return {
+				Success = false,
+				Code = reason or "OFFICIAL_SERVER_UNAVAILABLE",
+				Message = if reason == "ALREADY_ON_THIS_SERVER"
+					then "You are already on this server."
+					elseif
+						reason == "PROFILE_BUSY"
+					then "Your progress is still saving. Try again in a moment."
+					else "That server could not be joined - it may have just closed. Refresh and try again.",
+				RequestId = requestId,
+			}
+		end
+		return {
+			Success = true,
+			Code = "OK",
+			Message = "Connecting…",
+			Data = result,
 			RequestId = requestId,
 		}
 	end)

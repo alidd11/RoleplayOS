@@ -23,6 +23,16 @@ local TeleportService = game:GetService("TeleportService")
 -- and a data store would be the wrong tool at that rate for something disposable.
 local OCCUPANCY_MAP = "RoleplayOSOfficialOccupancy"
 
+-- A public server has no reserved access code to key itself by - matchmaking
+-- opens and closes instances on its own, and this framework never sees that
+-- happen. A sorted map rather than a hash map, because listing every live
+-- instance means enumerating an open set of keys this server never chose, and
+-- a hash map cannot be enumerated at all - only read back by a key already
+-- known. Sorted by player count so a browsing player sees the busiest, most
+-- alive-looking server first.
+local PUBLIC_DIRECTORY_MAP = "RoleplayOSPublicDirectory"
+local MAXIMUM_PUBLIC_ROWS = 20
+
 local OfficialServerService = { Critical = true, codes = {}, reserving = {} }
 
 function OfficialServerService:Init(context: any)
@@ -37,6 +47,15 @@ function OfficialServerService:Init(context: any)
 	if not self.occupancy then
 		self.context.Logger:Warning(
 			"No memory store, so instances cannot see how full each other are",
+			{}
+		)
+	end
+	local directoryOk, directory =
+		pcall(MemoryStoreService.GetSortedMap, MemoryStoreService, PUBLIC_DIRECTORY_MAP)
+	self.publicDirectory = if directoryOk then directory else nil
+	if not self.publicDirectory then
+		self.context.Logger:Warning(
+			"No memory store, so public instances cannot be listed for each other",
 			{}
 		)
 	end
@@ -420,6 +439,49 @@ function OfficialServerService:Join(
 	return { ServerId = serverId }, nil
 end
 
+-- Joins a specific public instance by JobId, the way TeleportToPlaceInstance
+-- expects rather than by reserved access code - a public instance has no
+-- code, only the JobId it already publishes itself under in the directory.
+function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
+	if type(jobId) ~= "string" or jobId == "" then
+		return nil, "OFFICIAL_SERVER_NOT_FOUND"
+	end
+	if jobId == game.JobId then
+		return nil, "ALREADY_ON_THIS_SERVER"
+	end
+	-- Saved and released before the teleport, for the same reason Join does
+	-- this: a destination reached while this server still holds the lease
+	-- refuses the load and kicks, and the lease then locks the player out of
+	-- every server, including this one, for its full duration.
+	local data = self.context.Services:Get("DataService")
+	local released, releaseReason = data:Save(player, true)
+	if not released then
+		self.context.Logger:Warning("Could not release the profile before a teleport", {
+			JobId = jobId,
+			UserId = player.UserId,
+			Error = tostring(releaseReason),
+		})
+		return nil, "PROFILE_BUSY"
+	end
+	local ok, problem =
+		pcall(TeleportService.TeleportToPlaceInstance, TeleportService, game.PlaceId, jobId, player)
+	if not ok then
+		self.context.Logger:Error(
+			"Public server teleport failed",
+			{ JobId = jobId, UserId = player.UserId, Error = tostring(problem) }
+		)
+		-- The instance shown may have already emptied and closed by the time this
+		-- ran - the directory entry lives up to OccupancyLifetimeSeconds behind
+		-- reality. The session was released for a journey that did not happen, so
+		-- it is taken back rather than leaving the player with no profile.
+		if player:IsDescendantOf(Players) then
+			data:Load(player)
+		end
+		return nil, "TELEPORT_FAILED"
+	end
+	return { JobId = jobId }, nil
+end
+
 function OfficialServerService:Start()
 	if self.settings.Enabled ~= true then
 		return
@@ -461,7 +523,7 @@ end
 -- reads as slightly stale rather than as an empty server that everybody is then
 -- sent into.
 function OfficialServerService:_publishOccupancy()
-	if not self.occupancy then
+	if not self.occupancy and not self.publicDirectory then
 		return
 	end
 	self.publishing = true
@@ -469,7 +531,7 @@ function OfficialServerService:_publishOccupancy()
 		while self.publishing do
 			local entry = self:CurrentEntry()
 			local index = self.currentInstanceIndex
-			if entry and index then
+			if self.occupancy and entry and index then
 				local ok, problem = pcall(
 					self.occupancy.SetAsync,
 					self.occupancy,
@@ -500,10 +562,77 @@ function OfficialServerService:_publishOccupancy()
 						{ ServerId = entry.Id, Instance = index, Error = tostring(startedProblem) }
 					)
 				end
+			elseif self.publicDirectory and not entry then
+				self:_publishPublicSelf()
 			end
 			task.wait(self.settings.OccupancyHeartbeatSeconds or 12)
 		end
 	end)
+end
+
+-- Publishes this server's own status into the public directory. A public
+-- server has no reserved code and no framework-assigned identity, so it
+-- publishes under its own JobId - the one thing that already uniquely names
+-- it - and is dropped from the list the moment it stops (the entry's
+-- lifetime is the same short-lived kind occupancy already uses, not
+-- something a crashed server would need to clean up after itself).
+function OfficialServerService:_publishPublicSelf()
+	-- Studio leaves JobId empty for a local Play-mode test - only a real
+	-- published server has one - and the memory store refuses an empty key.
+	-- Skipped rather than erroring every heartbeat: there is nothing wrong to
+	-- report, this server simply cannot identify itself yet.
+	if game.JobId == "" then
+		return
+	end
+	local playerCount = #Players:GetPlayers()
+	local ok, problem = pcall(self.publicDirectory.SetAsync, self.publicDirectory, game.JobId, {
+		PlayerCount = playerCount,
+		StartedAt = self.startedAt,
+		MaximumPlayers = Players.MaxPlayers,
+	}, self.settings.OccupancyLifetimeSeconds or 45, playerCount)
+	if not ok then
+		self.context.Logger:Warning(
+			"Could not publish this server to the public directory",
+			{ Error = tostring(problem) }
+		)
+	end
+end
+
+-- Every public instance currently reporting in, busiest first.
+function OfficialServerService:ListPublicInstances(): { any }
+	if not self.publicDirectory then
+		return {}
+	end
+	local ok, items = pcall(
+		self.publicDirectory.GetRangeAsync,
+		self.publicDirectory,
+		Enum.SortDirection.Descending,
+		MAXIMUM_PUBLIC_ROWS
+	)
+	if not ok then
+		self.context.Logger:Warning(
+			"Could not read the public directory",
+			{ Error = tostring(items) }
+		)
+		return {}
+	end
+	local rows = {}
+	for _, item in items do
+		local value = item.value
+		if type(value) == "table" then
+			table.insert(rows, {
+				Kind = "Public",
+				JobId = item.key,
+				Current = item.key == game.JobId,
+				PlayerCount = if type(value.PlayerCount) == "number" then value.PlayerCount else 0,
+				MaximumPlayers = if type(value.MaximumPlayers) == "number"
+					then value.MaximumPlayers
+					else nil,
+				StartedAt = if type(value.StartedAt) == "number" then value.StartedAt else nil,
+			})
+		end
+	end
+	return rows
 end
 
 -- Players already present when this service starts carry the same teleport data

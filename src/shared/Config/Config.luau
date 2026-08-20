@@ -2806,6 +2806,7 @@ local Config = {
 			GetOfficialServers = { Capacity = 4, RefillPerSecond = 0.5 },
 			-- A teleport is one action a player takes deliberately, never repeatedly.
 			JoinOfficialServer = { Capacity = 2, RefillPerSecond = 0.1 },
+			JoinPublicServer = { Capacity = 2, RefillPerSecond = 0.1 },
 			BeginDuty = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilian = { Capacity = 2, RefillPerSecond = 0.2 },
 			EnterCivilianAtGangTerritory = { Capacity = 2, RefillPerSecond = 0.2 },
