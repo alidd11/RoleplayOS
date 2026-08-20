@@ -29,6 +29,26 @@ local forbiddenClasses = {
 	ClickDetector = true,
 }
 
+-- A manifest can account for a reviewed framework script, but it must never
+-- turn an external loader or privileged service access into approved content.
+-- These checks are intentionally conservative until the imported systems are
+-- replaced by RoleplayOS-owned implementations.
+local forbiddenSourcePatterns = {
+	{ Pattern = "InsertService", Code = "INSERT_SERVICE" },
+	{ Pattern = "require%s*%(%s*%d", Code = "NUMERIC_REQUIRE" },
+	{ Pattern = "HttpService", Code = "HTTP_SERVICE" },
+	{ Pattern = "DataStoreService", Code = "DATASTORE_SERVICE" },
+	{ Pattern = "MemoryStoreService", Code = "MEMORYSTORE_SERVICE" },
+	{ Pattern = "MessagingService", Code = "MESSAGING_SERVICE" },
+	{ Pattern = "TeleportService", Code = "TELEPORT_SERVICE" },
+	{ Pattern = "loadstring", Code = "LOADSTRING" },
+	{ Pattern = "getfenv", Code = "GETFENV" },
+	{ Pattern = "setfenv", Code = "SETFENV" },
+	{ Pattern = "HttpGet", Code = "HTTP_GET" },
+	{ Pattern = "PostAsync", Code = "POST_ASYNC" },
+	{ Pattern = "RequestAsync", Code = "REQUEST_ASYNC" },
+}
+
 -- The tools ToolFactory can build without any imported geometry.
 --
 -- Named rather than accepted blindly, so declaring a fallback the factory has no
@@ -124,6 +144,32 @@ local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 		end
 	end
 	return nil
+end
+
+local function unsafeSource(root: Instance): (Instance?, string?)
+	for _, descendant in root:GetDescendants() do
+		if descendant:IsA("LuaSourceContainer") then
+			-- Reading Source can fail on its own, independent of what the source
+			-- actually contains - Roblox gates it behind a capability that is not
+			-- always available, and a scanner that raises on the very asset it is
+			-- meant to be scanning would take the whole server down with it. An
+			-- asset this cannot be read for is treated the same as one it found
+			-- something forbidden in: unsafe until it can actually be checked,
+			-- never silently passed because the check itself could not run.
+			local ok, source = pcall(function()
+				return descendant.Source
+			end)
+			if not ok then
+				return descendant, "SOURCE_UNREADABLE"
+			end
+			for _, entry in forbiddenSourcePatterns do
+				if string.find(source, entry.Pattern) then
+					return descendant, entry.Code
+				end
+			end
+		end
+	end
+	return nil, nil
 end
 
 local function validCertificationText(value: any): boolean
@@ -453,7 +499,12 @@ end
 
 function ContentValidationService:_discoverVehicle(assets: Instance, model: Model)
 	local path = pathFor(model, assets)
-	if #path < 4 or path[1] ~= "Vehicles" then
+	-- Vehicle templates are direct children of their catalogue folder. Limiting
+	-- discovery to those known shapes prevents nested lightbar models named
+	-- `Rear`, `Boot` or `Reds` from being registered as vehicles themselves.
+	local validPath = path[1] == "Vehicles"
+		and ((path[2] == "Civilian" and #path == 4) or (path[2] == "Services" and #path == 5))
+	if not validPath then
 		return
 	end
 	local id = model:GetAttribute("RoleplayOSAssetId") or model.Name
@@ -655,6 +706,11 @@ function ContentValidationService:_check(
 			self.report.Invalid,
 			kind .. ":" .. id .. ":UNSAFE_" .. string.upper(unsafe.ClassName)
 		)
+		return
+	end
+	local unsafeScript, sourceIssue = unsafeSource(template)
+	if unsafeScript and sourceIssue then
+		table.insert(self.report.Invalid, kind .. ":" .. id .. ":UNSAFE_SOURCE_" .. sourceIssue)
 		return
 	end
 	local qualityProblem = qualityIssue(template, expectedClass, self.context.Configuration, id)
