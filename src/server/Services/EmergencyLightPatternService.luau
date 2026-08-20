@@ -61,11 +61,16 @@ function EmergencyLightPatternService:Adopt(vehicle: Instance)
 	end
 	-- Recorded before this ever paints a lamp, so a stage that stops covering
 	-- one puts it back exactly as it was built rather than to a guessed off
-	-- colour.
+	-- colour. EasyLS lamps are authored transparent at rest, but adoption can
+	-- race the kit's own initialiser; a non-transparent capture is therefore an
+	-- on-state capture, not a trustworthy off-state appearance.
 	local original = {}
 	for name, part in kit.Lamps do
-		original[name] =
-			{ Color = part.Color, Material = part.Material, Transparency = part.Transparency }
+		original[name] = {
+			Color = part.Color,
+			Material = part.Material,
+			Transparency = if part.Transparency >= 0.99 then part.Transparency else 1,
+		}
 	end
 	-- Which of the kit's own Stage1/Stage2/Stage3 this vehicle actually
 	-- authored, in order. Most of the fleet has only Stage1 -- the framework's
@@ -82,15 +87,22 @@ function EmergencyLightPatternService:Adopt(vehicle: Instance)
 			table.insert(availableMainStages, name)
 		end
 	end
+	local painted = {}
+	for name in kit.Lamps do
+		-- A false sentinel makes the first nil/dark result a real paint. Without
+		-- it, nil ~= nil is false and a lamp that starts visibly on is never
+		-- restored when the vehicle is first adopted with its lights off.
+		painted[name] = false
+	end
 	self.vehicles[vehicle] = {
 		Kit = kit,
 		Original = original,
 		StageIndex = indexLamps(kit.Stages),
 		AvailableMainStages = availableMainStages,
-		-- What each lamp is currently showing: a colour name, or false for
-		-- dark/original. Forces the first paint to actually write, the same
-		-- reason VehicleLightingService's Painted starts nil.
-		Painted = {},
+		-- What each lamp is currently showing: a colour name, or nil for
+		-- dark/original. The false sentinel forces the first paint to actually
+		-- write, including when the first desired result is nil.
+		Painted = painted,
 	}
 	vehicle.Destroying:Once(function()
 		self.vehicles[vehicle] = nil
