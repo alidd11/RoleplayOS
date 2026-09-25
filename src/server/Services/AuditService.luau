@@ -18,6 +18,7 @@ local AuditService = {
 	flushBusy = false,
 	flushScheduled = false,
 	running = false,
+	destroyed = false,
 }
 
 function AuditService:Init(context: any)
@@ -32,6 +33,7 @@ function AuditService:Init(context: any)
 	self.flushBusy = false
 	self.flushScheduled = false
 	self.running = false
+	self.destroyed = false
 end
 
 function AuditService:_maximumPending(): number
@@ -138,6 +140,9 @@ local function auditKey(): string
 end
 
 function AuditService:Flush(): boolean
+	if self.destroyed then
+		return false
+	end
 	if self.flushBusy then
 		return false
 	end
@@ -160,6 +165,14 @@ function AuditService:Flush(): boolean
 			return retained
 		end)
 	end)
+
+	-- Destroy cannot cancel a DataStore request already in flight. If its
+	-- shutdown budget expired while this call was yielding, do not restore or
+	-- schedule any state after teardown has already completed.
+	if self.destroyed then
+		self.flushBusy = false
+		return ok and updated ~= nil
+	end
 
 	if not ok or updated == nil then
 		self:_restorePending(batch)
@@ -217,12 +230,14 @@ function AuditService:Destroy()
 			task.wait(0.25)
 		end
 	end
-	if self.pendingCount > 0 then
+	if self.pendingCount > 0 or self.flushBusy then
 		self.context.Logger:Warning("Audit shutdown deadline reached", {
 			PendingEntries = self.pendingCount,
 			DroppedEntries = self.droppedPending,
+			FlushInFlight = self.flushBusy,
 		})
 	end
+	self.destroyed = true
 	table.clear(self.entries)
 	table.clear(self.pending)
 	self.head = 1
