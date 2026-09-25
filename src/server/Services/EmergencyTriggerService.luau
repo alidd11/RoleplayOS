@@ -15,6 +15,7 @@ local EmergencyTriggerService = {
 function EmergencyTriggerService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("EmergencyAlert")
+	self.triggerConnections = {}
 end
 
 function EmergencyTriggerService:_departments(instance: Instance, incident: any): { string }
@@ -151,17 +152,24 @@ function EmergencyTriggerService:Panic(player: Player): (any?, string?)
 	return call, nil
 end
 
+function EmergencyTriggerService:_unwatch(instance: Instance)
+	local connection = self.triggerConnections[instance]
+	if connection then
+		connection:Disconnect()
+		self.triggerConnections[instance] = nil
+	end
+	self.cooldowns[instance] = nil
+end
+
 function EmergencyTriggerService:_watch(instance: Instance)
+	self:_unwatch(instance)
 	local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
 	if not prompt then
 		return
 	end
-	table.insert(
-		self.connections,
-		prompt.Triggered:Connect(function(player)
-			self:Trigger(instance, player)
-		end)
-	)
+	self.triggerConnections[instance] = prompt.Triggered:Connect(function(player)
+		self:Trigger(instance, player)
+	end)
 end
 
 function EmergencyTriggerService:Start()
@@ -177,8 +185,16 @@ function EmergencyTriggerService:Start()
 	)
 	table.insert(
 		self.connections,
+		CollectionService:GetInstanceRemovedSignal(self.context.Configuration.EmergencyTriggers.Tag)
+			:Connect(function(instance)
+				self:_unwatch(instance)
+			end)
+	)
+	table.insert(
+		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.playerCooldowns[player.UserId] = nil
+			self.panicCooldowns[player.UserId] = nil
 		end)
 	)
 end
@@ -188,6 +204,10 @@ function EmergencyTriggerService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, connection in self.triggerConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.triggerConnections)
 	table.clear(self.cooldowns)
 	table.clear(self.playerCooldowns)
 	table.clear(self.panicCooldowns)
