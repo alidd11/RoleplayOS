@@ -166,6 +166,10 @@ local function tearDown()
 		return
 	end
 	tornDown = true
+	-- Freeze new player requests before services begin tearing down. Otherwise a
+	-- late RemoteFunction can enter while its dependencies are already stopping,
+	-- or mutate a profile during the final-save window.
+	context.Network:BeginShutdown()
 	registry:Destroy(context)
 	context.Network:Destroy()
 end
