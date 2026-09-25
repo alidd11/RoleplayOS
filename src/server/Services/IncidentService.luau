@@ -311,7 +311,9 @@ function IncidentService:Recent(
 	local items = {}
 	for indexPosition = first, math.min(#entries, first + size - 1) do
 		local summary = entries[indexPosition]
-		local record = if summary.LiveDispatchCall then summary else self:_cacheGet(summary.IncidentId)
+		local record = if summary.LiveDispatchCall
+			then summary
+			else self:_cacheGet(summary.IncidentId)
 		if not record then
 			record, reason = self.context.Services
 				:Get("DataService")
