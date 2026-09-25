@@ -505,11 +505,16 @@ function RecordIndexService:SearchVehicles(
 end
 
 function RecordIndexService:_queuePlayer(player: Player)
-	if self.queued[player.UserId] then
+	local userId = player.UserId
+	if self.queued[userId] then
+		-- A fast rejoin can arrive before the old Player instance reaches the
+		-- front of this queue. Keep the single queued slot, but make it point at
+		-- the latest live instance so background indexing is not silently skipped.
+		self.queued[userId] = player
 		return
 	end
-	self.queued[player.UserId] = true
-	table.insert(self.queue, player)
+	self.queued[userId] = player
+	table.insert(self.queue, userId)
 end
 
 function RecordIndexService:_indexPlayer(player: Player)
@@ -549,10 +554,13 @@ function RecordIndexService:Start()
 	end
 	task.spawn(function()
 		while self.running do
-			local player = table.remove(self.queue, 1)
-			if player then
-				self.queued[player.UserId] = nil
-				self:_indexPlayer(player)
+			local userId = table.remove(self.queue, 1)
+			if userId then
+				local player = self.queued[userId]
+				self.queued[userId] = nil
+				if player and player.Parent then
+					self:_indexPlayer(player)
+				end
 			else
 				task.wait(0.5)
 			end
