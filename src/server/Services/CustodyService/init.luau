@@ -34,6 +34,7 @@ function CustodyService:Init(context: any)
 	self.chairEvent = context.Network:RegisterEvent("CustodyChairProcessed")
 	self.chairPrompts = {}
 	self.chairPromptConnections = {}
+	self.playerConnections = {}
 end
 
 -- Custody is a power the role holds, not a department it belongs to.
@@ -174,28 +175,29 @@ function CustodyService:Start()
 		end)
 	end
 	local function watch(player: Player)
-		table.insert(
-			self.connections,
-			player.CharacterAdded:Connect(function()
-				task.defer(function()
-					if self:HasActiveSentence(player) then
-						self:_placeInCell(player)
-						return
+		local previous = self.playerConnections[player.UserId]
+		if previous then
+			previous:Disconnect()
+		end
+		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
+			task.defer(function()
+				if self:HasActiveSentence(player) then
+					self:_placeInCell(player)
+					return
+				end
+				local state = self.cuffed[player.UserId]
+				if state then
+					player:SetAttribute("RoleplayOSCuffed", true)
+					player:SetAttribute("RoleplayOSCuffPosition", state.CuffPosition)
+					local targetHumanoid = humanoid(player)
+					if targetHumanoid then
+						targetHumanoid.WalkSpeed =
+							self.context.Configuration.Custody.CuffedWalkSpeed
+						targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
 					end
-					local state = self.cuffed[player.UserId]
-					if state then
-						player:SetAttribute("RoleplayOSCuffed", true)
-						player:SetAttribute("RoleplayOSCuffPosition", state.CuffPosition)
-						local targetHumanoid = humanoid(player)
-						if targetHumanoid then
-							targetHumanoid.WalkSpeed =
-								self.context.Configuration.Custody.CuffedWalkSpeed
-							targetHumanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
-						end
-					end
-				end)
+				end
 			end)
-		)
+		end)
 		restoreSentence(player)
 	end
 	for _, player in Players:GetPlayers() do
@@ -209,6 +211,11 @@ function CustodyService:Start()
 			-- is not an arrest and must never create a sentence by itself.
 			self:AddDisconnectPenalty(player)
 			self.cuffed[player.UserId] = nil
+			local playerConnection = self.playerConnections[player.UserId]
+			if playerConnection then
+				playerConnection:Disconnect()
+				self.playerConnections[player.UserId] = nil
+			end
 			local releaseUserIds = {}
 			for userId, state in self.cuffed do
 				if
@@ -316,10 +323,14 @@ function CustodyService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for _, connection in self.playerConnections do
+		connection:Disconnect()
+	end
 	for _, command in self.commands do
 		command:Destroy()
 	end
 	table.clear(self.connections)
+	table.clear(self.playerConnections)
 	table.clear(self.commands)
 	table.clear(self.cuffed)
 	for model in self.chairPrompts do
