@@ -6,6 +6,7 @@ local RecordIndexService = {
 	connections = {},
 	queue = {},
 	queued = {},
+	waiting = {},
 	pendingSync = {},
 	cache = {},
 	running = false,
@@ -65,6 +66,7 @@ function RecordIndexService:Init(context: any)
 	self.context = context
 	table.clear(self.queue)
 	table.clear(self.queued)
+	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
 end
@@ -504,7 +506,7 @@ function RecordIndexService:SearchVehicles(
 	return { Items = items, Page = page, Total = #matches }, nil
 end
 
-function RecordIndexService:_queuePlayer(player: Player)
+function RecordIndexService:_queueReadyPlayer(player: Player)
 	local userId = player.UserId
 	if self.queued[userId] then
 		-- A fast rejoin can arrive before the old Player instance reaches the
@@ -517,15 +519,33 @@ function RecordIndexService:_queuePlayer(player: Player)
 	table.insert(self.queue, userId)
 end
 
-function RecordIndexService:_indexPlayer(player: Player)
-	local deadline = os.clock() + 30
-	local session
-	repeat
-		session = self.context.Services:Get("DataService"):GetSession(player)
-		if not session then
-			task.wait(0.25)
+function RecordIndexService:_waitForSession(player: Player)
+	local userId = player.UserId
+	self.waiting[userId] = player
+	task.spawn(function()
+		local deadline = os.clock() + 30
+		local session
+		repeat
+			if not self.running or self.waiting[userId] ~= player or not player.Parent then
+				return
+			end
+			session = self.context.Services:Get("DataService"):GetSession(player)
+			if not session then
+				task.wait(0.25)
+			end
+		until session or os.clock() >= deadline
+		if self.waiting[userId] ~= player then
+			return
 		end
-	until session or not player.Parent or os.clock() >= deadline
+		self.waiting[userId] = nil
+		if self.running and session and player.Parent then
+			self:_queueReadyPlayer(player)
+		end
+	end)
+end
+
+function RecordIndexService:_indexPlayer(player: Player)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
 		return
 	end
@@ -546,11 +566,23 @@ function RecordIndexService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
-			self:_queuePlayer(player)
+			self:_waitForSession(player)
+		end)
+	)
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			local userId = player.UserId
+			if self.waiting[userId] == player then
+				self.waiting[userId] = nil
+			end
+			if self.queued[userId] == player then
+				self.queued[userId] = nil
+			end
 		end)
 	)
 	for _, player in Players:GetPlayers() do
-		self:_queuePlayer(player)
+		self:_waitForSession(player)
 	end
 	task.spawn(function()
 		while self.running do
@@ -576,6 +608,7 @@ function RecordIndexService:Destroy()
 	table.clear(self.connections)
 	table.clear(self.queue)
 	table.clear(self.queued)
+	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
 end
