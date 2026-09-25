@@ -2691,6 +2691,10 @@ local Config = {
 		-- request. Set below the client's own patience so the server is what
 		-- answers, rather than the client giving up on a server still thinking.
 		HandlerTimeoutSeconds = 8,
+		-- Grace period after the shutdown gate closes for handlers that were
+		-- already running. Kept below the ordinary handler timeout so profile and
+		-- incident shutdown work still retain most of Roblox's close window.
+		ShutdownRequestDrainSeconds = 4,
 		-- A request still running after this long is presumed lost and stops
 		-- occupying a concurrency slot, so one stuck handler cannot refuse every
 		-- later request from that player for the rest of the session.
