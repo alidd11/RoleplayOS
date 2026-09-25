@@ -204,11 +204,17 @@ function EconomyService:ReconcilePendingTransfers()
 					TransferId = record.TransferId,
 					Error = recordReason,
 				})
+				table.insert(remaining, id)
 			end
 		end
-		data:UpdateSharedRecord("pending-transfer-index", function()
+		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function()
 			return remaining
 		end)
+		if indexReason then
+			self.context.Logger:Error("Pending transfer refund index persistence failed", {
+				Error = indexReason,
+			})
+		end
 	end)
 	self.reconciling = false
 	if not ok then
