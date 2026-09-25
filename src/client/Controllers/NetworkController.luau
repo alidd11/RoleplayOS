@@ -36,7 +36,8 @@ local REMOTES_TIMEOUT_SECONDS = 20
 function NetworkController:Init(_context: any)
 	self.resolved = {}
 	self.remotes = nil
-	self.lookupStarted = false
+	self.lookupAttempted = false
+	self.lookupInProgress = false
 end
 
 -- The remotes folder, waited for once and shared by every later caller.
@@ -47,19 +48,21 @@ function NetworkController:_folder(): Instance?
 	if self.remotes then
 		return self.remotes
 	end
-	if self.lookupStarted then
+	if self.lookupInProgress then
 		-- Another caller is already waiting. Wait alongside it rather than
 		-- starting a second lookup for the same folder.
 		local deadline = os.clock() + REMOTES_TIMEOUT_SECONDS
-		while not self.remotes and os.clock() < deadline do
+		while self.lookupInProgress and not self.remotes and os.clock() < deadline do
 			task.wait(0.1)
 		end
 		return self.remotes
 	end
-	self.lookupStarted = true
+	self.lookupAttempted = true
+	self.lookupInProgress = true
 	local root = ReplicatedStorage:WaitForChild("RoleplayOS", REMOTES_TIMEOUT_SECONDS)
 	local network = if root then root:WaitForChild("Network", REMOTES_TIMEOUT_SECONDS) else nil
 	self.remotes = if network then network:WaitForChild("Remotes", REMOTES_TIMEOUT_SECONDS) else nil
+	self.lookupInProgress = false
 	if not self.remotes then
 		warn(
 			"RoleplayOS could not find the server's remotes. The server did not finish "
@@ -74,7 +77,10 @@ function NetworkController:GetState(): string
 	if self.remotes then
 		return if self.ready then "Ready" else "Connecting"
 	end
-	return if self.lookupStarted then "Unavailable" else "Connecting"
+	if self.lookupInProgress then
+		return "Connecting"
+	end
+	return if self.lookupAttempted then "Unavailable" else "Connecting"
 end
 function NetworkController:Start() end
 function NetworkController:_awaitReady()
