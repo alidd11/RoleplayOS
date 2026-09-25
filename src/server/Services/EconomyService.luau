@@ -87,6 +87,42 @@ function EconomyService:_queuePendingRefund(record: any)
 	end
 end
 
+function EconomyService:_transactionState(
+	character: any,
+	scope: string
+): ({ [string]: boolean }, { string })
+	local existingSeen = self.seen[scope]
+	local existingOrder = self.order[scope]
+	if existingSeen and existingOrder then
+		return existingSeen, existingOrder
+	end
+
+	-- Rebuild the volatile replay guard from the profile's durable transaction
+	-- history. Without this, hopping servers forgot every transaction id and a
+	-- recovery path using a stable id could apply the same balance change again.
+	local seen: { [string]: boolean } = {}
+	local order: { string } = {}
+	for _, transaction in character.Economy.Transactions or {} do
+		local transactionId = if type(transaction) == "table"
+			then transaction.TransactionId
+			else nil
+		if type(transactionId) == "string" and transactionId ~= "" and not seen[transactionId] then
+			seen[transactionId] = true
+			table.insert(order, transactionId)
+		end
+	end
+	local maximum = self.context.Configuration.Economy.MaximumTransactionHistory or 200
+	while #order > maximum do
+		local oldest = table.remove(order, 1)
+		if oldest then
+			seen[oldest] = nil
+		end
+	end
+	self.seen[scope] = seen
+	self.order[scope] = order
+	return seen, order
+end
+
 function EconomyService:ReconcilePendingTransfers()
 	if self.reconciling then
 		return
@@ -157,8 +193,7 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 		return false, "CHARACTER_NOT_ACTIVE"
 	end
 	local scope = transactionScope(player.UserId, transaction.CharacterId)
-	local seen = self.seen[scope] or {}
-	self.seen[scope] = seen
+	local seen, order = self:_transactionState(character, scope)
 	local account, accountReason = Validator.account(transaction.Account)
 	if not account then
 		return false, accountReason
@@ -174,8 +209,6 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 	-- Bounded. Identifiers are server generated GUIDs used once, so this only
 	-- needs to be long enough that a replay cannot outrun it; keeping every
 	-- identifier a character ever used grows for the life of the server.
-	local order = self.order[scope] or {}
-	self.order[scope] = order
 	table.insert(order, transaction.TransactionId)
 	local maximum = self.context.Configuration.Economy.MaximumTransactionHistory or 200
 	while #order > maximum do
