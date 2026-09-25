@@ -546,6 +546,7 @@ function TaxiService:Destroy()
 	table.clear(self.requests)
 	table.clear(self.byPassenger)
 	table.clear(self.byDriver)
+	table.clear(self.declined)
 end
 
 return TaxiService
