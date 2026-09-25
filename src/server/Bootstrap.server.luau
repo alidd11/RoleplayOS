@@ -170,6 +170,13 @@ local function tearDown()
 	-- late RemoteFunction can enter while its dependencies are already stopping,
 	-- or mutate a profile during the final-save window.
 	context.Network:BeginShutdown()
+	local drained, stillActive =
+		context.Network:DrainActive(Config.Network.ShutdownRequestDrainSeconds or 4)
+	if not drained then
+		logger:Warning("Remote handlers still active at shutdown deadline", {
+			ActiveHandlers = stillActive,
+		})
+	end
 	registry:Destroy(context)
 	context.Network:Destroy()
 end
