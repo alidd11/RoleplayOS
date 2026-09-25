@@ -14,6 +14,7 @@ function DispatchService:Init(context: any)
 	self.context = context
 	self.changedEvent = context.Network:RegisterEvent("DispatchChanged")
 	self.accessEvent = context.Network:RegisterEvent("DispatchConsoleAccess")
+	self.seatWatchers = {}
 end
 
 function DispatchService:_duty(player: Player): any?
@@ -105,28 +106,46 @@ function DispatchService:PrepareCall(player: Player, payload: any): (any?, strin
 		nil
 end
 
+function DispatchService:_unwatchSeat(instance: Instance)
+	local watcher = self.seatWatchers[instance]
+	if not watcher then
+		return
+	end
+	watcher.Connection:Disconnect()
+	local previous = watcher.Player
+	if previous then
+		self.occupied[previous.UserId] = nil
+		if previous.Parent == Players then
+			self.accessEvent:FireClient(previous, { Allowed = false })
+		end
+	end
+	self.seatWatchers[instance] = nil
+end
+
 function DispatchService:_watchSeat(instance: Instance)
 	if not (instance:IsA("Seat") or instance:IsA("VehicleSeat")) then
 		return
 	end
-	local previous: Player? = nil
+	self:_unwatchSeat(instance)
+	local watcher = { Connection = nil, Player = nil }
 	local function changed()
+		local previous = watcher.Player
 		if previous then
 			self.occupied[previous.UserId] = nil
-			self.accessEvent:FireClient(previous, { Allowed = false })
+			if previous.Parent == Players then
+				self.accessEvent:FireClient(previous, { Allowed = false })
+			end
 		end
 		local occupant = instance.Occupant
-		previous = if occupant then Players:GetPlayerFromCharacter(occupant.Parent) else nil
-		if previous then
-			self:_sendAccess(previous)
+		watcher.Player = if occupant then Players:GetPlayerFromCharacter(occupant.Parent) else nil
+		if watcher.Player then
+			self:_sendAccess(watcher.Player)
 		end
 	end
-	table.insert(
-		self.connections,
-		instance:GetPropertyChangedSignal("Occupant"):Connect(function()
-			task.defer(changed)
-		end)
-	)
+	watcher.Connection = instance:GetPropertyChangedSignal("Occupant"):Connect(function()
+		task.defer(changed)
+	end)
+	self.seatWatchers[instance] = watcher
 	changed()
 end
 
@@ -215,6 +234,13 @@ function DispatchService:Start()
 				self:_watchSeat(seat)
 			end)
 	)
+	table.insert(
+		self.connections,
+		CollectionService:GetInstanceRemovedSignal(self.context.Configuration.Dispatch.SeatTag)
+			:Connect(function(seat)
+				self:_unwatchSeat(seat)
+			end)
+	)
 end
 
 function DispatchService:Destroy()
@@ -223,6 +249,10 @@ function DispatchService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, watcher in self.seatWatchers do
+		watcher.Connection:Disconnect()
+	end
+	table.clear(self.seatWatchers)
 	table.clear(self.occupied)
 end
 
