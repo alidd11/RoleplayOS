@@ -166,19 +166,21 @@ function VehicleSpawnerService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	table.clear(self.connections)
 	for _, vehicle in self.active do
 		if vehicle.Parent then
 			RigMechanics.ejectOccupants(vehicle)
 			vehicle:Destroy()
 		end
 	end
-	for _, held in { self.deathConnections, self.spawnConnections } do
+	for _, held in { self.deathConnections, self.spawnConnections, self.seatConnections } do
 		for _, connection in held do
 			connection:Disconnect()
 		end
 		table.clear(held)
 	end
 	table.clear(self.active)
+	table.clear(self.cooldowns)
 	table.clear(self.spawning)
 	table.clear(self.previewLastUsed)
 end
