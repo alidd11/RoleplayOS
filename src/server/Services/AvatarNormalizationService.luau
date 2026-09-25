@@ -110,6 +110,7 @@ end
 function AvatarNormalizationService:Init(context: any)
 	self.context = context
 	table.clear(self.connections)
+	self.playerConnections = {}
 end
 
 function AvatarNormalizationService:Normalize(character: Model)
@@ -117,18 +118,26 @@ function AvatarNormalizationService:Normalize(character: Model)
 end
 
 function AvatarNormalizationService:Start()
+	local function forget(player: Player)
+		local connection = self.playerConnections[player.UserId]
+		if connection then
+			connection:Disconnect()
+			self.playerConnections[player.UserId] = nil
+		end
+	end
 	local function watch(player: Player)
-		table.insert(
-			self.connections,
-			player.CharacterAppearanceLoaded:Connect(function(character)
+		forget(player)
+		self.playerConnections[player.UserId] = player.CharacterAppearanceLoaded:Connect(
+			function(character)
 				normalize(character)
-			end)
+			end
 		)
 		if player.Character then
 			task.defer(normalize, player.Character)
 		end
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
+	table.insert(self.connections, Players.PlayerRemoving:Connect(forget))
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
@@ -139,6 +148,10 @@ function AvatarNormalizationService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, connection in self.playerConnections do
+		connection:Disconnect()
+	end
+	table.clear(self.playerConnections)
 end
 
 return AvatarNormalizationService
