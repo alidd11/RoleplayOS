@@ -38,7 +38,7 @@ function AuditService:_maximumPending(): number
 	return math.max(
 		25,
 		math.floor(
-			tonumber(self.context.Configuration.Framework.AuditMaximumPendingEntries) or 1000
+			tonumber(self.context.Configuration.Framework.AuditMaximumPendingEntries) or 500
 		)
 	)
 end
@@ -121,7 +121,7 @@ function AuditService:Start()
 	task.spawn(function()
 		local interval = math.max(
 			1,
-			tonumber(self.context.Configuration.Framework.AuditFlushIntervalSeconds) or 5
+			tonumber(self.context.Configuration.Framework.AuditFlushIntervalSeconds) or 10
 		)
 		while self.running do
 			task.wait(interval)
