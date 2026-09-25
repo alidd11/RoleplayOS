@@ -3,10 +3,75 @@
 local HttpService = game:GetService("HttpService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local IncidentService = { cache = {}, pending = {} }
+local IncidentService = { cache = {}, pending = {}, cacheCount = 0, cacheSweepCounter = 0 }
 
 function IncidentService:Init(context: any)
 	self.context = context
+	table.clear(self.cache)
+	table.clear(self.pending)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
+end
+
+function IncidentService:_sweepCache()
+	self.cacheSweepCounter += 1
+	if self.cacheSweepCounter < 32 then
+		return
+	end
+	self.cacheSweepCounter = 0
+
+	local now = os.clock()
+	for incidentId, entry in self.cache do
+		if type(entry) ~= "table" or (entry.ExpiresAt or 0) <= now then
+			self.cache[incidentId] = nil
+			self.cacheCount = math.max(0, self.cacheCount - 1)
+		end
+	end
+end
+
+function IncidentService:_cacheSet(incidentId: string, value: any)
+	local replacing = self.cache[incidentId] ~= nil
+	self.cache[incidentId] = {
+		Value = value,
+		ExpiresAt = os.clock() + self.context.Configuration.MDT.RecordCacheSeconds,
+	}
+	if not replacing then
+		self.cacheCount += 1
+	end
+
+	self:_sweepCache()
+
+	local maximum = math.max(1, self.context.Configuration.MDT.MaximumIncidentIndexEntries or 2000)
+	if self.cacheCount <= maximum then
+		return
+	end
+
+	local oldestId
+	local oldestExpiry = math.huge
+	for cachedId, entry in self.cache do
+		local expiresAt = if type(entry) == "table" then entry.ExpiresAt or 0 else 0
+		if expiresAt < oldestExpiry then
+			oldestExpiry = expiresAt
+			oldestId = cachedId
+		end
+	end
+	if oldestId then
+		self.cache[oldestId] = nil
+		self.cacheCount = math.max(0, self.cacheCount - 1)
+	end
+end
+
+function IncidentService:_cacheGet(incidentId: string): any?
+	local entry = self.cache[incidentId]
+	if not entry then
+		return nil
+	end
+	if type(entry) ~= "table" or (entry.ExpiresAt or 0) <= os.clock() then
+		self.cache[incidentId] = nil
+		self.cacheCount = math.max(0, self.cacheCount - 1)
+		return nil
+	end
+	return entry.Value
 end
 
 function IncidentService:Start() end
@@ -40,7 +105,7 @@ function IncidentService:_persist(incident: any): (any?, string?)
 	if not stored then
 		return nil, reason
 	end
-	self.cache[incident.IncidentId] = stored
+	self:_cacheSet(incident.IncidentId, stored)
 	local maximum = self.context.Configuration.MDT.MaximumIncidentIndexEntries
 	local indexed, indexReason = self.context.Services
 		:Get("DataService")
@@ -246,7 +311,9 @@ function IncidentService:Recent(
 	local items = {}
 	for indexPosition = first, math.min(#entries, first + size - 1) do
 		local summary = entries[indexPosition]
-		local record = if summary.LiveDispatchCall then summary else self.cache[summary.IncidentId]
+		local record = if summary.LiveDispatchCall
+			then summary
+			else self:_cacheGet(summary.IncidentId)
 		if not record then
 			record, reason = self.context.Services
 				:Get("DataService")
@@ -255,7 +322,7 @@ function IncidentService:Recent(
 				return nil, reason
 			end
 			if record then
-				self.cache[summary.IncidentId] = record
+				self:_cacheSet(summary.IncidentId, record)
 			end
 		end
 		if record then
@@ -275,6 +342,8 @@ function IncidentService:Destroy()
 	end
 	table.clear(self.cache)
 	table.clear(self.pending)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
 end
 
 return IncidentService
