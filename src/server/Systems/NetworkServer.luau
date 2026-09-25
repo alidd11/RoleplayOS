@@ -225,6 +225,10 @@ function NetworkServer:RegisterFunction(
 		task.spawn(function()
 			local handlerOk, handlerResult = pcall(handler, player, payload, requestId)
 			ok, result = handlerOk, handlerResult
+			-- A caller may already have received SERVER_TIMEOUT by the time the
+			-- handler finishes. Release its per-player slot here as well as on the
+			-- normal response path so completed work cannot keep later requests busy.
+			inFlight[requestId] = nil
 			finished = true
 			self.activeTotal = math.max(0, self.activeTotal - 1)
 		end)
