@@ -127,10 +127,11 @@ function AvatarNormalizationService:Start()
 	end
 	local function watch(player: Player)
 		forget(player)
-		self.playerConnections[player.UserId] =
-			player.CharacterAppearanceLoaded:Connect(function(character)
+		self.playerConnections[player.UserId] = player.CharacterAppearanceLoaded:Connect(
+			function(character)
 				normalize(character)
-			end)
+			end
+		)
 		if player.Character then
 			task.defer(normalize, player.Character)
 		end
