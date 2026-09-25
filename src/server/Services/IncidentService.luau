@@ -8,8 +8,6 @@ local IncidentService = { cache = {}, pending = {}, cacheCount = 0, cacheSweepCo
 function IncidentService:Init(context: any)
 	self.context = context
 	table.clear(self.cache)
-	self.cacheCount = 0
-	self.cacheSweepCounter = 0
 	table.clear(self.pending)
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
@@ -342,6 +340,8 @@ function IncidentService:Destroy()
 	end
 	table.clear(self.cache)
 	table.clear(self.pending)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
 end
 
 return IncidentService
