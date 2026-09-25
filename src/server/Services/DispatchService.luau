@@ -127,7 +127,7 @@ function DispatchService:_watchSeat(instance: Instance)
 		return
 	end
 	self:_unwatchSeat(instance)
-	local watcher = { Connection = nil, Player = nil }
+	local watcher: any = { Connection = nil, Player = nil }
 	local function changed()
 		local previous = watcher.Player
 		if previous then
