@@ -87,7 +87,10 @@ function EconomyService:_queuePendingRefund(record: any)
 	end
 end
 
-function EconomyService:_transactionState(character: any, scope: string): ({ [string]: boolean }, { string })
+function EconomyService:_transactionState(
+	character: any,
+	scope: string
+): ({ [string]: boolean }, { string })
 	local existingSeen = self.seen[scope]
 	local existingOrder = self.order[scope]
 	if existingSeen and existingOrder then
@@ -100,7 +103,9 @@ function EconomyService:_transactionState(character: any, scope: string): ({ [st
 	local seen: { [string]: boolean } = {}
 	local order: { string } = {}
 	for _, transaction in character.Economy.Transactions or {} do
-		local transactionId = if type(transaction) == "table" then transaction.TransactionId else nil
+		local transactionId = if type(transaction) == "table"
+			then transaction.TransactionId
+			else nil
 		if type(transactionId) == "string" and transactionId ~= "" and not seen[transactionId] then
 			seen[transactionId] = true
 			table.insert(order, transactionId)
