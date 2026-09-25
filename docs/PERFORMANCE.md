@@ -87,6 +87,12 @@ shutdown. Static configuration is frozen and cached. The join catalogue sends
 summaries rather than full profiles or full vehicle, property and furniture
 catalogues. MDT results paginate and remote payloads are capped.
 
+Shutdown closes the remote request gate before services begin tearing down and
+waits up to `Network.ShutdownRequestDrainSeconds` for already-running handlers.
+A second gate immediately before handler admission closes the race where a
+request entered validation just before shutdown. The drain is intentionally
+bounded so stuck request work cannot consume the profile-save window.
+
 Runtime state uses events rather than DataStore or MemoryStore polling. Dispatch
 messages contain only kind, stable ID and revision. Property interiors clone on
 demand and unload after the last occupant and a safety delay. Server-only
