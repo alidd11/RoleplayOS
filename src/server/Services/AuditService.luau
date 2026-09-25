@@ -155,12 +155,17 @@ function AuditService:Flush(): boolean
 	local data = self.context.Services:Get("DataService")
 	local ok, updated, reason = pcall(function()
 		return data:UpdateSharedRecord(auditKey(), function(existing)
-			local retained = if type(existing) == "table" then existing else {}
+			local combined = if type(existing) == "table" then existing else {}
 			for _, entry in batch do
-				table.insert(retained, entry)
+				table.insert(combined, entry)
 			end
-			while #retained > MAX_ENTRIES do
-				table.remove(retained, 1)
+			if #combined <= MAX_ENTRIES then
+				return combined
+			end
+			local retained = table.create(MAX_ENTRIES)
+			local first = #combined - MAX_ENTRIES + 1
+			for index = first, #combined do
+				table.insert(retained, combined[index])
 			end
 			return retained
 		end)
