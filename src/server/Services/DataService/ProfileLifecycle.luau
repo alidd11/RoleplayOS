@@ -391,6 +391,11 @@ return function(DataService)
 				end
 				return snapshot
 			end)
+		end, function(failure)
+			-- A lost lease is a settled ownership result, not a transient DataStore
+			-- failure. Retrying cannot recover it while another live server remains
+			-- authoritative, and can consume most of the shutdown save budget.
+			return string.find(tostring(failure), "SESSION_OWNERSHIP_LOST", 1, true) ~= nil
 		end)
 		session.Saving = false
 		if ok then
