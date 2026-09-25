@@ -213,6 +213,20 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
+		-- Re-check immediately before acquiring the active slot. A request can
+		-- pass the first gate just before shutdown begins, then spend time in
+		-- authorisation/schema validation. There is no yield between this check
+		-- and the counter increment, so BeginShutdown cannot miss a handler that
+		-- is about to start while deciding whether the transport is idle.
+		if not self.accepting then
+			self:_count("SERVER_SHUTTING_DOWN")
+			return {
+				Success = false,
+				Code = "SERVER_SHUTTING_DOWN",
+				Message = "This server is closing. Please rejoin.",
+				RequestId = requestId,
+			}
+		end
 		inFlight[requestId] = now
 		self.activeTotal += 1
 
@@ -303,6 +317,14 @@ end
 function NetworkServer:BeginShutdown()
 	self.accepting = false
 	self.folder:SetAttribute("Ready", false)
+end
+
+function NetworkServer:DrainActive(timeoutSeconds: number): (boolean, number)
+	local deadline = os.clock() + math.max(0, timeoutSeconds)
+	while self.activeTotal > 0 and os.clock() < deadline do
+		task.wait(0.03)
+	end
+	return self.activeTotal == 0, self.activeTotal
 end
 
 function NetworkServer:Destroy()
