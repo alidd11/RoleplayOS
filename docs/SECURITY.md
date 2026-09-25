@@ -2,6 +2,8 @@
 
 The server owns money, rewards, prices, content definitions, permissions, roles, inventory and ownership. Every remote has explicit registration, payload type checks, byte limits, per-endpoint and global per-player token buckets, concurrency caps, request IDs, protected execution and sanitised errors. Payloads are rejected for excessive nesting, nodes or strings, non-finite numbers, unsupported Roblox instances, and cycles. Limiter state is removed when a player leaves. Sensitive searches and mutations are audited without recording unnecessary answer or note text.
 
+Audit persistence uses a bounded pending ring and a single controlled flush path. Low-volume events flush on a short interval, bursts request one immediate flush, failed writes are retried without allowing the queue or task count to grow without bound, and shutdown drains only within its configured deadline. If a prolonged persistence outage fills the buffer, the oldest pending audit entries are dropped and the server logs the loss rather than sacrificing live-server stability.
+
 Emergency alarms, flashlight state, stamina, walk speed, hunger, food prices, economy debits, dispatch chair access, team duty, and MDT permissions are server-authoritative. Security-sensitive robbery systems should call `EmergencyTriggerService:Trigger()` from server code or use a tagged server-owned prompt; clients never select incident priority or food price.
 
 The official whitelisted deployment uses configured Roblox group links and fails closed when membership cannot be verified. Group API failures use a short negative-cache cooldown to prevent request storms.
