@@ -7,6 +7,13 @@ field continues to mean `Bank`, preserving older callers. Physical money drops
 and robbery proceeds use `Cash`; phone transfers, purchases and wages retain
 their existing bank behaviour unless their design explicitly says otherwise.
 
+Replay protection is rebuilt from each character's persisted bounded transaction
+history when a server takes ownership of the profile. Recovery operations that
+may be retried must therefore use a deterministic transaction ID. Pending player
+transfer refunds derive that ID from the transfer, save the profile before
+retiring the pending item, and persist a reconciled receipt so a stale shared
+index entry cannot credit the same refund again.
+
 Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Never accept a reward or price from a client.
 
 ## Wages
