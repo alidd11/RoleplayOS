@@ -4,6 +4,7 @@ local Utils = require(script.Parent.Utils)
 local NEEDLE_TAU = Utils.NEEDLE_TAU
 local TACHO_TAU = Utils.TACHO_TAU
 local isTelemetry = Utils.isTelemetry
+local VALUES_RETRY_SECONDS = 1
 
 return function(SpeedometerController)
 	-- The chassis's own values folder.
@@ -22,30 +23,57 @@ return function(SpeedometerController)
 	-- one that can.
 	function SpeedometerController:_chassisValues(seat: BasePart): Folder?
 		local settings = self.settings
+		local now = os.clock()
+		if self.valuesSeat ~= seat then
+			self.valuesSeat = seat
+			self.valuesFolder = nil
+			self.valuesConfirmed = false
+			self.valuesRetryAt = 0
+		else
+			local cached = self.valuesFolder
+			if cached and cached.Parent and cached:IsA("Folder") then
+				if self.valuesConfirmed or now < (self.valuesRetryAt or 0) then
+					return cached
+				end
+			elseif now < (self.valuesRetryAt or 0) then
+				return nil
+			end
+		end
+
 		local name = settings.ValuesFolderName
 		local nearby =
 			{ seat:FindFirstChild(name), seat.Parent and seat.Parent:FindFirstChild(name) }
 		for _, candidate in nearby do
 			if candidate and candidate:IsA("Folder") and isTelemetry(candidate, settings) then
+				self.valuesFolder = candidate
+				self.valuesConfirmed = true
 				return candidate
 			end
 		end
 		local vehicle = seat:FindFirstAncestorOfClass("Model")
 		if not vehicle then
+			self.valuesFolder = nil
+			self.valuesConfirmed = false
+			self.valuesRetryAt = now + VALUES_RETRY_SECONDS
 			return nil
 		end
 		local fallback: Folder? = nil
 		for _, descendant in vehicle:GetDescendants() do
 			if descendant.Name == name and descendant:IsA("Folder") then
 				if isTelemetry(descendant, settings) then
+					self.valuesFolder = descendant
+					self.valuesConfirmed = true
 					return descendant
 				end
 				fallback = fallback or descendant
 			end
 		end
-		-- Nothing published telemetry. The caller copes: speed falls back to the
-		-- seat's assembly velocity and the rest of the cluster stays blank, which is
-		-- the honest reading for a vehicle that reports nothing.
+		-- A streamed vehicle can receive its values folder after the seat. Cache a
+		-- useful fallback for the current sample, but retry discovery only once a
+		-- second instead of walking the whole vehicle at 12.5 Hz for the full drive.
+		self.valuesFolder = fallback
+		self.valuesConfirmed = false
+		self.valuesRetryAt = now + VALUES_RETRY_SECONDS
 		return fallback
 	end
 
@@ -116,6 +144,10 @@ return function(SpeedometerController)
 		self.shownMph = nil
 		self.targetRpm = nil
 		self.shownRpm = nil
+		self.valuesSeat = nil
+		self.valuesFolder = nil
+		self.valuesConfirmed = false
+		self.valuesRetryAt = 0
 		-- Forces the next _setTachoVisible through, since the new vehicle may not have
 		-- a tachometer where the last one did.
 		self.tachoVisible = nil
