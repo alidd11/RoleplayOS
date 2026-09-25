@@ -229,6 +229,7 @@ function AuditService:Destroy()
 	self.count = 0
 	self.pendingHead = 1
 	self.pendingCount = 0
+	self.droppedPending = 0
 	self.flushScheduled = false
 	self.flushBusy = false
 end
