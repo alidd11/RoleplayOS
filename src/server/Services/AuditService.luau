@@ -39,9 +39,7 @@ end
 function AuditService:_maximumPending(): number
 	return math.max(
 		25,
-		math.floor(
-			tonumber(self.context.Configuration.Framework.AuditMaximumPendingEntries) or 500
-		)
+		math.floor(tonumber(self.context.Configuration.Framework.AuditMaximumPendingEntries) or 500)
 	)
 end
 
@@ -222,10 +220,7 @@ end
 function AuditService:Destroy()
 	self.running = false
 	local deadline = os.clock()
-		+ math.max(
-			1,
-			tonumber(self.context.Configuration.Framework.AuditShutdownFlushSeconds) or 5
-		)
+		+ math.max(1, tonumber(self.context.Configuration.Framework.AuditShutdownFlushSeconds) or 5)
 	while self.flushBusy and os.clock() < deadline do
 		task.wait(0.05)
 	end
