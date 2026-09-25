@@ -159,7 +159,7 @@ function EconomyService:ReconcilePendingTransfers()
 				table.insert(remaining, id)
 				continue
 			end
-			local refundTransactionId = "transfer-refund-reconcile:" .. tostring(record.TransferId)
+			local refundTransactionId = "transfer-refund-reconcile:" .. tostring(id)
 			local applied, applyReason = self:Apply(player, {
 				TransactionId = refundTransactionId,
 				CharacterId = record.SenderCharacterId,
