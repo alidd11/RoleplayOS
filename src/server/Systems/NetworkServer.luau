@@ -33,6 +33,7 @@ function NetworkServer.new(config: any, logger: any)
 		counts = {},
 		active = {},
 		activeTotal = 0,
+		accepting = true,
 		authorizer = nil,
 		globalLimiter = RateLimiter.new(
 			config.GlobalCapacity or 30,
@@ -97,6 +98,15 @@ function NetworkServer:RegisterFunction(
 	self.endpoints[name] = remote
 	remote.OnServerInvoke = function(player: Player, payload: any)
 		local requestId = HttpService:GenerateGUID(false)
+		if not self.accepting then
+			self:_count("SERVER_SHUTTING_DOWN")
+			return {
+				Success = false,
+				Code = "SERVER_SHUTTING_DOWN",
+				Message = "This server is closing. Please rejoin.",
+				RequestId = requestId,
+			}
+		end
 		local userKey = tostring(player.UserId)
 		if not self.globalLimiter:Allow(userKey) or not limiter:Allow(userKey) then
 			self:_count("RATE_LIMITED")
@@ -290,7 +300,13 @@ function NetworkServer:MarkReady()
 	self.folder:SetAttribute("Ready", true)
 end
 
+function NetworkServer:BeginShutdown()
+	self.accepting = false
+	self.folder:SetAttribute("Ready", false)
+end
+
 function NetworkServer:Destroy()
+	self:BeginShutdown()
 	if self.playerRemoving then
 		self.playerRemoving:Disconnect()
 	end
