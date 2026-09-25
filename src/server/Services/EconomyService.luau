@@ -143,6 +143,12 @@ function EconomyService:ReconcilePendingTransfers()
 		local remaining = {}
 		for _, id in index do
 			local record = data:GetSharedRecord(id)
+			if type(record) == "table" and record.Status == "Reconciled" then
+				-- The profile save and durable receipt already succeeded. If the
+				-- index cleanup failed afterwards, drop the stale index entry without
+				-- touching the balance again.
+				continue
+			end
 			local player = type(record) == "table"
 				and Players:GetPlayerByUserId(record.SenderUserId)
 			local session = player and data:GetSession(player)
@@ -153,8 +159,9 @@ function EconomyService:ReconcilePendingTransfers()
 				table.insert(remaining, id)
 				continue
 			end
-			local applied = self:Apply(player, {
-				TransactionId = HttpService:GenerateGUID(false),
+			local refundTransactionId = "transfer-refund-reconcile:" .. tostring(id)
+			local applied, applyReason = self:Apply(player, {
+				TransactionId = refundTransactionId,
 				CharacterId = record.SenderCharacterId,
 				Amount = record.Amount,
 				Direction = "Credit",
@@ -163,21 +170,51 @@ function EconomyService:ReconcilePendingTransfers()
 				RelatedEntityId = record.TransferId,
 				Metadata = {},
 			})
-			if applied then
-				data:Save(player)
-				data:UpdateSharedRecord(id, function(existing)
-					if type(existing) == "table" then
-						existing.Status = "Reconciled"
-					end
-					return existing
-				end)
-			else
+			if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
+				table.insert(remaining, id)
+				continue
+			end
+
+			-- A duplicate here means this exact deterministic refund is already in
+			-- the character's transaction state, possibly from an earlier attempt
+			-- whose profile save or shared-record cleanup failed. Save again before
+			-- retiring the pending item so an in-memory application is never treated
+			-- as durable merely because its replay guard exists.
+			local saved, saveReason = data:Save(player)
+			if not saved then
+				self.context.Logger:Warning("Pending transfer refund save failed", {
+					TransferId = record.TransferId,
+					UserId = player.UserId,
+					Error = saveReason,
+				})
+				table.insert(remaining, id)
+				continue
+			end
+
+			local _, recordReason = data:UpdateSharedRecord(id, function(existing)
+				if type(existing) == "table" then
+					existing.Status = "Reconciled"
+					existing.ReconciledAt = os.time()
+					existing.RefundTransactionId = refundTransactionId
+				end
+				return existing
+			end)
+			if recordReason then
+				self.context.Logger:Error("Pending transfer refund receipt persistence failed", {
+					TransferId = record.TransferId,
+					Error = recordReason,
+				})
 				table.insert(remaining, id)
 			end
 		end
-		data:UpdateSharedRecord("pending-transfer-index", function()
+		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function()
 			return remaining
 		end)
+		if indexReason then
+			self.context.Logger:Error("Pending transfer refund index persistence failed", {
+				Error = indexReason,
+			})
+		end
 	end)
 	self.reconciling = false
 	if not ok then
