@@ -110,9 +110,9 @@ local Config = {
 		-- Audit persistence is deliberately bounded. A prolonged DataStore outage
 		-- must not turn security logging into an unbounded memory queue or a task
 		-- storm that degrades the live server.
-		AuditMaximumPendingEntries = 1000,
+		AuditMaximumPendingEntries = 500,
 		AuditFlushThreshold = 25,
-		AuditFlushIntervalSeconds = 5,
+		AuditFlushIntervalSeconds = 10,
 		AuditShutdownFlushSeconds = 5,
 	},
 	-- The role tile artwork, in one place.
