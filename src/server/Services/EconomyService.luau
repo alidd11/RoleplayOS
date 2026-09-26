@@ -301,7 +301,7 @@ function EconomyService:_transfer(
 	recipient: Player,
 	amount: any,
 	maximumAmount: number?,
-	buildDefinition: (any, any, string) -> any
+	buildDefinition: (any, any) -> any
 ): (any?, string?)
 	if sender == recipient then
 		return nil, "SELF_TRANSFER"
@@ -350,7 +350,7 @@ function EconomyService:_transfer(
 	end
 
 	local transferId = HttpService:GenerateGUID(false)
-	local definition = buildDefinition(senderCharacter, recipientCharacter, transferId)
+	local definition = buildDefinition(senderCharacter, recipientCharacter)
 	local recipientName = recipientCharacter.Identity.FirstName
 		.. " "
 		.. recipientCharacter.Identity.LastName
