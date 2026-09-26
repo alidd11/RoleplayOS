@@ -4,7 +4,15 @@ local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 
-local IdentificationService = { connections = {}, playerConnections = {} }
+local IdentificationService = {
+	connections = {},
+	playerConnections = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 local FORBIDDEN_ASSET_CLASSES: { [string]: boolean } = {
 	Script = true,
@@ -163,6 +171,9 @@ function IdentificationService:_identityData(player: Player, character: any): an
 end
 
 function IdentificationService:Refresh(player: Player)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false, "BACKPACK_UNAVAILABLE"
@@ -180,6 +191,11 @@ function IdentificationService:Refresh(player: Player)
 		return true, nil
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	-- DutyService:Get may yield on a group membership lookup. The player may
+	-- leave or the service may be torn down while that check is in flight.
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	if not duty or duty.DepartmentId ~= "Police" then
 		-- Refusing to issue a card is also the moment to take back the last one.
 		--
@@ -241,11 +257,14 @@ local NOT_READY_YET = {
 
 function IdentificationService:RefreshWithRetry(player: Player)
 	for attempt = 1, 4 do
-		if not player.Parent then
+		if not self.running or not playerIsCurrent(player) then
 			return
 		end
 		local issued, reason = self:Refresh(player)
 		if issued then
+			return
+		end
+		if reason == "PLAYER_UNAVAILABLE" then
 			return
 		end
 		if attempt < 4 then
@@ -262,21 +281,25 @@ function IdentificationService:RefreshWithRetry(player: Player)
 end
 
 function IdentificationService:Start()
+	self.running = true
 	self.playerConnections = {}
 	local function watch(player: Player)
-		local existing = self.playerConnections[player.UserId]
+		if not self.running or not playerIsCurrent(player) then
+			return
+		end
+		local existing = self.playerConnections[player]
 		if existing then
 			for _, connection in existing do
 				connection:Disconnect()
 			end
 		end
 		local connections = {}
-		self.playerConnections[player.UserId] = connections
+		self.playerConnections[player] = connections
 		table.insert(
 			connections,
 			player.CharacterAdded:Connect(function()
 				task.delay(1, function()
-					if player.Parent then
+					if self.running and playerIsCurrent(player) then
 						self:RefreshWithRetry(player)
 					end
 				end)
@@ -286,7 +309,7 @@ function IdentificationService:Start()
 			connections,
 			player:GetPropertyChangedSignal("Team"):Connect(function()
 				task.defer(function()
-					if player.Parent then
+					if self.running and playerIsCurrent(player) then
 						self:RefreshWithRetry(player)
 					end
 				end)
@@ -300,12 +323,12 @@ function IdentificationService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			local connections = self.playerConnections[player.UserId]
+			local connections = self.playerConnections[player]
 			if connections then
 				for _, connection in connections do
 					connection:Disconnect()
 				end
-				self.playerConnections[player.UserId] = nil
+				self.playerConnections[player] = nil
 			end
 		end)
 	)
@@ -319,12 +342,18 @@ function IdentificationService:Present(
 	targetUserId: number,
 	credentialType: string
 ): (any?, string?)
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local toolName = if credentialType == "Police" then "Warrant Card" else "ID Card"
 	local equipped = actor.Character and actor.Character:FindFirstChild(toolName)
 	if not equipped or not equipped:IsA("Tool") then
 		return nil, "CREDENTIAL_MUST_BE_EQUIPPED"
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(actor)
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if credentialType == "Police" then
 		if not duty or duty.DepartmentId ~= "Police" then
 			return nil, "POLICE_DUTY_REQUIRED"
@@ -368,6 +397,7 @@ function IdentificationService:Present(
 end
 
 function IdentificationService:Destroy()
+	self.running = false
 	for _, connections in self.playerConnections do
 		for _, connection in connections do
 			connection:Disconnect()
