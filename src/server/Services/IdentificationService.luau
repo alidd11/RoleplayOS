@@ -287,14 +287,14 @@ function IdentificationService:Start()
 		if not self.running or not playerIsCurrent(player) then
 			return
 		end
-		local existing = self.playerConnections[player.UserId]
+		local existing = self.playerConnections[player]
 		if existing then
 			for _, connection in existing do
 				connection:Disconnect()
 			end
 		end
 		local connections = {}
-		self.playerConnections[player.UserId] = connections
+		self.playerConnections[player] = connections
 		table.insert(
 			connections,
 			player.CharacterAdded:Connect(function()
@@ -323,14 +323,12 @@ function IdentificationService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			local connections = self.playerConnections[player.UserId]
+			local connections = self.playerConnections[player]
 			if connections then
 				for _, connection in connections do
 					connection:Disconnect()
 				end
-				if self.playerConnections[player.UserId] == connections then
-					self.playerConnections[player.UserId] = nil
-				end
+				self.playerConnections[player] = nil
 			end
 		end)
 	)
@@ -344,12 +342,18 @@ function IdentificationService:Present(
 	targetUserId: number,
 	credentialType: string
 ): (any?, string?)
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local toolName = if credentialType == "Police" then "Warrant Card" else "ID Card"
 	local equipped = actor.Character and actor.Character:FindFirstChild(toolName)
 	if not equipped or not equipped:IsA("Tool") then
 		return nil, "CREDENTIAL_MUST_BE_EQUIPPED"
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(actor)
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if credentialType == "Police" then
 		if not duty or duty.DepartmentId ~= "Police" then
 			return nil, "POLICE_DUTY_REQUIRED"
