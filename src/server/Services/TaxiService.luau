@@ -414,9 +414,10 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	if passengerCharacter.Economy.Balance < request.Fare then
 		return nil, "INSUFFICIENT_FUNDS"
 	end
-	local settled, settlementReason = self.context.Services
-		:Get("EconomyService")
-		:PayTaxiFare(passenger, player, request.Fare, requestId, request.Dropoff)
+	local settled, settlementReason =
+		self.context.Services
+			:Get("EconomyService")
+			:PayTaxiFare(passenger, player, request.Fare, requestId, request.Dropoff)
 	if not settled then
 		return nil, settlementReason
 	end
