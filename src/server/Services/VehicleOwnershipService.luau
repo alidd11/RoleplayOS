@@ -317,6 +317,115 @@ function VehicleOwnershipService:Purchase(
 	return vehicle, nil
 end
 
+function VehicleOwnershipService:GetOrCreateTeamRegistration(
+	player: Player,
+	teamName: string,
+	definitionId: string
+): (string?, string?)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	if not session or not self:_vehicleDefinition(definitionId) then
+		return nil, "INVALID_TEAM_VEHICLE"
+	end
+	local key = teamName .. ":" .. definitionId
+	local existing = session.Profile.TeamVehicleRegistrations[key]
+	if type(existing) == "string" then
+		local marker = "team:" .. tostring(player.UserId) .. ":" .. key
+		local reserved, reason = self.context.Services
+			:Get("DataService")
+			:ReserveCustomRegistration(existing, player.UserId, marker)
+		if not reserved then
+			return nil, reason
+		end
+		return existing, nil
+	end
+	local marker = "team:" .. tostring(player.UserId) .. ":" .. key
+	local registration, reason = self:_allocate(player, marker)
+	if not registration then
+		return nil, reason
+	end
+	session.Profile.TeamVehicleRegistrations[key] = registration
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return registration, nil
+end
+
+function VehicleOwnershipService:_moderate(player: Player, proposed: string): (string?, string?)
+	local settings = self.context.Configuration.VehicleIdentity
+	local normalised = string.upper(proposed):gsub("[^A-Z0-9 ]", ""):gsub("%s+", " ")
+	normalised = string.match(normalised, "^%s*(.-)%s*$") or ""
+	if
+		#normalised < settings.MinimumRegistrationLength
+		or #normalised > settings.MaximumRegistrationLength
+	then
+		return nil, "INVALID_REGISTRATION_LENGTH"
+	end
+	local filtered, reason =
+		TextFilter.forBroadcast(normalised, player.UserId, Enum.TextFilterContext.PublicChat)
+	if not filtered then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
+	end
+	-- Any rewrite or hash means the plate was moderated, so reject rather than
+	-- silently registering a censored variant.
+	if filtered ~= normalised or string.find(filtered, "#", 1, true) then
+		return nil, "REGISTRATION_NOT_PERMITTED"
+	end
+	return normalised, nil
+end
+
+function VehicleOwnershipService:SetCustomRegistration(
+	player: Player,
+	vehicleId: string,
+	proposed: string
+): (any?, string?)
+	local pass = self.context.Configuration.Gamepasses.CustomRegistration
+	local owned, ownershipReason =
+		self.context.Services:Get("GamepassService"):Refresh(player, pass)
+	if not owned then
+		return nil, ownershipReason or "GAMEPASS_REQUIRED"
+	end
+	local vehicle, character = self:_find(player, vehicleId)
+	if not vehicle then
+		return nil, "VEHICLE_NOT_OWNED"
+	end
+	local registration, reason = self:_moderate(player, proposed)
+	if not registration then
+		return nil, reason
+	end
+	local existing = self:GetByRegistration(registration)
+	if existing and existing.VehicleId ~= vehicle.VehicleId then
+		return nil, "REGISTRATION_ALREADY_USED"
+	end
+	local reserved, reserveReason = self.context.Services
+		:Get("DataService")
+		:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
+	if not reserved then
+		return nil, reserveReason
+	end
+	local previousRegistration = vehicle.Registration
+	self.registrations[vehicle.Registration] = nil
+	vehicle.Registration = registration
+	vehicle.CustomRegistration = true
+	self.registrations[registration] = true
+	if previousRegistration ~= registration then
+		self.context.Services
+			:Get("DataService")
+			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
+	end
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services
+		:Get("VehiclePlateService")
+		:RefreshOwned(player.UserId, vehicle.VehicleId, registration)
+	self.context.Services
+		:Get("RecordIndexService")
+		:ScheduleVehicle(player, character, vehicle, previousRegistration)
+	self.context.Services:Get("AuditService"):Record({
+		ActorUserId = player.UserId,
+		Action = "Vehicle.CustomRegistrationSet",
+		Target = vehicle.VehicleId,
+		Metadata = { Registration = registration },
+	})
+	return { VehicleId = vehicle.VehicleId, Registration = registration }, nil
+end
+
 function VehicleOwnershipService:Create(
 	player: Player,
 	characterId: string,
