@@ -264,6 +264,9 @@ function VehicleOwnershipService:Purchase(
 	if type(price) ~= "number" or price < 0 then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
+	if character.Economy.Balance < price then
+		return nil, "INSUFFICIENT_FUNDS"
+	end
 
 	-- Registration allocation is the only expected fallible persistent step in
 	-- creating an owned vehicle. Reserve it before taking money, so an outage
