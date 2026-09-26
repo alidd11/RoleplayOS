@@ -6,8 +6,18 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
 local HttpService = game:GetService("HttpService")
 
-local EconomyService =
-	{ seen = {}, order = {}, transferring = {}, connections = {}, reconciling = false }
+local EconomyService = {
+	seen = {},
+	order = {},
+	transferring = {},
+	connections = {},
+	reconciling = false,
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 local function transactionScope(userId: number, characterId: string): string
 	return tostring(userId) .. ":" .. characterId
@@ -16,6 +26,7 @@ function EconomyService:Init(context: any)
 	self.context = context
 end
 function EconomyService:Start()
+	self.running = true
 	-- The in-progress marker is cleared when a player leaves as well as on every
 	-- exit from Transfer. Anything raising between setting and clearing it would
 	-- otherwise leave that player unable to send money for the rest of the
@@ -37,13 +48,14 @@ function EconomyService:Start()
 		task.spawn(function()
 			local deadline = os.clock() + 15
 			while
-				player.Parent
+				self.running
+				and playerIsCurrent(player)
 				and not self.context.Services:Get("DataService"):GetSession(player)
 				and os.clock() < deadline
 			do
 				task.wait(0.25)
 			end
-			if player.Parent then
+			if self.running and playerIsCurrent(player) then
 				self:ReconcilePendingTransfers()
 			end
 		end)
@@ -53,7 +65,7 @@ function EconomyService:Start()
 		reconcileWhenReady(player)
 	end
 	task.delay(15, function()
-		if self.context and self.context.Services then
+		if self.running then
 			self:ReconcilePendingTransfers()
 		end
 	end)
@@ -124,7 +136,7 @@ function EconomyService:_transactionState(
 end
 
 function EconomyService:ReconcilePendingTransfers()
-	if self.reconciling then
+	if not self.running or self.reconciling then
 		return
 	end
 	self.reconciling = true
@@ -137,12 +149,21 @@ function EconomyService:ReconcilePendingTransfers()
 	local ok, problem = pcall(function()
 		local data = self.context.Services:Get("DataService")
 		local index = data:GetSharedRecord("pending-transfer-index")
+		if not self.running then
+			return
+		end
 		if type(index) ~= "table" then
 			return
 		end
 		local remaining = {}
 		for _, id in index do
+			if not self.running then
+				return
+			end
 			local record = data:GetSharedRecord(id)
+			if not self.running then
+				return
+			end
 			if type(record) == "table" and record.Status == "Reconciled" then
 				-- The profile save and durable receipt already succeeded. If the
 				-- index cleanup failed afterwards, drop the stale index entry without
@@ -181,6 +202,9 @@ function EconomyService:ReconcilePendingTransfers()
 			-- retiring the pending item so an in-memory application is never treated
 			-- as durable merely because its replay guard exists.
 			local saved, saveReason = data:Save(player)
+			if not self.running then
+				return
+			end
 			if not saved then
 				self.context.Logger:Warning("Pending transfer refund save failed", {
 					TransferId = record.TransferId,
@@ -199,6 +223,9 @@ function EconomyService:ReconcilePendingTransfers()
 				end
 				return existing
 			end)
+			if not self.running then
+				return
+			end
 			if recordReason then
 				self.context.Logger:Error("Pending transfer refund receipt persistence failed", {
 					TransferId = record.TransferId,
@@ -206,6 +233,9 @@ function EconomyService:ReconcilePendingTransfers()
 				})
 				table.insert(remaining, id)
 			end
+		end
+		if not self.running then
+			return
 		end
 		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function()
 			return remaining
@@ -224,6 +254,9 @@ function EconomyService:ReconcilePendingTransfers()
 	end
 end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "ECONOMY_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[transaction.CharacterId]
 	if not character or session.ActiveCharacterId ~= transaction.CharacterId then
@@ -303,6 +336,9 @@ function EconomyService:_transfer(
 	maximumAmount: number?,
 	buildDefinition: (any, any) -> any
 ): (any?, string?)
+	if not self.running or not playerIsCurrent(sender) or not playerIsCurrent(recipient) then
+		return nil, "ECONOMY_UNAVAILABLE"
+	end
 	if sender == recipient then
 		return nil, "SELF_TRANSFER"
 	end
@@ -510,6 +546,7 @@ function EconomyService:PayTaxiFare(
 end
 
 function EconomyService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
