@@ -1,11 +1,20 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
-local CharacterService = { Critical = true }
+local CharacterService = {
+	Critical = true,
+	creating = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 -- What SaveCurrentAppearance reads back off a server-owned HumanoidDescription.
 --
@@ -299,8 +308,30 @@ local function applyAppearance(character: Model, appearance: { [string]: any }):
 end
 function CharacterService:Init(context: any)
 	self.context = context
+	table.clear(self.creating)
 end
-function CharacterService:Start() end
+
+function CharacterService:Start()
+	self.running = true
+end
+
+function CharacterService:_sessionIsCurrent(player: Player, session: any): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and self.context.Services:Get("DataService"):GetSession(player) == session
+end
+
+function CharacterService:_characterIsCurrent(
+	player: Player,
+	session: any,
+	characterId: string,
+	character: any,
+	requireActive: boolean?
+): boolean
+	return self:_sessionIsCurrent(player, session)
+		and session.Profile.Characters[characterId] == character
+		and (requireActive ~= true or session.ActiveCharacterId == characterId)
+end
 local function filterIdentity(player: Player, identity: any): (any?, string?)
 	-- Both names at once. Filtered one after the other they cost the sum of two
 	-- web calls, which is longer than a request should ever take and is why
@@ -325,94 +356,119 @@ function CharacterService:SlotAllowance(session: any): number
 	return math.min(slots, self.context.Configuration.Characters.MaximumSlots)
 end
 function CharacterService:Create(player: Player, identity: any): (any?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
-	if not session then
-		return nil, "PROFILE_UNAVAILABLE"
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
 	end
-	local valid, reason = Validator.identity(
-		identity,
-		nil,
-		self.context.Configuration.Characters.MinimumAge,
-		self.context.Configuration.Characters.MaximumAge
-	)
-	if not valid then
-		return nil, reason
+	if self.creating[player] then
+		return nil, "CHARACTER_CREATION_IN_PROGRESS"
 	end
-	local filteredIdentity, filterReason = filterIdentity(player, identity)
-	if not filteredIdentity then
-		return nil, filterReason
-	end
-	local count = 0
-	for _ in session.Profile.Characters do
-		count += 1
-	end
-	if count >= self:SlotAllowance(session) then
-		return nil, "NO_CHARACTER_SLOT"
-	end
-	local id = HttpService:GenerateGUID(false)
-	local now = os.time()
-	local startingAppearance = {}
-	if player.Character then
-		local captured = captureAppearance(player.Character)
-		if captured then
-			startingAppearance = captured
+	self.creating[player] = true
+	local ok, result, resultReason = pcall(function(): (any?, string?)
+		local data = self.context.Services:Get("DataService")
+		local session = data:GetSession(player)
+		if not session then
+			return nil, "PROFILE_UNAVAILABLE"
 		end
-	end
-	local character = {
-		CharacterId = id,
-		Identity = filteredIdentity,
-		-- Capture the player's current Roblox avatar at creation time so the new
-		-- identity starts personalised instead of falling back to a blank outfit.
-		Appearance = startingAppearance,
-		-- Authored once, then fixed. The creator opens while this is false and
-		-- closes by setting it, so a character's look is a decision rather than
-		-- something quietly rewritten later. Reopening it costs an edit.
-		AppearanceLocked = false,
-		Economy = {
-			Balance = self.context.Configuration.Economy.StartingBankBalance,
-			Cash = self.context.Configuration.Economy.StartingCashBalance,
-			Transactions = {},
-		},
-		Employment = {},
-		Vehicles = {},
-		Properties = {},
-		FurnitureInventory = {},
-		FurniturePlacements = {},
-		Inventory = {},
-		Licences = {},
-		CriminalRecord = {},
-		MedicalRecord = {},
-		DrivingRecord = { Points = 0, Fines = {} },
-		CustodyRecord = { Bookings = {} },
-		Progression = {},
-		Phone = {
-			Number = PhoneValidator.numberFromCharacterId(id),
-			Messages = {},
-		},
-		CreatedAt = now,
-		LastPlayedAt = now,
-	}
-	session.Profile.Characters[id] = character
-	table.insert(session.Profile.CharacterSlots, id)
-	local starter, starterReason =
-		self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, id)
-	if not starter and starterReason ~= "NO_STARTER_CONFIGURED" then
-		-- Vehicle registration uses a separate persistent reservation. A transient
-		-- failure there must not erase an otherwise valid character; retry lazily
-		-- when the character is selected instead.
-		--
-		-- A server with no starter car configured is not such a failure and must
-		-- not be marked pending: nothing would ever satisfy it.
-		character.StarterVehiclePending = true
-		self.context.Logger:Warning("Starter vehicle deferred after character creation", {
-			UserId = player.UserId,
+		local valid, reason = Validator.identity(
+			identity,
+			nil,
+			self.context.Configuration.Characters.MinimumAge,
+			self.context.Configuration.Characters.MaximumAge
+		)
+		if not valid then
+			return nil, reason
+		end
+		local filteredIdentity, filterReason = filterIdentity(player, identity)
+		if not filteredIdentity then
+			return nil, filterReason
+		end
+		if not self:_sessionIsCurrent(player, session) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		local count = 0
+		for _ in session.Profile.Characters do
+			count += 1
+		end
+		if count >= self:SlotAllowance(session) then
+			return nil, "NO_CHARACTER_SLOT"
+		end
+		local id = HttpService:GenerateGUID(false)
+		local now = os.time()
+		local startingAppearance = {}
+		if player.Character then
+			local captured = captureAppearance(player.Character)
+			if captured then
+				startingAppearance = captured
+			end
+		end
+		local character = {
 			CharacterId = id,
-			Reason = starterReason or "STARTER_VEHICLE_UNAVAILABLE",
-		})
+			Identity = filteredIdentity,
+			-- Capture the player's current Roblox avatar at creation time so the new
+			-- identity starts personalised instead of falling back to a blank outfit.
+			Appearance = startingAppearance,
+			-- Authored once, then fixed. The creator opens while this is false and
+			-- closes by setting it, so a character's look is a decision rather than
+			-- something quietly rewritten later. Reopening it costs an edit.
+			AppearanceLocked = false,
+			Economy = {
+				Balance = self.context.Configuration.Economy.StartingBankBalance,
+				Cash = self.context.Configuration.Economy.StartingCashBalance,
+				Transactions = {},
+			},
+			Employment = {},
+			Vehicles = {},
+			Properties = {},
+			FurnitureInventory = {},
+			FurniturePlacements = {},
+			Inventory = {},
+			Licences = {},
+			CriminalRecord = {},
+			MedicalRecord = {},
+			DrivingRecord = { Points = 0, Fines = {} },
+			CustodyRecord = { Bookings = {} },
+			Progression = {},
+			Phone = {
+				Number = PhoneValidator.numberFromCharacterId(id),
+				Messages = {},
+			},
+			CreatedAt = now,
+			LastPlayedAt = now,
+		}
+		session.Profile.Characters[id] = character
+		table.insert(session.Profile.CharacterSlots, id)
+		-- Make the character part of the live profile before the starter grant,
+		-- which may yield through registration persistence. A leave during that
+		-- work must not leave an unmarked profile mutation behind.
+		data:MarkDirty(player)
+		local starter, starterReason =
+			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, id)
+		if not self:_characterIsCurrent(player, session, id, character, false) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		if not starter and starterReason ~= "NO_STARTER_CONFIGURED" then
+			-- Vehicle registration uses a separate persistent reservation. A transient
+			-- failure there must not erase an otherwise valid character; retry lazily
+			-- when the character is selected instead.
+			--
+			-- A server with no starter car configured is not such a failure and must
+			-- not be marked pending: nothing would ever satisfy it.
+			character.StarterVehiclePending = true
+			self.context.Logger:Warning("Starter vehicle deferred after character creation", {
+				UserId = player.UserId,
+				CharacterId = id,
+				Reason = starterReason or "STARTER_VEHICLE_UNAVAILABLE",
+			})
+			data:MarkDirty(player)
+		end
+		self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
+		return self:Summary(character), nil
+	end)
+	self.creating[player] = nil
+	if not ok then
+		error(result)
 	end
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("RecordIndexService"):ScheduleCharacter(player, character)
-	return self:Summary(character), nil
+	return result, resultReason
 end
 function CharacterService:Summary(character: any): any
 	local appearance = character.Appearance or {}
@@ -431,6 +487,9 @@ function CharacterService:Summary(character: any): any
 	}
 end
 function CharacterService:List(player: Player): { any }
+	if not self.running or not playerIsCurrent(player) then
+		return {}
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local result = {}
 	if not session then
@@ -449,6 +508,9 @@ function CharacterService:ApplyCivilianAppearance(
 	player: Player,
 	characterId: string
 ): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not session or session.ActiveCharacterId ~= characterId or not character then
@@ -456,6 +518,9 @@ function CharacterService:ApplyCivilianAppearance(
 	end
 	if self.context.Services:Get("DutyService"):Get(player) then
 		return false, "CIVILIAN_REQUIRED"
+	end
+	if not self:_characterIsCurrent(player, session, characterId, character, true) then
+		return false, "PLAYER_UNAVAILABLE"
 	end
 	local runtimeCharacter = player.Character
 	if not runtimeCharacter then
@@ -479,6 +544,9 @@ function CharacterService:SaveCurrentAppearance(
 	player: Player,
 	characterId: string
 ): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not session or session.ActiveCharacterId ~= characterId or not character then
@@ -490,6 +558,9 @@ function CharacterService:SaveCurrentAppearance(
 		or player.Team.Name ~= "Civilian"
 	then
 		return false, "CIVILIAN_REQUIRED"
+	end
+	if not self:_characterIsCurrent(player, session, characterId, character, true) then
+		return false, "PLAYER_UNAVAILABLE"
 	end
 	local runtimeCharacter = player.Character
 	if not runtimeCharacter then
@@ -504,7 +575,11 @@ function CharacterService:SaveCurrentAppearance(
 	return true, nil
 end
 function CharacterService:Select(player: Player, characterId: string): (any?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not character then
 		return nil, "CHARACTER_NOT_OWNED"
@@ -519,17 +594,21 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 		"RoleplayOSDisplayName",
 		character.Identity.FirstName .. " " .. character.Identity.LastName
 	)
+	data:MarkDirty(player)
 	if character.StarterVehiclePending == true then
 		local starter, starterReason =
 			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
+		if not self:_characterIsCurrent(player, session, characterId, character, true) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
 		-- Cleared when the grant lands, and equally when there is nothing to
 		-- grant. Characters created before that became a no-op still carry a
 		-- pending flag, and retrying it on every selection can never satisfy it.
 		if starter or starterReason == "NO_STARTER_CONFIGURED" then
 			character.StarterVehiclePending = nil
+			data:MarkDirty(player)
 		end
 	end
-	self.context.Services:Get("DataService"):MarkDirty(player)
 	return character, nil
 end
 function CharacterService:Delete(
@@ -537,6 +616,9 @@ function CharacterService:Delete(
 	characterId: string,
 	confirmationId: string
 ): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not character or confirmationId ~= characterId then
@@ -564,6 +646,9 @@ end
 -- player's Roblox avatar rather than authored, so it is treated as unlocked:
 -- the owner gets the one free authoring pass everybody else got at creation.
 function CharacterService:AppearanceEditState(player: Player, characterId: string): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not session or not character then
@@ -594,6 +679,9 @@ function CharacterService:SetAuthoredAppearance(
 	characterId: string,
 	appearance: any
 ): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
 	if not session or not character then
@@ -608,6 +696,9 @@ function CharacterService:SetAuthoredAppearance(
 		or player.Team.Name ~= "Civilian"
 	then
 		return false, "CIVILIAN_REQUIRED"
+	end
+	if not self:_characterIsCurrent(player, session, characterId, character, true) then
+		return false, "PLAYER_UNAVAILABLE"
 	end
 	local sanitised, reason = sanitiseAuthoredAppearance(appearance)
 	if not sanitised then
@@ -627,9 +718,21 @@ function CharacterService:SetAuthoredAppearance(
 	if not applied then
 		return false, applyReason
 	end
+	if
+		not self:_characterIsCurrent(player, session, characterId, character, true)
+		or player.Character ~= runtimeCharacter
+	then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	-- Store what the body ended up wearing rather than what was asked for, so the
 	-- record matches the result after Roblox has resolved and conformed it.
 	local captured = captureAppearance(runtimeCharacter) or sanitised
+	if
+		not self:_characterIsCurrent(player, session, characterId, character, true)
+		or player.Character ~= runtimeCharacter
+	then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	character.Appearance = captured
 	character.AppearanceLocked = true
 	if locked then
@@ -646,5 +749,8 @@ function CharacterService:SetAuthoredAppearance(
 	return true, nil
 end
 
-function CharacterService:Destroy() end
+function CharacterService:Destroy()
+	self.running = false
+	table.clear(self.creating)
+end
 return CharacterService
