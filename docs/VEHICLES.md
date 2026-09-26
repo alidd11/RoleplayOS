@@ -6,7 +6,7 @@ and spawns can then use that model while the map is being assembled. This fallba
 disabled in `Production`; release vehicles must be certified canonical templates under
 `ServerStorage/RoleplayOSAssets/Vehicles`.
 
-Dealership catalogues refer to configured vehicle IDs. Purchase revalidates catalogue membership and access, debits the configured price, then creates a GUID ownership record and generated registration. Ownership, colour, mileage, fuel, condition, insurance, tax and garage are persisted per character.
+Dealership catalogues refer to configured vehicle IDs. Purchase revalidates catalogue membership and access, reserves the generated registration first, re-checks the active character after that persistent allocation, and only then debits the configured price. A failed payment or character handover releases the unused registration; once payment succeeds, the ownership record is inserted without another yielding allocation step. Ownership, colour, mileage, fuel, condition, insurance, tax and garage are persisted per character.
 
 Spawning checks active character ownership, terminal distance, spawn-point clearance, cooldown and the one-active-vehicle limit before cloning a configured ServerStorage model. Clearance checks recognise existing RoleplayOS vehicles and characters in the configured spawn volume.
 
