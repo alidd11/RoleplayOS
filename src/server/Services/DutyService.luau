@@ -115,11 +115,7 @@ function DutyService:Get(player: Player): any?
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
 	-- Access evaluation may yield on a Roblox group lookup. Revalidate the exact
 	-- live duty record afterwards so an ended shift cannot be returned stale.
-	if
-		not self.running
-		or not playerIsPresent(player)
-		or self.active[player.UserId] ~= duty
-	then
+	if not self.running or not playerIsPresent(player) or self.active[player.UserId] ~= duty then
 		return nil
 	end
 	if not access.Allowed then
