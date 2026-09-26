@@ -2,7 +2,12 @@
 
 local Players = game:GetService("Players")
 
-local ExperienceAccessService = { Critical = true, connections = {}, verified = {} }
+local ExperienceAccessService = {
+	Critical = true,
+	connections = {},
+	verified = {},
+	running = false,
+}
 
 function ExperienceAccessService:Init(context: any)
 	self.context = context
@@ -29,11 +34,19 @@ end
 
 function ExperienceAccessService:_check(player: Player)
 	local config = self.context.Configuration.ExperienceAccess
-	if not player:IsDescendantOf(Players) then
+	local function active(): boolean
+		return self.running
+			and player:IsDescendantOf(Players)
+			and Players:GetPlayerByUserId(player.UserId) == player
+	end
+	if not active() then
 		return
 	end
 	local linkId = self.context.Services:Get("ServerModeService"):RequiredGroupLinkId()
 	if not linkId then
+		if not active() then
+			return
+		end
 		-- No gate resolved. On the public place that is the correct answer and
 		-- the whole reason it is the public place.
 		--
@@ -60,20 +73,29 @@ function ExperienceAccessService:_check(player: Player)
 	end
 	local groupService = self.context.Services:Get("GroupService")
 	local membership = groupService:GetMembership(player, linkId)
+	if not active() then
+		return
+	end
 	-- A failed check is usually Roblox throttling this server rather than an
 	-- answer about this player, and a throttle clears on a clock. The waits
 	-- therefore double, so the retries outlast a rate limit instead of arriving
 	-- inside it and turning every throttled join into a kick.
 	for attempt = 2, config.VerifyAttempts or 4 do
-		if membership.Failed ~= true or not player:IsDescendantOf(Players) then
+		if membership.Failed ~= true or not active() then
 			break
 		end
 		task.wait((config.VerifyBackoffSeconds or 3) * 2 ^ (attempt - 2))
-		if not player:IsDescendantOf(Players) then
+		if not active() then
 			return
 		end
 		groupService:Invalidate(player, linkId)
 		membership = groupService:GetMembership(player, linkId)
+		if not active() then
+			return
+		end
+	end
+	if not active() then
+		return
 	end
 	if
 		membership.IsMember == true
@@ -100,10 +122,14 @@ function ExperienceAccessService:_check(player: Player)
 end
 
 function ExperienceAccessService:IsVerified(player: Player): boolean
-	return player:IsDescendantOf(Players) and self.verified[player.UserId] == true
+	return self.running
+		and player:IsDescendantOf(Players)
+		and Players:GetPlayerByUserId(player.UserId) == player
+		and self.verified[player.UserId] == true
 end
 
 function ExperienceAccessService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
@@ -128,6 +154,7 @@ function ExperienceAccessService:Start()
 end
 
 function ExperienceAccessService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
