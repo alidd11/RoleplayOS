@@ -8,6 +8,7 @@ local Validator = require(ReplicatedStorage.RoleplayOS.Shared.CharacterValidator
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local CharacterService = {
 	Critical = true,
+	appearanceWrites = {},
 	creating = {},
 	running = false,
 }
@@ -308,6 +309,7 @@ local function applyAppearance(character: Model, appearance: { [string]: any }):
 end
 function CharacterService:Init(context: any)
 	self.context = context
+	table.clear(self.appearanceWrites)
 	table.clear(self.creating)
 end
 
@@ -671,9 +673,10 @@ end
 
 -- Writes an authored appearance and closes the editor for this character.
 --
--- The credit is taken only once the write has actually persisted. Deducting
--- first and saving afterwards would charge a player whose save then failed, and
--- this is a purchase, so it has to fail closed in their favour rather than ours.
+-- The credit is taken only after Roblox has accepted the appearance and the
+-- server has captured the resulting look. Serialising the whole operation is
+-- important: two concurrent requests must not both observe the same remaining
+-- edit credit and spend it twice.
 function CharacterService:SetAuthoredAppearance(
 	player: Player,
 	characterId: string,
@@ -682,75 +685,90 @@ function CharacterService:SetAuthoredAppearance(
 	if not self.running or not playerIsCurrent(player) then
 		return false, "PLAYER_UNAVAILABLE"
 	end
-	local session = self.context.Services:Get("DataService"):GetSession(player)
-	local character = session and session.Profile.Characters[characterId]
-	if not session or not character then
-		return false, "CHARACTER_NOT_OWNED"
+	local writeKey = tostring(player.UserId) .. ":" .. characterId
+	if self.appearanceWrites[writeKey] then
+		return false, "APPEARANCE_UPDATE_IN_PROGRESS"
 	end
-	if session.ActiveCharacterId ~= characterId then
-		return false, "CHARACTER_NOT_ACTIVE"
+	self.appearanceWrites[writeKey] = true
+	local ok, result, resultReason = pcall(function(): (boolean, string?)
+		local session = self.context.Services:Get("DataService"):GetSession(player)
+		local character = session and session.Profile.Characters[characterId]
+		if not session or not character then
+			return false, "CHARACTER_NOT_OWNED"
+		end
+		if session.ActiveCharacterId ~= characterId then
+			return false, "CHARACTER_NOT_ACTIVE"
+		end
+		if
+			self.context.Services:Get("DutyService"):Get(player)
+			or not player.Team
+			or player.Team.Name ~= "Civilian"
+		then
+			return false, "CIVILIAN_REQUIRED"
+		end
+		if not self:_characterIsCurrent(player, session, characterId, character, true) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
+		local sanitised, reason = sanitiseAuthoredAppearance(appearance)
+		if not sanitised then
+			return false, reason
+		end
+		local locked = character.AppearanceLocked == true
+		local credits =
+			math.max(0, math.floor(tonumber(session.Profile.Consumables.AppearanceEdits) or 0))
+		if locked and credits <= 0 then
+			return false, "APPEARANCE_EDIT_REQUIRED"
+		end
+		local runtimeCharacter = player.Character
+		if not runtimeCharacter then
+			return false, "CHARACTER_UNAVAILABLE"
+		end
+		local applied, applyReason = applyAppearance(runtimeCharacter, sanitised)
+		if not applied then
+			return false, applyReason
+		end
+		if
+			not self:_characterIsCurrent(player, session, characterId, character, true)
+			or player.Character ~= runtimeCharacter
+		then
+			return false, "PLAYER_UNAVAILABLE"
+		end
+		-- Store what the body ended up wearing rather than what was asked for, so the
+		-- record matches the result after Roblox has resolved and conformed it.
+		local captured = captureAppearance(runtimeCharacter) or sanitised
+		if
+			not self:_characterIsCurrent(player, session, characterId, character, true)
+			or player.Character ~= runtimeCharacter
+		then
+			return false, "PLAYER_UNAVAILABLE"
+		end
+		character.Appearance = captured
+		character.AppearanceLocked = true
+		if locked then
+			session.Profile.Consumables.AppearanceEdits = credits - 1
+		end
+		runtimeCharacter:SetAttribute("RoleplayOSCivilianAppearance", true)
+		self.context.Services:Get("DataService"):MarkDirty(player)
+		self.context.Services:Get("AuditService"):Record({
+			ActorUserId = player.UserId,
+			Action = if locked
+				then "Character.AppearanceReedited"
+				else "Character.AppearanceAuthored",
+			Target = characterId,
+			Metadata = { SpentCredit = locked },
+		})
+		return true, nil
+	end)
+	self.appearanceWrites[writeKey] = nil
+	if not ok then
+		error(result)
 	end
-	if
-		self.context.Services:Get("DutyService"):Get(player)
-		or not player.Team
-		or player.Team.Name ~= "Civilian"
-	then
-		return false, "CIVILIAN_REQUIRED"
-	end
-	if not self:_characterIsCurrent(player, session, characterId, character, true) then
-		return false, "PLAYER_UNAVAILABLE"
-	end
-	local sanitised, reason = sanitiseAuthoredAppearance(appearance)
-	if not sanitised then
-		return false, reason
-	end
-	local locked = character.AppearanceLocked == true
-	local credits =
-		math.max(0, math.floor(tonumber(session.Profile.Consumables.AppearanceEdits) or 0))
-	if locked and credits <= 0 then
-		return false, "APPEARANCE_EDIT_REQUIRED"
-	end
-	local runtimeCharacter = player.Character
-	if not runtimeCharacter then
-		return false, "CHARACTER_UNAVAILABLE"
-	end
-	local applied, applyReason = applyAppearance(runtimeCharacter, sanitised)
-	if not applied then
-		return false, applyReason
-	end
-	if
-		not self:_characterIsCurrent(player, session, characterId, character, true)
-		or player.Character ~= runtimeCharacter
-	then
-		return false, "PLAYER_UNAVAILABLE"
-	end
-	-- Store what the body ended up wearing rather than what was asked for, so the
-	-- record matches the result after Roblox has resolved and conformed it.
-	local captured = captureAppearance(runtimeCharacter) or sanitised
-	if
-		not self:_characterIsCurrent(player, session, characterId, character, true)
-		or player.Character ~= runtimeCharacter
-	then
-		return false, "PLAYER_UNAVAILABLE"
-	end
-	character.Appearance = captured
-	character.AppearanceLocked = true
-	if locked then
-		session.Profile.Consumables.AppearanceEdits = credits - 1
-	end
-	runtimeCharacter:SetAttribute("RoleplayOSCivilianAppearance", true)
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		Action = if locked then "Character.AppearanceReedited" else "Character.AppearanceAuthored",
-		Target = characterId,
-		Metadata = { SpentCredit = locked },
-	})
-	return true, nil
+	return result, resultReason
 end
 
 function CharacterService:Destroy()
 	self.running = false
+	table.clear(self.appearanceWrites)
 	table.clear(self.creating)
 end
 return CharacterService
