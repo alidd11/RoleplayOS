@@ -120,14 +120,21 @@ function GangTerritoryService:_adopt(part: Instance)
 		return
 	end
 	self.territories[id] = { Id = id, Name = nameOrReason, Part = part }
-	part.Destroying:Once(function()
-		if self.territories[id] and self.territories[id].Part == part then
+	self:_seedMirror(id)
+end
+
+function GangTerritoryService:_remove(part: Instance)
+	-- Resolve by instance rather than by its current attributes. An authored part
+	-- may have its id edited before its tag is removed, and stale runtime state
+	-- must still be released in that case.
+	for id, territory in self.territories do
+		if territory.Part == part then
 			self.territories[id] = nil
 			self.contests[id] = nil
 			self.policeClears[id] = nil
+			return
 		end
-	end)
-	self:_seedMirror(id)
+	end
 end
 
 -- Writes the persisted owner onto the part's attributes. Called once, when a
@@ -140,6 +147,11 @@ function GangTerritoryService:_seedMirror(territoryId: string)
 		return
 	end
 	local owners = self.context.Services:Get("DataService"):GetSharedRecord(TERRITORY_OWNERS_RECORD)
+	-- The shared-record read yields. The territory may have been untagged or
+	-- removed while it was in flight, so never write the mirror onto stale state.
+	if self.territories[territoryId] ~= territory then
+		return
+	end
 	local record = type(owners) == "table" and owners[territoryId]
 	local gangId = type(record) == "table" and record.GangId
 	local changedAt = type(record) == "table" and record.ChangedAt
@@ -152,15 +164,23 @@ end
 
 function GangTerritoryService:Start()
 	local tag = self.context.Configuration.Gangs.TerritoryTag
-	for _, part in CollectionService:GetTagged(tag) do
-		self:_adopt(part)
-	end
+	-- Subscribe before the initial walk so a tag removed while _adopt is yielding
+	-- on its shared-record seed cannot leave a stale territory behind.
 	table.insert(
 		self.connections,
 		CollectionService:GetInstanceAddedSignal(tag):Connect(function(part)
 			self:_adopt(part)
 		end)
 	)
+	table.insert(
+		self.connections,
+		CollectionService:GetInstanceRemovedSignal(tag):Connect(function(part)
+			self:_remove(part)
+		end)
+	)
+	for _, part in CollectionService:GetTagged(tag) do
+		self:_adopt(part)
+	end
 	local count = 0
 	for _ in self.territories do
 		count += 1
