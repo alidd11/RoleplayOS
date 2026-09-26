@@ -128,19 +128,26 @@ function PayrollService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(self.settings.IntervalSeconds)
+			-- Destroy can run while this thread is sleeping. Re-check before touching
+			-- player profiles so a final interval cannot race DataService shutdown.
+			if not self.running then
+				break
+			end
 			for _, player in Players:GetPlayers() do
-				-- One player's payment failing must not stop the rest being paid.
-				task.spawn(function()
-					local ok, problem = pcall(function()
-						self:_pay(player)
-					end)
-					if not ok then
-						self.context.Logger:Warning(
-							"Wage payment failed",
-							{ UserId = player.UserId, Error = tostring(problem) }
-						)
-					end
+				if not self.running then
+					break
+				end
+				-- _pay does not yield, so keep it inside the service-owned worker instead
+				-- of spawning detached tasks that can outlive Destroy.
+				local ok, problem = pcall(function()
+					self:_pay(player)
 				end)
+				if not ok then
+					self.context.Logger:Warning(
+						"Wage payment failed",
+						{ UserId = player.UserId, Error = tostring(problem) }
+					)
+				end
 			end
 		end
 	end)
