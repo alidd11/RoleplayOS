@@ -394,8 +394,7 @@ function VehicleOwnershipService:GetOrCreateTeamRegistration(
 	local existing = session.Profile.TeamVehicleRegistrations[key]
 	if type(existing) == "string" then
 		local marker = "team:" .. tostring(player.UserId) .. ":" .. key
-		local reserved, reason =
-			data:ReserveCustomRegistration(existing, player.UserId, marker)
+		local reserved, reason = data:ReserveCustomRegistration(existing, player.UserId, marker)
 		if not self.running or not playerIsCurrent(player) then
 			return nil, "PLAYER_UNAVAILABLE"
 		end
@@ -410,11 +409,7 @@ function VehicleOwnershipService:GetOrCreateTeamRegistration(
 		return nil, reason
 	end
 	local currentSession = data:GetSession(player)
-	if
-		not self.running
-		or not playerIsCurrent(player)
-		or currentSession ~= session
-	then
+	if not self.running or not playerIsCurrent(player) or currentSession ~= session then
 		self:_releaseRegistration(player, registration, marker)
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -515,7 +510,8 @@ function VehicleOwnershipService:SetCustomRegistration(
 				return {
 					VehicleId = currentVehicle.VehicleId,
 					Registration = currentVehicle.Registration,
-				}, nil
+				},
+					nil
 			end
 			if registration ~= previousRegistration then
 				self:_releaseRegistration(player, registration, vehicleId)
