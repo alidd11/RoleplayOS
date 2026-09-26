@@ -35,6 +35,56 @@ function VehicleOwnershipService:_allocate(player: Player, vehicleId: string): (
 	return nil, "REGISTRATION_ALLOCATION_FAILED"
 end
 
+function VehicleOwnershipService:_releaseRegistration(
+	player: Player,
+	registration: string,
+	vehicleId: string
+)
+	self.registrations[registration] = nil
+	self.context.Services
+		:Get("DataService")
+		:ReleaseCustomRegistration(registration, player.UserId, vehicleId)
+end
+
+function VehicleOwnershipService:_recordVehicle(
+	player: Player,
+	character: any,
+	characterId: string,
+	definitionId: string,
+	colour: string,
+	garageId: string,
+	vehicleId: string,
+	registration: string
+): any
+	local vehicle = {
+		VehicleId = vehicleId,
+		OwnerCharacterId = characterId,
+		DefinitionId = definitionId,
+		Registration = registration,
+		Colour = colour,
+		Mileage = 0,
+		Fuel = 100,
+		Condition = 100,
+		Insured = false,
+		Taxed = false,
+		StoredGarageId = garageId,
+	}
+	table.insert(character.Vehicles, vehicle)
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	local indexed, indexError = pcall(function()
+		self.context.Services
+			:Get("RecordIndexService")
+			:ScheduleVehicle(player, character, vehicle, nil)
+	end)
+	if not indexed then
+		self.context.Logger:Warning("Vehicle MDT indexing could not be scheduled", {
+			VehicleId = vehicleId,
+			Error = tostring(indexError),
+		})
+	end
+	return vehicle
+end
+
 function VehicleOwnershipService:_find(player: Player, vehicleId: string): (any?, any?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	for _, character in if session then session.Profile.Characters else {} do
@@ -180,15 +230,17 @@ end
 -- dealership had a list of what it sells, and there was no way to buy any of
 -- it: the only car anybody could own was the free starter grant.
 --
--- Charged before the record is created and not after. Create allocates a
--- registration and touches the search index, and undoing that on a failed
--- payment is harder than simply not doing it.
+-- Reserve the registration before charging. Registration allocation is the
+-- persistent step most likely to fail during an outage; once it succeeds, the
+-- active character is revalidated, payment is taken, and the ownership record
+-- is inserted without another yielding allocation step.
 function VehicleOwnershipService:Purchase(
 	player: Player,
 	definitionId: string,
 	colour: string
 ): (any?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
 	local characterId = session and session.ActiveCharacterId
 	local character = characterId and session.Profile.Characters[characterId]
 	if not character then
@@ -198,17 +250,12 @@ function VehicleOwnershipService:Purchase(
 	if not definition or definition.Category ~= "Civilian" then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
-	-- A fleet vehicle is issued by a job rather than owned, and the taxi is the
-	-- one already on the forecourt list, so this is not hypothetical.
 	if definition.Fleet == true then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
 	if type(definition.Colours) ~= "table" or not table.find(definition.Colours, colour) then
 		return nil, "INVALID_VEHICLE_SELECTION"
 	end
-	-- Gamepass vehicles are still bought with cash; the pass is what admits them
-	-- to the forecourt at all. Re-evaluated here rather than trusted from the
-	-- menu, which is a client's view of the world.
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)
 	if not access.Allowed then
 		return nil, access.ReasonCode
@@ -217,6 +264,33 @@ function VehicleOwnershipService:Purchase(
 	if type(price) ~= "number" or price < 0 then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
+	if character.Economy.Balance < price then
+		return nil, "INSUFFICIENT_FUNDS"
+	end
+
+	-- Registration allocation is the only expected fallible persistent step in
+	-- creating an owned vehicle. Reserve it before taking money, so an outage
+	-- cannot debit the player and then discover that the vehicle cannot exist.
+	local vehicleId = HttpService:GenerateGUID(false)
+	local registration, registrationReason = self:_allocate(player, vehicleId)
+	if not registration then
+		return nil, registrationReason
+	end
+
+	-- Allocation yielded through DataStore work. Re-check the active character
+	-- before charging so a character switch or disconnect cannot pay from stale
+	-- state and attach the vehicle to a character that is no longer active.
+	session = data:GetSession(player)
+	if not session or session.ActiveCharacterId ~= characterId then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+	character = session.Profile.Characters[characterId]
+	if not character then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+
 	local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = characterId,
@@ -228,35 +302,22 @@ function VehicleOwnershipService:Purchase(
 		Metadata = { Colour = colour },
 	})
 	if not paid then
+		self:_releaseRegistration(player, registration, vehicleId)
 		return nil, reason
 	end
+
 	local garageId = definition.GarageId or self.context.Configuration.VehicleData.StarterGarageId
-	local vehicle, createReason = self:Create(player, characterId, definitionId, colour, garageId)
-	if vehicle then
-		return vehicle, nil
-	end
-	local refunded, refundReason = self.context.Services:Get("EconomyService"):Apply(player, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = characterId,
-		Amount = price,
-		Direction = "Credit",
-		ReasonCode = "VEHICLE_PURCHASE_REFUND",
-		Description = "Refund for an undelivered vehicle purchase",
-		RelatedEntityId = definitionId,
-		Metadata = { PurchaseFailure = createReason },
-	})
-	if not refunded then
-		self.context.Logger:Error("Vehicle purchase refund failed", {
-			UserId = player.UserId,
-			CharacterId = characterId,
-			DefinitionId = definitionId,
-			Amount = price,
-			PurchaseFailure = createReason,
-			RefundFailure = refundReason,
-		})
-		return nil, "VEHICLE_PURCHASE_REFUND_FAILED"
-	end
-	return nil, createReason or "VEHICLE_CREATION_FAILED"
+	local vehicle = self:_recordVehicle(
+		player,
+		character,
+		characterId,
+		definitionId,
+		colour,
+		garageId,
+		vehicleId,
+		registration
+	)
+	return vehicle, nil
 end
 
 function VehicleOwnershipService:GetOrCreateTeamRegistration(
@@ -367,6 +428,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 	})
 	return { VehicleId = vehicle.VehicleId, Registration = registration }, nil
 end
+
 function VehicleOwnershipService:Create(
 	player: Player,
 	characterId: string,
@@ -388,23 +450,17 @@ function VehicleOwnershipService:Create(
 	if not registration then
 		return nil, registrationReason
 	end
-	local vehicle = {
-		VehicleId = vehicleId,
-		OwnerCharacterId = characterId,
-		DefinitionId = definitionId,
-		Registration = registration,
-		Colour = colour,
-		Mileage = 0,
-		Fuel = 100,
-		Condition = 100,
-		Insured = false,
-		Taxed = false,
-		StoredGarageId = garageId,
-	}
-	table.insert(character.Vehicles, vehicle)
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("RecordIndexService"):ScheduleVehicle(player, character, vehicle, nil)
-	return vehicle, nil
+	return self:_recordVehicle(
+		player,
+		character,
+		characterId,
+		definitionId,
+		colour,
+		garageId,
+		vehicleId,
+		registration
+	),
+		nil
 end
 function VehicleOwnershipService:Destroy()
 	table.clear(self.registrations)
