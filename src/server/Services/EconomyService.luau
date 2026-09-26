@@ -336,11 +336,7 @@ function EconomyService:_transfer(
 	maximumAmount: number?,
 	buildDefinition: (any, any) -> any
 ): (any?, string?)
-	if
-		not self.running
-		or not playerIsCurrent(sender)
-		or not playerIsCurrent(recipient)
-	then
+	if not self.running or not playerIsCurrent(sender) or not playerIsCurrent(recipient) then
 		return nil, "ECONOMY_UNAVAILABLE"
 	end
 	if sender == recipient then
