@@ -386,7 +386,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 			return nil, "PLAYER_UNAVAILABLE"
 		end
 		local count = 0
-		for _ in session.Profile.Characters do	
+		for _ in session.Profile.Characters do
 			count += 1
 		end
 		if count >= self:SlotAllowance(session) then
@@ -433,7 +433,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 				Messages = {},
 			},
 			CreatedAt = now,
-				LastPlayedAt = now,
+			LastPlayedAt = now,
 		}
 		session.Profile.Characters[id] = character
 		table.insert(session.Profile.CharacterSlots, id)
