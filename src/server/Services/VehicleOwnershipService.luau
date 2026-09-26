@@ -71,7 +71,17 @@ function VehicleOwnershipService:_recordVehicle(
 	}
 	table.insert(character.Vehicles, vehicle)
 	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("RecordIndexService"):ScheduleVehicle(player, character, vehicle, nil)
+	local indexed, indexError = pcall(function()
+		self.context.Services
+			:Get("RecordIndexService")
+			:ScheduleVehicle(player, character, vehicle, nil)
+	end)
+	if not indexed then
+		self.context.Logger:Warning("Vehicle MDT indexing could not be scheduled", {
+			VehicleId = vehicleId,
+			Error = tostring(indexError),
+		})
+	end
 	return vehicle
 end
 
@@ -220,9 +230,10 @@ end
 -- dealership had a list of what it sells, and there was no way to buy any of
 -- it: the only car anybody could own was the free starter grant.
 --
--- Charged before the record is created and not after. Create allocates a
--- registration and touches the search index, and undoing that on a failed
--- payment is harder than simply not doing it.
+-- Reserve the registration before charging. Registration allocation is the
+-- persistent step most likely to fail during an outage; once it succeeds, the
+-- active character is revalidated, payment is taken, and the ownership record
+-- is inserted without another yielding allocation step.
 function VehicleOwnershipService:Purchase(
 	player: Player,
 	definitionId: string,
