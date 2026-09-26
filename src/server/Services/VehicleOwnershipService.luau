@@ -295,8 +295,8 @@ function VehicleOwnershipService:Purchase(
 		Direction = "Debit",
 		ReasonCode = "VEHICLE_PURCHASE",
 		Description = "Vehicle purchase: " .. tostring(definition.Name or definitionId),
-		RelatedEntityId = vehicleId,
-		Metadata = { DefinitionId = definitionId, Colour = colour, Registration = registration },
+		RelatedEntityId = definitionId,
+		Metadata = { Colour = colour },
 	})
 	if not paid then
 		self:_releaseRegistration(player, registration, vehicleId)
