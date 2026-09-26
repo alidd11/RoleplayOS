@@ -296,7 +296,13 @@ end
 
 -- Moves bank funds between two active characters in this server. The client
 -- supplies neither character id nor balance; both are resolved again here.
-function EconomyService:Transfer(sender: Player, recipient: Player, amount: any): (any?, string?)
+function EconomyService:_transfer(
+	sender: Player,
+	recipient: Player,
+	amount: any,
+	maximumAmount: number?,
+	buildDefinition: (any, any, string) -> any
+): (any?, string?)
 	if sender == recipient then
 		return nil, "SELF_TRANSFER"
 	end
@@ -304,9 +310,10 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	if not valid then
 		return nil, reason
 	end
-	if amount > self.context.Configuration.Economy.TransferMaximum then
+	if maximumAmount and amount > maximumAmount then
 		return nil, "TRANSFER_LIMIT"
 	end
+
 	-- Acquire both locks in ascending UserId order, and check/set them without a
 	-- yield. Luau code is single-threaded between yields, so opposing A→B and
 	-- B→A requests cannot both pass the check and then deadlock each other.
@@ -321,6 +328,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		self.transferring[sender.UserId] = nil
 		self.transferring[recipient.UserId] = nil
 	end
+
 	local data = self.context.Services:Get("DataService")
 	local senderSession = data:GetSession(sender)
 	local recipientSession = data:GetSession(recipient)
@@ -341,41 +349,36 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		return nil, "INSUFFICIENT_FUNDS"
 	end
 
-	-- Lock both profiles until both immediate saves finish. Locking only the
-	-- sender allowed A->B and B->A to overlap while the first Save yielded,
-	-- letting one write an older snapshot over the other transfer.
-	-- Always acquire locks in ascending UserId order. This invariant prevents
-	-- future multi-step transfer code from introducing lock-order deadlocks.
 	local transferId = HttpService:GenerateGUID(false)
+	local definition = buildDefinition(senderCharacter, recipientCharacter, transferId)
 	local recipientName = recipientCharacter.Identity.FirstName
 		.. " "
 		.. recipientCharacter.Identity.LastName
-	local senderName = senderCharacter.Identity.FirstName
-		.. " "
-		.. senderCharacter.Identity.LastName
+
 	local debited, debitReason = self:Apply(sender, {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = senderId,
 		Amount = amount,
 		Direction = "Debit",
-		ReasonCode = "PLAYER_TRANSFER_SENT",
-		Description = "Transfer to " .. recipientName,
+		ReasonCode = definition.DebitReasonCode,
+		Description = definition.DebitDescription,
 		RelatedEntityId = transferId,
-		Metadata = { RecipientUserId = recipient.UserId },
+		Metadata = definition.DebitMetadata or {},
 	})
 	if not debited then
 		releaseTransferLocks()
 		return nil, debitReason
 	end
+
 	local credited, creditReason = self:Apply(recipient, {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = recipientId,
 		Amount = amount,
 		Direction = "Credit",
-		ReasonCode = "PLAYER_TRANSFER_RECEIVED",
-		Description = "Transfer from " .. senderName,
+		ReasonCode = definition.CreditReasonCode,
+		Description = definition.CreditDescription,
 		RelatedEntityId = transferId,
-		Metadata = { SenderUserId = sender.UserId },
+		Metadata = definition.CreditMetadata or {},
 	})
 	if not credited then
 		local refunded, refundReason = self:Apply(sender, {
@@ -383,10 +386,10 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 			CharacterId = senderId,
 			Amount = amount,
 			Direction = "Credit",
-			ReasonCode = "PLAYER_TRANSFER_REFUND",
-			Description = "Automatic transfer refund",
+			ReasonCode = definition.RefundReasonCode,
+			Description = definition.RefundDescription,
 			RelatedEntityId = transferId,
-			Metadata = {},
+			Metadata = definition.RefundMetadata or {},
 		})
 		-- Persist the restored balance before another transfer may use it.
 		if refunded then
@@ -402,7 +405,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 				CreatedAt = os.time(),
 				Status = "Pending",
 			})
-			self.context.Logger:Error("Player transfer refund failed", {
+			self.context.Logger:Error("Economy transfer refund failed", {
 				SenderUserId = sender.UserId,
 				RecipientUserId = recipient.UserId,
 				Amount = amount,
@@ -413,29 +416,15 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 		end
 		return nil, creditReason
 	end
-	-- Both halves are written now, and the recipient's first.
-	--
-	-- The two people live under separate DataStore keys, so a transfer that is
-	-- perfectly atomic in memory is not atomic on disk. Left to the autosave,
-	-- either could be written up to a minute later or not at all: if the
-	-- recipient's lands and the sender's does not, money has been created, and
-	-- the reverse destroys it.
-	--
-	-- Writing immediately shrinks that window from a minute to the length of two
-	-- calls. Recipient first, deliberately, because the orders of failure are not
-	-- equally bad: a transfer that vanishes can be given back from the line
-	-- below, while one that doubles is loose in the economy for good and there is
-	-- nothing to take it from.
-	--
-	-- This is a narrowing, not a fix. Making it truly atomic needs a ledger both
-	-- profiles are reconciled against, which is a bigger change than this is.
+
+	-- Both halves are written now, and the recipient's first. The two people
+	-- live under separate DataStore keys, so this narrows the split-write window
+	-- from an autosave interval to two immediate saves. A durable cross-profile
+	-- ledger is still the long-term route to true atomicity.
 	local recipientSaved = data:Save(recipient)
 	local senderSaved = data:Save(sender)
 	if not recipientSaved or not senderSaved then
-		-- Everything needed to put it right by hand, in one line, because the
-		-- audit trail is an in-memory ring that does not survive the shutdown
-		-- this would most likely be discovered after.
-		self.context.Logger:Error("Player transfer may not have persisted on both sides", {
+		self.context.Logger:Error("Economy transfer may not have persisted on both sides", {
 			TransferId = transferId,
 			Amount = amount,
 			SenderUserId = sender.UserId,
@@ -444,6 +433,7 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 			RecipientUserId = recipient.UserId,
 			RecipientCharacterId = recipientId,
 			RecipientSaved = recipientSaved,
+			Kind = definition.Kind,
 		})
 	end
 	releaseTransferLocks()
@@ -456,6 +446,69 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 	},
 		nil
 end
+
+-- Player-initiated bank transfer. The client supplies only the recipient and
+-- amount; all transaction semantics remain server-owned here.
+function EconomyService:Transfer(sender: Player, recipient: Player, amount: any): (any?, string?)
+	return self:_transfer(
+		sender,
+		recipient,
+		amount,
+		self.context.Configuration.Economy.TransferMaximum,
+		function(senderCharacter, recipientCharacter)
+			local recipientName = recipientCharacter.Identity.FirstName
+				.. " "
+				.. recipientCharacter.Identity.LastName
+			local senderName = senderCharacter.Identity.FirstName
+				.. " "
+				.. senderCharacter.Identity.LastName
+			return {
+				Kind = "PlayerTransfer",
+				DebitReasonCode = "PLAYER_TRANSFER_SENT",
+				DebitDescription = "Transfer to " .. recipientName,
+				DebitMetadata = { RecipientUserId = recipient.UserId },
+				CreditReasonCode = "PLAYER_TRANSFER_RECEIVED",
+				CreditDescription = "Transfer from " .. senderName,
+				CreditMetadata = { SenderUserId = sender.UserId },
+				RefundReasonCode = "PLAYER_TRANSFER_REFUND",
+				RefundDescription = "Automatic transfer refund",
+				RefundMetadata = {},
+			}
+		end
+	)
+end
+
+-- Server-owned taxi settlement. TaxiService proves the journey and supplies the
+-- configured fare; EconomyService owns the actual two-profile money movement.
+function EconomyService:PayTaxiFare(
+	passenger: Player,
+	driver: Player,
+	amount: any,
+	taxiId: string,
+	dropoff: string
+): (any?, string?)
+	if taxiId == "" or #taxiId > 128 or #dropoff > 80 then
+		return nil, "INVALID_TAXI_FARE"
+	end
+	return self:_transfer(passenger, driver, amount, nil, function(senderCharacter)
+		local passengerName = senderCharacter.Identity.FirstName
+			.. " "
+			.. senderCharacter.Identity.LastName
+		return {
+			Kind = "TaxiFare",
+			DebitReasonCode = "TAXI_FARE",
+			DebitDescription = "Taxi fare to " .. dropoff,
+			DebitMetadata = { TaxiId = taxiId, DriverUserId = driver.UserId },
+			CreditReasonCode = "TAXI_FARE_RECEIVED",
+			CreditDescription = "Taxi fare from " .. passengerName,
+			CreditMetadata = { TaxiId = taxiId, PassengerUserId = passenger.UserId },
+			RefundReasonCode = "TAXI_FARE_REFUND",
+			RefundDescription = "Taxi fare refund",
+			RefundMetadata = { TaxiId = taxiId },
+		}
+	end)
+end
+
 function EconomyService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
