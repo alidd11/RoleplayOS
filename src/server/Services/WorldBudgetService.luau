@@ -15,7 +15,7 @@ local Workspace = game:GetService("Workspace")
 -- Nothing here is a visual decision. Each one replaces "always the most
 -- expensive option" with "the expensive option only when it is close enough to
 -- see", which is the whole of what a level of detail system is.
-local WorldBudgetService = { connections = {}, applied = nil }
+local WorldBudgetService = { connections = {}, applied = nil, running = false }
 
 type Counts = {
 	Meshes: number,
@@ -159,7 +159,7 @@ end
 -- this the budget would apply to the ten vehicles parked in the map and to none
 -- of the ones players actually drive.
 function WorldBudgetService:Normalise(root: Instance)
-	if not self:_settings().Enabled then
+	if not self.running or not self:_settings().Enabled then
 		return
 	end
 	local counts = newCounts()
@@ -233,6 +233,7 @@ function WorldBudgetService:Start()
 	if not settings.Enabled then
 		return
 	end
+	self.running = true
 
 	-- Spawned and paced, for the same reason the camera walk is. Every service
 	-- after this one waits for Start to return, and the network endpoints are
@@ -242,11 +243,20 @@ function WorldBudgetService:Start()
 		local counts = newCounts()
 		local scanned = 0
 		for _, instance in Workspace:GetDescendants() do
+			if not self.running then
+				return
+			end
 			self:_apply(instance, counts)
 			scanned += 1
 			if scanned % settings.InstancesPerStep == 0 then
 				task.wait()
+				if not self.running then
+					return
+				end
 			end
+		end
+		if not self.running then
+			return
 		end
 		self.applied = counts
 		self.context.Logger:Info("World render budget applied", {
@@ -278,6 +288,8 @@ function WorldBudgetService:Start()
 end
 
 function WorldBudgetService:Destroy()
+	self.running = false
+	self.applied = nil
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
