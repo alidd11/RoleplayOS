@@ -170,10 +170,16 @@ function GangTerritoryService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(self.context.Configuration.Gangs.ContestCheckSeconds)
+			if not self.running then
+				break
+			end
 			-- Guarded per territory, the same reason CustodyService's sentence
 			-- tick guards per prisoner: one bad read must not stop every other
 			-- territory's contest from being checked for the rest of the tick.
 			for territoryId in self.territories do
+				if not self.running then
+					break
+				end
 				local ok, problem = pcall(function()
 					self:_tick(territoryId)
 				end)
@@ -189,6 +195,9 @@ function GangTerritoryService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(self.context.Configuration.Payroll.IntervalSeconds)
+			if not self.running then
+				break
+			end
 			local ok, problem = pcall(function()
 				self:_payIncome()
 			end)
@@ -434,15 +443,26 @@ end
 -- contest tick's, this is nowhere near the read volume that DataStore
 -- throttling would care about.
 function GangTerritoryService:_payIncome()
+	if not self.running then
+		return
+	end
 	local income = self.context.Configuration.Gangs.TerritoryIncomePerInterval
 	if not income or income <= 0 then
 		return
 	end
 	local dataService = self.context.Services:Get("DataService")
 	for territoryId, territory in self.territories do
+		if not self.running then
+			return
+		end
 		local ownerGangId = territory.Part:GetAttribute("OwnerGangId")
 		if type(ownerGangId) == "string" and ownerGangId ~= "" then
 			local gang = dataService:GetSharedRecord(gangKey(ownerGangId))
+			-- The shared-record read yields. Destroy may run while it is in flight,
+			-- so do not resume with a payout once teardown has begun.
+			if not self.running then
+				return
+			end
 			if type(gang) == "table" then
 				self:_payGangShare(gang, income, territoryId)
 			end
