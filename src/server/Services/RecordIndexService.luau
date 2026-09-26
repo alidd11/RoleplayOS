@@ -594,7 +594,11 @@ function RecordIndexService:_waitForSession(player: Player)
 		local deadline = os.clock() + 30
 		local session
 		repeat
-			if not self.running or self.waiting[userId] ~= player or not playerIsCurrent(player) then
+			if
+				not self.running
+				or self.waiting[userId] ~= player
+				or not playerIsCurrent(player)
+			then
 				return
 			end
 			session = self.context.Services:Get("DataService"):GetSession(player)
