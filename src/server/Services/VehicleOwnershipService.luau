@@ -35,6 +35,46 @@ function VehicleOwnershipService:_allocate(player: Player, vehicleId: string): (
 	return nil, "REGISTRATION_ALLOCATION_FAILED"
 end
 
+function VehicleOwnershipService:_releaseRegistration(
+	player: Player,
+	registration: string,
+	vehicleId: string
+)
+	self.registrations[registration] = nil
+	self.context.Services
+		:Get("DataService")
+		:ReleaseCustomRegistration(registration, player.UserId, vehicleId)
+end
+
+function VehicleOwnershipService:_recordVehicle(
+	player: Player,
+	character: any,
+	characterId: string,
+	definitionId: string,
+	colour: string,
+	garageId: string,
+	vehicleId: string,
+	registration: string
+): any
+	local vehicle = {
+		VehicleId = vehicleId,
+		OwnerCharacterId = characterId,
+		DefinitionId = definitionId,
+		Registration = registration,
+		Colour = colour,
+		Mileage = 0,
+		Fuel = 100,
+		Condition = 100,
+		Insured = false,
+		Taxed = false,
+		StoredGarageId = garageId,
+	}
+	table.insert(character.Vehicles, vehicle)
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	self.context.Services:Get("RecordIndexService"):ScheduleVehicle(player, character, vehicle, nil)
+	return vehicle
+end
+
 function VehicleOwnershipService:_find(player: Player, vehicleId: string): (any?, any?)
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	for _, character in if session then session.Profile.Characters else {} do
@@ -188,7 +228,8 @@ function VehicleOwnershipService:Purchase(
 	definitionId: string,
 	colour: string
 ): (any?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
 	local characterId = session and session.ActiveCharacterId
 	local character = characterId and session.Profile.Characters[characterId]
 	if not character then
@@ -198,17 +239,12 @@ function VehicleOwnershipService:Purchase(
 	if not definition or definition.Category ~= "Civilian" then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
-	-- A fleet vehicle is issued by a job rather than owned, and the taxi is the
-	-- one already on the forecourt list, so this is not hypothetical.
 	if definition.Fleet == true then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
 	if type(definition.Colours) ~= "table" or not table.find(definition.Colours, colour) then
 		return nil, "INVALID_VEHICLE_SELECTION"
 	end
-	-- Gamepass vehicles are still bought with cash; the pass is what admits them
-	-- to the forecourt at all. Re-evaluated here rather than trusted from the
-	-- menu, which is a client's view of the world.
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, definition.Access)
 	if not access.Allowed then
 		return nil, access.ReasonCode
@@ -217,6 +253,30 @@ function VehicleOwnershipService:Purchase(
 	if type(price) ~= "number" or price < 0 then
 		return nil, "VEHICLE_NOT_FOR_SALE"
 	end
+
+	-- Registration allocation is the only expected fallible persistent step in
+	-- creating an owned vehicle. Reserve it before taking money, so an outage
+	-- cannot debit the player and then discover that the vehicle cannot exist.
+	local vehicleId = HttpService:GenerateGUID(false)
+	local registration, registrationReason = self:_allocate(player, vehicleId)
+	if not registration then
+		return nil, registrationReason
+	end
+
+	-- Allocation yielded through DataStore work. Re-check the active character
+	-- before charging so a character switch or disconnect cannot pay from stale
+	-- state and attach the vehicle to a character that is no longer active.
+	session = data:GetSession(player)
+	if not session or session.ActiveCharacterId ~= characterId then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+	character = session.Profile.Characters[characterId]
+	if not character then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+
 	local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = characterId,
@@ -224,149 +284,28 @@ function VehicleOwnershipService:Purchase(
 		Direction = "Debit",
 		ReasonCode = "VEHICLE_PURCHASE",
 		Description = "Vehicle purchase: " .. tostring(definition.Name or definitionId),
-		RelatedEntityId = definitionId,
-		Metadata = { Colour = colour },
+		RelatedEntityId = vehicleId,
+		Metadata = { DefinitionId = definitionId, Colour = colour, Registration = registration },
 	})
 	if not paid then
+		self:_releaseRegistration(player, registration, vehicleId)
 		return nil, reason
 	end
+
 	local garageId = definition.GarageId or self.context.Configuration.VehicleData.StarterGarageId
-	local vehicle, createReason = self:Create(player, characterId, definitionId, colour, garageId)
-	if vehicle then
-		return vehicle, nil
-	end
-	local refunded, refundReason = self.context.Services:Get("EconomyService"):Apply(player, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = characterId,
-		Amount = price,
-		Direction = "Credit",
-		ReasonCode = "VEHICLE_PURCHASE_REFUND",
-		Description = "Refund for an undelivered vehicle purchase",
-		RelatedEntityId = definitionId,
-		Metadata = { PurchaseFailure = createReason },
-	})
-	if not refunded then
-		self.context.Logger:Error("Vehicle purchase refund failed", {
-			UserId = player.UserId,
-			CharacterId = characterId,
-			DefinitionId = definitionId,
-			Amount = price,
-			PurchaseFailure = createReason,
-			RefundFailure = refundReason,
-		})
-		return nil, "VEHICLE_PURCHASE_REFUND_FAILED"
-	end
-	return nil, createReason or "VEHICLE_CREATION_FAILED"
+	local vehicle = self:_recordVehicle(
+		player,
+		character,
+		characterId,
+		definitionId,
+		colour,
+		garageId,
+		vehicleId,
+		registration
+	)
+	return vehicle, nil
 end
 
-function VehicleOwnershipService:GetOrCreateTeamRegistration(
-	player: Player,
-	teamName: string,
-	definitionId: string
-): (string?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
-	if not session or not self:_vehicleDefinition(definitionId) then
-		return nil, "INVALID_TEAM_VEHICLE"
-	end
-	local key = teamName .. ":" .. definitionId
-	local existing = session.Profile.TeamVehicleRegistrations[key]
-	if type(existing) == "string" then
-		local marker = "team:" .. tostring(player.UserId) .. ":" .. key
-		local reserved, reason = self.context.Services
-			:Get("DataService")
-			:ReserveCustomRegistration(existing, player.UserId, marker)
-		if not reserved then
-			return nil, reason
-		end
-		return existing, nil
-	end
-	local marker = "team:" .. tostring(player.UserId) .. ":" .. key
-	local registration, reason = self:_allocate(player, marker)
-	if not registration then
-		return nil, reason
-	end
-	session.Profile.TeamVehicleRegistrations[key] = registration
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	return registration, nil
-end
-
-function VehicleOwnershipService:_moderate(player: Player, proposed: string): (string?, string?)
-	local settings = self.context.Configuration.VehicleIdentity
-	local normalised = string.upper(proposed):gsub("[^A-Z0-9 ]", ""):gsub("%s+", " ")
-	normalised = string.match(normalised, "^%s*(.-)%s*$") or ""
-	if
-		#normalised < settings.MinimumRegistrationLength
-		or #normalised > settings.MaximumRegistrationLength
-	then
-		return nil, "INVALID_REGISTRATION_LENGTH"
-	end
-	local filtered, reason =
-		TextFilter.forBroadcast(normalised, player.UserId, Enum.TextFilterContext.PublicChat)
-	if not filtered then
-		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
-	end
-	-- Any rewrite or hash means the plate was moderated, so reject rather than
-	-- silently registering a censored variant.
-	if filtered ~= normalised or string.find(filtered, "#", 1, true) then
-		return nil, "REGISTRATION_NOT_PERMITTED"
-	end
-	return normalised, nil
-end
-
-function VehicleOwnershipService:SetCustomRegistration(
-	player: Player,
-	vehicleId: string,
-	proposed: string
-): (any?, string?)
-	local pass = self.context.Configuration.Gamepasses.CustomRegistration
-	local owned, ownershipReason =
-		self.context.Services:Get("GamepassService"):Refresh(player, pass)
-	if not owned then
-		return nil, ownershipReason or "GAMEPASS_REQUIRED"
-	end
-	local vehicle, character = self:_find(player, vehicleId)
-	if not vehicle then
-		return nil, "VEHICLE_NOT_OWNED"
-	end
-	local registration, reason = self:_moderate(player, proposed)
-	if not registration then
-		return nil, reason
-	end
-	local existing = self:GetByRegistration(registration)
-	if existing and existing.VehicleId ~= vehicle.VehicleId then
-		return nil, "REGISTRATION_ALREADY_USED"
-	end
-	local reserved, reserveReason = self.context.Services
-		:Get("DataService")
-		:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
-	if not reserved then
-		return nil, reserveReason
-	end
-	local previousRegistration = vehicle.Registration
-	self.registrations[vehicle.Registration] = nil
-	vehicle.Registration = registration
-	vehicle.CustomRegistration = true
-	self.registrations[registration] = true
-	if previousRegistration ~= registration then
-		self.context.Services
-			:Get("DataService")
-			:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
-	end
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services
-		:Get("VehiclePlateService")
-		:RefreshOwned(player.UserId, vehicle.VehicleId, registration)
-	self.context.Services
-		:Get("RecordIndexService")
-		:ScheduleVehicle(player, character, vehicle, previousRegistration)
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		Action = "Vehicle.CustomRegistrationSet",
-		Target = vehicle.VehicleId,
-		Metadata = { Registration = registration },
-	})
-	return { VehicleId = vehicle.VehicleId, Registration = registration }, nil
-end
 function VehicleOwnershipService:Create(
 	player: Player,
 	characterId: string,
@@ -388,23 +327,16 @@ function VehicleOwnershipService:Create(
 	if not registration then
 		return nil, registrationReason
 	end
-	local vehicle = {
-		VehicleId = vehicleId,
-		OwnerCharacterId = characterId,
-		DefinitionId = definitionId,
-		Registration = registration,
-		Colour = colour,
-		Mileage = 0,
-		Fuel = 100,
-		Condition = 100,
-		Insured = false,
-		Taxed = false,
-		StoredGarageId = garageId,
-	}
-	table.insert(character.Vehicles, vehicle)
-	self.context.Services:Get("DataService"):MarkDirty(player)
-	self.context.Services:Get("RecordIndexService"):ScheduleVehicle(player, character, vehicle, nil)
-	return vehicle, nil
+	return self:_recordVehicle(
+		player,
+		character,
+		characterId,
+		definitionId,
+		colour,
+		garageId,
+		vehicleId,
+		registration
+	), nil
 end
 function VehicleOwnershipService:Destroy()
 	table.clear(self.registrations)
