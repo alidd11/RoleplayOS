@@ -12,6 +12,10 @@ local RecordIndexService = {
 	running = false,
 }
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 local function normalise(value: string): string
 	return string.lower(value):gsub("[^a-z0-9 ]", ""):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
 end
@@ -162,6 +166,9 @@ end
 
 -- The person record and the name index, and nothing else.
 function RecordIndexService:IndexPerson(player: Player, character: any): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "INDEX_CANCELLED"
+	end
 	local fullName = character.Identity.FirstName .. " " .. character.Identity.LastName
 	local personKey = recordKey("Person", character.CharacterId)
 	local person, reason = self:_updateRecord(personKey, function(existing)
@@ -184,6 +191,9 @@ function RecordIndexService:IndexPerson(player: Player, character: any): (boolea
 	if not person then
 		return false, reason
 	end
+	if not self.running or not playerIsCurrent(player) then
+		return false, "INDEX_CANCELLED"
+	end
 	self.context.Services:Get("WarrantService"):CachePersonRecord(person)
 	local entry = {
 		CharacterId = character.CharacterId,
@@ -195,6 +205,9 @@ function RecordIndexService:IndexPerson(player: Player, character: any): (boolea
 	}
 	local seen = {}
 	for _, token in { character.Identity.FirstName, character.Identity.LastName } do
+		if not self.running or not playerIsCurrent(player) then
+			return false, "INDEX_CANCELLED"
+		end
 		local key = indexKey("Person", token)
 		if key and not seen[key] then
 			seen[key] = true
@@ -217,11 +230,17 @@ end
 -- server. Thirty drivers being fined would have spent the whole server's
 -- allowance on records that had not changed.
 function RecordIndexService:IndexCharacter(player: Player, character: any): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "INDEX_CANCELLED"
+	end
 	local ok, reason = self:IndexPerson(player, character)
 	if not ok then
 		return false, reason
 	end
 	for _, vehicle in character.Vehicles or {} do
+		if not self.running or not playerIsCurrent(player) then
+			return false, "INDEX_CANCELLED"
+		end
 		local indexed, vehicleReason = self:IndexVehicle(player, character, vehicle)
 		if not indexed then
 			return false, vehicleReason
@@ -235,6 +254,9 @@ function RecordIndexService:IndexVehicle(
 	character: any,
 	vehicle: any
 ): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "INDEX_CANCELLED"
+	end
 	local key = recordKey("Vehicle", vehicle.VehicleId)
 	local updated, reason = self:_updateRecord(key, function(_existing)
 		return {
@@ -255,6 +277,9 @@ function RecordIndexService:IndexVehicle(
 	end)
 	if not updated then
 		return false, reason
+	end
+	if not self.running or not playerIsCurrent(player) then
+		return false, "INDEX_CANCELLED"
 	end
 	local search = compact(vehicle.Registration)
 	local bucket = indexKey("Vehicle", search)
@@ -301,6 +326,8 @@ function RecordIndexService:ReindexVehicle(
 	local indexed, reason = self:IndexVehicle(player, character, vehicle)
 	if
 		indexed
+		and self.running
+		and playerIsCurrent(player)
 		and previousRegistration
 		and compact(previousRegistration) ~= compact(vehicle.Registration)
 	then
@@ -314,13 +341,27 @@ end
 -- whole lot, so a caller that has not thought about it is no worse off than
 -- before, and the callers that only touch a record say so.
 function RecordIndexService:ScheduleCharacter(player: Player, character: any, scope: string?)
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
 	local key = "Person:" .. character.CharacterId
 	local existing = self.pendingSync[key]
 	if existing then
+		-- A fast rejoin may schedule the same character while the old Player
+		-- instance is still inside a yielding DataStore write. Keep one job, but
+		-- make its next pass use the newest live session references.
+		existing.Player = player
+		existing.Character = character
+		existing.Full = existing.Full or scope ~= "Person"
 		existing.Resync = true
 		return
 	end
-	local state = { Resync = false }
+	local state = {
+		Resync = false,
+		Player = player,
+		Character = character,
+		Full = scope ~= "Person",
+	}
 	self.pendingSync[key] = state
 	task.spawn(function()
 		-- Released whether indexing returns or raises. Held on a raise, every
@@ -330,17 +371,22 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any, sc
 		local safe, raised = pcall(function()
 			repeat
 				state.Resync = false
-				-- A statement rather than an if expression. An if expression
-				-- yields one value, so the second return would have been dropped
-				-- and every indexing failure logged with no reason attached.
-				if scope == "Person" then
-					ok, reason = self:IndexPerson(player, character)
+				local currentPlayer = state.Player
+				local currentCharacter = state.Character
+				local full = state.Full
+				state.Full = false
+				if not self.running or not playerIsCurrent(currentPlayer) then
+					ok, reason = false, "INDEX_CANCELLED"
+				elseif full then
+					ok, reason = self:IndexCharacter(currentPlayer, currentCharacter)
 				else
-					ok, reason = self:IndexCharacter(player, character)
+					ok, reason = self:IndexPerson(currentPlayer, currentCharacter)
 				end
-			until not state.Resync
+			until not self.running or not state.Resync
 		end)
-		self.pendingSync[key] = nil
+		if self.pendingSync[key] == state then
+			self.pendingSync[key] = nil
+		end
 		if not safe then
 			self.context.Logger:Error("Deferred MDT character indexing raised", {
 				CharacterId = character.CharacterId,
@@ -348,7 +394,7 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any, sc
 			})
 			return
 		end
-		if not ok then
+		if not ok and reason ~= "INDEX_CANCELLED" then
 			self.context.Logger:Warning("Deferred MDT character indexing failed", {
 				CharacterId = character.CharacterId,
 				Error = reason,
@@ -363,27 +409,49 @@ function RecordIndexService:ScheduleVehicle(
 	vehicle: any,
 	previousRegistration: string?
 )
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
 	local key = "Vehicle:" .. vehicle.VehicleId
 	local existing = self.pendingSync[key]
 	if existing then
+		existing.Player = player
+		existing.Character = character
+		existing.Vehicle = vehicle
 		existing.Resync = true
 		if previousRegistration then
 			existing.PreviousRegistration = existing.PreviousRegistration or previousRegistration
 		end
 		return
 	end
-	local state = { Resync = false, PreviousRegistration = previousRegistration }
+	local state = {
+		Resync = false,
+		Player = player,
+		Character = character,
+		Vehicle = vehicle,
+		PreviousRegistration = previousRegistration,
+	}
 	self.pendingSync[key] = state
 	task.spawn(function()
 		local ok, reason
 		repeat
 			state.Resync = false
+			local currentPlayer = state.Player
+			local currentCharacter = state.Character
+			local currentVehicle = state.Vehicle
 			local previous = state.PreviousRegistration
 			state.PreviousRegistration = nil
-			ok, reason = self:ReindexVehicle(player, character, vehicle, previous)
-		until not state.Resync
-		self.pendingSync[key] = nil
-		if not ok then
+			if not self.running or not playerIsCurrent(currentPlayer) then
+				ok, reason = false, "INDEX_CANCELLED"
+			else
+				ok, reason =
+					self:ReindexVehicle(currentPlayer, currentCharacter, currentVehicle, previous)
+			end
+		until not self.running or not state.Resync
+		if self.pendingSync[key] == state then
+			self.pendingSync[key] = nil
+		end
+		if not ok and reason ~= "INDEX_CANCELLED" then
 			self.context.Logger:Warning("Deferred MDT vehicle indexing failed", {
 				VehicleId = vehicle.VehicleId,
 				Error = reason,
@@ -526,7 +594,11 @@ function RecordIndexService:_waitForSession(player: Player)
 		local deadline = os.clock() + 30
 		local session
 		repeat
-			if not self.running or self.waiting[userId] ~= player or not player.Parent then
+			if
+				not self.running
+				or self.waiting[userId] ~= player
+				or not playerIsCurrent(player)
+			then
 				return
 			end
 			session = self.context.Services:Get("DataService"):GetSession(player)
@@ -538,20 +610,26 @@ function RecordIndexService:_waitForSession(player: Player)
 			return
 		end
 		self.waiting[userId] = nil
-		if self.running and session and player.Parent then
+		if self.running and session and playerIsCurrent(player) then
 			self:_queueReadyPlayer(player)
 		end
 	end)
 end
 
 function RecordIndexService:_indexPlayer(player: Player)
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
 		return
 	end
 	for _, character in session.Profile.Characters do
+		if not self.running or not playerIsCurrent(player) then
+			return
+		end
 		local ok, reason = self:IndexCharacter(player, character)
-		if not ok then
+		if not ok and reason ~= "INDEX_CANCELLED" then
 			self.context.Logger:Warning("MDT background indexing failed", {
 				CharacterId = character.CharacterId,
 				Error = reason,
@@ -590,7 +668,7 @@ function RecordIndexService:Start()
 			if userId then
 				local player = self.queued[userId]
 				self.queued[userId] = nil
-				if player and player.Parent then
+				if player and self.running and playerIsCurrent(player) then
 					self:_indexPlayer(player)
 				end
 			else
