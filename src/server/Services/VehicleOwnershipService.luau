@@ -459,7 +459,8 @@ function VehicleOwnershipService:Create(
 		garageId,
 		vehicleId,
 		registration
-	), nil
+	),
+		nil
 end
 function VehicleOwnershipService:Destroy()
 	table.clear(self.registrations)
