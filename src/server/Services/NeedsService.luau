@@ -3,7 +3,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
-local NeedsService = { states = {}, connections = {}, failureLog = {} }
+local NeedsService = { states = {}, connections = {}, failureLog = {}, running = false }
 
 function NeedsService:Init(context: any)
 	self.context = context
@@ -201,6 +201,9 @@ end
 -- attribute is the guard against a player activating twice before the tool is
 -- destroyed, which would otherwise feed them twice from one sandwich.
 function NeedsService:_eat(player: Player, tool: Tool, foodId: string)
+	if not self.running then
+		return
+	end
 	if tool:GetAttribute("RoleplayOSEaten") then
 		return
 	end
@@ -238,6 +241,9 @@ end
 -- character who has been granted it and eaten it gets nothing; one who has been
 -- granted it and still carries it gets the tool back.
 function NeedsService:EnsureStarterFood(player: Player)
+	if not self.running or not player.Parent then
+		return
+	end
 	local settings = self.context.Configuration.Needs.StarterFood
 	if not settings or settings.Enabled ~= true then
 		return
@@ -393,6 +399,11 @@ function NeedsService:Start()
 		local last = os.clock()
 		while self.running do
 			task.wait(0.5)
+			-- Destroy can run while this worker is sleeping. Do not mutate needs or
+			-- profile state after the service has entered teardown.
+			if not self.running then
+				break
+			end
 			local now = os.clock()
 			local delta = math.min(now - last, 1)
 			last = now
@@ -479,6 +490,7 @@ function NeedsService:Destroy()
 	end
 	table.clear(self.playerConnections or {})
 	table.clear(self.states)
+	table.clear(self.failureLog)
 end
 
 return NeedsService
