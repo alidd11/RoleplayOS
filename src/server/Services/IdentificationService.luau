@@ -4,7 +4,15 @@ local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 
-local IdentificationService = { connections = {}, playerConnections = {} }
+local IdentificationService = {
+	connections = {},
+	playerConnections = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 local FORBIDDEN_ASSET_CLASSES: { [string]: boolean } = {
 	Script = true,
@@ -163,6 +171,9 @@ function IdentificationService:_identityData(player: Player, character: any): an
 end
 
 function IdentificationService:Refresh(player: Player)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false, "BACKPACK_UNAVAILABLE"
@@ -180,6 +191,11 @@ function IdentificationService:Refresh(player: Player)
 		return true, nil
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	-- DutyService:Get may yield on a group membership lookup. The player may
+	-- leave or the service may be torn down while that check is in flight.
+	if not self.running or not playerIsCurrent(player) then
+		return false, "PLAYER_UNAVAILABLE"
+	end
 	if not duty or duty.DepartmentId ~= "Police" then
 		-- Refusing to issue a card is also the moment to take back the last one.
 		--
@@ -241,11 +257,14 @@ local NOT_READY_YET = {
 
 function IdentificationService:RefreshWithRetry(player: Player)
 	for attempt = 1, 4 do
-		if not player.Parent then
+		if not self.running or not playerIsCurrent(player) then
 			return
 		end
 		local issued, reason = self:Refresh(player)
 		if issued then
+			return
+		end
+		if reason == "PLAYER_UNAVAILABLE" then
 			return
 		end
 		if attempt < 4 then
@@ -262,8 +281,12 @@ function IdentificationService:RefreshWithRetry(player: Player)
 end
 
 function IdentificationService:Start()
+	self.running = true
 	self.playerConnections = {}
 	local function watch(player: Player)
+		if not self.running or not playerIsCurrent(player) then
+			return
+		end
 		local existing = self.playerConnections[player.UserId]
 		if existing then
 			for _, connection in existing do
@@ -276,7 +299,7 @@ function IdentificationService:Start()
 			connections,
 			player.CharacterAdded:Connect(function()
 				task.delay(1, function()
-					if player.Parent then
+					if self.running and playerIsCurrent(player) then
 						self:RefreshWithRetry(player)
 					end
 				end)
@@ -286,7 +309,7 @@ function IdentificationService:Start()
 			connections,
 			player:GetPropertyChangedSignal("Team"):Connect(function()
 				task.defer(function()
-					if player.Parent then
+					if self.running and playerIsCurrent(player) then
 						self:RefreshWithRetry(player)
 					end
 				end)
@@ -305,7 +328,9 @@ function IdentificationService:Start()
 				for _, connection in connections do
 					connection:Disconnect()
 				end
-				self.playerConnections[player.UserId] = nil
+				if self.playerConnections[player.UserId] == connections then
+					self.playerConnections[player.UserId] = nil
+				end
 			end
 		end)
 	)
@@ -368,6 +393,7 @@ function IdentificationService:Present(
 end
 
 function IdentificationService:Destroy()
+	self.running = false
 	for _, connections in self.playerConnections do
 		for _, connection in connections do
 			connection:Disconnect()
