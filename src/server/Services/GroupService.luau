@@ -4,7 +4,17 @@ local Players = game:GetService("Players")
 local WebCallPacer = require(script.Parent.Parent.Systems.WebCallPacer)
 local RunService = game:GetService("RunService")
 
-local RobloxGroupService = { Critical = true, cache = {}, connections = {}, failures = {} }
+local RobloxGroupService = {
+	Critical = true,
+	cache = {},
+	connections = {},
+	failures = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function RobloxGroupService:Init(context: any)
 	self.context = context
@@ -37,6 +47,9 @@ function RobloxGroupService:GetMembershipByGroupId(
 	cacheKey: string?,
 	minimumRank: number?
 ): any
+	if not self.running or not playerIsCurrent(player) then
+		return { Failed = true, Reason = "PLAYER_UNAVAILABLE" }
+	end
 	local key = cacheKey or "group:" .. tostring(groupId)
 	local playerCache = self.cache[player.UserId]
 	if not playerCache then
@@ -73,6 +86,12 @@ function RobloxGroupService:GetMembershipByGroupId(
 		return unconfigured
 	end
 	local ok, rank = pcall(player.GetRankInGroup, player, groupId)
+	-- The web call yields. A leaving player can be replaced by another Player
+	-- instance with the same UserId while it is in flight, and teardown can run
+	-- too. Never let that stale result update shared failure state or a cache.
+	if not self.running or not playerIsCurrent(player) then
+		return { Failed = true, Reason = "PLAYER_UNAVAILABLE" }
+	end
 	if not ok or type(rank) ~= "number" then
 		-- Roblox throttles this call, and a failure is very often a 429 rather
 		-- than a real answer about the player. Retrying a throttle on a fixed
@@ -130,12 +149,15 @@ end
 -- The link that gates entry is warmed first and without delay, because a player
 -- is waiting on it. Everything else is a prefetch and can take its time.
 function RobloxGroupService:Warm(player: Player)
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
 	local gate = self.context.Configuration.ExperienceAccess.RequiredGroupLinkId
 	if gate and self.context.Configuration.GroupLinks[gate] then
 		self:GetMembership(player, gate)
 	end
 	for linkId in self.context.Configuration.GroupLinks do
-		if not player:IsDescendantOf(Players) then
+		if not self.running or not playerIsCurrent(player) then
 			return
 		end
 		if linkId ~= gate then
@@ -146,7 +168,7 @@ function RobloxGroupService:Warm(player: Player)
 			-- arriving together ran thirty of these loops at once and the
 			-- aggregate rate scaled with the size of the crowd.
 			WebCallPacer:Wait()
-			if not player:IsDescendantOf(Players) then
+			if not self.running or not playerIsCurrent(player) then
 				return
 			end
 			self:GetMembership(player, linkId)
@@ -155,6 +177,7 @@ function RobloxGroupService:Warm(player: Player)
 end
 
 function RobloxGroupService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -177,11 +200,13 @@ function RobloxGroupService:Start()
 end
 
 function RobloxGroupService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
 	table.clear(self.cache)
+	table.clear(self.failures)
 end
 
 return RobloxGroupService
