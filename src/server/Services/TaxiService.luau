@@ -414,43 +414,11 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	if passengerCharacter.Economy.Balance < request.Fare then
 		return nil, "INSUFFICIENT_FUNDS"
 	end
-	local economy = self.context.Services:Get("EconomyService")
-	local transferId = HttpService:GenerateGUID(false)
-	local debited, debitReason = economy:Apply(passenger, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = passengerCharacterId,
-		Amount = request.Fare,
-		Direction = "Debit",
-		ReasonCode = "TAXI_FARE",
-		Description = "Taxi fare to " .. request.Dropoff,
-		RelatedEntityId = transferId,
-		Metadata = { TaxiId = requestId, DriverUserId = player.UserId },
-	})
-	if not debited then
-		return nil, debitReason
-	end
-	local credited, creditReason = economy:Apply(player, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = driverCharacterId,
-		Amount = request.Fare,
-		Direction = "Credit",
-		ReasonCode = "TAXI_FARE_RECEIVED",
-		Description = "Taxi fare from " .. request.PassengerName,
-		RelatedEntityId = transferId,
-		Metadata = { TaxiId = requestId, PassengerUserId = passenger.UserId },
-	})
-	if not credited then
-		economy:Apply(passenger, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = passengerCharacterId,
-			Amount = request.Fare,
-			Direction = "Credit",
-			ReasonCode = "TAXI_FARE_REFUND",
-			Description = "Taxi fare refund",
-			RelatedEntityId = transferId,
-			Metadata = { TaxiId = requestId },
-		})
-		return nil, creditReason
+	local settled, settlementReason = self.context.Services
+		:Get("EconomyService")
+		:PayTaxiFare(passenger, player, request.Fare, requestId, request.Dropoff)
+	if not settled then
+		return nil, settlementReason
 	end
 	request.State = "Completed"
 	request.CompletedAt = os.time()
