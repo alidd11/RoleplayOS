@@ -7,7 +7,7 @@ local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local PhoneService = { calls = {}, userCalls = {}, connections = {} }
+local PhoneService = { calls = {}, userCalls = {}, connections = {}, running = false }
 
 local function isPhoneTool(instance: Instance): boolean
 	return instance:IsA("Tool")
@@ -81,6 +81,9 @@ function PhoneService:_makeTool(): Tool
 end
 
 function PhoneService:EnsureTool(player: Player)
+	if not self.running then
+		return
+	end
 	if not self:_character(player) then
 		return
 	end
@@ -348,6 +351,9 @@ function PhoneService:PlaceCall(player: Player, rawNumber: any): (any?, string?)
 	self.event:FireClient(player, { Kind = "Call", Call = call })
 	self.event:FireClient(recipient, { Kind = "Call", Call = call })
 	task.delay(45, function()
+		if not self.running then
+			return
+		end
 		local current = self.calls[call.CallId]
 		if current and current.State == "Ringing" then
 			local caller = Players:GetPlayerByUserId(current.CallerUserId)
@@ -412,7 +418,9 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 		end
 	end
 	task.delay(5, function()
-		self.calls[callId] = nil
+		if self.running then
+			self.calls[callId] = nil
+		end
 	end)
 	return true, nil
 end
@@ -447,13 +455,14 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 end
 
 function PhoneService:Start()
+	self.running = true
 	local function onCharacterAdded(player: Player)
 		local callId = self.userCalls[player.UserId]
 		if callId then
 			self:EndCall(player, callId)
 		end
 		task.delay(1, function()
-			if player.Parent then
+			if self.running and player.Parent then
 				self:EnsureTool(player)
 			end
 		end)
@@ -495,6 +504,7 @@ function PhoneService:Start()
 end
 
 function PhoneService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
