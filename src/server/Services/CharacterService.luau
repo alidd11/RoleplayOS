@@ -751,7 +751,8 @@ function CharacterService:SetAuthoredAppearance(
 		self.context.Services:Get("DataService"):MarkDirty(player)
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
-			Action = if locked then "Character.AppearanceReedited"
+			Action = if locked
+				then "Character.AppearanceReedited"
 				else "Character.AppearanceAuthored",
 			Target = characterId,
 			Metadata = { SpentCredit = locked },
