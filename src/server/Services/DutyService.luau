@@ -7,16 +7,17 @@ local Players = game:GetService("Players")
 -- the Players service but the reference held by an in-flight request stays
 -- perfectly valid, so checking the reference alone proves nothing.
 local function playerIsPresent(player: Player): boolean
-	return player.Parent ~= nil
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
-local DutyService = { active = {} }
+local DutyService = { active = {}, running = false }
 
 function DutyService:Init(context: any)
 	self.context = context
 end
 
 function DutyService:Start()
+	self.running = true
 	self.connections = self.connections or {}
 	-- Per-player handlers are held against the player rather than pushed onto the
 	-- service-wide list, which is only emptied when the server shuts down. Every
@@ -43,6 +44,9 @@ function DutyService:Start()
 		forget(player)
 		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
 			task.delay(1, function()
+				if not self.running or not playerIsPresent(player) then
+					return
+				end
 				-- Gamepass weapons used to be dropped into the backpack here on
 				-- every spawn, silently, for whoever owned the pass. Everyone else
 				-- has to walk up to a dealer and press a button; owning a pass
@@ -88,6 +92,9 @@ function DutyService:Start()
 end
 
 function DutyService:Get(player: Player): any?
+	if not self.running or not playerIsPresent(player) then
+		return nil
+	end
 	local duty = self.active[player.UserId]
 	if not duty then
 		return nil
@@ -106,6 +113,15 @@ function DutyService:Get(player: Player): any?
 		return nil
 	end
 	local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
+	-- Access evaluation may yield on a Roblox group lookup. Revalidate the exact
+	-- live duty record afterwards so an ended shift cannot be returned stale.
+	if
+		not self.running
+		or not playerIsPresent(player)
+		or self.active[player.UserId] ~= duty
+	then
+		return nil
+	end
 	if not access.Allowed then
 		-- A check that could not be made is not a refusal.
 		--
@@ -139,6 +155,9 @@ function DutyService:Get(player: Player): any?
 end
 
 function DutyService:Begin(player: Player, request: any): (boolean, string?)
+	if not self.running or not playerIsPresent(player) then
+		return false, "DUTY_UNAVAILABLE"
+	end
 	if self.active[player.UserId] then
 		return false, "ALREADY_ON_DUTY"
 	end
@@ -176,6 +195,9 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		if startMenu and type(startMenu.Build) == "function" then
 			startMenu:Build(player)
 		end
+		if not self.running or not playerIsPresent(player) then
+			return false, "DUTY_UNAVAILABLE"
+		end
 		profile = session.Profile.DutyProfiles[request.DutyProfileId]
 	end
 	if not profile then
@@ -195,11 +217,17 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if not assigned then
 		return false, roleReason
 	end
+	if not self.running or not playerIsPresent(player) then
+		return false, "DUTY_UNAVAILABLE"
+	end
 	local spawned, finalSpawnReason =
 		self.context.Services:Get("SpawnService"):Spawn(player, request)
 	if not spawned then
 		player.Team = previousTeam
 		return false, finalSpawnReason
+	end
+	if not self.running or not playerIsPresent(player) then
+		return false, "DUTY_UNAVAILABLE"
 	end
 	-- Players arrive in their Roblox clothing and choose an authorised uniform
 	-- from the changing room. This keeps clothing selection visible and avoids
@@ -230,8 +258,8 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	-- Nothing ever clears it afterwards, and the first check in Begin refuses
 	-- anybody already in self.active, so that player could never go on duty again
 	-- for the remaining life of the server -- with no error explaining why.
-	if not playerIsPresent(player) then
-		return false, "PLAYER_LEFT"
+	if not self.running or not playerIsPresent(player) then
+		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	self.active[player.UserId] = {
 		DutyProfileId = request.DutyProfileId,
@@ -271,9 +299,9 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	-- shift in this service. An explicitly set callsign on the profile still wins,
 	-- so a unit given a bespoke one by staff keeps it.
 	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
-	if not playerIsPresent(player) then
+	if not self.running or not playerIsPresent(player) then
 		self.active[player.UserId] = nil
-		return false, "PLAYER_LEFT"
+		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
 		then profile.Callsign
@@ -297,13 +325,19 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	end
 	self.active[player.UserId].Callsign = callsign
 	task.spawn(function()
+		if not self.running or not playerIsPresent(player) then
+			return
+		end
 		local identification = self.context.Services:Get("IdentificationService")
 		identification:RefreshWithRetry(player)
+		if not self.running or not playerIsPresent(player) then
+			return
+		end
 		-- Team assignment, character spawning and StarterGear replication can settle
 		-- in different frames. A second refresh closes that race without issuing a
 		-- a duplicate: IdentificationService removes stale credentials first.
 		task.delay(1, function()
-			if player.Parent and self:Get(player) then
+			if self.running and playerIsPresent(player) and self:Get(player) then
 				identification:RefreshWithRetry(player)
 			end
 		end)
@@ -347,6 +381,9 @@ end
 function DutyService:End(player: Player)
 	local duty = self.active[player.UserId]
 	self.active[player.UserId] = nil
+	if not self.running then
+		return
+	end
 	self.context.Services:Get("UnitService"):Unregister(player)
 	self.context.Services:Get("LoadoutService"):ClearIssued(player)
 	self.context.Services:Get("UniformService"):Restore(player)
@@ -363,6 +400,7 @@ function DutyService:End(player: Player)
 end
 
 function DutyService:Destroy()
+	self.running = false
 	for _, connection in self.connections or {} do
 		connection:Disconnect()
 	end
