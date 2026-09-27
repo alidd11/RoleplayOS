@@ -14,6 +14,15 @@ transfer refunds derive that ID from the transfer, save the profile before
 retiring the pending item, and persist a reconciled receipt so a stale shared
 index entry cannot credit the same refund again.
 
+Cash drops use the same recovery rule. Normal expiry still removes uncollected
+cash, but an orderly server shutdown refunds every active drop rather than
+destroying the value. Refunds for owners whose active character is still loaded
+are applied with a deterministic transaction ID and saved once per owner.
+Anything that cannot be saved immediately is merged into one durable shared
+recovery record and retried after the owner selects that character in a later
+session. The durable entry is removed only after the recovered profile saves
+successfully, so a retry cannot duplicate the refund.
+
 Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Taxi fares use `EconomyService:PayTaxiFare()`, so journey validation stays in TaxiService while the two-player balance mutation, transfer lock, refund recovery and immediate persistence stay in EconomyService. Never accept a reward or price from a client.
 
 ## Wages
