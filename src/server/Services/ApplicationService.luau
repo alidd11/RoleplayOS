@@ -1,7 +1,31 @@
 --!strict
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local ApplicationService = {}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
+local function submissionAvailable(profile: any, formId: string, cooldownSeconds: number): (boolean, string?)
+	for _, existing in profile.Applications do
+		if
+			existing.FormId == formId
+			and existing.Status ~= "Rejected"
+			and existing.Status ~= "Withdrawn"
+		then
+			return false, "APPLICATION_ALREADY_EXISTS"
+		elseif
+			existing.FormId == formId
+			and existing.Status == "Rejected"
+			and os.time() - existing.UpdatedAt < cooldownSeconds
+		then
+			return false, "APPLICATION_COOLDOWN"
+		end
+	end
+	return true, nil
+end
 local allowed = {
 	Draft = true,
 	Submitted = true,
@@ -16,28 +40,22 @@ function ApplicationService:Init(context: any)
 end
 function ApplicationService:Start() end
 function ApplicationService:Submit(player: Player, formId: string, answers: any): (any?, string?)
+	if not playerIsCurrent(player) then
+		return nil, "PROFILE_UNAVAILABLE"
+	end
 	local form = self.context.Configuration.Applications[formId]
 	if not form then
 		return nil, "FORM_NOT_FOUND"
 	end
-	local session = self.context.Services:Get("DataService"):GetSession(player)
-	if not session then
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	if not session or session.Releasing then
 		return nil, "PROFILE_UNAVAILABLE"
 	end
-	for _, existing in session.Profile.Applications do
-		if
-			existing.FormId == formId
-			and existing.Status ~= "Rejected"
-			and existing.Status ~= "Withdrawn"
-		then
-			return nil, "APPLICATION_ALREADY_EXISTS"
-		elseif
-			existing.FormId == formId
-			and existing.Status == "Rejected"
-			and os.time() - existing.UpdatedAt < form.CooldownSeconds
-		then
-			return nil, "APPLICATION_COOLDOWN"
-		end
+	local available, availabilityReason =
+		submissionAvailable(session.Profile, formId, form.CooldownSeconds)
+	if not available then
+		return nil, availabilityReason
 	end
 	local clean = {}
 	for _, question in form.Questions do
@@ -65,22 +83,24 @@ function ApplicationService:Submit(player: Player, formId: string, answers: any)
 			clean[question.Id] = filtered
 		end
 	end
-	-- Filtering yields, and the session captured before it may have been released
-	-- in the meantime. Writing into that table would put the application into a
-	-- profile nobody will ever save, and a duplicate check made before the yield
-	-- is equally stale, so both are taken again.
-	local current = self.context.Services:Get("DataService"):GetSession(player)
-	if not current or current ~= session then
+	-- Filtering yields. PlayerRemoving defers the final save, so the outgoing
+	-- session can still be present here while its save snapshot is already in
+	-- flight. Matching only by UserId/session reference is therefore not enough:
+	-- a stale submit must not dirty a profile after its release snapshot.
+	if not playerIsCurrent(player) then
 		return nil, "PROFILE_UNAVAILABLE"
 	end
-	for _, existing in current.Profile.Applications do
-		if
-			existing.FormId == formId
-			and existing.Status ~= "Rejected"
-			and existing.Status ~= "Withdrawn"
-		then
-			return nil, "APPLICATION_ALREADY_EXISTS"
-		end
+	local current = data:GetSession(player)
+	if not current or current ~= session or current.Releasing then
+		return nil, "PROFILE_UNAVAILABLE"
+	end
+	-- Another request can finish filtering first, or an application can be
+	-- rejected while this request is yielding. Re-run the complete policy rather
+	-- than only the active-application half so cooldowns cannot be bypassed.
+	available, availabilityReason =
+		submissionAvailable(current.Profile, formId, form.CooldownSeconds)
+	if not available then
+		return nil, availabilityReason
 	end
 	local record = {
 		ApplicationId = HttpService:GenerateGUID(false),
@@ -99,7 +119,7 @@ function ApplicationService:Submit(player: Player, formId: string, answers: any)
 	while #session.Profile.Applications > maximum do
 		table.remove(session.Profile.Applications, 1)
 	end
-	self.context.Services:Get("DataService"):MarkDirty(player)
+	data:MarkDirty(player)
 	return {
 		ApplicationId = record.ApplicationId,
 		FormId = formId,
