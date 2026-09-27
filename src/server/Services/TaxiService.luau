@@ -4,7 +4,11 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local TaxiService = { requests = {}, byPassenger = {}, byDriver = {} }
+local TaxiService = { requests = {}, byPassenger = {}, byDriver = {}, running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function TaxiService:Init(context: any)
 	self.context = context
@@ -18,6 +22,9 @@ function TaxiService:Init(context: any)
 end
 
 function TaxiService:_character(player: Player): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session or not session.ActiveCharacterId then
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
@@ -30,7 +37,7 @@ function TaxiService:_character(player: Player): (any?, string?)
 end
 
 function TaxiService:_isDriver(player: Player): boolean
-	if not player.Parent then
+	if not self.running or not playerIsCurrent(player) then
 		return false
 	end
 	-- A TaxiDriver employment is the durable job credential. The Transport team
@@ -255,15 +262,22 @@ function TaxiService:Request(
 	rawDropoff: any,
 	rawBand: any
 ): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if player.Team == nil or player.Team.Name ~= "Civilian" then
 		return nil, "CIVILIAN_REQUIRED"
 	end
 	if self.byPassenger[player.UserId] or self.byDriver[player.UserId] then
 		return nil, "TAXI_REQUEST_ALREADY_ACTIVE"
 	end
-	local character, characterId = self:_character(player)
-	if not character then
-		return nil, characterId
+
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	local characterId = session and session.ActiveCharacterId
+	local character = characterId and session.Profile.Characters[characterId]
+	if not character or not characterId then
+		return nil, "ACTIVE_CHARACTER_REQUIRED"
 	end
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not root or not root:IsA("BasePart") then
@@ -282,16 +296,49 @@ function TaxiService:Request(
 	if character.Economy.Balance < fare then
 		return nil, "INSUFFICIENT_FUNDS"
 	end
-	local pickup, pickupReason =
-		TextFilter.forBroadcast(rawPickup, player.UserId, Enum.TextFilterContext.PublicChat)
-	local dropoff, dropoffReason =
-		TextFilter.forBroadcast(rawDropoff, player.UserId, Enum.TextFilterContext.PublicChat)
-	if not pickup then
-		return nil, pickupReason
+
+	-- Both fields are filtered concurrently. More importantly, filtering yields,
+	-- so every piece of session state captured above is provisional until the
+	-- calls return.
+	local filtered, filterReason = TextFilter.manyForBroadcast({
+		Pickup = rawPickup,
+		Dropoff = rawDropoff,
+	}, player.UserId, Enum.TextFilterContext.PublicChat)
+	if not filtered then
+		return nil, filterReason
 	end
-	if not dropoff then
-		return nil, dropoffReason
+
+	-- A leave can run TaxiService's PlayerRemoving cleanup while the filter is
+	-- waiting. Without this check the stale worker could then create a booking
+	-- after cleanup had already finished, leaving an immortal waiting request
+	-- keyed to the departed UserId and blocking a same-server rejoin.
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
 	end
+	local currentSession = data:GetSession(player)
+	if
+		currentSession ~= session
+		or currentSession.ActiveCharacterId ~= characterId
+		or currentSession.Profile.Characters[characterId] ~= character
+	then
+		return nil, "CHARACTER_CHANGED"
+	end
+	if player.Team == nil or player.Team.Name ~= "Civilian" then
+		return nil, "CIVILIAN_REQUIRED"
+	end
+	-- Two requests can enter the filter together. Rechecking after the yield makes
+	-- the first one to commit the booking the only winner; there is no yield
+	-- between this guard and writing byPassenger below.
+	if self.byPassenger[player.UserId] or self.byDriver[player.UserId] then
+		return nil, "TAXI_REQUEST_ALREADY_ACTIVE"
+	end
+	local currentRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not currentRoot or not currentRoot:IsA("BasePart") then
+		return nil, "CHARACTER_NOT_READY"
+	end
+
+	local pickup = filtered.Pickup
+	local dropoff = filtered.Dropoff
 	local identity = character.Identity.FirstName .. " " .. character.Identity.LastName
 	local request = {
 		RequestId = HttpService:GenerateGUID(false),
@@ -302,7 +349,7 @@ function TaxiService:Request(
 		Dropoff = dropoff,
 		Band = rawBand,
 		Fare = fare,
-		PickupPosition = root.Position,
+		PickupPosition = currentRoot.Position,
 		State = "Waiting",
 		CreatedAt = os.time(),
 	}
@@ -325,7 +372,6 @@ function TaxiService:Request(
 	end
 	return self:_statusFor(player), nil
 end
-
 function TaxiService:Accept(player: Player, requestId: any): (any?, string?)
 	if type(requestId) ~= "string" or not self:_isDriver(player) then
 		return nil, "TAXI_DRIVER_REQUIRED"
@@ -376,6 +422,9 @@ function TaxiService:Accept(player: Player, requestId: any): (any?, string?)
 end
 
 function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if type(requestId) ~= "string" or self.byDriver[player.UserId] ~= requestId then
 		return nil, "TAXI_DRIVER_REQUIRED"
 	end
@@ -423,16 +472,25 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	end
 	request.State = "Completed"
 	request.CompletedAt = os.time()
-	self.byPassenger[request.PassengerUserId] = nil
-	self.byDriver[player.UserId] = nil
-	self:_notify(passenger, {
-		Kind = "TaxiStatus",
-		MessageId = requestId,
-		Direction = "Incoming",
-		Body = string.format("Taxi complete · %s paid £%d", request.DriverName, request.Fare),
-		TaxiId = requestId,
-		Timestamp = os.time(),
-	})
+	-- PayTaxiFare persists both profiles and therefore yields. Clear only the
+	-- mappings that still belong to this ride; a participant may have left and
+	-- rejoined while those saves were in flight.
+	if self.byPassenger[request.PassengerUserId] == requestId then
+		self.byPassenger[request.PassengerUserId] = nil
+	end
+	if self.byDriver[player.UserId] == requestId then
+		self.byDriver[player.UserId] = nil
+	end
+	if playerIsCurrent(passenger) then
+		self:_notify(passenger, {
+			Kind = "TaxiStatus",
+			MessageId = requestId,
+			Direction = "Incoming",
+			Body = string.format("Taxi complete · %s paid £%d", request.DriverName, request.Fare),
+			TaxiId = requestId,
+			Timestamp = os.time(),
+		})
+	end
 	return { Fare = request.Fare, RequestId = requestId }, nil
 end
 
@@ -483,6 +541,9 @@ function TaxiService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(60)
+			if not self.running then
+				break
+			end
 			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
 			for requestId, request in self.requests do
 				local terminal = request.State == "Completed" or request.State == "Cancelled"
