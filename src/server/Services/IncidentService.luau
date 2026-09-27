@@ -163,17 +163,28 @@ function IncidentService:_persist(incident: any): (any?, string?, boolean, any?)
 	return stored, nil, true, stored
 end
 function IncidentService:Create(player: Player, data: any): (any?, string?)
-	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite") then
+	if not self.running then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
-	if type(data.Title) ~= "string" then
+	local mdt = self.context.Services:Get("MDTService")
+	local duty = mdt:GetAuthorisedDuty(player, "IncidentWrite")
+	if not duty then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	if type(data) ~= "table" or type(data.Title) ~= "string" then
 		return nil, "INVALID_INCIDENT"
 	end
 	local title, titleReason = self:_filterTitle(player, data.Title)
 	if not title then
 		return nil, titleReason
 	end
-	local duty = self.context.Services:Get("MDTService"):GetDuty(player)
+	-- Text filtering yields. Re-authorise after moderation and use that exact duty
+	-- snapshot for the incident department so a stale request cannot persist after
+	-- the player leaves duty, changes role or disconnects.
+	duty = mdt:GetAuthorisedDuty(player, "IncidentWrite")
+	if not self.running or not duty then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
 	local incident = {
 		IncidentId = HttpService:GenerateGUID(false),
 		Title = title,
