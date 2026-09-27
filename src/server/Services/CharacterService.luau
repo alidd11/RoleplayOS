@@ -417,6 +417,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 				Balance = self.context.Configuration.Economy.StartingBankBalance,
 				Cash = self.context.Configuration.Economy.StartingCashBalance,
 				Transactions = {},
+				PendingCashDropRefunds = {},
 			},
 			Employment = {},
 			Vehicles = {},
