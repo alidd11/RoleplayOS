@@ -343,7 +343,9 @@ function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any
 	if not senderCharacter then
 		return nil, "ACTIVE_CHARACTER_REQUIRED"
 	end
-	local senderName = senderCharacter.Identity.FirstName .. " " .. senderCharacter.Identity.LastName
+	local senderName = senderCharacter.Identity.FirstName
+		.. " "
+		.. senderCharacter.Identity.LastName
 	local recipient, findReason = self:_findByName(rawName)
 	if not recipient then
 		return nil, findReason
@@ -417,8 +419,7 @@ function PhoneService:SendText(player: Player, rawNumber: any, rawMessage: any):
 			recipientSession,
 			recipientCharacterId,
 			recipientCharacter
-		)
-		or self:_ensurePhone(recipientCharacter).Number ~= number
+		) or self:_ensurePhone(recipientCharacter).Number ~= number
 	then
 		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
 	end
