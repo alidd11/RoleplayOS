@@ -12,12 +12,16 @@ local EconomyService = {
 	transferring = {},
 	connections = {},
 	reconciling = false,
+	reconcilingMoneyDropRefunds = false,
+	moneyDropReconcileRequested = false,
 	running = false,
 }
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
+
+local MONEY_DROP_REFUNDS_KEY = "pending-money-drop-refunds"
 
 local function transactionScope(userId: number, characterId: string): string
 	return tostring(userId) .. ":" .. characterId
@@ -57,6 +61,7 @@ function EconomyService:Start()
 			end
 			if self.running and playerIsCurrent(player) then
 				self:ReconcilePendingTransfers()
+				self:RequestMoneyDropReconciliation()
 			end
 		end)
 	end
@@ -67,6 +72,7 @@ function EconomyService:Start()
 	task.delay(15, function()
 		if self.running then
 			self:ReconcilePendingTransfers()
+			self:RequestMoneyDropReconciliation()
 		end
 	end)
 end
@@ -97,6 +103,166 @@ function EconomyService:_queuePendingRefund(record: any)
 			Error = indexReason,
 		})
 	end
+end
+
+function EconomyService:QueueMoneyDropRefunds(records: { any }): (boolean, string?)
+	if #records == 0 then
+		return true, nil
+	end
+	local data = self.context.Services:Get("DataService")
+	local _, reason = data:UpdateSharedRecord(MONEY_DROP_REFUNDS_KEY, function(existing)
+		local pending = if type(existing) == "table" then table.clone(existing) else {}
+		for _, record in records do
+			local dropId = record.DropId
+			if
+				type(dropId) == "string"
+				and dropId ~= ""
+				and type(record.OwnerUserId) == "number"
+				and type(record.OwnerCharacterId) == "string"
+				and type(record.Amount) == "number"
+			then
+				pending[dropId] = {
+					DropId = dropId,
+					OwnerUserId = record.OwnerUserId,
+					OwnerCharacterId = record.OwnerCharacterId,
+					Amount = record.Amount,
+					CreatedAt = record.CreatedAt or os.time(),
+					Status = "Pending",
+				}
+			end
+		end
+		return pending
+	end)
+	if reason then
+		self.context.Logger:Error("Pending cash-drop refund persistence failed", {
+			Count = #records,
+			Error = reason,
+		})
+		return false, reason
+	end
+	return true, nil
+end
+
+function EconomyService:RefundMoneyDrop(player: Player, record: any): (boolean, string?)
+	if
+		type(record) ~= "table"
+		or type(record.DropId) ~= "string"
+		or type(record.OwnerCharacterId) ~= "string"
+		or type(record.Amount) ~= "number"
+	then
+		return false, "INVALID_MONEY_DROP_REFUND"
+	end
+	return self:Apply(player, {
+		TransactionId = "money-drop-refund:" .. record.DropId,
+		CharacterId = record.OwnerCharacterId,
+		Account = "Cash",
+		Amount = record.Amount,
+		Direction = "Credit",
+		ReasonCode = "MoneyDrop.ShutdownRefund",
+		Description = "Recovered uncollected cash drop",
+		RelatedEntityId = record.DropId,
+		Metadata = {},
+	})
+end
+
+function EconomyService:_reconcilePendingMoneyDropRefunds()
+	local ok, problem = pcall(function()
+		local data = self.context.Services:Get("DataService")
+		local pending = data:GetSharedRecord(MONEY_DROP_REFUNDS_KEY)
+		if not self.running or type(pending) ~= "table" then
+			return
+		end
+		local completed: { [string]: boolean } = {}
+		for dropId, record in pending do
+			if not self.running then
+				return
+			end
+			if
+				type(dropId) ~= "string"
+				or type(record) ~= "table"
+				or type(record.OwnerUserId) ~= "number"
+				or type(record.OwnerCharacterId) ~= "string"
+				or type(record.Amount) ~= "number"
+			then
+				completed[tostring(dropId)] = true
+				self.context.Logger:Error("Discarding malformed pending cash-drop refund", {
+					DropId = tostring(dropId),
+				})
+				continue
+			end
+
+			local player = Players:GetPlayerByUserId(record.OwnerUserId)
+			local session = player and data:GetSession(player)
+			if
+				not player
+				or not session
+				or session.ActiveCharacterId ~= record.OwnerCharacterId
+				or not session.Profile.Characters[record.OwnerCharacterId]
+			then
+				continue
+			end
+
+			local refunded, refundReason = self:RefundMoneyDrop(player, record)
+			if not refunded and refundReason ~= "DUPLICATE_TRANSACTION" then
+				continue
+			end
+			local saved, saveReason = data:Save(player)
+			if not self.running then
+				return
+			end
+			if not saved then
+				self.context.Logger:Warning("Recovered cash-drop refund save failed", {
+					DropId = dropId,
+					UserId = player.UserId,
+					Error = saveReason,
+				})
+				continue
+			end
+			completed[dropId] = true
+		end
+
+		if next(completed) == nil or not self.running then
+			return
+		end
+		local _, cleanupReason = data:UpdateSharedRecord(MONEY_DROP_REFUNDS_KEY, function(existing)
+			if type(existing) ~= "table" then
+				return existing
+			end
+			local remaining = table.clone(existing)
+			for dropId in completed do
+				remaining[dropId] = nil
+			end
+			return remaining
+		end)
+		if cleanupReason then
+			self.context.Logger:Error("Pending cash-drop refund cleanup failed", {
+				Error = cleanupReason,
+			})
+		end
+	end)
+	if not ok then
+		self.context.Logger:Error("Pending cash-drop refund reconciliation failed", {
+			Error = tostring(problem),
+		})
+	end
+end
+
+function EconomyService:RequestMoneyDropReconciliation()
+	if not self.running then
+		return
+	end
+	self.moneyDropReconcileRequested = true
+	if self.reconcilingMoneyDropRefunds then
+		return
+	end
+	self.reconcilingMoneyDropRefunds = true
+	task.spawn(function()
+		while self.running and self.moneyDropReconcileRequested do
+			self.moneyDropReconcileRequested = false
+			self:_reconcilePendingMoneyDropRefunds()
+		end
+		self.reconcilingMoneyDropRefunds = false
+	end)
 end
 
 function EconomyService:_transactionState(
@@ -547,6 +713,7 @@ end
 
 function EconomyService:Destroy()
 	self.running = false
+	self.moneyDropReconcileRequested = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
