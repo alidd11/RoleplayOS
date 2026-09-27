@@ -113,18 +113,6 @@ return function(self: any)
 			and (payload.Page == nil or type(payload.Page) == "number")
 			and (payload.ResolvedOnly == nil or type(payload.ResolvedOnly) == "boolean")
 	end, function(player, payload, requestId)
-		local mdt = self.context.Services:Get("MDTService")
-		if
-			not mdt:CanUsePermission(player, "IncidentRead")
-			and not mdt:CanUsePermission(player, "IncidentWrite")
-		then
-			return {
-				Success = false,
-				Code = "MDT_NOT_AUTHORISED",
-				Message = "This duty cannot view incident records.",
-				RequestId = requestId,
-			}
-		end
 		local page = if type(payload.Page) == "number"
 			then math.clamp(math.floor(payload.Page), 1, 1000)
 			else 1
@@ -134,7 +122,10 @@ return function(self: any)
 		return {
 			Success = incidents ~= nil,
 			Code = if incidents then "OK" else reason,
-			Message = if incidents then "" else "Incident records are temporarily unavailable.",
+			Message = if incidents
+				then ""
+				elseif reason == "MDT_NOT_AUTHORISED" then "This duty cannot view incident records."
+				else "Incident records are temporarily unavailable.",
 			Data = incidents,
 			RequestId = requestId,
 		}
