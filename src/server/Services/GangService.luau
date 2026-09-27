@@ -583,8 +583,10 @@ function GangService:Leave(player: Player): (boolean, string?)
 			if type(gang.TerritoryId) == "string" and gang.TerritoryId ~= "" then
 				self.context.Services:Get("GangTerritoryService"):SetOwner(gang.TerritoryId, nil)
 			end
-			session.Profile.GangId = nil
-			dataService:MarkDirty(player)
+			if self:_sessionIsCurrent(player, session) and session.Profile.GangId == gang.Id then
+				session.Profile.GangId = nil
+				dataService:MarkDirty(player)
+			end
 			self.context.Services:Get("AuditService"):Record({
 				ActorUserId = player.UserId,
 				Action = "Gang.Disbanded",
@@ -606,8 +608,10 @@ function GangService:Leave(player: Player): (boolean, string?)
 		if leaveReason then
 			return false, "GANG_LEAVE_FAILED"
 		end
-		session.Profile.GangId = nil
-		dataService:MarkDirty(player)
+		if self:_sessionIsCurrent(player, session) and session.Profile.GangId == gang.Id then
+			session.Profile.GangId = nil
+			dataService:MarkDirty(player)
+		end
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
 			Action = "Gang.Left",
