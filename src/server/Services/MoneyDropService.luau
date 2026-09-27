@@ -359,7 +359,11 @@ function MoneyDropService:Destroy()
 		self:_remove(dropId, "Shutdown")
 
 		local owner = Players:GetPlayerByUserId(record.OwnerUserId)
-		local _, activeCharacterId = if owner then self:_activeCharacter(owner) else nil, nil
+		local activeCharacterId: string? = nil
+		if owner then
+			local _, currentCharacterId = self:_activeCharacter(owner)
+			activeCharacterId = currentCharacterId
+		end
 		if owner and activeCharacterId == record.OwnerCharacterId then
 			local refunded, refundReason = economy:RefundMoneyDrop(owner, recovery)
 			if refunded or refundReason == "DUPLICATE_TRANSACTION" then
