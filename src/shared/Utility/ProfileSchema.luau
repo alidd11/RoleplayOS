@@ -4,11 +4,11 @@ local SettingsValidator = require(script.Parent.SettingsValidator)
 local PhoneValidator = require(script.Parent.PhoneValidator)
 
 local ProfileSchema = {}
-ProfileSchema.CURRENT_VERSION = 13
+ProfileSchema.CURRENT_VERSION = 14
 
 function ProfileSchema.default(userId: number): any
 	return {
-		SchemaVersion = 13,
+		SchemaVersion = 14,
 		UserId = userId,
 		Settings = SettingsValidator.defaults(),
 		CharacterSlots = {},
@@ -247,6 +247,29 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 			data.GangInvites = {}
 		end
 		data.SchemaVersion = 13
+	end
+	if data.SchemaVersion == 13 then
+		-- Cash drops are server-local, but a player may leave or the server may
+		-- close while one is still active. Keep the small recovery queue on the
+		-- character that paid for it so the obligation survives the profile save
+		-- without creating an unbounded global queue.
+		for _, character in data.Characters or {} do
+			if type(character) == "table" then
+				local economy = character.Economy
+				if type(economy) ~= "table" then
+					economy = {
+						Balance = 0,
+						Cash = 0,
+						Transactions = {},
+					}
+					character.Economy = economy
+				end
+				if type(economy.PendingCashDropRefunds) ~= "table" then
+					economy.PendingCashDropRefunds = {}
+				end
+			end
+		end
+		data.SchemaVersion = 14
 	end
 	data.UserId = userId
 	reconcile(data, ProfileSchema.default(userId))
