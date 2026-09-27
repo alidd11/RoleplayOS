@@ -124,8 +124,7 @@ return function(self: any)
 			Code = if incidents then "OK" else reason,
 			Message = if incidents
 				then ""
-				elseif reason == "MDT_NOT_AUTHORISED"
-				then "This duty cannot view incident records."
+				elseif reason == "MDT_NOT_AUTHORISED" then "This duty cannot view incident records."
 				else "Incident records are temporarily unavailable.",
 			Data = incidents,
 			RequestId = requestId,
