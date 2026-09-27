@@ -88,6 +88,18 @@ function IncidentService:Start()
 	self.running = true
 end
 
+function IncidentService:_getReadDuty(player: Player): any?
+	local mdt = self.context.Services:Get("MDTService")
+	local duty = mdt:GetAuthorisedDuty(player, nil)
+	if not duty then
+		return nil
+	end
+	if not mdt:HasPermission(duty, "IncidentRead") and not mdt:HasPermission(duty, "IncidentWrite") then
+		return nil
+	end
+	return duty
+end
+
 function IncidentService:_filterTitle(actor: Player, raw: string): (string?, string?)
 	local title = string.sub(string.gsub(raw, "[%c]", ""), 1, 120)
 	title = string.match(title, "^%s*(.-)%s*$") or ""
@@ -328,7 +340,10 @@ function IncidentService:Recent(
 	page: number,
 	resolvedOnly: boolean?
 ): (any?, string?)
-	local duty = self.context.Services:Get("MDTService"):GetDuty(player)
+	if not self.running then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	local duty = self:_getReadDuty(player)
 	if not duty then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
@@ -397,6 +412,14 @@ function IncidentService:Recent(
 		if record then
 			table.insert(items, record)
 		end
+	end
+	-- Index and record reads can yield on DataStore budget, retries and network
+	-- latency. Revalidate the exact duty snapshot before returning any records so
+	-- a player who left duty, changed role or disconnected while those reads were
+	-- in flight cannot receive a response authorised by an older duty.
+	local currentDuty = self:_getReadDuty(player)
+	if not self.running or currentDuty ~= duty then
+		return nil, "MDT_NOT_AUTHORISED"
 	end
 	return { Items = items, Page = page, Total = #entries }, nil
 end
