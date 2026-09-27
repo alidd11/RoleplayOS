@@ -286,7 +286,8 @@ function IncidentService:Close(player: Player, incidentId: string): (any?, strin
 	if not self.running then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
-	local authorised = self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite")
+	local authorised =
+		self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite")
 	if not self.running or not authorised then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
