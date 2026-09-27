@@ -383,7 +383,10 @@ H.test("migration adds bounded cash-drop recovery state", function()
 			},
 		},
 	}, 42)
-	H.expect(profile.SchemaVersion == ProfileSchema.CURRENT_VERSION, "profile version did not advance")
+	H.expect(
+		profile.SchemaVersion == ProfileSchema.CURRENT_VERSION,
+		"profile version did not advance"
+	)
 	H.expect(
 		type(profile.Characters.character.Economy.PendingCashDropRefunds) == "table",
 		"cash-drop recovery container missing"
