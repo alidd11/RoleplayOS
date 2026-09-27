@@ -21,7 +21,12 @@ local GangRules = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared
 -- needs to reach an offline player: the alternative -- a second shared record
 -- acting as a cross-server mailbox -- is real complexity for a feature this
 -- spec does not ask for.
-local GangService = { running = false, creating = {} }
+local GangService = {
+	running = false,
+	creating = {},
+	membershipWrites = {},
+	pendingMemberships = {},
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -34,6 +39,8 @@ end
 function GangService:Init(context: any)
 	self.context = context
 	table.clear(self.creating)
+	table.clear(self.membershipWrites)
+	table.clear(self.pendingMemberships)
 end
 
 function GangService:Start()
@@ -89,6 +96,9 @@ function GangService:_reconcile(player: Player, session: any): (GangRules.Gang?,
 	if type(gangId) ~= "string" then
 		return nil, nil
 	end
+	if self.pendingMemberships[player.UserId] == gangId then
+		return nil, "GANG_MEMBERSHIP_UPDATE_IN_PROGRESS"
+	end
 	local gang, gangReason = self:_gang(gangId)
 	-- A failed shared read is uncertainty, not evidence that the gang vanished.
 	-- Clearing the profile pointer on a transient DataStore error permanently
@@ -103,6 +113,16 @@ function GangService:_reconcile(player: Player, session: any): (GangRules.Gang?,
 		session.Profile.GangId = nil
 		self.context.Services:Get("DataService"):MarkDirty(player)
 		return nil, nil
+	end
+	local removedInvite = false
+	for index = #session.Profile.GangInvites, 1, -1 do
+		if session.Profile.GangInvites[index].GangId == gangId then
+			table.remove(session.Profile.GangInvites, index)
+			removedInvite = true
+		end
+	end
+	if removedInvite then
+		self.context.Services:Get("DataService"):MarkDirty(player)
 	end
 	return gang, nil
 end
@@ -137,7 +157,12 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 	if self.creating[player] then
 		return nil, "GANG_CREATE_IN_PROGRESS"
 	end
+	if self.membershipWrites[player.UserId] then
+		return nil, "GANG_MEMBERSHIP_UPDATE_IN_PROGRESS"
+	end
 	self.creating[player] = true
+	self.membershipWrites[player.UserId] = player
+	local pendingGangId: string? = nil
 
 	local ok, result, resultReason = pcall(function(): (GangRules.Gang?, string?)
 		local dataService = self.context.Services:Get("DataService")
@@ -198,10 +223,11 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 			TerritoryId = nil,
 		}
 
-		-- Stage the local pointer before the shared write. If the player leaves
-		-- while that write yields, DataService's deferred final save already has
-		-- the intended membership in the profile instead of creating an orphaned
-		-- shared gang after PlayerRemoving finished.
+		-- Stage the local pointer before the shared write. The pending marker stops
+		-- another request from reconciling that provisional pointer away while the
+		-- shared write is in flight.
+		pendingGangId = gangId
+		self.pendingMemberships[player.UserId] = gangId
 		session.Profile.GangId = gangId
 		dataService:MarkDirty(player)
 
@@ -215,6 +241,9 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 			end
 		)
 		if gangReason or type(storedGang) ~= "table" or storedGang.Id ~= gangId then
+			if self.pendingMemberships[player.UserId] == gangId then
+				self.pendingMemberships[player.UserId] = nil
+			end
 			if session.Profile.GangId == gangId then
 				session.Profile.GangId = nil
 				if self:_sessionIsCurrent(player, session) then
@@ -223,6 +252,9 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 			end
 			self:_releaseNameReservation(nameKey, gangId)
 			return nil, "GANG_CREATE_FAILED"
+		end
+		if self.pendingMemberships[player.UserId] == gangId then
+			self.pendingMemberships[player.UserId] = nil
 		end
 
 		self.context.Services:Get("AuditService"):Record({
@@ -235,6 +267,12 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 	end)
 
 	self.creating[player] = nil
+	if pendingGangId and self.pendingMemberships[player.UserId] == pendingGangId then
+		self.pendingMemberships[player.UserId] = nil
+	end
+	if self.membershipWrites[player.UserId] == player then
+		self.membershipWrites[player.UserId] = nil
+	end
 	if not ok then
 		error(result)
 	end
@@ -316,153 +354,282 @@ function GangService:RespondToInvite(player: Player, gangId: any, accept: any): 
 	if type(gangId) ~= "string" or type(accept) ~= "boolean" then
 		return false, "INVALID_RESPONSE"
 	end
-	local dataService = self.context.Services:Get("DataService")
-	local session = dataService:GetSession(player)
-	if not session then
+	if not self.running or not playerIsCurrent(player) then
 		return false, "PROFILE_UNAVAILABLE"
 	end
-	local index = nil
-	for i, invite in session.Profile.GangInvites do
-		if invite.GangId == gangId then
-			index = i
-			break
+	if self.membershipWrites[player.UserId] then
+		return false, "GANG_MEMBERSHIP_UPDATE_IN_PROGRESS"
+	end
+	self.membershipWrites[player.UserId] = player
+	local pendingGangId: string? = nil
+
+	local ok, result, resultReason = pcall(function(): (boolean, string?)
+		local dataService = self.context.Services:Get("DataService")
+		local session = dataService:GetSession(player)
+		if not session then
+			return false, "PROFILE_UNAVAILABLE"
 		end
-	end
-	if not index then
-		return false, "INVITE_NOT_FOUND"
-	end
-	table.remove(session.Profile.GangInvites, index)
-	dataService:MarkDirty(player)
-	if not accept then
+
+		local function inviteIndex(): number?
+			for index, invite in session.Profile.GangInvites do
+				if invite.GangId == gangId then
+					return index
+				end
+			end
+			return nil
+		end
+
+		local index = inviteIndex()
+		if not index then
+			return false, "INVITE_NOT_FOUND"
+		end
+
+		if not accept then
+			table.remove(session.Profile.GangInvites, index)
+			dataService:MarkDirty(player)
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				Action = "Gang.InviteDeclined",
+				Target = gangId,
+			})
+			return true, nil
+		end
+
+		local currentGang, reconcileReason = self:_reconcile(player, session)
+		if reconcileReason then
+			return false, reconcileReason
+		end
+		if currentGang then
+			return false, "ALREADY_IN_A_GANG"
+		end
+		if not self:_sessionIsCurrent(player, session) then
+			return false, "PROFILE_UNAVAILABLE"
+		end
+
+		-- Persist the intended pointer before adding this user to the shared gang.
+		-- If the server dies after the shared write, the next server therefore has
+		-- enough durable state to find the membership instead of leaving a member
+		-- in the shared roster with no profile pointer back to it.
+		pendingGangId = gangId
+		self.pendingMemberships[player.UserId] = gangId
+		session.Profile.GangId = gangId
+		dataService:MarkDirty(player)
+		local saved, saveReason = dataService:Save(player)
+		if not saved then
+			if self.pendingMemberships[player.UserId] == gangId then
+				self.pendingMemberships[player.UserId] = nil
+			end
+			if session.Profile.GangId == gangId then
+				session.Profile.GangId = nil
+				if self:_sessionIsCurrent(player, session) then
+					dataService:MarkDirty(player)
+				end
+			end
+			self.context.Logger:Warning("Gang join intent could not be saved", {
+				UserId = player.UserId,
+				GangId = gangId,
+				Reason = saveReason,
+			})
+			return false, "GANG_JOIN_FAILED"
+		end
+		if not self:_sessionIsCurrent(player, session) then
+			if self.pendingMemberships[player.UserId] == gangId then
+				self.pendingMemberships[player.UserId] = nil
+			end
+			return false, "PROFILE_UNAVAILABLE"
+		end
+
+		-- The transform is idempotent and carries no external success flag:
+		-- UpdateAsync may invoke it more than once. A retry that observes this user
+		-- already present simply returns the committed record.
+		local storedGang, updateReason = dataService:UpdateSharedRecord(
+			gangKey(gangId),
+			function(stored)
+				if type(stored) ~= "table" then
+					return stored
+				end
+				if GangRules.isMember(stored, player.UserId) then
+					return stored
+				end
+				local allowed = GangRules.canInvite(stored, stored.LeaderUserId, player.UserId)
+				if not allowed then
+					return stored
+				end
+				table.insert(stored.MemberUserIds, player.UserId)
+				return stored
+			end
+		)
+		if self.pendingMemberships[player.UserId] == gangId then
+			self.pendingMemberships[player.UserId] = nil
+		end
+
+		if updateReason then
+			if session.Profile.GangId == gangId then
+				session.Profile.GangId = nil
+				if self:_sessionIsCurrent(player, session) then
+					dataService:MarkDirty(player)
+				end
+			end
+			return false, "GANG_JOIN_FAILED"
+		end
+		if type(storedGang) ~= "table" then
+			if session.Profile.GangId == gangId then
+				session.Profile.GangId = nil
+				if self:_sessionIsCurrent(player, session) then
+					dataService:MarkDirty(player)
+				end
+			end
+			local staleIndex = inviteIndex()
+			if staleIndex and self:_sessionIsCurrent(player, session) then
+				table.remove(session.Profile.GangInvites, staleIndex)
+				dataService:MarkDirty(player)
+			end
+			return false, "GANG_NOT_FOUND"
+		end
+		if not GangRules.isMember(storedGang, player.UserId) then
+			if session.Profile.GangId == gangId then
+				session.Profile.GangId = nil
+				if self:_sessionIsCurrent(player, session) then
+					dataService:MarkDirty(player)
+				end
+			end
+			local allowed, reason =
+				GangRules.canInvite(storedGang, storedGang.LeaderUserId, player.UserId)
+			return false, if allowed then "GANG_JOIN_FAILED" else reason
+		end
+
+		-- The pointer was saved before the shared membership. If the Player left
+		-- during that shared write, consistency is already durable; the stale invite
+		-- is harmless and _reconcile removes it on the next live session.
+		if self:_sessionIsCurrent(player, session) then
+			local acceptedIndex = inviteIndex()
+			if acceptedIndex then
+				table.remove(session.Profile.GangInvites, acceptedIndex)
+			end
+			dataService:MarkDirty(player)
+		end
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
-			Action = "Gang.InviteDeclined",
+			Action = "Gang.Joined",
 			Target = gangId,
 		})
 		return true, nil
-	end
-	local currentGang, reconcileReason = self:_reconcile(player, session)
-	if reconcileReason then
-		return false, reconcileReason
-	end
-	if currentGang then
-		return false, "ALREADY_IN_A_GANG"
-	end
-	-- Re-validated inside the transform, not just before it. The invite was
-	-- checked against the cap when it was sent, but accepting can happen long
-	-- afterwards, and two invitees accepting in the same instant must not both
-	-- win a seat the cap only had room for one of.
-	local joined = false
-	local joinReason: string? = nil
-	dataService:UpdateSharedRecord(gangKey(gangId), function(stored)
-		if type(stored) ~= "table" then
-			joinReason = "GANG_NOT_FOUND"
-			return stored
-		end
-		local allowed, reason = GangRules.canInvite(stored, stored.LeaderUserId, player.UserId)
-		if not allowed then
-			joinReason = reason
-			return stored
-		end
-		table.insert(stored.MemberUserIds, player.UserId)
-		joined = true
-		return stored
 	end)
-	if not joined then
-		return false, joinReason or "GANG_JOIN_FAILED"
+
+	if pendingGangId and self.pendingMemberships[player.UserId] == pendingGangId then
+		self.pendingMemberships[player.UserId] = nil
 	end
-	session.Profile.GangId = gangId
-	dataService:MarkDirty(player)
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		Action = "Gang.Joined",
-		Target = gangId,
-	})
-	return true, nil
+	if self.membershipWrites[player.UserId] == player then
+		self.membershipWrites[player.UserId] = nil
+	end
+	if not ok then
+		error(result)
+	end
+	return result, resultReason
 end
 
 function GangService:Leave(player: Player): (boolean, string?)
-	local dataService = self.context.Services:Get("DataService")
-	local session = dataService:GetSession(player)
-	if not session then
+	if not self.running or not playerIsCurrent(player) then
 		return false, "PROFILE_UNAVAILABLE"
 	end
-	local gang, reconcileReason = self:_reconcile(player, session)
-	if reconcileReason then
-		return false, reconcileReason
+	if self.membershipWrites[player.UserId] then
+		return false, "GANG_MEMBERSHIP_UPDATE_IN_PROGRESS"
 	end
-	if not gang then
-		return false, "NOT_IN_A_GANG"
-	end
-	-- The shared record is mutated before the local pointer is cleared, not
-	-- after. Clearing it first and disbanding second was the same mistake
-	-- CustodyService's early-release path made: if the shared write then
-	-- failed, the player would already show as not in a gang while the shared
-	-- record still listed them as its leader, and nothing would ever retry it.
-	if gang.LeaderUserId == player.UserId then
-		-- Leadership transfer is not built. The leader leaving disbands the
-		-- gang outright rather than orphaning it with nobody able to invite, no
-		-- vehicle spawner to authorise and, once territory exists, nobody to
-		-- clear a contest or collect its income.
-		local _, disbandReason = dataService:UpdateSharedRecord(gangKey(gang.Id), function()
-			return nil
-		end)
-		-- The transform legitimately returns nil on success -- that is what
-		-- disbanding means -- so only the reason string distinguishes a failed
-		-- write from a successful one, never the returned value.
-		if disbandReason then
-			return false, "GANG_LEAVE_FAILED"
+	self.membershipWrites[player.UserId] = player
+
+	local ok, result, resultReason = pcall(function(): (boolean, string?)
+		local dataService = self.context.Services:Get("DataService")
+		local session = dataService:GetSession(player)
+		if not session then
+			return false, "PROFILE_UNAVAILABLE"
 		end
-		dataService:UpdateSharedRecord("gang-names", function(index)
-			if type(index) == "table" then
-				index[GangRules.nameKey(gang.Name)] = nil
+		local gang, reconcileReason = self:_reconcile(player, session)
+		if reconcileReason then
+			return false, reconcileReason
+		end
+		if not gang then
+			return false, "NOT_IN_A_GANG"
+		end
+		-- The shared record is mutated before the local pointer is cleared, not
+		-- after. Clearing it first and disbanding second was the same mistake
+		-- CustodyService's early-release path made: if the shared write then
+		-- failed, the player would already show as not in a gang while the shared
+		-- record still listed them as its leader, and nothing would ever retry it.
+		if gang.LeaderUserId == player.UserId then
+			-- Leadership transfer is not built. The leader leaving disbands the
+			-- gang outright rather than orphaning it with nobody able to invite, no
+			-- vehicle spawner to authorise and, once territory exists, nobody to
+			-- clear a contest or collect its income.
+			local _, disbandReason = dataService:UpdateSharedRecord(gangKey(gang.Id), function()
+				return nil
+			end)
+			-- The transform legitimately returns nil on success -- that is what
+			-- disbanding means -- so only the reason string distinguishes a failed
+			-- write from a successful one, never the returned value.
+			if disbandReason then
+				return false, "GANG_LEAVE_FAILED"
 			end
-			return index
+			dataService:UpdateSharedRecord("gang-names", function(index)
+				if type(index) == "table" then
+					index[GangRules.nameKey(gang.Name)] = nil
+				end
+				return index
+			end)
+			-- A disbanded gang that held a territory would otherwise leave it
+			-- pointing at an id nothing can ever match again -- not a security
+			-- hole, since no profile keeps that id once the disband above runs,
+			-- but a spawner and a future contest both left addressing a dead gang
+			-- rather than the unowned ground this should actually be.
+			if type(gang.TerritoryId) == "string" and gang.TerritoryId ~= "" then
+				self.context.Services:Get("GangTerritoryService"):SetOwner(gang.TerritoryId, nil)
+			end
+			session.Profile.GangId = nil
+			dataService:MarkDirty(player)
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				Action = "Gang.Disbanded",
+				Target = gang.Id,
+				Metadata = { Name = gang.Name },
+			})
+			return true, nil
+		end
+		local _, leaveReason = dataService:UpdateSharedRecord(gangKey(gang.Id), function(stored)
+			if type(stored) ~= "table" then
+				return stored
+			end
+			local memberIndex = table.find(stored.MemberUserIds, player.UserId)
+			if memberIndex then
+				table.remove(stored.MemberUserIds, memberIndex)
+			end
+			return stored
 		end)
-		-- A disbanded gang that held a territory would otherwise leave it
-		-- pointing at an id nothing can ever match again -- not a security
-		-- hole, since no profile keeps that id once the disband above runs,
-		-- but a spawner and a future contest both left addressing a dead gang
-		-- rather than the unowned ground this should actually be.
-		if type(gang.TerritoryId) == "string" and gang.TerritoryId ~= "" then
-			self.context.Services:Get("GangTerritoryService"):SetOwner(gang.TerritoryId, nil)
+		if leaveReason then
+			return false, "GANG_LEAVE_FAILED"
 		end
 		session.Profile.GangId = nil
 		dataService:MarkDirty(player)
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
-			Action = "Gang.Disbanded",
+			Action = "Gang.Left",
 			Target = gang.Id,
-			Metadata = { Name = gang.Name },
 		})
 		return true, nil
-	end
-	local _, leaveReason = dataService:UpdateSharedRecord(gangKey(gang.Id), function(stored)
-		if type(stored) ~= "table" then
-			return stored
-		end
-		local memberIndex = table.find(stored.MemberUserIds, player.UserId)
-		if memberIndex then
-			table.remove(stored.MemberUserIds, memberIndex)
-		end
-		return stored
 	end)
-	if leaveReason then
-		return false, "GANG_LEAVE_FAILED"
+
+	if self.membershipWrites[player.UserId] == player then
+		self.membershipWrites[player.UserId] = nil
 	end
-	session.Profile.GangId = nil
-	dataService:MarkDirty(player)
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		Action = "Gang.Left",
-		Target = gang.Id,
-	})
-	return true, nil
+	if not ok then
+		error(result)
+	end
+	return result, resultReason
 end
 
 function GangService:Destroy()
 	self.running = false
 	table.clear(self.creating)
+	table.clear(self.membershipWrites)
+	table.clear(self.pendingMemberships)
 end
 
 return GangService
