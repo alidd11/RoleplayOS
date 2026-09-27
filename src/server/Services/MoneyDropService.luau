@@ -70,47 +70,76 @@ function MoneyDropService:_collect(dropId: string, player: Player)
 	if not record or record.Collecting then
 		return
 	end
-	if self.context.Services:Get("DutyService"):Get(player) then
-		return
-	end
-	local position = self:_rootPosition(player)
-	if
-		not position
-		or (position - record.Part.Position).Magnitude > self.settings.PickupDistance + 2
-	then
-		return
-	end
-	local _, characterId = self:_activeCharacter(player)
-	if not characterId then
-		return
-	end
+
+	-- Claim the drop before any access check can yield. DutyService:Get may wait on
+	-- a Roblox group lookup; without this, two prompt callbacks can both enter the
+	-- same drop before either reaches the old Collecting assignment and both credit
+	-- the full amount.
 	record.Collecting = true
-	local credited, reason = self.context.Services:Get("EconomyService"):Apply(player, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = characterId,
-		Account = "Cash",
-		Amount = record.Amount,
-		Direction = "Credit",
-		ReasonCode = "MoneyDrop.Pickup",
-		Description = "Cash picked up",
-		RelatedEntityId = dropId,
-		Metadata = { DroppedByUserId = record.OwnerUserId },
-	})
-	if credited then
-		self.context.Services:Get("AuditService"):Record({
-			ActorUserId = player.UserId,
+	local function releaseClaim()
+		if self.drops[dropId] == record then
+			record.Collecting = false
+		end
+	end
+
+	local ok, err = pcall(function()
+		if self.context.Services:Get("DutyService"):Get(player) then
+			releaseClaim()
+			return
+		end
+		-- Expiry or shutdown may remove the drop while the duty check is yielding.
+		-- Do not credit a record that no longer exists in the live drop table.
+		if self.drops[dropId] ~= record then
+			return
+		end
+		local position = self:_rootPosition(player)
+		if
+			not position
+			or (position - record.Part.Position).Magnitude > self.settings.PickupDistance + 2
+		then
+			releaseClaim()
+			return
+		end
+		local _, characterId = self:_activeCharacter(player)
+		if not characterId then
+			releaseClaim()
+			return
+		end
+		local credited, reason = self.context.Services:Get("EconomyService"):Apply(player, {
+			TransactionId = HttpService:GenerateGUID(false),
 			CharacterId = characterId,
-			Action = "MoneyDrop.PickedUp",
-			Target = dropId,
-			Metadata = { Amount = record.Amount, DroppedByUserId = record.OwnerUserId },
+			Account = "Cash",
+			Amount = record.Amount,
+			Direction = "Credit",
+			ReasonCode = "MoneyDrop.Pickup",
+			Description = "Cash picked up",
+			RelatedEntityId = dropId,
+			Metadata = { DroppedByUserId = record.OwnerUserId },
 		})
-		self:_remove(dropId)
-	else
-		record.Collecting = false
-		self.context.Logger:Warning("Cash pickup could not be credited", {
+		if credited then
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				CharacterId = characterId,
+				Action = "MoneyDrop.PickedUp",
+				Target = dropId,
+				Metadata = { Amount = record.Amount, DroppedByUserId = record.OwnerUserId },
+			})
+			self:_remove(dropId)
+		else
+			releaseClaim()
+			self.context.Logger:Warning("Cash pickup could not be credited", {
+				DropId = dropId,
+				UserId = player.UserId,
+				Reason = reason,
+			})
+		end
+	end)
+	if not ok then
+		releaseClaim()
+		self.context.Logger:Error("Cash pickup handler failed", {
 			DropId = dropId,
 			UserId = player.UserId,
-			Reason = reason,
+			Error = tostring(err),
 		})
 	end
 end
