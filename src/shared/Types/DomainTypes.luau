@@ -99,7 +99,17 @@ export type Transaction = {
 	Metadata: { [string]: any },
 	Result: string,
 }
-export type BankAccount = { Balance: number, Cash: number, Transactions: { Transaction } }
+export type PendingCashDropRefund = {
+	DropId: string,
+	Amount: number,
+	CreatedAt: number,
+}
+export type BankAccount = {
+	Balance: number,
+	Cash: number,
+	Transactions: { Transaction },
+	PendingCashDropRefunds: { [string]: PendingCashDropRefund },
+}
 export type VehicleDefinition = {
 	Id: string,
 	Name: string,
