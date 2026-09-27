@@ -1,11 +1,22 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MoneyDropPolicy = require(ReplicatedStorage.RoleplayOS.Shared.MoneyDropPolicy)
 
 local MoneyDropService = { drops = {} }
+
+local function recoveryRecord(dropId: string, record: any): any
+	return {
+		DropId = dropId,
+		OwnerUserId = record.OwnerUserId,
+		OwnerCharacterId = record.OwnerCharacterId,
+		Amount = record.Amount,
+		CreatedAt = record.CreatedAt or os.time(),
+	}
+end
 
 function MoneyDropService:Init(context: any)
 	self.context = context
@@ -178,6 +189,7 @@ function MoneyDropService:_create(
 		Amount = amount,
 		OwnerUserId = ownerUserId,
 		OwnerCharacterId = ownerCharacterId,
+		CreatedAt = os.time(),
 		Collecting = false,
 	}
 	self.drops[dropId] = record
@@ -253,18 +265,47 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 		return self:_create(dropId, amount, player.UserId, characterId, position)
 	end)
 	if not created or not record then
-		local refunded, refundReason = self.context.Services:Get("EconomyService"):Apply(player, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = characterId,
-			Account = "Cash",
+		local recovery = {
+			DropId = dropId,
+			OwnerUserId = player.UserId,
+			OwnerCharacterId = characterId,
 			Amount = amount,
-			Direction = "Credit",
-			ReasonCode = "MoneyDrop.CreationRefund",
-			Description = "Failed cash drop refunded",
-			RelatedEntityId = dropId,
-			Metadata = {},
-		})
+			CreatedAt = os.time(),
+		}
+		local economy = self.context.Services:Get("EconomyService")
+		local refunded, refundReason = economy:RefundMoneyDrop(player, recovery)
+		local recovered = refunded or refundReason == "DUPLICATE_TRANSACTION"
+		local queued = false
+		local queueReason = nil
+		if not recovered then
+			queued, queueReason = economy:QueueMoneyDropRefunds({ recovery })
+		end
 		self.context.Services:Get("AuditService"):Record({
+			ActorUserId = player.UserId,
+			CharacterId = characterId,
+			Action = "MoneyDrop.CreationRefund",
+			Target = dropId,
+			Metadata = {
+				Amount = amount,
+				Refunded = recovered,
+				RefundReason = refundReason,
+				Queued = queued,
+				QueueReason = queueReason,
+			},
+		})
+		if not recovered and not queued then
+			self.context.Logger:Error("Cash drop creation recovery could not be persisted", {
+				DropId = dropId,
+				UserId = player.UserId,
+				CharacterId = characterId,
+				Amount = amount,
+				RefundReason = refundReason,
+				QueueReason = queueReason,
+			})
+		end
+		return nil, "DROP_CREATION_FAILED"
+	end
+	self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
 			CharacterId = characterId,
 			Action = "MoneyDrop.CreationRefund",
@@ -299,8 +340,83 @@ function MoneyDropService:Destroy()
 	for dropId in self.drops do
 		table.insert(ids, dropId)
 	end
+
+	local economy = self.context.Services:Get("EconomyService")
+	local data = self.context.Services:Get("DataService")
+	local pending: { any } = {}
+	local refundsByPlayer: { [Player]: { any } } = {}
+
+	-- Remove every world drop before the first save or shared-record write can
+	-- yield. A pickup already past its final liveness check cannot interleave
+	-- here; one still waiting will see the record gone and abort rather than
+	-- racing a shutdown refund.
 	for _, dropId in ids do
+		local record = self.drops[dropId]
+		if not record then
+			continue
+		end
+		local recovery = recoveryRecord(dropId, record)
 		self:_remove(dropId, "Shutdown")
+
+		local owner = Players:GetPlayerByUserId(record.OwnerUserId)
+		local _, activeCharacterId = if owner then self:_activeCharacter(owner) else nil, nil
+		if owner and activeCharacterId == record.OwnerCharacterId then
+			local refunded, refundReason = economy:RefundMoneyDrop(owner, recovery)
+			if refunded or refundReason == "DUPLICATE_TRANSACTION" then
+				local playerRefunds = refundsByPlayer[owner]
+				if not playerRefunds then
+					playerRefunds = {}
+					refundsByPlayer[owner] = playerRefunds
+				end
+				table.insert(playerRefunds, recovery)
+			else
+				table.insert(pending, recovery)
+				self.context.Logger:Warning("Cash-drop shutdown refund could not be applied", {
+					DropId = dropId,
+					UserId = record.OwnerUserId,
+					Reason = refundReason,
+				})
+			end
+		else
+			table.insert(pending, recovery)
+		end
+	end
+
+	-- Persist once per affected owner, not once per drop. If this save loses a
+	-- race with another save or fails transiently, the same deterministic refund
+	-- is queued below and can be retried safely on a later session.
+	for player, records in refundsByPlayer do
+		local saved, saveReason = data:Save(player)
+		if saved then
+			for _, record in records do
+				self.context.Services:Get("AuditService"):Record({
+					ActorUserId = player.UserId,
+					CharacterId = record.OwnerCharacterId,
+					Action = "MoneyDrop.ShutdownRefunded",
+					Target = record.DropId,
+					Metadata = { Amount = record.Amount },
+				})
+			end
+		else
+			for _, record in records do
+				table.insert(pending, record)
+			end
+			self.context.Logger:Warning("Cash-drop shutdown refunds could not be saved", {
+				UserId = player.UserId,
+				Count = #records,
+				Reason = saveReason,
+			})
+		end
+	end
+
+	if #pending > 0 then
+		local queued, queueReason = economy:QueueMoneyDropRefunds(pending)
+		if not queued then
+			self.context.Logger:Error("Cash-drop shutdown recovery queue failed", {
+				Count = #pending,
+				Reason = queueReason,
+			})
+		end
 	end
 end
 
