@@ -8,7 +8,11 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
-local function submissionAvailable(profile: any, formId: string, cooldownSeconds: number): (boolean, string?)
+local function submissionAvailable(
+	profile: any,
+	formId: string,
+	cooldownSeconds: number
+): (boolean, string?)
 	for _, existing in profile.Applications do
 		if
 			existing.FormId == formId
