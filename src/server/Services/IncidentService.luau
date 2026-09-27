@@ -283,7 +283,11 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 	end)
 end
 function IncidentService:Close(player: Player, incidentId: string): (any?, string?)
-	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite") then
+	if not self.running then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	local authorised = self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite")
+	if not self.running or not authorised then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
 	local updated, reason = self.context.Services
@@ -291,6 +295,12 @@ function IncidentService:Close(player: Player, incidentId: string): (any?, strin
 		:UpdateMdtRecord("Incident:" .. incidentId, function(existing)
 			if type(existing) ~= "table" then
 				return nil
+			end
+			-- Closing is idempotent. A retry after the primary record committed but
+			-- its recent-index projection failed must preserve the original closure
+			-- actor, timestamp and revision while repairing only that projection.
+			if existing.Status == "Closed" then
+				return existing
 			end
 			existing.Status = "Closed"
 			existing.ClosedAt = os.time()
@@ -301,7 +311,15 @@ function IncidentService:Close(player: Player, incidentId: string): (any?, strin
 	if not updated then
 		return nil, reason or "INCIDENT_NOT_FOUND"
 	end
-	return self:_persist(updated)
+	-- UpdateMdtRecord above is the authoritative durable mutation. Do not send
+	-- the same record through _persist(), which would spend another UpdateAsync
+	-- retry budget and rewrite a record that is already committed.
+	self:_cacheSet(updated.IncidentId, updated)
+	local indexed, indexReason = self:_indexIncident(updated)
+	if not indexed then
+		return nil, indexReason
+	end
+	return updated, nil
 end
 
 function IncidentService:Recent(
