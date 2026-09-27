@@ -3,15 +3,32 @@
 local HttpService = game:GetService("HttpService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local WarrantService = { warrants = {}, byCharacter = {} }
+local WarrantService = {
+	warrants = {},
+	byCharacter = {},
+	running = false,
+	acceptingCache = false,
+}
 
 function WarrantService:Init(context: any)
 	self.context = context
+	table.clear(self.warrants)
+	table.clear(self.byCharacter)
+	self.running = false
+	-- RecordIndexService starts earlier and may hydrate person records before this
+	-- service's Start runs. Cache hydration is valid after Init, but never after
+	-- Destroy, when background indexing is still unwinding in reverse order.
+	self.acceptingCache = true
 end
 
-function WarrantService:Start() end
+function WarrantService:Start()
+	self.running = true
+end
 
 function WarrantService:CachePersonRecord(record: any)
+	if not self.acceptingCache then
+		return
+	end
 	local characterId = record.CharacterId
 	if type(characterId) ~= "string" then
 		return
@@ -68,12 +85,25 @@ function WarrantService:Create(
 	rawReason: string,
 	expiresAt: number?
 ): (any?, string?)
-	if not self.context.Services:Get("MDTService"):CanUsePermission(actor, "WarrantWrite") then
+	if not self.running then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	local mdt = self.context.Services:Get("MDTService")
+	local authorised = mdt:CanUsePermission(actor, "WarrantWrite")
+	if not self.running or not authorised then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
 	local reason, filterReason = self:_filter(actor, rawReason)
 	if not reason then
 		return nil, filterReason
+	end
+	-- Text filtering yields. The officer may leave duty, change role or disconnect
+	-- while Roblox is moderating the reason. Re-authorise immediately before the
+	-- durable person-record write so an old request cannot issue a warrant with
+	-- stale WarrantWrite authority.
+	authorised = mdt:CanUsePermission(actor, "WarrantWrite")
+	if not self.running or not authorised then
+		return nil, "MDT_NOT_AUTHORISED"
 	end
 	local now = os.time()
 	if expiresAt ~= nil then
@@ -132,7 +162,12 @@ function WarrantService:Revoke(
 	characterId: string,
 	warrantId: string
 ): (any?, string?)
-	if not self.context.Services:Get("MDTService"):CanUsePermission(actor, "WarrantWrite") then
+	if not self.running then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	local authorised =
+		self.context.Services:Get("MDTService"):CanUsePermission(actor, "WarrantWrite")
+	if not self.running or not authorised then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
 	local revoked
@@ -171,6 +206,8 @@ function WarrantService:Revoke(
 end
 
 function WarrantService:Destroy()
+	self.running = false
+	self.acceptingCache = false
 	table.clear(self.warrants)
 	table.clear(self.byCharacter)
 end
