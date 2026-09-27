@@ -8,7 +8,11 @@ local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolic
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local DispatchService = { Optional = true, connections = {}, occupied = {} }
+local DispatchService = { Optional = true, connections = {}, occupied = {}, running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function DispatchService:Init(context: any)
 	self.context = context
@@ -21,28 +25,55 @@ function DispatchService:_duty(player: Player): any?
 	return self.context.Services:Get("DutyService"):Get(player)
 end
 
-function DispatchService:IsAtConsole(player: Player): boolean
+function DispatchService:_dispatchSeat(player: Player): BasePart?
 	local character = player.Character
 	local humanoid = if character then character:FindFirstChildOfClass("Humanoid") else nil
 	local seat = if humanoid then humanoid.SeatPart else nil
+	if
+		seat
+		and (seat:IsA("Seat") or seat:IsA("VehicleSeat"))
+		and CollectionService:HasTag(seat, self.context.Configuration.Dispatch.SeatTag)
+	then
+		return seat
+	end
+	return nil
+end
+
+function DispatchService:IsAtConsole(player: Player): boolean
+	if not self.running or not playerIsCurrent(player) then
+		return false
+	end
+	local seat = self:_dispatchSeat(player)
+	if not seat then
+		return false
+	end
 	local studioAccess = RunService:IsStudio()
 		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio == true
-	return seat ~= nil
-		and CollectionService:HasTag(seat, self.context.Configuration.Dispatch.SeatTag)
-		and (
-			studioAccess
-			or DispatchPolicy.canDispatch(
-				self:_duty(player),
-				self.context.Configuration.Dispatch.DispatcherDepartments,
-				true
-			)
+	if studioAccess then
+		return true
+	end
+
+	-- DutyService:Get can yield while Roblox answers a group lookup. The seat
+	-- captured before that call is therefore only provisional: standing up,
+	-- changing character or leaving during the lookup must revoke dispatch access
+	-- before this authority check returns.
+	local duty = self:_duty(player)
+	return self.running
+		and playerIsCurrent(player)
+		and self:_dispatchSeat(player) == seat
+		and DispatchPolicy.canDispatch(
+			duty,
+			self.context.Configuration.Dispatch.DispatcherDepartments,
+			true
 		)
 end
 
 function DispatchService:_sendAccess(player: Player)
 	local allowed = self:IsAtConsole(player)
 	self.occupied[player.UserId] = if allowed then true else nil
-	self.accessEvent:FireClient(player, { Allowed = allowed })
+	if playerIsCurrent(player) then
+		self.accessEvent:FireClient(player, { Allowed = allowed })
+	end
 end
 
 function DispatchService:_filter(player: Player, value: string): (string?, string?)
@@ -89,6 +120,13 @@ function DispatchService:PrepareCall(player: Player, payload: any): (any?, strin
 				or { "Control" }
 		)
 	end
+	-- Every filter above can yield. The endpoint checked the console before
+	-- entering this function, but that authority is not a lease: the dispatcher
+	-- must still be seated and authorised at the instant the prepared call is
+	-- committed.
+	if not self:IsAtConsole(player) then
+		return nil, "DISPATCH_CONSOLE_REQUIRED"
+	end
 	return {
 		Summary = string.sub(summary, 1, 160),
 		Location = string.sub(location, 1, 120),
@@ -129,10 +167,20 @@ function DispatchService:_watchSeat(instance: Instance)
 	self:_unwatchSeat(instance)
 	local watcher: any = { Connection = nil, Player = nil }
 	local function changed()
+		-- Occupant changes are deferred below. A queued callback can otherwise run
+		-- after the seat was untagged, replaced or the service was destroyed and
+		-- repopulate state that teardown just cleared.
+		if
+			not self.running
+			or self.seatWatchers[instance] ~= watcher
+			or not instance:IsDescendantOf(workspace)
+		then
+			return
+		end
 		local previous = watcher.Player
 		if previous then
 			self.occupied[previous.UserId] = nil
-			if previous.Parent == Players then
+			if playerIsCurrent(previous) then
 				self.accessEvent:FireClient(previous, { Allowed = false })
 			end
 		end
