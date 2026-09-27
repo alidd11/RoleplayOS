@@ -21,7 +21,11 @@ local GangRules = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared
 -- needs to reach an offline player: the alternative -- a second shared record
 -- acting as a cross-server mailbox -- is real complexity for a feature this
 -- spec does not ask for.
-local GangService = {}
+local GangService = { running = false, creating = {} }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 local function gangKey(gangId: string): string
 	return "gang:" .. gangId
@@ -29,16 +33,46 @@ end
 
 function GangService:Init(context: any)
 	self.context = context
+	table.clear(self.creating)
 end
 
-function GangService:Start() end
+function GangService:Start()
+	self.running = true
+end
 
-function GangService:_gang(gangId: string): GangRules.Gang?
-	local record = self.context.Services:Get("DataService"):GetSharedRecord(gangKey(gangId))
-	if type(record) ~= "table" then
-		return nil
+function GangService:_sessionIsCurrent(player: Player, session: any): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and self.context.Services:Get("DataService"):GetSession(player) == session
+end
+
+function GangService:_gang(gangId: string): (GangRules.Gang?, string?)
+	local record, reason =
+		self.context.Services:Get("DataService"):GetSharedRecord(gangKey(gangId))
+	if reason then
+		return nil, reason
 	end
-	return record :: GangRules.Gang
+	if type(record) ~= "table" then
+		return nil, nil
+	end
+	return record :: GangRules.Gang, nil
+end
+
+function GangService:_releaseNameReservation(nameKey: string, gangId: string)
+	local dataService = self.context.Services:Get("DataService")
+	local _, reason = dataService:UpdateSharedRecord("gang-names", function(index)
+		if type(index) == "table" and index[nameKey] == gangId then
+			index[nameKey] = nil
+		end
+		return index
+	end)
+	if reason then
+		self.context.Logger:Error("Gang name reservation cleanup failed", {
+			GangId = gangId,
+			NameKey = nameKey,
+			Reason = reason,
+		})
+	end
 end
 
 -- The gang a profile's pointer actually resolves to, or nil -- clearing the
@@ -48,18 +82,30 @@ end
 -- disbanding only touches the leader's own profile and the shared record, so
 -- an offline member's GangId is stale the moment that happens and stays stale
 -- until something checks. Every public method below checks first.
-function GangService:_reconcile(player: Player, session: any): GangRules.Gang?
+function GangService:_reconcile(player: Player, session: any): (GangRules.Gang?, string?)
+	if not self:_sessionIsCurrent(player, session) then
+		return nil, "PROFILE_UNAVAILABLE"
+	end
 	local gangId = session.Profile.GangId
 	if type(gangId) ~= "string" then
-		return nil
+		return nil, nil
 	end
-	local gang = self:_gang(gangId)
+	local gang, gangReason = self:_gang(gangId)
+	-- A failed shared read is uncertainty, not evidence that the gang vanished.
+	-- Clearing the profile pointer on a transient DataStore error permanently
+	-- removes a valid membership while the shared gang still lists the player.
+	if gangReason then
+		return nil, gangReason
+	end
+	if not self:_sessionIsCurrent(player, session) then
+		return nil, "PROFILE_UNAVAILABLE"
+	end
 	if not gang or not GangRules.isMember(gang, player.UserId) then
 		session.Profile.GangId = nil
 		self.context.Services:Get("DataService"):MarkDirty(player)
-		return nil
+		return nil, nil
 	end
-	return gang
+	return gang, nil
 end
 
 function GangService:_ownsPass(session: any): boolean
@@ -74,7 +120,10 @@ function GangService:GetStatus(player: Player): any
 	if not session then
 		return nil
 	end
-	local gang = self:_reconcile(player, session)
+	local gang, reconcileReason = self:_reconcile(player, session)
+	if reconcileReason or not self:_sessionIsCurrent(player, session) then
+		return nil
+	end
 	local invites = {}
 	for _, invite in session.Profile.GangInvites do
 		table.insert(invites, invite)
@@ -83,61 +132,112 @@ function GangService:GetStatus(player: Player): any
 end
 
 function GangService:Create(player: Player, name: any): (GangRules.Gang?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
-	if not session then
+	if not self.running or not playerIsCurrent(player) then
 		return nil, "PROFILE_UNAVAILABLE"
 	end
-	if self:_reconcile(player, session) then
-		return nil, "ALREADY_IN_A_GANG"
+	if self.creating[player] then
+		return nil, "GANG_CREATE_IN_PROGRESS"
 	end
-	if not self:_ownsPass(session) then
-		return nil, "GANG_PASS_REQUIRED"
-	end
-	local cleanName, nameReason = GangRules.validateName(name)
-	if not cleanName then
-		return nil, nameReason
-	end
-	local nameKey = GangRules.nameKey(cleanName)
-	local dataService = self.context.Services:Get("DataService")
-	-- Reserved inside the same transform that checks it, so two players naming
-	-- a gang the same thing in the same instant cannot both win: UpdateAsync
-	-- retries the whole transform against whatever the other write left behind,
-	-- rather than two reads racing to write last.
-	local claimed = false
-	dataService:UpdateSharedRecord("gang-names", function(index)
-		index = if type(index) == "table" then index else {}
-		if index[nameKey] then
-			return index
-		end
-		claimed = true
-		index[nameKey] = true
-		return index
-	end)
-	if not claimed then
-		return nil, "NAME_TAKEN"
-	end
-	local gangId = HttpService:GenerateGUID(false)
-	local gang: GangRules.Gang = {
-		Id = gangId,
-		Name = cleanName,
-		LeaderUserId = player.UserId,
-		MemberUserIds = {},
-		TerritoryId = nil,
-	}
-	dataService:UpdateSharedRecord(gangKey(gangId), function()
-		return gang
-	end)
-	session.Profile.GangId = gangId
-	dataService:MarkDirty(player)
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		Action = "Gang.Created",
-		Target = gangId,
-		Metadata = { Name = cleanName },
-	})
-	return gang, nil
-end
+	self.creating[player] = true
 
+	local ok, result, resultReason = pcall(function(): (GangRules.Gang?, string?)
+		local dataService = self.context.Services:Get("DataService")
+		local session = dataService:GetSession(player)
+		if not session then
+			return nil, "PROFILE_UNAVAILABLE"
+		end
+		local currentGang, reconcileReason = self:_reconcile(player, session)
+		if reconcileReason then
+			return nil, reconcileReason
+		end
+		if currentGang then
+			return nil, "ALREADY_IN_A_GANG"
+		end
+		if not self:_sessionIsCurrent(player, session) then
+			return nil, "PROFILE_UNAVAILABLE"
+		end
+		if not self:_ownsPass(session) then
+			return nil, "GANG_PASS_REQUIRED"
+		end
+		local cleanName, nameReason = GangRules.validateName(name)
+		if not cleanName then
+			return nil, nameReason
+		end
+
+		local gangId = HttpService:GenerateGUID(false)
+		local nameKey = GangRules.nameKey(cleanName)
+		-- The reservation value identifies its owner. UpdateAsync may invoke its
+		-- transform more than once, so a sticky external success boolean is not a
+		-- reliable result: an early invocation can win and a retry can then discover
+		-- that another server actually committed the name.
+		local nameIndex, indexReason = dataService:UpdateSharedRecord("gang-names", function(index)
+			index = if type(index) == "table" then index else {}
+			if index[nameKey] == nil then
+				index[nameKey] = gangId
+			end
+			return index
+		end)
+		if indexReason then
+			return nil, "GANG_CREATE_FAILED"
+		end
+		if type(nameIndex) ~= "table" or nameIndex[nameKey] ~= gangId then
+			return nil, "NAME_TAKEN"
+		end
+
+		-- The name reservation yielded. Do not create a gang for an old Player
+		-- instance or a profile session that has since been released/replaced.
+		if not self:_sessionIsCurrent(player, session) then
+			self:_releaseNameReservation(nameKey, gangId)
+			return nil, "PROFILE_UNAVAILABLE"
+		end
+
+		local gang: GangRules.Gang = {
+			Id = gangId,
+			Name = cleanName,
+			LeaderUserId = player.UserId,
+			MemberUserIds = {},
+			TerritoryId = nil,
+		}
+
+		-- Stage the local pointer before the shared write. If the player leaves
+		-- while that write yields, DataService's deferred final save already has
+		-- the intended membership in the profile instead of creating an orphaned
+		-- shared gang after PlayerRemoving finished.
+		session.Profile.GangId = gangId
+		dataService:MarkDirty(player)
+
+		local storedGang, gangReason = dataService:UpdateSharedRecord(gangKey(gangId), function(existing)
+			if existing == nil then
+				return gang
+			end
+			return existing
+		end)
+		if gangReason or type(storedGang) ~= "table" or storedGang.Id ~= gangId then
+			if session.Profile.GangId == gangId then
+				session.Profile.GangId = nil
+				if self:_sessionIsCurrent(player, session) then
+					dataService:MarkDirty(player)
+				end
+			end
+			self:_releaseNameReservation(nameKey, gangId)
+			return nil, "GANG_CREATE_FAILED"
+		end
+
+		self.context.Services:Get("AuditService"):Record({
+			ActorUserId = player.UserId,
+			Action = "Gang.Created",
+			Target = gangId,
+			Metadata = { Name = cleanName },
+		})
+		return gang, nil
+	end)
+
+	self.creating[player] = nil
+	if not ok then
+		error(result)
+	end
+	return result, resultReason
+end
 function GangService:Invite(leader: Player, targetUserId: any): (boolean, string?)
 	if type(targetUserId) ~= "number" then
 		return false, "INVALID_TARGET"
@@ -147,7 +247,10 @@ function GangService:Invite(leader: Player, targetUserId: any): (boolean, string
 	if not leaderSession then
 		return false, "PROFILE_UNAVAILABLE"
 	end
-	local gang = self:_reconcile(leader, leaderSession)
+	local gang, gangReason = self:_reconcile(leader, leaderSession)
+	if gangReason then
+		return false, gangReason
+	end
 	if not gang then
 		return false, "NOT_IN_A_GANG"
 	end
@@ -169,8 +272,18 @@ function GangService:Invite(leader: Player, targetUserId: any): (boolean, string
 	if not targetSession then
 		return false, "PROFILE_UNAVAILABLE"
 	end
-	if self:_reconcile(target, targetSession) then
+	local targetGang, targetReason = self:_reconcile(target, targetSession)
+	if targetReason then
+		return false, targetReason
+	end
+	if targetGang then
 		return false, "ALREADY_IN_A_GANG"
+	end
+	-- Target reconciliation yields on its shared record. The inviter must still
+	-- be the same live profile before their authority is used to mutate the
+	-- target's inbox.
+	if not self:_sessionIsCurrent(leader, leaderSession) then
+		return false, "PROFILE_UNAVAILABLE"
 	end
 	for _, invite in targetSession.Profile.GangInvites do
 		if invite.GangId == gang.Id then
@@ -226,7 +339,11 @@ function GangService:RespondToInvite(player: Player, gangId: any, accept: any): 
 		})
 		return true, nil
 	end
-	if self:_reconcile(player, session) then
+	local currentGang, reconcileReason = self:_reconcile(player, session)
+	if reconcileReason then
+		return false, reconcileReason
+	end
+	if currentGang then
 		return false, "ALREADY_IN_A_GANG"
 	end
 	-- Re-validated inside the transform, not just before it. The invite was
@@ -268,7 +385,10 @@ function GangService:Leave(player: Player): (boolean, string?)
 	if not session then
 		return false, "PROFILE_UNAVAILABLE"
 	end
-	local gang = self:_reconcile(player, session)
+	local gang, reconcileReason = self:_reconcile(player, session)
+	if reconcileReason then
+		return false, reconcileReason
+	end
 	if not gang then
 		return false, "NOT_IN_A_GANG"
 	end
@@ -338,6 +458,9 @@ function GangService:Leave(player: Player): (boolean, string?)
 	return true, nil
 end
 
-function GangService:Destroy() end
+function GangService:Destroy()
+	self.running = false
+	table.clear(self.creating)
+end
 
 return GangService
