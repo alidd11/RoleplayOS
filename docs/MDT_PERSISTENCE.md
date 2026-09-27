@@ -2,6 +2,8 @@
 
 MDT searches are server-authorised and operate on durable, filtered record snapshots. They do not scan the live `Players` list and do not call `ListKeysAsync()` during an interactive search.
 
+Person and vehicle searches derive the search permission, department access profile and warrant visibility from one exact authorised duty snapshot. Because index and record reads can yield, the same duty snapshot is revalidated before successful results are returned; a duty/role change or disconnect during persistence causes the response to be rejected instead of leaking records authorised by stale state.
+
 ## Stores
 
 - `RoleplayOS_MDTRecords_v1` stores person records by stable character ID and vehicle records by stable vehicle ID.

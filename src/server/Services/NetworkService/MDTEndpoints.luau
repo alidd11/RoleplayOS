@@ -9,8 +9,10 @@ return function(self: any)
 			and (payload.Type == "Person" or payload.Type == "Vehicle"),
 			"INVALID_SEARCH"
 	end, function(player, payload, requestId)
+		local mdt = self.context.Services:Get("MDTService")
 		local permission = if payload.Type == "Person" then "PersonSearch" else "VehicleSearch"
-		if not self.context.Services:Get("MDTService"):CanUsePermission(player, permission) then
+		local duty = mdt:GetAuthorisedDuty(player, permission)
+		if not duty then
 			return {
 				Success = false,
 				Code = "MDT_NOT_AUTHORISED",
@@ -18,7 +20,7 @@ return function(self: any)
 				RequestId = requestId,
 			}
 		end
-		local query, reason = self.context.Services:Get("MDTService"):SanitiseQuery(payload.Query)
+		local query, reason = mdt:SanitiseQuery(payload.Query)
 		if not query then
 			return {
 				Success = false,
@@ -27,36 +29,45 @@ return function(self: any)
 				RequestId = requestId,
 			}
 		end
-		self.context.Services:Get("MDTService"):AuditSearch(player, payload.Type, requestId)
+		mdt:AuditSearch(player, payload.Type, requestId)
 		local page = if type(payload.Page) == "number"
 			then math.clamp(math.floor(payload.Page), 1, 1000)
 			else 1
+		local canReadWarrants = mdt:HasPermission(duty, "WarrantRead")
 		local data, searchReason
 		if payload.Type == "Person" then
-			local duty = self.context.Services:Get("MDTService"):GetDuty(player)
 			local accessProfile = "Emergency"
-			if
-				duty
-				and duty.DepartmentId == "Police"
-				and self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
-			then
+			if duty.DepartmentId == "Police" and canReadWarrants then
 				accessProfile = "Police"
-			elseif duty and duty.DepartmentId == "Highways" then
+			elseif duty.DepartmentId == "Highways" then
 				accessProfile = "Highways"
 			end
 			data, searchReason =
 				self.context.Services:Get("PersonRecordService"):Search(query, page, accessProfile)
 		else
-			data, searchReason = self.context.Services:Get("VehicleRecordService"):Search(
-				query,
-				page,
-				self.context.Services:Get("MDTService"):CanUsePermission(player, "WarrantRead")
-			)
+			data, searchReason = self.context.Services
+				:Get("VehicleRecordService")
+				:Search(query, page, canReadWarrants)
+		end
+		if data then
+			-- Record-index searches can make several yielding DataStore reads. Do
+			-- not return results if the duty that authorised both the search and its
+			-- access profile stopped being the player's exact live duty meanwhile.
+			local currentDuty = mdt:GetAuthorisedDuty(player, permission)
+			if currentDuty ~= duty then
+				data = nil
+				searchReason = "MDT_NOT_AUTHORISED"
+			end
 		end
 		return {
 			Success = data ~= nil,
 			Code = if data then "OK" else searchReason or "MDT_SEARCH_UNAVAILABLE",
-			Message = if data then "" else "Persistent records are temporarily unavailable.",
+			Message = if data
+				then ""
+				elseif
+					searchReason == "MDT_NOT_AUTHORISED"
+				then "You must be on an authorised duty to use this search."
+				else "Persistent records are temporarily unavailable.",
 			Data = data,
 			RequestId = requestId,
 		}
