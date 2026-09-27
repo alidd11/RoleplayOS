@@ -94,7 +94,9 @@ function IncidentService:_getReadDuty(player: Player): any?
 	if not duty then
 		return nil
 	end
-	if not mdt:HasPermission(duty, "IncidentRead") and not mdt:HasPermission(duty, "IncidentWrite") then
+	if
+		not mdt:HasPermission(duty, "IncidentRead") and not mdt:HasPermission(duty, "IncidentWrite")
+	then
 		return nil
 	end
 	return duty
