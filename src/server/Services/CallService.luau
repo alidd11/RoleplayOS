@@ -285,10 +285,13 @@ function CallService:Snapshot(): { any }
 				-- Do not retain failed history indefinitely. By this point the
 				-- projection has had its immediate attempt plus the periodic retries
 				-- inside the same hard TTL that already bounds resolved call state.
-				self.context.Logger:Error("Resolved call incident projection exhausted recovery window", {
-					CallId = call.CallId,
-					RecordPersisted = call.IncidentRecordPersisted == true,
-				})
+				self.context.Logger:Error(
+					"Resolved call incident projection exhausted recovery window",
+					{
+						CallId = call.CallId,
+						RecordPersisted = call.IncidentRecordPersisted == true,
+					}
+				)
 				self.calls[callId] = nil
 			end
 		elseif age > ttl then
