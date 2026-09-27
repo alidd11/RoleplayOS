@@ -64,7 +64,8 @@ return function(self: any)
 			Code = if data then "OK" else searchReason or "MDT_SEARCH_UNAVAILABLE",
 			Message = if data
 				then ""
-				elseif searchReason == "MDT_NOT_AUTHORISED"
+				elseif
+					searchReason == "MDT_NOT_AUTHORISED"
 				then "You must be on an authorised duty to use this search."
 				else "Persistent records are temporarily unavailable.",
 			Data = data,
