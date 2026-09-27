@@ -27,8 +27,13 @@ function MDTService:CanUse(player: Player): boolean
 	)
 end
 function MDTService:CanUsePermission(player: Player, permission: string): boolean
+	-- DutyService:Get can yield while Roblox resolves group membership. Reusing
+	-- this exact validated snapshot avoids a second yielding lookup and prevents
+	-- eligibility from being checked against a different duty than the one whose
+	-- permissions are evaluated below.
 	local duty = self:GetDuty(player)
-	return self:CanUse(player) and self:HasPermission(duty, permission)
+	return DispatchPolicy.canUseMdt(duty, self.context.Configuration.MDT.AllowedDepartments)
+		and self:HasPermission(duty, permission)
 end
 function MDTService:SanitiseQuery(query: any): (string?, string?)
 	if type(query) ~= "string" then
@@ -52,7 +57,10 @@ function MDTService:AuditSearch(player: Player, queryType: string, requestId: st
 end
 function MDTService:AccessSummary(player: Player): any
 	local duty = self:GetDuty(player)
-	if not self:CanUse(player) then
+	-- Keep the access summary on the same duty snapshot as its permissions. A
+	-- second Get would yield again and could observe a role transition between
+	-- the Allowed flag and the permission list.
+	if not DispatchPolicy.canUseMdt(duty, self.context.Configuration.MDT.AllowedDepartments) then
 		return { Allowed = false, Permissions = {} }
 	end
 	local unit = self.context.Services:Get("UnitService").units[tostring(player.UserId)]
