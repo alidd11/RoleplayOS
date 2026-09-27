@@ -617,11 +617,14 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 	local recovered, recoveryReason =
 		self.context.Services:Get("EconomyService"):ReconcileMoneyDropRefunds(player, characterId)
 	if not recovered then
-		self.context.Logger:Warning("Cash-drop recovery is still pending after character selection", {
-			UserId = player.UserId,
-			CharacterId = characterId,
-			Reason = recoveryReason,
-		})
+		self.context.Logger:Warning(
+			"Cash-drop recovery is still pending after character selection",
+			{
+				UserId = player.UserId,
+				CharacterId = characterId,
+				Reason = recoveryReason,
+			}
+		)
 	end
 	return character, nil
 end
