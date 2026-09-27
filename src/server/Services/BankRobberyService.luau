@@ -69,6 +69,12 @@ function BankRobberyService:_startClaimIsCurrent(
 		and self.activePlayers[player.UserId] == robberyId
 end
 
+function BankRobberyService:_releasePlayerClaim(userId: number, robberyId: string)
+	if self.activePlayers[userId] == robberyId then
+		self.activePlayers[userId] = nil
+	end
+end
+
 function BankRobberyService:_releaseStartClaim(
 	target: Instance,
 	state: any,
@@ -84,9 +90,7 @@ function BankRobberyService:_releaseStartClaim(
 			prompt.Enabled = true
 		end
 	end
-	if self.activePlayers[player.UserId] == robberyId then
-		self.activePlayers[player.UserId] = nil
-	end
+	self:_releasePlayerClaim(player.UserId, robberyId)
 end
 
 function BankRobberyService:_alarm(target: Instance, player: Player): (boolean, BasePart?)
@@ -179,7 +183,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 		})
 		state.Active = false
 		self:_clearAlarm(state)
-		self.activePlayers[player.UserId] = nil
+		self:_releasePlayerClaim(player.UserId, robberyId)
 		state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
 		task.delay(config.FailedCooldownSeconds, function()
 			if
@@ -224,7 +228,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 	end
 	state.Active = false
 	self:_clearAlarm(state)
-	self.activePlayers[player.UserId] = nil
+	self:_releasePlayerClaim(player.UserId, robberyId)
 	state.CooldownUntil = os.clock() + config.CooldownSeconds
 	task.delay(config.CooldownSeconds, function()
 		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
@@ -354,8 +358,8 @@ function BankRobberyService:Start()
 		self.connections,
 		CollectionService:GetInstanceRemovedSignal(tag):Connect(function(target)
 			local state = self.states[target]
-			if state and state.PlayerUserId then
-				self.activePlayers[state.PlayerUserId] = nil
+			if state and state.PlayerUserId and state.RobberyId then
+				self:_releasePlayerClaim(state.PlayerUserId, state.RobberyId)
 			end
 			self:_clearAlarm(state)
 			local connection = self.promptConnections[target]
@@ -370,7 +374,9 @@ function BankRobberyService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			local robberyId = self.activePlayers[player.UserId]
-			self.activePlayers[player.UserId] = nil
+			if robberyId then
+				self:_releasePlayerClaim(player.UserId, robberyId)
+			end
 			if not robberyId then
 				return
 			end
