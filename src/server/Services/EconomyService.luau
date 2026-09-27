@@ -100,7 +100,7 @@ function EconomyService:_queuePendingRefund(record: any)
 end
 
 function EconomyService:QueueMoneyDropRefund(player: Player, record: any): (boolean, string?)
-	if not self.running or not playerIsCurrent(player) then
+	if not self.running then
 		return false, "ECONOMY_UNAVAILABLE"
 	end
 	if
