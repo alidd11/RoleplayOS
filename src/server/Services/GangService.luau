@@ -47,8 +47,7 @@ function GangService:_sessionIsCurrent(player: Player, session: any): boolean
 end
 
 function GangService:_gang(gangId: string): (GangRules.Gang?, string?)
-	local record, reason =
-		self.context.Services:Get("DataService"):GetSharedRecord(gangKey(gangId))
+	local record, reason = self.context.Services:Get("DataService"):GetSharedRecord(gangKey(gangId))
 	if reason then
 		return nil, reason
 	end
@@ -206,12 +205,15 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 		session.Profile.GangId = gangId
 		dataService:MarkDirty(player)
 
-		local storedGang, gangReason = dataService:UpdateSharedRecord(gangKey(gangId), function(existing)
-			if existing == nil then
-				return gang
+		local storedGang, gangReason = dataService:UpdateSharedRecord(
+			gangKey(gangId),
+			function(existing)
+				if existing == nil then
+					return gang
+				end
+				return existing
 			end
-			return existing
-		end)
+		)
 		if gangReason or type(storedGang) ~= "table" or storedGang.Id ~= gangId then
 			if session.Profile.GangId == gangId then
 				session.Profile.GangId = nil
