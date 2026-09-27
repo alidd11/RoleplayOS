@@ -641,6 +641,10 @@ function CharacterService:Delete(
 	if session.ActiveCharacterId == characterId then
 		return false, "CHARACTER_ACTIVE"
 	end
+	local pendingCashRefunds = character.Economy and character.Economy.PendingCashDropRefunds
+	if type(pendingCashRefunds) == "table" and next(pendingCashRefunds) ~= nil then
+		return false, "CHARACTER_HAS_PENDING_RECOVERY"
+	end
 	if #character.Vehicles > 0 or #character.Properties > 0 or #character.Employment > 0 then
 		return false, "CHARACTER_HAS_PROTECTED_RECORDS"
 	end
