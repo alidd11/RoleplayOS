@@ -306,24 +306,6 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 		return nil, "DROP_CREATION_FAILED"
 	end
 	self.context.Services:Get("AuditService"):Record({
-			ActorUserId = player.UserId,
-			CharacterId = characterId,
-			Action = "MoneyDrop.CreationRefund",
-			Target = dropId,
-			Metadata = { Amount = amount, Refunded = refunded, Reason = refundReason },
-		})
-		if not refunded then
-			self.context.Logger:Error("Cash drop creation refund failed", {
-				DropId = dropId,
-				UserId = player.UserId,
-				CharacterId = characterId,
-				Amount = amount,
-				Reason = refundReason,
-			})
-		end
-		return nil, "DROP_CREATION_FAILED"
-	end
-	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		CharacterId = characterId,
 		Action = "MoneyDrop.Created",
