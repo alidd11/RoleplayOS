@@ -32,10 +32,14 @@ creates incidents.
 
 Roughly in dependency order.
 
-1. **Gang membership and persistence.** A gang record on the leader's profile —
-   name, members, territory — and a membership pointer on each member's. Invite
-   and accept through the network layer, with the leader's pass checked
-   server-side on invite rather than trusted from the client.
+1. **Gang membership and persistence.** One shared gang record stores the name,
+   members and territory, while each member profile stores only its GangId pointer
+   and pending invites. Unique names are reserved in a shared index by the owning
+   gang ID, so retries can distinguish their own reservation from another server's.
+   A transient shared-record read is treated as unavailable data, never as proof
+   that a valid membership disappeared. Invite and accept through the network
+   layer, with the leader's pass checked server-side on invite rather than trusted
+   from the client.
 2. **Territory zones.** Tagged parts in the map the way `RoleplayOSZone` already
    works for `LocationController`, each with an id and a name. Claim state lives
    on the server and replicates as attributes.
