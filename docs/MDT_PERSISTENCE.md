@@ -12,7 +12,7 @@ Index writes use `UpdateAsync()` through the same bounded retry layer as the res
 
 ## Warrants
 
-Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Repeated `UpdateAsync()` transforms do not duplicate a warrant.
+Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant.
 
 Active warrants appear as `WANTED` flags in both person and registered-vehicle results. The MDT exposes issue and two-step revoke controls only to authorised duties.
 
