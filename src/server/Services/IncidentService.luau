@@ -136,7 +136,7 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 	return indexed ~= nil, indexReason
 end
 
-function IncidentService:_persist(incident: any): (any?, string?, boolean)
+function IncidentService:_persist(incident: any): (any?, string?, boolean, any?)
 	local key = "Incident:" .. incident.IncidentId
 	local stored, reason = self.context.Services
 		:Get("DataService")
@@ -150,7 +150,7 @@ function IncidentService:_persist(incident: any): (any?, string?, boolean)
 			return incident
 		end)
 	if not stored then
-		return nil, reason, false
+		return nil, reason, false, nil
 	end
 	self:_cacheSet(incident.IncidentId, stored)
 	local indexed, indexReason = self:_indexIncident(stored)
@@ -158,9 +158,9 @@ function IncidentService:_persist(incident: any): (any?, string?, boolean)
 		-- The primary record is already durable. Expose that stage to the caller so
 		-- a retry can repair only the recent index instead of spending another
 		-- record-store write and another full DataStore retry budget.
-		return nil, indexReason, true
+		return nil, indexReason, true, stored
 	end
-	return stored, nil, true
+	return stored, nil, true, stored
 end
 function IncidentService:Create(player: Player, data: any): (any?, string?)
 	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite") then
@@ -234,10 +234,11 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		-- The claim is released whether persistence returns or raises. A partial
 		-- success remembers that the record is already durable, so the next retry
 		-- repairs only Incident:Recent rather than rewriting the record.
-		local ok, stored, reason, recordWritten = pcall(function()
+		local ok, stored, reason, recordWritten, durableRecord = pcall(function()
 			if call.IncidentRecordPersisted == true then
-				local indexed, indexReason = self:_indexIncident(snapshot)
-				return if indexed then snapshot else nil, indexReason, true
+				local record = call.IncidentRecordSnapshot or snapshot
+				local indexed, indexReason = self:_indexIncident(record)
+				return if indexed then record else nil, indexReason, true, record
 			end
 			return self:_persist(snapshot)
 		end)
@@ -251,9 +252,16 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		end
 		if recordWritten then
 			call.IncidentRecordPersisted = true
+			if not stored and durableRecord then
+				-- Keep the exact record UpdateAsync committed only while its index is
+				-- missing. This handles a newer revision returned by the record store
+				-- without making the repair perform another read.
+				call.IncidentRecordSnapshot = durableRecord
+			end
 		end
 		if stored then
 			call.IncidentPersisted = true
+			call.IncidentRecordSnapshot = nil
 			return
 		end
 		self.context.Logger:Warning("Closed dispatch incident persistence will retry", {
