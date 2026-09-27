@@ -16,6 +16,8 @@ Incident creation requires `IncidentWrite` both before and after title filtering
 
 Manual incident closure performs one authoritative record update and then projects that committed record to the recent-incidents index. Closing an already-closed incident is idempotent: retries preserve the original closure actor, timestamp and revision, allowing a failed index projection to be repaired without rewriting closure history.
 
+Incident history reads authorise `IncidentRead` or `IncidentWrite` inside `IncidentService`, then revalidate the exact same duty snapshot after any index/record DataStore reads have completed. A player who leaves duty, changes role or disconnects while persistence is yielding receives no incident records, and the network endpoint does not spend a separate duplicate permission lookup.
+
 ## Warrants
 
 Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant.
