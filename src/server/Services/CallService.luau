@@ -82,19 +82,19 @@ function CallService:AddOperationalNote(
 	rawNote: string
 ): (any?, string?)
 	local call = self.calls[callId]
-	local duty = self.context.Services:Get("DutyService"):Get(player)
 	if not call or call.Status == "Resolved" then
 		return nil, "CALL_NOT_FOUND"
 	end
-	if
-		not duty
-		or not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentRead")
-	then
+
+	local mdt = self.context.Services:Get("MDTService")
+	local duty = mdt:GetAuthorisedDuty(player, "IncidentRead")
+	if not duty then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
 	if duty.DepartmentId ~= "Control" and not table.find(call.DepartmentIds, duty.DepartmentId) then
 		return nil, "CALL_NOT_RELEVANT"
 	end
+
 	local note = string.sub(string.match(rawNote, "^%s*(.-)%s*$") or "", 1, 300)
 	if #note < 3 then
 		return nil, "INVALID_NOTE"
@@ -103,6 +103,27 @@ function CallService:AddOperationalNote(
 	if not filtered then
 		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
 	end
+
+	-- Filtering yields. The call may have resolved and been projected to durable
+	-- history, or the officer may have left/changed duty, while Roblox moderated
+	-- the note. Revalidate both before mutating the live call so a late note can
+	-- never land after the historical snapshot was taken.
+	if self.calls[callId] ~= call or call.Status == "Resolved" then
+		return nil, "CALL_NOT_FOUND"
+	end
+	duty = mdt:GetAuthorisedDuty(player, "IncidentRead")
+	if not duty then
+		return nil, "MDT_NOT_AUTHORISED"
+	end
+	-- The duty lookup above can itself yield on group access. Check the target one
+	-- final time; no further yield occurs before the note is committed.
+	if self.calls[callId] ~= call or call.Status == "Resolved" then
+		return nil, "CALL_NOT_FOUND"
+	end
+	if duty.DepartmentId ~= "Control" and not table.find(call.DepartmentIds, duty.DepartmentId) then
+		return nil, "CALL_NOT_RELEVANT"
+	end
+
 	call.OperationalNotes = if type(call.OperationalNotes) == "table"
 		then call.OperationalNotes
 		else {}
@@ -127,16 +148,7 @@ function CallService:AddOperationalNote(
 	})
 	return call, nil
 end
--- Moves the call a unit is assigned to on scene when that unit arrives.
---
--- Open, Assigned and OnScene are the three stages a call has, and until now
--- nothing could set the third: dispatch assigned a unit and the call stayed
--- Assigned until it was closed, however long the unit had been standing at the
--- scene. Control could not tell a car still driving to a call from one already
--- working it, which is the distinction the stage exists to make.
---
--- Driven by the unit rather than set by hand, because the officer arriving is
--- the thing that happened and dispatch should not have to be told twice.
+
 function CallService:NoteUnitOnScene(unitId: string): boolean
 	local unit = self.context.Services:Get("UnitService").units[unitId]
 	local callId = unit and unit.AssignedCallId
