@@ -14,6 +14,8 @@ Closed dispatch calls are projected in two durable steps: the incident record fi
 
 Incident creation requires `IncidentWrite` both before and after title filtering. The department recorded on the incident comes from the post-filter authorised duty snapshot, so a request that lost duty, role permission or its live player session while moderation yielded is rejected before persistence.
 
+Manual incident closure performs one authoritative record update and then projects that committed record to the recent-incidents index. Closing an already-closed incident is idempotent: retries preserve the original closure actor, timestamp and revision, allowing a failed index projection to be repaired without rewriting closure history.
+
 ## Warrants
 
 Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant.
