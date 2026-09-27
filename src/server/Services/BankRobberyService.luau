@@ -75,11 +75,7 @@ function BankRobberyService:_releaseStartClaim(
 	player: Player,
 	robberyId: string
 )
-	if
-		self.states[target] == state
-		and state.Starting == true
-		and state.RobberyId == robberyId
-	then
+	if self.states[target] == state and state.Starting == true and state.RobberyId == robberyId then
 		state.Starting = false
 		state.RobberyId = nil
 		state.PlayerUserId = nil
@@ -246,12 +242,7 @@ function BankRobberyService:Begin(target: Instance, player: Player): (boolean, s
 	if not CollectionService:HasTag(target, config.Tag) or not target:IsDescendantOf(workspace) then
 		return false, "UNAUTHORISED_TARGET"
 	end
-	if
-		not state
-		or state.Active
-		or state.Starting
-		or (state.CooldownUntil or 0) > os.clock()
-	then
+	if not state or state.Active or state.Starting or (state.CooldownUntil or 0) > os.clock() then
 		return false, "ROBBERY_UNAVAILABLE"
 	end
 	if self.activePlayers[player.UserId] then
