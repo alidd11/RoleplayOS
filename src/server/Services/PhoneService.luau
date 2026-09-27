@@ -9,6 +9,10 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local PhoneService = { calls = {}, userCalls = {}, connections = {}, running = false }
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 local function isPhoneTool(instance: Instance): boolean
 	return instance:IsA("Tool")
 		and (instance.Name == "Phone" or instance:GetAttribute("RoleplayOSToolId") == "Phone")
@@ -116,10 +120,26 @@ function PhoneService:Init(context: any)
 end
 
 function PhoneService:_character(player: Player): any?
+	if not self.running or not playerIsCurrent(player) then
+		return nil
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	return session
 		and session.ActiveCharacterId
 		and session.Profile.Characters[session.ActiveCharacterId]
+end
+
+function PhoneService:_characterIsCurrent(
+	player: Player,
+	session: any,
+	characterId: string,
+	character: any
+): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and self.context.Services:Get("DataService"):GetSession(player) == session
+		and session.ActiveCharacterId == characterId
+		and session.Profile.Characters[characterId] == character
 end
 
 function PhoneService:_ensurePhone(character: any): any
@@ -149,7 +169,56 @@ function PhoneService:_filterBroadcast(message: string, from: Player): (string?,
 	return TextFilter.forBroadcast(message, from.UserId, Enum.TextFilterContext.PublicChat)
 end
 
-function PhoneService:_append(player: Player, character: any, message: any)
+function PhoneService:_filterParticipants(
+	message: string,
+	from: Player,
+	to: Player
+): (string?, string?, string?)
+	local pending = 2
+	local forRecipient: string? = nil
+	local forSender: string? = nil
+	local failure: string? = nil
+
+	local function run(target: Player, recipientView: boolean)
+		task.spawn(function()
+			local ok, value, reason = pcall(function()
+				return self:_filter(message, from, target)
+			end)
+			if ok and value then
+				if recipientView then
+					forRecipient = value
+				else
+					forSender = value
+				end
+			elseif recipientView then
+				failure = failure or (if ok then reason else "TEXT_FILTER_UNAVAILABLE")
+			end
+			pending -= 1
+		end)
+	end
+
+	-- The two views used to be filtered one after the other. Each call has a
+	-- four-second bound, so serial filtering made a text remote spend up to eight
+	-- seconds waiting. They are independent views of the same text and can run in
+	-- parallel; each child call is already bounded by TextFilter.
+	run(to, true)
+	run(from, false)
+	while pending > 0 do
+		task.wait()
+	end
+	if not forRecipient then
+		return nil, nil, failure or "TEXT_FILTER_UNAVAILABLE"
+	end
+	return forRecipient, forSender or forRecipient, nil
+end
+
+function PhoneService:_append(player: Player, character: any, message: any): boolean
+	-- Callers can hold a character reference across a yielding filter. Never let a
+	-- stale reference mutate an old profile while MarkDirty resolves the same
+	-- UserId to a replacement session.
+	if self:_character(player) ~= character then
+		return false
+	end
 	local phone = self:_ensurePhone(character)
 	table.insert(phone.Messages, message)
 	local maximum = self.context.Configuration.Phone.MaximumMessages
@@ -157,13 +226,17 @@ function PhoneService:_append(player: Player, character: any, message: any)
 		table.remove(phone.Messages, 1)
 	end
 	self.context.Services:Get("DataService"):MarkDirty(player)
+	return true
 end
 
 -- Server-originated phone notifications use the same persisted inbox as texts,
 -- so a taxi request remains visible when the player opens the handset later.
-function PhoneService:AppendSystemMessage(player: Player, character: any, message: any)
-	self:_append(player, character, message)
+function PhoneService:AppendSystemMessage(player: Player, character: any, message: any): boolean
+	if not self:_append(player, character, message) then
+		return false
+	end
 	self.event:FireClient(player, { Kind = message.Kind or "System", Message = message })
+	return true
 end
 
 function PhoneService:Snapshot(player: Player): (any?, string?)
@@ -260,9 +333,17 @@ function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any
 	-- By username rather than by phone number. A number is something a player has
 	-- to be told before they can be paid, and there is nowhere in the game that
 	-- tells them: a name is on the nameplate above the person standing there.
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if type(rawName) ~= "string" or #rawName > 64 then
 		return nil, "INVALID_RECIPIENT_NAME"
 	end
+	local senderCharacter = self:_character(player)
+	if not senderCharacter then
+		return nil, "ACTIVE_CHARACTER_REQUIRED"
+	end
+	local senderName = senderCharacter.Identity.FirstName .. " " .. senderCharacter.Identity.LastName
 	local recipient, findReason = self:_findByName(rawName)
 	if not recipient then
 		return nil, findReason
@@ -272,35 +353,76 @@ function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any
 	if not transfer then
 		return nil, reason
 	end
-	local senderCharacter = self:_character(player)
-	local senderName = if senderCharacter
-		then senderCharacter.Identity.FirstName .. " " .. senderCharacter.Identity.LastName
-		else "Another player"
-	self.event:FireClient(recipient, {
-		Kind = "BankTransfer",
-		Amount = transfer.Amount,
-		From = senderName,
-	})
+	-- EconomyService persists both sides before returning, so this point is after
+	-- yielding DataStore work. The money movement is already committed; only the
+	-- transient notification is skipped if that exact recipient session has gone.
+	if playerIsCurrent(recipient) then
+		self.event:FireClient(recipient, {
+			Kind = "BankTransfer",
+			Amount = transfer.Amount,
+			From = senderName,
+		})
+	end
 	return transfer, nil
 end
 
 function PhoneService:SendText(player: Player, rawNumber: any, rawMessage: any): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local number = PhoneValidator.number(rawNumber)
 	local message =
 		PhoneValidator.message(rawMessage, self.context.Configuration.Phone.MaximumMessageLength)
-	local senderCharacter = self:_character(player)
-	if not number or not message or not senderCharacter then
+	if not number or not message then
 		return nil, "INVALID_TEXT_MESSAGE"
 	end
+
+	local data = self.context.Services:Get("DataService")
+	local senderSession = data:GetSession(player)
+	local senderCharacterId = senderSession and senderSession.ActiveCharacterId
+	local senderCharacter = senderCharacterId
+		and senderSession.Profile.Characters[senderCharacterId]
+	if not senderSession or not senderCharacterId or not senderCharacter then
+		return nil, "INVALID_TEXT_MESSAGE"
+	end
+
 	local recipient, recipientCharacter = self:_findByNumber(number)
 	if not recipient or not recipientCharacter or recipient == player then
 		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
 	end
-	local forRecipient, filterReason = self:_filter(message, player, recipient)
-	if not forRecipient then
+	local recipientSession = data:GetSession(recipient)
+	local recipientCharacterId = recipientSession and recipientSession.ActiveCharacterId
+	if
+		not recipientSession
+		or not recipientCharacterId
+		or recipientSession.Profile.Characters[recipientCharacterId] ~= recipientCharacter
+	then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+
+	local forRecipient, forSender, filterReason =
+		self:_filterParticipants(message, player, recipient)
+	if not forRecipient or not forSender then
 		return nil, filterReason
 	end
-	local forSender = select(1, self:_filter(message, player, player)) or forRecipient
+
+	-- Filtering yields. Require the exact Player instances, profile sessions and
+	-- active character objects captured above before writing either inbox.
+	if not self:_characterIsCurrent(player, senderSession, senderCharacterId, senderCharacter) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+	if
+		not self:_characterIsCurrent(
+			recipient,
+			recipientSession,
+			recipientCharacterId,
+			recipientCharacter
+		)
+		or self:_ensurePhone(recipientCharacter).Number ~= number
+	then
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+
 	local senderPhone = self:_ensurePhone(senderCharacter)
 	local id = HttpService:GenerateGUID(false)
 	local timestamp = os.time()
@@ -315,12 +437,18 @@ function PhoneService:SendText(player: Player, rawNumber: any, rawMessage: any):
 	local received = table.clone(sent)
 	received.Body = forRecipient
 	received.Direction = "Incoming"
-	self:_append(player, senderCharacter, sent)
-	self:_append(recipient, recipientCharacter, received)
+	if not self:_append(player, senderCharacter, sent) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+	if not self:_append(recipient, recipientCharacter, received) then
+		-- No yield occurs between the two appends, so this can only happen if a
+		-- service invariant changed synchronously. Do not notify a message that was
+		-- not stored in the recipient inbox.
+		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
 	self.event:FireClient(recipient, { Kind = "Text", Message = received })
 	return sent, nil
 end
-
 function PhoneService:PlaceCall(player: Player, rawNumber: any): (any?, string?)
 	local number = PhoneValidator.number(rawNumber)
 	local callerCharacter = self:_character(player)
@@ -426,24 +554,44 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 end
 
 function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: any): (any?, string?)
-	local character = self:_character(player)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local summary = PhoneValidator.message(rawSummary, 120)
 	local location = PhoneValidator.message(rawLocation, 80)
-	if not character or not summary or not location then
+	if not summary or not location then
 		return nil, "INVALID_EMERGENCY_CALL"
 	end
-	local filteredSummary, reason = self:_filterBroadcast(summary, player)
-	local filteredLocation = select(1, self:_filterBroadcast(location, player))
-	if not filteredSummary or not filteredLocation then
+
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	local characterId = session and session.ActiveCharacterId
+	local character = characterId and session.Profile.Characters[characterId]
+	if not session or not characterId or not character then
+		return nil, "INVALID_EMERGENCY_CALL"
+	end
+
+	-- Both public fields can be filtered together, so a 999 submission costs the
+	-- slowest filter instead of the sum of two web waits.
+	local filtered, reason = TextFilter.manyForBroadcast({
+		Summary = summary,
+		Location = location,
+	}, player.UserId, Enum.TextFilterContext.PublicChat)
+	if not filtered then
 		return nil, reason
 	end
-	-- Plot the call where the caller actually stands. Resolved server-side so a
-	-- client cannot place an incident somewhere it is not.
+	if not self:_characterIsCurrent(player, session, characterId, character) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+
+	-- Plot the call where the caller actually stands after filtering. Resolved
+	-- server-side so a client cannot place an incident somewhere it is not, and a
+	-- stale pre-filter position cannot survive a respawn or character switch.
 	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	return self.context.Services:Get("CallService"):Create({
 		Priority = "Immediate",
-		Summary = "999 · " .. filteredSummary,
-		Location = filteredLocation,
+		Summary = "999 · " .. filtered.Summary,
+		Location = filtered.Location,
 		Position = if rootPart and rootPart:IsA("BasePart")
 			then MapProjection.serialise(rootPart.Position)
 			else nil,
@@ -453,7 +601,6 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 		CallerName = character.Identity.FirstName .. " " .. character.Identity.LastName,
 	})
 end
-
 function PhoneService:Start()
 	self.running = true
 	local function onCharacterAdded(player: Player)
@@ -462,7 +609,7 @@ function PhoneService:Start()
 			self:EndCall(player, callId)
 		end
 		task.delay(1, function()
-			if self.running and player.Parent then
+			if self.running and playerIsCurrent(player) then
 				self:EnsureTool(player)
 			end
 		end)
