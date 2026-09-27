@@ -191,7 +191,7 @@ function EconomyService:ReconcileMoneyDropRefunds(
 		return true, nil
 	end
 
-	local completed: { string } = {}
+	local completed: { any } = {}
 	local unresolvedReason: string? = nil
 	for dropId, record in pending do
 		local valid = type(dropId) == "string"
@@ -201,7 +201,7 @@ function EconomyService:ReconcileMoneyDropRefunds(
 			and record.Amount > 0
 			and record.Amount == math.floor(record.Amount)
 		if not valid then
-			table.insert(completed, tostring(dropId))
+			table.insert(completed, dropId)
 			self.context.Logger:Error("Discarding malformed pending cash-drop refund", {
 				UserId = player.UserId,
 				CharacterId = characterId,
