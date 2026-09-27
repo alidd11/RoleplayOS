@@ -611,10 +611,17 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 			data:MarkDirty(player)
 		end
 	end
-	-- Recovery is asynchronous and EconomyService remains the only balance
-	-- writer. A refund queued for this character may have been waiting since an
-	-- earlier server closed while the drop was still in the world.
-	self.context.Services:Get("EconomyService"):RequestMoneyDropReconciliation()
+	-- Reconcile any bounded cash-drop recovery carried by this character before
+	-- normal play resumes. EconomyService remains the only balance writer.
+	local recovered, recoveryReason =
+		self.context.Services:Get("EconomyService"):ReconcileMoneyDropRefunds(player, characterId)
+	if not recovered then
+		self.context.Logger:Warning("Cash-drop recovery is still pending after character selection", {
+			UserId = player.UserId,
+			CharacterId = characterId,
+			Reason = recoveryReason,
+		})
+	end
 	return character, nil
 end
 function CharacterService:Delete(
