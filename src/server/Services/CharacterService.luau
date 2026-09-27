@@ -611,6 +611,10 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 			data:MarkDirty(player)
 		end
 	end
+	-- Recovery is asynchronous and EconomyService remains the only balance
+	-- writer. A refund queued for this character may have been waiting since an
+	-- earlier server closed while the drop was still in the world.
+	self.context.Services:Get("EconomyService"):RequestMoneyDropReconciliation()
 	return character, nil
 end
 function CharacterService:Delete(
