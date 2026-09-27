@@ -242,6 +242,7 @@ function CallService:Close(callId: string, closedByUserId: number?): (boolean, s
 	end
 	call.Status = "Resolved"
 	call.ClosedAt = os.time()
+	call.ClosedByUserId = closedByUserId or 0
 	for _, unitId in call.UnitIds do
 		local unit = self.context.Services:Get("UnitService").units[unitId]
 		if unit then
@@ -250,39 +251,50 @@ function CallService:Close(callId: string, closedByUserId: number?): (boolean, s
 		end
 	end
 	call.Revision += 1
-	self.context.Services:Get("IncidentService"):ScheduleFromCall(call, closedByUserId or 0)
+	self.context.Services:Get("IncidentService"):ScheduleFromCall(call, call.ClosedByUserId)
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallClosed", callId, self.revision)
 	return true, nil
 end
 function CallService:Snapshot(): { any }
 	local result = {}
-	-- Resolved calls are dropped once they are old enough, here rather than on a
-	-- timer.
-	--
-	-- Closing a call marked it Resolved and left it in the table for the life of
-	-- the server, and this loop skipped over every one of them on every request.
-	-- A busy Control server accumulates hundreds in an evening, and with fifteen
-	-- terminals refreshing about once a second that is thousands of wasted
-	-- iterations a second by the third hour, growing all the while.
-	--
-	-- The delay before dropping one exists because a client that asked just
-	-- before it closed should still see it disappear rather than have it vanish
-	-- from under them. Dispatch.ActiveStateTtlSeconds has been in the
-	-- configuration all along with nothing reading it; this is what it was for.
-	--
-	-- Nothing is lost by dropping it: IncidentService has already persisted the
-	-- call at the moment it closed.
-	--
-	-- Pruned in the reader rather than on its own loop, because if nobody is
-	-- asking then nothing is walking the table and there is nothing to save.
+	-- Resolved calls remain the bounded recovery source for their durable incident
+	-- projection. The first persistence attempt happens at Close; this sweep runs
+	-- every minute even with no MDT readers, and retries only when the configured
+	-- interval has elapsed. A successful projection can then expire normally.
 	local now = os.time()
+	local clock = os.clock()
 	local dispatch = self.context.Configuration.Dispatch
 	local ttl = (dispatch and tonumber(dispatch.ActiveStateTtlSeconds)) or 300
+	local retrySeconds =
+		math.max(5, (dispatch and tonumber(dispatch.IncidentPersistenceRetrySeconds)) or 60)
+	local incidentService = self.context.Services:Get("IncidentService")
 	for callId, call in self.calls do
 		if call.Status ~= "Resolved" then
 			table.insert(result, table.clone(call))
-		elseif now - (tonumber(call.ClosedAt) or now) > ttl then
+			continue
+		end
+		local closedAt = tonumber(call.ClosedAt) or now
+		local age = now - closedAt
+		if call.IncidentPersisted ~= true then
+			local lastAttempt = tonumber(call.IncidentLastAttemptAt) or -math.huge
+			if clock - lastAttempt >= retrySeconds then
+				incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
+			end
+			if age > ttl then
+				-- Do not retain failed history indefinitely. By this point the
+				-- projection has had its immediate attempt plus the periodic retries
+				-- inside the same hard TTL that already bounds resolved call state.
+				self.context.Logger:Error(
+					"Resolved call incident projection exhausted recovery window",
+					{
+						CallId = call.CallId,
+						RecordPersisted = call.IncidentRecordPersisted == true,
+					}
+				)
+				self.calls[callId] = nil
+			end
+		elseif age > ttl then
 			self.calls[callId] = nil
 		end
 	end
@@ -293,6 +305,15 @@ function CallService:Snapshot(): { any }
 end
 function CallService:Destroy()
 	self.running = false
+	-- One final orderly-shutdown attempt before the source calls are released.
+	-- IncidentService is destroyed later (reverse service order) and waits for its
+	-- tracked persistence workers, while DataService remains alive until last.
+	local incidentService = self.context.Services:Get("IncidentService")
+	for _, call in self.calls do
+		if call.Status == "Resolved" and call.IncidentPersisted ~= true then
+			incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
+		end
+	end
 	table.clear(self.calls)
 	self.revision = 0
 end

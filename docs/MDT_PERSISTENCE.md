@@ -10,6 +10,8 @@ MDT searches are server-authorised and operate on durable, filtered record snaps
 
 Index writes use `UpdateAsync()` through the same bounded retry layer as the rest of RoleplayOS. Gameplay mutations schedule and coalesce projection work rather than waiting on DataStore latency. Existing profiles are indexed in a spaced background queue when their owner joins. Each bucket has a configured maximum and evicts its oldest entry if that hard bound is reached.
 
+Closed dispatch calls are projected in two durable steps: the incident record first, then the bounded recent-incidents index. A resolved call remains the bounded recovery source for the configured active-state TTL. If the primary record succeeds but the index exhausts its own DataStore retries, later recovery attempts repair only the index rather than rewriting the record. The existing call sweep retries at the configured incident-persistence cadence, and orderly shutdown makes one final projection attempt before CallService releases its runtime calls.
+
 ## Warrants
 
 Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant.

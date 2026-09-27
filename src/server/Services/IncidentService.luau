@@ -3,7 +3,13 @@
 local HttpService = game:GetService("HttpService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local IncidentService = { cache = {}, pending = {}, cacheCount = 0, cacheSweepCounter = 0 }
+local IncidentService = {
+	cache = {},
+	pending = {},
+	cacheCount = 0,
+	cacheSweepCounter = 0,
+	running = false,
+}
 
 function IncidentService:Init(context: any)
 	self.context = context
@@ -11,6 +17,7 @@ function IncidentService:Init(context: any)
 	table.clear(self.pending)
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
+	self.running = false
 end
 
 function IncidentService:_sweepCache()
@@ -30,6 +37,9 @@ function IncidentService:_sweepCache()
 end
 
 function IncidentService:_cacheSet(incidentId: string, value: any)
+	if not self.running then
+		return
+	end
 	local replacing = self.cache[incidentId] ~= nil
 	self.cache[incidentId] = {
 		Value = value,
@@ -74,7 +84,9 @@ function IncidentService:_cacheGet(incidentId: string): any?
 	return entry.Value
 end
 
-function IncidentService:Start() end
+function IncidentService:Start()
+	self.running = true
+end
 
 function IncidentService:_filterTitle(actor: Player, raw: string): (string?, string?)
 	local title = string.sub(string.gsub(raw, "[%c]", ""), 1, 120)
@@ -89,23 +101,7 @@ function IncidentService:_filterTitle(actor: Player, raw: string): (string?, str
 	return filtered, nil
 end
 
-function IncidentService:_persist(incident: any): (any?, string?)
-	local key = "Incident:" .. incident.IncidentId
-	local stored, reason = self.context.Services
-		:Get("DataService")
-		:UpdateMdtRecord(key, function(existing)
-			if
-				type(existing) == "table"
-				and (existing.Revision or 0) > (incident.Revision or 0)
-			then
-				return existing
-			end
-			return incident
-		end)
-	if not stored then
-		return nil, reason
-	end
-	self:_cacheSet(incident.IncidentId, stored)
+function IncidentService:_indexIncident(incident: any): (boolean, string?)
 	local maximum = self.context.Configuration.MDT.MaximumIncidentIndexEntries
 	local indexed, indexReason = self.context.Services
 		:Get("DataService")
@@ -137,12 +133,35 @@ function IncidentService:_persist(incident: any): (any?, string?)
 			index.UpdatedAt = os.time()
 			return index
 		end)
-	if not indexed then
-		return nil, indexReason
-	end
-	return stored, nil
+	return indexed ~= nil, indexReason
 end
 
+function IncidentService:_persist(incident: any): (any?, string?, boolean, any?)
+	local key = "Incident:" .. incident.IncidentId
+	local stored, reason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtRecord(key, function(existing)
+			if
+				type(existing) == "table"
+				and (existing.Revision or 0) > (incident.Revision or 0)
+			then
+				return existing
+			end
+			return incident
+		end)
+	if not stored then
+		return nil, reason, false, nil
+	end
+	self:_cacheSet(incident.IncidentId, stored)
+	local indexed, indexReason = self:_indexIncident(stored)
+	if not indexed then
+		-- The primary record is already durable. Expose that stage to the caller so
+		-- a retry can repair only the recent index instead of spending another
+		-- record-store write and another full DataStore retry budget.
+		return nil, indexReason, true, stored
+	end
+	return stored, nil, true, stored
+end
 function IncidentService:Create(player: Player, data: any): (any?, string?)
 	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite") then
 		return nil, "MDT_NOT_AUTHORISED"
@@ -181,11 +200,15 @@ function IncidentService:Create(player: Player, data: any): (any?, string?)
 end
 
 function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
+	if not self.running or call.IncidentPersisted == true then
+		return
+	end
 	local incidentId = "CALL:" .. call.CallId
 	if self.pending[incidentId] then
 		return
 	end
 	self.pending[incidentId] = true
+	call.IncidentLastAttemptAt = os.clock()
 	local snapshot = {
 		IncidentId = incidentId,
 		SourceCallId = call.CallId,
@@ -208,11 +231,15 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		Revision = call.Revision or 1,
 	}
 	task.spawn(function()
-		-- The claim is released whether persisting returns or raises. Releasing it
-		-- only on the way out meant a single raise held it forever: that incident
-		-- could never be scheduled again, and shutdown then spent its whole
-		-- deadline waiting for something that had already died.
-		local ok, stored, reason = pcall(function()
+		-- The claim is released whether persistence returns or raises. A partial
+		-- success remembers that the record is already durable, so the next retry
+		-- repairs only Incident:Recent rather than rewriting the record.
+		local ok, stored, reason, recordWritten, durableRecord = pcall(function()
+			if call.IncidentRecordPersisted == true then
+				local record = call.IncidentRecordSnapshot or snapshot
+				local indexed, indexReason = self:_indexIncident(record)
+				return if indexed then record else nil, indexReason, true, record
+			end
 			return self:_persist(snapshot)
 		end)
 		self.pending[incidentId] = nil
@@ -223,15 +250,27 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 			})
 			return
 		end
-		if not stored then
-			self.context.Logger:Error("Closed dispatch incident persistence failed", {
-				IncidentId = incidentId,
-				Error = reason,
-			})
+		if recordWritten then
+			call.IncidentRecordPersisted = true
+			if not stored and durableRecord then
+				-- Keep the exact record UpdateAsync committed only while its index is
+				-- missing. This handles a newer revision returned by the record store
+				-- without making the repair perform another read.
+				call.IncidentRecordSnapshot = durableRecord
+			end
 		end
+		if stored then
+			call.IncidentPersisted = true
+			call.IncidentRecordSnapshot = nil
+			return
+		end
+		self.context.Logger:Warning("Closed dispatch incident persistence will retry", {
+			IncidentId = incidentId,
+			Error = reason,
+			RecordPersisted = call.IncidentRecordPersisted == true,
+		})
 	end)
 end
-
 function IncidentService:Close(player: Player, incidentId: string): (any?, string?)
 	if not self.context.Services:Get("MDTService"):CanUsePermission(player, "IncidentWrite") then
 		return nil, "MDT_NOT_AUTHORISED"
@@ -340,6 +379,7 @@ function IncidentService:Destroy()
 	if next(self.pending) ~= nil then
 		self.context.Logger:Warning("Incident persistence shutdown deadline reached", {})
 	end
+	self.running = false
 	table.clear(self.cache)
 	table.clear(self.pending)
 	self.cacheCount = 0
