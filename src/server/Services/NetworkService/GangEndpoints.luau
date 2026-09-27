@@ -29,6 +29,7 @@ return function(self: any)
 		NOT_THE_LEADER = "Only the leader can do that.",
 		GANG_PASS_REQUIRED = "Gang System Access is required to do that.",
 		GANG_CREATE_IN_PROGRESS = "Your gang is already being created.",
+		GANG_MEMBERSHIP_UPDATE_IN_PROGRESS = "Your gang membership is already being updated.",
 		GANG_CREATE_FAILED = "The gang could not be saved. Try again.",
 		SHARED_RECORD_LOAD_FAILED = "Gang data is temporarily unavailable. Try again.",
 		NAME_REQUIRED = "Enter a name for the gang.",

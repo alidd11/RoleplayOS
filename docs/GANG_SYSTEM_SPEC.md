@@ -37,9 +37,13 @@ Roughly in dependency order.
    and pending invites. Unique names are reserved in a shared index by the owning
    gang ID, so retries can distinguish their own reservation from another server's.
    A transient shared-record read is treated as unavailable data, never as proof
-   that a valid membership disappeared. Invite and accept through the network
-   layer, with the leader's pass checked server-side on invite rather than trusted
-   from the client.
+   that a valid membership disappeared. Membership writes are serialised per
+   player. Accepting an invite persists the profile's intended GangId before the
+   shared gang is updated with an idempotent membership transform, and consumes
+   the invite only after that shared membership is confirmed; this prevents a
+   disconnect or retry from leaving an invisible member in the shared roster.
+   Invite and accept through the network layer, with the leader's pass checked
+   server-side on invite rather than trusted from the client.
 2. **Territory zones.** Tagged parts in the map the way `RoleplayOSZone` already
    works for `LocationController`, each with an id and a name. Claim state lives
    on the server and replicates as attributes.
