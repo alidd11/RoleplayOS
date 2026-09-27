@@ -27,6 +27,10 @@ local function rootOf(player: Player): BasePart?
 	return if root and root:IsA("BasePart") then root else nil
 end
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 function BankRobberyService:Init(context: any)
 	self.context = context
 	table.clear(self.connections)
@@ -46,6 +50,47 @@ function BankRobberyService:_activeCharacter(player: Player): (string?, any?)
 	local characterId = session and session.ActiveCharacterId
 	local character = characterId and session.Profile.Characters[characterId]
 	return characterId, character
+end
+
+function BankRobberyService:_startClaimIsCurrent(
+	target: Instance,
+	state: any,
+	player: Player,
+	robberyId: string
+): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and target:IsDescendantOf(workspace)
+		and self.states[target] == state
+		and state.Starting == true
+		and state.Active ~= true
+		and state.RobberyId == robberyId
+		and state.PlayerUserId == player.UserId
+		and self.activePlayers[player.UserId] == robberyId
+end
+
+function BankRobberyService:_releasePlayerClaim(userId: number, robberyId: string)
+	if self.activePlayers[userId] == robberyId then
+		self.activePlayers[userId] = nil
+	end
+end
+
+function BankRobberyService:_releaseStartClaim(
+	target: Instance,
+	state: any,
+	player: Player,
+	robberyId: string
+)
+	if self.states[target] == state and state.Starting == true and state.RobberyId == robberyId then
+		state.Starting = false
+		state.RobberyId = nil
+		state.PlayerUserId = nil
+		local prompt = state.Prompt
+		if self.running and target.Parent and prompt and prompt.Parent then
+			prompt.Enabled = true
+		end
+	end
+	self:_releasePlayerClaim(player.UserId, robberyId)
 end
 
 function BankRobberyService:_alarm(target: Instance, player: Player): (boolean, BasePart?)
@@ -73,14 +118,29 @@ function BankRobberyService:_alarm(target: Instance, player: Player): (boolean, 
 	sound.Parent = alarm
 	alarm.Parent = workspace
 	CollectionService:AddTag(alarm, self.context.Configuration.EmergencyTriggers.Tag)
-	local call, reason = self.context.Services:Get("EmergencyTriggerService"):Trigger(alarm, nil)
+	local triggered, call, reason = pcall(function()
+		return self.context.Services:Get("EmergencyTriggerService"):Trigger(alarm, nil)
+	end)
+	if not triggered then
+		self.context.Logger:Error("Bank robbery alarm handler failed", {
+			UserId = player.UserId,
+			Error = tostring(call),
+		})
+		alarm:Destroy()
+		return false, nil
+	end
 	if not call then
 		self.context.Logger:Warning("Bank robbery alarm could not be raised", {
 			UserId = player.UserId,
 			Reason = reason,
 		})
+		alarm:Destroy()
+		return false, nil
 	end
-	if not call then
+	-- Trigger broadcasts to on-duty users and can therefore yield through their
+	-- access checks. Do not leave a late alarm behind after the service, target or
+	-- initiating player has gone away.
+	if not self.running or not target:IsDescendantOf(workspace) or not playerIsCurrent(player) then
 		alarm:Destroy()
 		return false, nil
 	end
@@ -123,7 +183,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 		})
 		state.Active = false
 		self:_clearAlarm(state)
-		self.activePlayers[player.UserId] = nil
+		self:_releasePlayerClaim(player.UserId, robberyId)
 		state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
 		task.delay(config.FailedCooldownSeconds, function()
 			if
@@ -168,7 +228,7 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 	end
 	state.Active = false
 	self:_clearAlarm(state)
-	self.activePlayers[player.UserId] = nil
+	self:_releasePlayerClaim(player.UserId, robberyId)
 	state.CooldownUntil = os.clock() + config.CooldownSeconds
 	task.delay(config.CooldownSeconds, function()
 		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
@@ -180,17 +240,17 @@ end
 function BankRobberyService:Begin(target: Instance, player: Player): (boolean, string?)
 	local config = self.context.Configuration.BankRobbery
 	local state = self.states[target]
+	if not self.running or not playerIsCurrent(player) then
+		return false, "ROBBERY_UNAVAILABLE"
+	end
 	if not CollectionService:HasTag(target, config.Tag) or not target:IsDescendantOf(workspace) then
 		return false, "UNAUTHORISED_TARGET"
 	end
-	if not state or state.Active or (state.CooldownUntil or 0) > os.clock() then
+	if not state or state.Active or state.Starting or (state.CooldownUntil or 0) > os.clock() then
 		return false, "ROBBERY_UNAVAILABLE"
 	end
 	if self.activePlayers[player.UserId] then
 		return false, "ROBBERY_ALREADY_ACTIVE"
-	end
-	if self.context.Services:Get("DutyService"):Get(player) then
-		return false, "CIVILIAN_REQUIRED"
 	end
 	local characterId = self:_activeCharacter(player)
 	if not characterId then
@@ -199,17 +259,54 @@ function BankRobberyService:Begin(target: Instance, player: Player): (boolean, s
 	if not self:_near(player, target, config.ActivationDistance) then
 		return false, "TOO_FAR"
 	end
+
+	-- Claim both resources before DutyService:Get. That getter can yield while
+	-- Roblox answers a group lookup; without this claim, two prompt callbacks can
+	-- both observe the same free bank (or the same free player) and both continue
+	-- into alarm creation.
 	local robberyId = HttpService:GenerateGUID(false)
-	local alarmRaised, alarm = self:_alarm(target, player)
-	if not alarmRaised then
-		return false, "ROBBERY_ALARM_FAILED"
-	end
-	state.Active = true
+	state.Starting = true
 	state.RobberyId = robberyId
 	state.PlayerUserId = player.UserId
-	state.Alarm = alarm
 	self.activePlayers[player.UserId] = robberyId
 	state.Prompt.Enabled = false
+
+	local dutyChecked, duty = pcall(function()
+		return self.context.Services:Get("DutyService"):Get(player)
+	end)
+	if not dutyChecked then
+		self:_releaseStartClaim(target, state, player, robberyId)
+		self.context.Logger:Warning("Bank robbery duty check failed", {
+			UserId = player.UserId,
+			Error = tostring(duty),
+		})
+		return false, "ROBBERY_UNAVAILABLE"
+	end
+	if not self:_startClaimIsCurrent(target, state, player, robberyId) then
+		self:_releaseStartClaim(target, state, player, robberyId)
+		return false, if playerIsCurrent(player) then "ROBBERY_UNAVAILABLE" else "PLAYER_LEFT"
+	end
+	if duty then
+		self:_releaseStartClaim(target, state, player, robberyId)
+		return false, "CIVILIAN_REQUIRED"
+	end
+
+	local alarmRaised, alarm = self:_alarm(target, player)
+	if not alarmRaised then
+		self:_releaseStartClaim(target, state, player, robberyId)
+		return false, "ROBBERY_ALARM_FAILED"
+	end
+	if not self:_startClaimIsCurrent(target, state, player, robberyId) then
+		if alarm then
+			alarm:Destroy()
+		end
+		self:_releaseStartClaim(target, state, player, robberyId)
+		return false, if playerIsCurrent(player) then "ROBBERY_UNAVAILABLE" else "PLAYER_LEFT"
+	end
+
+	state.Starting = false
+	state.Active = true
+	state.Alarm = alarm
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = player.UserId,
 		CharacterId = characterId,
@@ -239,7 +336,7 @@ function BankRobberyService:_watch(target: Instance)
 		prompt.MaxActivationDistance,
 		self.context.Configuration.BankRobbery.ActivationDistance
 	)
-	self.states[target] = { Active = false, CooldownUntil = 0, Prompt = prompt }
+	self.states[target] = { Active = false, Starting = false, CooldownUntil = 0, Prompt = prompt }
 	self.promptConnections[target] = prompt.Triggered:Connect(function(player)
 		self:Begin(target, player)
 	end)
@@ -261,8 +358,8 @@ function BankRobberyService:Start()
 		self.connections,
 		CollectionService:GetInstanceRemovedSignal(tag):Connect(function(target)
 			local state = self.states[target]
-			if state and state.PlayerUserId then
-				self.activePlayers[state.PlayerUserId] = nil
+			if state and state.PlayerUserId and state.RobberyId then
+				self:_releasePlayerClaim(state.PlayerUserId, state.RobberyId)
 			end
 			self:_clearAlarm(state)
 			local connection = self.promptConnections[target]
@@ -276,7 +373,33 @@ function BankRobberyService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			self.activePlayers[player.UserId] = nil
+			local robberyId = self.activePlayers[player.UserId]
+			if robberyId then
+				self:_releasePlayerClaim(player.UserId, robberyId)
+			end
+			if not robberyId then
+				return
+			end
+			-- An in-progress robbery keeps its normal completion/failure path. A
+			-- start that is still yielding has not begun gameplay yet, so release
+			-- that provisional target claim immediately instead of leaving the bank
+			-- disabled until the lookup returns.
+			for target, state in self.states do
+				if
+					state.Starting == true
+					and state.PlayerUserId == player.UserId
+					and state.RobberyId == robberyId
+				then
+					state.Starting = false
+					state.RobberyId = nil
+					state.PlayerUserId = nil
+					local prompt = state.Prompt
+					if self.running and target.Parent and prompt and prompt.Parent then
+						prompt.Enabled = true
+					end
+					break
+				end
+			end
 		end)
 	)
 end
