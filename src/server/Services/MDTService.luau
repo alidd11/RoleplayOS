@@ -20,20 +20,25 @@ end
 function MDTService:GetDuty(player: Player): any?
 	return self.context.Services:Get("DutyService"):Get(player)
 end
+function MDTService:GetAuthorisedDuty(player: Player, permission: string?): any?
+	-- DutyService:Get can yield while Roblox resolves group membership. Return
+	-- the exact validated snapshot used for both MDT eligibility and the optional
+	-- permission check so callers never have to perform a second lookup merely to
+	-- learn which duty was authorised.
+	local duty = self:GetDuty(player)
+	if not DispatchPolicy.canUseMdt(duty, self.context.Configuration.MDT.AllowedDepartments) then
+		return nil
+	end
+	if permission and not self:HasPermission(duty, permission) then
+		return nil
+	end
+	return duty
+end
 function MDTService:CanUse(player: Player): boolean
-	return DispatchPolicy.canUseMdt(
-		self:GetDuty(player),
-		self.context.Configuration.MDT.AllowedDepartments
-	)
+	return self:GetAuthorisedDuty(player, nil) ~= nil
 end
 function MDTService:CanUsePermission(player: Player, permission: string): boolean
-	-- DutyService:Get can yield while Roblox resolves group membership. Reusing
-	-- this exact validated snapshot avoids a second yielding lookup and prevents
-	-- eligibility from being checked against a different duty than the one whose
-	-- permissions are evaluated below.
-	local duty = self:GetDuty(player)
-	return DispatchPolicy.canUseMdt(duty, self.context.Configuration.MDT.AllowedDepartments)
-		and self:HasPermission(duty, permission)
+	return self:GetAuthorisedDuty(player, permission) ~= nil
 end
 function MDTService:SanitiseQuery(query: any): (string?, string?)
 	if type(query) ~= "string" then
@@ -56,11 +61,8 @@ function MDTService:AuditSearch(player: Player, queryType: string, requestId: st
 	})
 end
 function MDTService:AccessSummary(player: Player): any
-	local duty = self:GetDuty(player)
-	-- Keep the access summary on the same duty snapshot as its permissions. A
-	-- second Get would yield again and could observe a role transition between
-	-- the Allowed flag and the permission list.
-	if not DispatchPolicy.canUseMdt(duty, self.context.Configuration.MDT.AllowedDepartments) then
+	local duty = self:GetAuthorisedDuty(player, nil)
+	if not duty then
 		return { Allowed = false, Permissions = {} }
 	end
 	local unit = self.context.Services:Get("UnitService").units[tostring(player.UserId)]
