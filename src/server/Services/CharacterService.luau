@@ -417,6 +417,7 @@ function CharacterService:Create(player: Player, identity: any): (any?, string?)
 				Balance = self.context.Configuration.Economy.StartingBankBalance,
 				Cash = self.context.Configuration.Economy.StartingCashBalance,
 				Transactions = {},
+				PendingCashDropRefunds = {},
 			},
 			Employment = {},
 			Vehicles = {},
@@ -611,6 +612,20 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 			data:MarkDirty(player)
 		end
 	end
+	-- Reconcile any bounded cash-drop recovery carried by this character before
+	-- normal play resumes. EconomyService remains the only balance writer.
+	local recovered, recoveryReason =
+		self.context.Services:Get("EconomyService"):ReconcileMoneyDropRefunds(player, characterId)
+	if not recovered then
+		self.context.Logger:Warning(
+			"Cash-drop recovery is still pending after character selection",
+			{
+				UserId = player.UserId,
+				CharacterId = characterId,
+				Reason = recoveryReason,
+			}
+		)
+	end
 	return character, nil
 end
 function CharacterService:Delete(
@@ -628,6 +643,10 @@ function CharacterService:Delete(
 	end
 	if session.ActiveCharacterId == characterId then
 		return false, "CHARACTER_ACTIVE"
+	end
+	local pendingCashRefunds = character.Economy and character.Economy.PendingCashDropRefunds
+	if type(pendingCashRefunds) == "table" and next(pendingCashRefunds) ~= nil then
+		return false, "CHARACTER_HAS_PENDING_RECOVERY"
 	end
 	if #character.Vehicles > 0 or #character.Properties > 0 or #character.Employment > 0 then
 		return false, "CHARACTER_HAS_PROTECTED_RECORDS"

@@ -1,15 +1,27 @@
 --!strict
 
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MoneyDropPolicy = require(ReplicatedStorage.RoleplayOS.Shared.MoneyDropPolicy)
 
-local MoneyDropService = { drops = {} }
+local MoneyDropService = { drops = {}, connections = {} }
+
+local function recoveryRecord(dropId: string, record: any): any
+	return {
+		DropId = dropId,
+		OwnerUserId = record.OwnerUserId,
+		OwnerCharacterId = record.OwnerCharacterId,
+		Amount = record.Amount,
+		CreatedAt = record.CreatedAt or os.time(),
+	}
+end
 
 function MoneyDropService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.MoneyDrops
+	table.clear(self.connections)
 end
 
 function MoneyDropService:_activeCharacter(player: Player): (any?, string?)
@@ -178,6 +190,7 @@ function MoneyDropService:_create(
 		Amount = amount,
 		OwnerUserId = ownerUserId,
 		OwnerCharacterId = ownerCharacterId,
+		CreatedAt = os.time(),
 		Collecting = false,
 	}
 	self.drops[dropId] = record
@@ -213,6 +226,11 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 	if not position then
 		return nil, "CHARACTER_UNAVAILABLE"
 	end
+	local economy = self.context.Services:Get("EconomyService")
+	local recovered, recoveryReason = economy:ReconcileMoneyDropRefunds(player, characterId)
+	if not recovered then
+		return nil, recoveryReason or "MONEY_DROP_RECOVERY_PENDING"
+	end
 	local owned = 0
 	for _, record in self.drops do
 		if record.OwnerUserId == player.UserId then
@@ -234,7 +252,7 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 	end
 
 	local dropId = HttpService:GenerateGUID(false)
-	local debited, debitReason = self.context.Services:Get("EconomyService"):Apply(player, {
+	local debited, debitReason = economy:Apply(player, {
 		TransactionId = HttpService:GenerateGUID(false),
 		CharacterId = characterId,
 		Account = "Cash",
@@ -253,31 +271,41 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 		return self:_create(dropId, amount, player.UserId, characterId, position)
 	end)
 	if not created or not record then
-		local refunded, refundReason = self.context.Services:Get("EconomyService"):Apply(player, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = characterId,
-			Account = "Cash",
+		local recovery = {
+			DropId = dropId,
+			OwnerUserId = player.UserId,
+			OwnerCharacterId = characterId,
 			Amount = amount,
-			Direction = "Credit",
-			ReasonCode = "MoneyDrop.CreationRefund",
-			Description = "Failed cash drop refunded",
-			RelatedEntityId = dropId,
-			Metadata = {},
-		})
+			CreatedAt = os.time(),
+		}
+		local refunded, refundReason = economy:RefundMoneyDrop(player, recovery)
+		local recoveredRefund = refunded or refundReason == "DUPLICATE_TRANSACTION"
+		local queued = false
+		local queueReason: string? = nil
+		if not recoveredRefund then
+			queued, queueReason = economy:QueueMoneyDropRefund(player, recovery)
+		end
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
 			CharacterId = characterId,
 			Action = "MoneyDrop.CreationRefund",
 			Target = dropId,
-			Metadata = { Amount = amount, Refunded = refunded, Reason = refundReason },
+			Metadata = {
+				Amount = amount,
+				Refunded = recoveredRefund,
+				RefundReason = refundReason,
+				Queued = queued,
+				QueueReason = queueReason,
+			},
 		})
-		if not refunded then
-			self.context.Logger:Error("Cash drop creation refund failed", {
+		if not recoveredRefund and not queued then
+			self.context.Logger:Error("Cash drop creation recovery could not be retained", {
 				DropId = dropId,
 				UserId = player.UserId,
 				CharacterId = characterId,
 				Amount = amount,
-				Reason = refundReason,
+				RefundReason = refundReason,
+				QueueReason = queueReason,
 			})
 		end
 		return nil, "DROP_CREATION_FAILED"
@@ -292,15 +320,89 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 	return { DropId = dropId, Amount = amount, Cash = character.Economy.Cash }, nil
 end
 
-function MoneyDropService:Start() end
+function MoneyDropService:_recoverDrop(dropId: string, player: Player, reason: string)
+	local record = self.drops[dropId]
+	if not record then
+		return
+	end
+	local recovery = recoveryRecord(dropId, record)
+	self:_remove(dropId, reason)
+
+	local economy = self.context.Services:Get("EconomyService")
+	local refunded, refundReason = economy:RefundMoneyDrop(player, recovery)
+	if refunded or refundReason == "DUPLICATE_TRANSACTION" then
+		return
+	end
+	local queued, queueReason = economy:QueueMoneyDropRefund(player, recovery)
+	if not queued then
+		self.context.Logger:Error("Cash-drop recovery could not be retained in the profile", {
+			DropId = dropId,
+			UserId = record.OwnerUserId,
+			CharacterId = record.OwnerCharacterId,
+			Amount = record.Amount,
+			RefundReason = refundReason,
+			QueueReason = queueReason,
+		})
+	end
+end
+
+function MoneyDropService:_recoverOwnedDrops(player: Player, reason: string)
+	local ids = {}
+	for dropId, record in self.drops do
+		if record.OwnerUserId == player.UserId then
+			table.insert(ids, dropId)
+		end
+	end
+	for _, dropId in ids do
+		self:_recoverDrop(dropId, player, reason)
+	end
+end
+
+function MoneyDropService:Start()
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			-- Cash drops are server-local Instances and cannot safely outlive the
+			-- profile session that paid for them. Recover them before DataService's
+			-- deferred final save takes its snapshot.
+			self:_recoverOwnedDrops(player, "OwnerLeft")
+		end)
+	)
+end
 
 function MoneyDropService:Destroy()
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
+
 	local ids = {}
 	for dropId in self.drops do
 		table.insert(ids, dropId)
 	end
+	-- No yielding work is done here. EconomyService either restores the active
+	-- character immediately or records a bounded pending refund inside the same
+	-- player profile; DataService, which destroys last, persists that profile.
 	for _, dropId in ids do
-		self:_remove(dropId, "Shutdown")
+		local record = self.drops[dropId]
+		if not record then
+			continue
+		end
+		local owner = Players:GetPlayerByUserId(record.OwnerUserId)
+		if owner then
+			self:_recoverDrop(dropId, owner, "Shutdown")
+		else
+			-- PlayerRemoving should already have recovered this owner's drops.
+			-- Reaching this branch means the lifecycle invariant was violated; the
+			-- world object must still be cleaned up, but log enough to investigate.
+			self:_remove(dropId, "Shutdown")
+			self.context.Logger:Error("Cash drop owner was unavailable during shutdown recovery", {
+				DropId = dropId,
+				UserId = record.OwnerUserId,
+				CharacterId = record.OwnerCharacterId,
+				Amount = record.Amount,
+			})
+		end
 	end
 end
 

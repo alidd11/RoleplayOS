@@ -362,11 +362,34 @@ end)
 H.test("migration reconciles missing fields", function()
 	local profile = ProfileSchema.migrate({ SchemaVersion = 0 }, 42)
 	H.expect(
-		profile.SchemaVersion == Config.Framework.SchemaVersion
+		profile.SchemaVersion == ProfileSchema.CURRENT_VERSION
 			and profile.UserId == 42
 			and type(profile.Characters) == "table"
 			and type(profile.Communities) == "table",
 		"migration failed"
+	)
+end)
+
+H.test("migration adds bounded cash-drop recovery state", function()
+	local profile = ProfileSchema.migrate({
+		SchemaVersion = 13,
+		Characters = {
+			character = {
+				Economy = {
+					Balance = 100,
+					Cash = 50,
+					Transactions = {},
+				},
+			},
+		},
+	}, 42)
+	H.expect(
+		profile.SchemaVersion == ProfileSchema.CURRENT_VERSION,
+		"profile version did not advance"
+	)
+	H.expect(
+		type(profile.Characters.character.Economy.PendingCashDropRefunds) == "table",
+		"cash-drop recovery container missing"
 	)
 end)
 H.test("settings reject unknown and invalid values", function()

@@ -99,6 +99,141 @@ function EconomyService:_queuePendingRefund(record: any)
 	end
 end
 
+function EconomyService:QueueMoneyDropRefund(player: Player, record: any): (boolean, string?)
+	if not self.running then
+		return false, "ECONOMY_UNAVAILABLE"
+	end
+	if
+		type(record) ~= "table"
+		or record.OwnerUserId ~= player.UserId
+		or type(record.DropId) ~= "string"
+		or record.DropId == ""
+		or type(record.OwnerCharacterId) ~= "string"
+		or record.OwnerCharacterId == ""
+		or type(record.Amount) ~= "number"
+		or record.Amount <= 0
+		or record.Amount ~= math.floor(record.Amount)
+	then
+		return false, "INVALID_MONEY_DROP_REFUND"
+	end
+
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	local character = session and session.Profile.Characters[record.OwnerCharacterId]
+	if not character then
+		return false, "CHARACTER_NOT_OWNED"
+	end
+	local economy = character.Economy
+	local pending = economy.PendingCashDropRefunds
+	if type(pending) ~= "table" then
+		pending = {}
+		economy.PendingCashDropRefunds = pending
+	end
+	if pending[record.DropId] == nil then
+		local count = 0
+		for _ in pending do
+			count += 1
+		end
+		if count >= self.context.Configuration.MoneyDrops.MaximumActivePerPlayer then
+			return false, "MONEY_DROP_REFUND_QUEUE_FULL"
+		end
+	end
+	pending[record.DropId] = {
+		DropId = record.DropId,
+		Amount = record.Amount,
+		CreatedAt = record.CreatedAt or os.time(),
+	}
+	data:MarkDirty(player)
+	return true, nil
+end
+
+function EconomyService:RefundMoneyDrop(player: Player, record: any): (boolean, string?)
+	if
+		type(record) ~= "table"
+		or record.OwnerUserId ~= player.UserId
+		or type(record.DropId) ~= "string"
+		or type(record.OwnerCharacterId) ~= "string"
+		or type(record.Amount) ~= "number"
+	then
+		return false, "INVALID_MONEY_DROP_REFUND"
+	end
+	return self:Apply(player, {
+		TransactionId = "money-drop-refund:" .. record.DropId,
+		CharacterId = record.OwnerCharacterId,
+		Account = "Cash",
+		Amount = record.Amount,
+		Direction = "Credit",
+		ReasonCode = "MoneyDrop.RecoveryRefund",
+		Description = "Recovered cash drop",
+		RelatedEntityId = record.DropId,
+		Metadata = {},
+	})
+end
+
+function EconomyService:ReconcileMoneyDropRefunds(
+	player: Player,
+	characterId: string
+): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "ECONOMY_UNAVAILABLE"
+	end
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	local character = session and session.Profile.Characters[characterId]
+	if not character or session.ActiveCharacterId ~= characterId then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local economy = character.Economy
+	local pending = economy.PendingCashDropRefunds
+	if type(pending) ~= "table" then
+		economy.PendingCashDropRefunds = {}
+		data:MarkDirty(player)
+		return true, nil
+	end
+
+	local completed: { any } = {}
+	local unresolvedReason: string? = nil
+	for dropId, record in pending do
+		local valid = type(dropId) == "string"
+			and type(record) == "table"
+			and record.DropId == dropId
+			and type(record.Amount) == "number"
+			and record.Amount > 0
+			and record.Amount == math.floor(record.Amount)
+		if not valid then
+			table.insert(completed, dropId)
+			self.context.Logger:Error("Discarding malformed pending cash-drop refund", {
+				UserId = player.UserId,
+				CharacterId = characterId,
+				DropId = tostring(dropId),
+			})
+			continue
+		end
+		local refunded, refundReason = self:RefundMoneyDrop(player, {
+			DropId = dropId,
+			OwnerUserId = player.UserId,
+			OwnerCharacterId = characterId,
+			Amount = record.Amount,
+		})
+		if refunded or refundReason == "DUPLICATE_TRANSACTION" then
+			table.insert(completed, dropId)
+		elseif unresolvedReason == nil then
+			unresolvedReason = refundReason or "MONEY_DROP_REFUND_FAILED"
+		end
+	end
+
+	for _, dropId in completed do
+		pending[dropId] = nil
+	end
+	if #completed > 0 then
+		data:MarkDirty(player)
+	end
+	if unresolvedReason then
+		return false, unresolvedReason
+	end
+	return true, nil
+end
+
 function EconomyService:_transactionState(
 	character: any,
 	scope: string
