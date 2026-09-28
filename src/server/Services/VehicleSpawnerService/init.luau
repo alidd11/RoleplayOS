@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local RigMechanics = require(script.RigMechanics)
 
 local VehicleSpawnerService = {
+	running = false,
 	-- A broken or absent vehicle facility degrades that feature only. It must
 	-- never prevent character, data, access, MDT, phone or custody startup.
 	Critical = false,
@@ -36,10 +37,12 @@ require(script.SeatLifecycle)(VehicleSpawnerService)
 function VehicleSpawnerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.VehicleSpawners
+	self.running = false
 	self.previewCleaning = true
 end
 
 function VehicleSpawnerService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -68,9 +71,19 @@ function VehicleSpawnerService:Start()
 	-- since each respawn brings a new humanoid and a watch connected once at
 	-- join stops firing the moment they first die.
 	local function watchDeath(player: Player, character: Model)
+		if not self.running then
+			return
+		end
 		local found = character:FindFirstChildWhichIsA("Humanoid")
 			or character:WaitForChild("Humanoid", 10)
-		if not found or not found:IsA("Humanoid") or player.Character ~= character then
+		if
+			not self.running
+			or player.Parent ~= Players
+			or Players:GetPlayerByUserId(player.UserId) ~= player
+			or not found
+			or not found:IsA("Humanoid")
+			or player.Character ~= character
+		then
 			return
 		end
 		local previous = self.deathConnections[player.UserId]
@@ -78,10 +91,15 @@ function VehicleSpawnerService:Start()
 			previous:Disconnect()
 		end
 		self.deathConnections[player.UserId] = found.Died:Connect(function()
-			self:Remove(player.UserId)
+			if self.running then
+				self:Remove(player.UserId)
+			end
 		end)
 	end
 	local function watch(player: Player)
+		if not self.running then
+			return
+		end
 		local previous = self.spawnConnections[player.UserId]
 		if previous then
 			previous:Disconnect()
@@ -90,14 +108,23 @@ function VehicleSpawnerService:Start()
 			watchDeath(player, character)
 			-- Re-armed per character: the humanoid is a new instance after every
 			-- respawn, so a watcher bound to the old one is watching nothing.
-			self:_watchSeat(player)
+			if self.running and player.Character == character then
+				self:_watchSeat(player)
+			end
 		end)
 		local character = player.Character
 		if character then
 			task.defer(function()
-				if player.Parent and player.Character == character then
+				if
+					self.running
+					and player.Parent == Players
+					and Players:GetPlayerByUserId(player.UserId) == player
+					and player.Character == character
+				then
 					watchDeath(player, character)
-					self:_watchSeat(player)
+					if self.running and player.Character == character then
+						self:_watchSeat(player)
+					end
 				end
 			end)
 		end
@@ -154,6 +181,7 @@ function VehicleSpawnerService:Start()
 end
 
 function VehicleSpawnerService:Destroy()
+	self.running = false
 	self.consuming = false
 	self.previewCleaning = false
 	-- Bank every drive in progress before the server goes.
