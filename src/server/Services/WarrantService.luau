@@ -6,6 +6,9 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local WarrantService = {
 	warrants = {},
 	byCharacter = {},
+	cacheMeta = {},
+	cacheCount = 0,
+	cacheSweepCounter = 0,
 	running = false,
 	acceptingCache = false,
 }
@@ -14,6 +17,9 @@ function WarrantService:Init(context: any)
 	self.context = context
 	table.clear(self.warrants)
 	table.clear(self.byCharacter)
+	table.clear(self.cacheMeta)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
 	self.running = false
 	-- RecordIndexService starts earlier and may hydrate person records before this
 	-- service's Start runs. Cache hydration is valid after Init, but never after
@@ -23,6 +29,53 @@ end
 
 function WarrantService:Start()
 	self.running = true
+end
+
+function WarrantService:_dropCachedCharacter(characterId: string)
+	local ids = self.byCharacter[characterId]
+	if ids then
+		for warrantId in ids do
+			self.warrants[warrantId] = nil
+		end
+		self.byCharacter[characterId] = nil
+	end
+	if self.cacheMeta[characterId] then
+		self.cacheMeta[characterId] = nil
+		self.cacheCount = math.max(0, self.cacheCount - 1)
+	end
+end
+
+function WarrantService:_sweepCache()
+	self.cacheSweepCounter += 1
+	local now = os.clock()
+	if self.cacheSweepCounter >= 32 then
+		self.cacheSweepCounter = 0
+		for characterId, meta in self.cacheMeta do
+			if type(meta) ~= "table" or (meta.ExpiresAt or 0) <= now then
+				self:_dropCachedCharacter(characterId)
+			end
+		end
+	end
+
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumWarrantCacheCharacters) or 512)
+	)
+	while self.cacheCount > maximum do
+		local oldestCharacterId
+		local oldestAccess = math.huge
+		for characterId, meta in self.cacheMeta do
+			local accessedAt = if type(meta) == "table" then meta.AccessedAt or 0 else 0
+			if accessedAt < oldestAccess then
+				oldestAccess = accessedAt
+				oldestCharacterId = characterId
+			end
+		end
+		if not oldestCharacterId then
+			break
+		end
+		self:_dropCachedCharacter(oldestCharacterId)
+	end
 end
 
 function WarrantService:CachePersonRecord(record: any)
@@ -47,9 +100,42 @@ function WarrantService:CachePersonRecord(record: any)
 		end
 	end
 	self.byCharacter[characterId] = ids
+	if not self.cacheMeta[characterId] then
+		self.cacheCount += 1
+	end
+	local now = os.clock()
+	self.cacheMeta[characterId] = {
+		ExpiresAt = now + self.context.Configuration.MDT.RecordCacheSeconds,
+		AccessedAt = now,
+	}
+	self:_sweepCache()
 end
 
-function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { any })
+function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { any }, string?)
+	local meta = self.cacheMeta[characterId]
+	local clock = os.clock()
+	if not meta or (meta.ExpiresAt or 0) <= clock then
+		if meta then
+			self:_dropCachedCharacter(characterId)
+		end
+		local record, reason =
+			self.context.Services:Get("RecordIndexService"):GetPerson(characterId)
+		if reason then
+			return false, {}, reason
+		end
+		if not record then
+			return false, {}, nil
+		end
+		if not self.acceptingCache then
+			return false, {}, "WARRANT_CACHE_UNAVAILABLE"
+		end
+		self:CachePersonRecord(record)
+		meta = self.cacheMeta[characterId]
+	end
+	if meta then
+		meta.AccessedAt = clock
+	end
+
 	local active = {}
 	local now = os.time()
 	for warrantId in self.byCharacter[characterId] or {} do
@@ -62,7 +148,7 @@ function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { 
 			table.insert(active, warrant)
 		end
 	end
-	return #active > 0, active
+	return #active > 0, active, nil
 end
 
 function WarrantService:_filter(actor: Player, raw: string): (string?, string?)
@@ -231,6 +317,9 @@ function WarrantService:Destroy()
 	self.acceptingCache = false
 	table.clear(self.warrants)
 	table.clear(self.byCharacter)
+	table.clear(self.cacheMeta)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
 end
 
 return WarrantService
