@@ -491,6 +491,24 @@ function RecordIndexService:GetPerson(characterId: string): (any?, string?)
 	return self:_getRecord(recordKey("Person", characterId))
 end
 
+function RecordIndexService:GetPersonFresh(characterId: string): (any?, string?)
+	if not self.running then
+		return nil, "INDEX_CANCELLED"
+	end
+	local key = recordKey("Person", characterId)
+	local value, reason = self.context.Services:Get("DataService"):GetMdtRecord(key)
+	if reason then
+		return nil, reason
+	end
+	if not self.running then
+		return nil, "INDEX_CANCELLED"
+	end
+	if value then
+		self:_cacheSet(key, value)
+	end
+	return value, nil
+end
+
 function RecordIndexService:UpdatePerson(
 	characterId: string,
 	transform: (any?) -> any
