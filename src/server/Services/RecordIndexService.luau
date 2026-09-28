@@ -448,8 +448,12 @@ function RecordIndexService:ScheduleVehicle(
 				if not self.running or not playerIsCurrent(currentPlayer) then
 					ok, reason = false, "INDEX_CANCELLED"
 				else
-					ok, reason =
-						self:ReindexVehicle(currentPlayer, currentCharacter, currentVehicle, previous)
+					ok, reason = self:ReindexVehicle(
+						currentPlayer,
+						currentCharacter,
+						currentVehicle,
+						previous
+					)
 				end
 			until not self.running or not state.Resync
 		end)
