@@ -1,10 +1,15 @@
 --!strict
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local RigMechanics = require(script.Parent.RigMechanics)
 
 local PREVIEW_IDLE_SECONDS = 60 * 60
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 return function(VehicleSpawnerService)
 	function VehicleSpawnerService:_vehicleDefinitions(): { [string]: any }
@@ -244,9 +249,15 @@ return function(VehicleSpawnerService)
 	end
 
 	function VehicleSpawnerService:Menu(player: Player, spawnerId: string): (any?, string?)
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
 		local spawner, reason = self:_authorise(player, spawnerId)
-		if not spawner then
-			return nil, reason
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		if not spawner or not spawner:IsDescendantOf(Workspace) then
+			return nil, reason or "SPAWNER_NOT_FOUND"
 		end
 		local vehicles = {}
 		local departmentId = spawner:GetAttribute("DepartmentId")
@@ -256,7 +267,14 @@ return function(VehicleSpawnerService)
 		if isIssuedFacility then
 			for id, definition in self:_vehicleDefinitions() do
 				local template = self:_template(definition)
-				if self:_definitionAllowed(player, spawner, definition) and template then
+				local allowed = self:_definitionAllowed(player, spawner, definition)
+				if not self.running or not playerIsCurrent(player) then
+					return nil, "PLAYER_UNAVAILABLE"
+				end
+				if not spawner:IsDescendantOf(Workspace) then
+					return nil, "SPAWNER_NOT_FOUND"
+				end
+				if allowed and template then
 					self:_ensurePreview(id, definition)
 					table.insert(vehicles, {
 						Id = id,
@@ -311,6 +329,12 @@ return function(VehicleSpawnerService)
 					local access = self.context.Services
 						:Get("AccessService")
 						:Evaluate(player, definition.Access)
+					if not self.running or not playerIsCurrent(player) then
+						return nil, "PLAYER_UNAVAILABLE"
+					end
+					if not spawner:IsDescendantOf(Workspace) then
+						return nil, "SPAWNER_NOT_FOUND"
+					end
 					self:_ensurePreview(definitionId, definition)
 					table.insert(vehicles, {
 						Id = definitionId,
@@ -346,6 +370,12 @@ return function(VehicleSpawnerService)
 				end
 			end
 		end
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		if not spawner:IsDescendantOf(Workspace) then
+			return nil, "SPAWNER_NOT_FOUND"
+		end
 		table.sort(vehicles, function(a, b)
 			-- What is for sale first, cheapest first, then the cars this character
 			-- already keeps here. Sorting the two together interleaved a showroom
@@ -374,9 +404,15 @@ return function(VehicleSpawnerService)
 		player: Player,
 		spawnerId: string
 	): (boolean, string?)
+		if not self.running or not playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		local spawner, reason = self:_authorise(player, spawnerId)
-		if not spawner then
-			return false, reason
+		if not self.running or not playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
+		if not spawner or not spawner:IsDescendantOf(Workspace) then
+			return false, reason or "SPAWNER_NOT_FOUND"
 		end
 		local departmentId = spawner:GetAttribute("DepartmentId")
 		if type(departmentId) == "string" and departmentId ~= "" then
