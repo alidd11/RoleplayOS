@@ -1,6 +1,18 @@
 --!strict
 local Validators = {}
 
+local MAXIMUM_SAFE_INTEGER = 9007199254740991
+
+function Validators.playerUserId(value: any): boolean
+	return type(value) == "number"
+		and value == value
+		and value ~= math.huge
+		and value ~= -math.huge
+		and value ~= 0
+		and value % 1 == 0
+		and math.abs(value) <= MAXIMUM_SAFE_INTEGER
+end
+
 function Validators.tablePayload(value: any): (boolean, string?)
 	return type(value) == "table", "EXPECTED_TABLE"
 end

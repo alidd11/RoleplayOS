@@ -1,4 +1,7 @@
 --!strict
+local Validators = require(script.Parent.Validators)
+local playerUserId = Validators.playerUserId
+
 return function(self: any)
 	self.context.Network:RegisterFunction("GetGangStatus", function(payload)
 		return type(payload) == "table"
@@ -62,7 +65,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("InviteToGang", function(payload)
-		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+		return type(payload) == "table" and playerUserId(payload.TargetUserId)
 	end, function(player, payload, requestId)
 		local invited, reason =
 			self.context.Services:Get("GangService"):Invite(player, payload.TargetUserId)
