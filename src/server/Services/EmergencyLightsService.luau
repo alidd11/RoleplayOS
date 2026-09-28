@@ -42,6 +42,7 @@ end
 
 function EmergencyLightsService:Init(context: any)
 	self.context = context
+	self.running = false
 end
 
 function EmergencyLightsService:_settings(): any
@@ -357,7 +358,11 @@ function EmergencyLightsService:Start()
 	if not settings.Enabled then
 		return
 	end
+	self.running = true
 	task.spawn(function()
+		if not self.running then
+			return
+		end
 		local byModelName: { [string]: any } = {}
 		local validator = self.context.Services:Get("ContentValidationService")
 		local vehicleDefinitions = if validator and validator.GetVehicleDefinitions
@@ -371,6 +376,9 @@ function EmergencyLightsService:Start()
 		end
 		local adopted, unknown, unlit = 0, {}, {}
 		for _, child in Workspace:GetChildren() do
+			if not self.running then
+				return
+			end
 			if not child:IsA("Model") or not child:FindFirstChildWhichIsA("VehicleSeat", true) then
 				continue
 			end
@@ -402,6 +410,9 @@ function EmergencyLightsService:Start()
 				table.insert(unlit, child.Name)
 			end
 		end
+		if not self.running then
+			return
+		end
 		self.context.Logger:Info("Parked emergency vehicles adopted", { Adopted = adopted })
 		if #unknown > 0 then
 			self.context.Logger:Warning("Parked vehicles with no department to light them", {
@@ -420,6 +431,7 @@ function EmergencyLightsService:Start()
 end
 
 function EmergencyLightsService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
