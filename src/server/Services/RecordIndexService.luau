@@ -4,7 +4,6 @@ local Players = game:GetService("Players")
 
 local RecordIndexService = {
 	connections = {},
-	queue = {},
 	queued = {},
 	waiting = {},
 	pendingSync = {},
@@ -68,7 +67,6 @@ end
 
 function RecordIndexService:Init(context: any)
 	self.context = context
-	table.clear(self.queue)
 	table.clear(self.queued)
 	table.clear(self.waiting)
 	table.clear(self.cache)
@@ -594,16 +592,10 @@ function RecordIndexService:SearchVehicles(
 end
 
 function RecordIndexService:_queueReadyPlayer(player: Player)
-	local userId = player.UserId
-	if self.queued[userId] then
-		-- A fast rejoin can arrive before the old Player instance reaches the
-		-- front of this queue. Keep the single queued slot, but make it point at
-		-- the latest live instance so background indexing is not silently skipped.
-		self.queued[userId] = player
-		return
-	end
-	self.queued[userId] = player
-	table.insert(self.queue, userId)
+	-- queued is both the deduplication map and the work set. Keeping no
+	-- separate array means departed players leave no stale user IDs behind, and
+	-- backlog stays bounded by players that are actually still queued.
+	self.queued[player.UserId] = player
 end
 
 function RecordIndexService:_waitForSession(player: Player)
@@ -683,9 +675,8 @@ function RecordIndexService:Start()
 	end
 	task.spawn(function()
 		while self.running do
-			local userId = table.remove(self.queue, 1)
+			local userId, player = next(self.queued)
 			if userId then
-				local player = self.queued[userId]
 				self.queued[userId] = nil
 				if player and self.running and playerIsCurrent(player) then
 					self:_indexPlayer(player)
@@ -703,7 +694,6 @@ function RecordIndexService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
-	table.clear(self.queue)
 	table.clear(self.queued)
 	table.clear(self.waiting)
 	table.clear(self.cache)
