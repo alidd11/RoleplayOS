@@ -322,47 +322,48 @@ return function(DataService)
 			end
 			return true, nil
 		end
+		-- A release must become visible before waiting on an existing save.
+		--
+		-- Otherwise an immediate rejoin can arrive while this final save is blocked
+		-- behind an autosave, see a normal live session, and adopt the profile that
+		-- this call is about to release. The final save then removes the replacement
+		-- player's session underneath them.
+		if release then
+			session.Releasing = true
+		end
 		if session.Saving then
 			if not release then
 				return false, "SAVE_IN_PROGRESS"
 			end
-			local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
-			while session.Saving and os.clock() < deadline do
-				task.wait(0.05)
-			end
-			if session.Saving then
-				-- Give the session up rather than abandoning it half-released.
-				--
-				-- This returned without dropping it, which left the player's profile
-				-- in self.sessions for the rest of the server's life: they had already
-				-- gone, so the autosave loop would never revisit them, and every later
-				-- load on this server found the session still present and refused.
-				-- Rejoining was impossible until the server itself died.
-				--
-				-- It is reachable in ordinary conditions. A retry under DataStore
-				-- throttling can wait several seconds per attempt, and four attempts
-				-- can outlast ShutdownSaveSeconds, which is exactly when a busy server
-				-- is saving hardest.
-				--
-				-- Dropping is the same choice the failed-save path below makes, for
-				-- the same reason: holding the profile in memory saves nothing once
-				-- the player has left, and the stored lease expires on its own clock.
-				-- The in-flight save keeps its own reference and still completes.
-				if release then
-					self.sessions[player.UserId] = nil
-					self.context.Logger:Warning("Released a session whose save was still running", {
-						UserId = player.UserId,
-					})
+			if self.closing then
+				local deadline =
+					os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
+				while session.Saving and os.clock() < deadline do
+					task.wait(0.05)
 				end
-				return false, "SAVE_IN_PROGRESS"
+				if session.Saving then
+					-- Never discard the session while its previous writer still owns a
+					-- snapshot. That writer can still commit after this function returns;
+					-- removing the session here would allow a replacement load to start
+					-- and be overwritten later by the stale in-flight save.
+					return false, "SAVE_IN_PROGRESS"
+				end
+			else
+				-- Outside shutdown there is no teardown deadline. The active save is
+				-- already bounded by DataService retry policy, so wait for that writer
+				-- to finish and then perform the release ourselves instead of orphaning
+				-- a permanently Releasing session.
+				while session.Saving do
+					task.wait(0.05)
+				end
+			end
+			-- Another concurrent release (for example BindToClose racing a leave)
+			-- may have completed while this caller waited.
+			if self.sessions[player.UserId] ~= session then
+				return true, nil
 			end
 		end
 		session.Saving = true
-		-- Marks the session as on its way out, so a load arriving now waits for the
-		-- handover instead of adopting a profile that is about to be dropped.
-		if release then
-			session.Releasing = true
-		end
 		local revision = session.Revision or 0
 		local snapshot = deepCopy(session.Profile)
 		local now = os.time()
