@@ -63,6 +63,9 @@ return function(DataService)
 	end
 
 	function DataService:Load(player: Player, waited: boolean?): (any?, string?)
+		if self.closing or not self.running then
+			return nil, "SERVICE_SHUTTING_DOWN"
+		end
 		-- Loading is idempotent. Two paths call it for the same player: the join
 		-- signal, and the sweep over everyone already present when this service
 		-- starts. Whoever joins a server first satisfies both, so both ran, and the
@@ -85,6 +88,9 @@ return function(DataService)
 			local deadline = os.clock()
 				+ (self.context.Configuration.Framework.SessionHandoverSeconds or 10)
 			while self.loading[player.UserId] == existingLoad and os.clock() < deadline do
+				if self.closing or not self.running then
+					return nil, "SERVICE_SHUTTING_DOWN"
+				end
 				if not player:IsDescendantOf(Players) then
 					return nil, "PLAYER_LEFT"
 				end
@@ -113,6 +119,9 @@ return function(DataService)
 			local deadline = os.clock()
 				+ (self.context.Configuration.Framework.SessionHandoverSeconds or 10)
 			while self.sessions[player.UserId] and os.clock() < deadline do
+				if self.closing or not self.running then
+					return nil, "SERVICE_SHUTTING_DOWN"
+				end
 				if not player:IsDescendantOf(Players) then
 					return nil, "PLAYER_LEFT"
 				end
@@ -161,6 +170,12 @@ return function(DataService)
 					UpdatedAt = os.time(),
 				})
 			end
+			if self.closing or not self.running then
+				return nil, "SERVICE_SHUTTING_DOWN"
+			end
+			if not player:IsDescendantOf(Players) then
+				return nil, "PLAYER_LEFT"
+			end
 			self.sessions[player.UserId] = {
 				Player = player,
 				Profile = profile,
@@ -195,7 +210,13 @@ return function(DataService)
 			end
 		end
 		local ok, problem = self:_retry(function()
+			if loadToken.Cancelled or self.closing or not self.running then
+				error("PROFILE_LOAD_CANCELLED")
+			end
 			return self.store:UpdateAsync(profileKey, function(stored)
+				if loadToken.Cancelled or self.closing or not self.running then
+					error("PROFILE_LOAD_CANCELLED")
+				end
 				local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
 				if not profile then
 					-- A profile that cannot be read is set aside and replaced, not
@@ -224,8 +245,15 @@ return function(DataService)
 				return profile
 			end)
 		end, function(failure)
-			return string.find(tostring(failure), "PROFILE_SESSION_LOCKED", 1, true) ~= nil
+			local text = tostring(failure)
+			return string.find(text, "PROFILE_SESSION_LOCKED", 1, true) ~= nil
+				or string.find(text, "PROFILE_LOAD_CANCELLED", 1, true) ~= nil
 		end)
+		if not ok and string.find(tostring(problem), "PROFILE_LOAD_CANCELLED", 1, true) ~= nil then
+			finishLoading()
+			return nil,
+				if self.closing or not self.running then "SERVICE_SHUTTING_DOWN" else "PLAYER_LEFT"
+		end
 		if not ok and lockedUntil and not waited then
 			-- A lease is held by another server. Retrying immediately cannot succeed,
 			-- since it expires on a clock rather than on contention, so wait it out
@@ -248,11 +276,22 @@ return function(DataService)
 					UserId = player.UserId,
 					Seconds = remaining,
 				})
-				task.wait(remaining + 1)
-				finishLoading()
-				if not player:IsDescendantOf(Players) then
-					return nil, "PLAYER_LEFT"
+				local waitUntil = os.clock() + remaining + 1
+				while os.clock() < waitUntil do
+					if loadToken.Cancelled or self.closing or not self.running then
+						finishLoading()
+						return nil,
+							if self.closing or not self.running
+								then "SERVICE_SHUTTING_DOWN"
+								else "PLAYER_LEFT"
+					end
+					if not player:IsDescendantOf(Players) then
+						finishLoading()
+						return nil, "PLAYER_LEFT"
+					end
+					task.wait(0.1)
 				end
+				finishLoading()
 				return self:Load(player, true)
 			end
 			if remaining > 0 then
@@ -296,8 +335,14 @@ return function(DataService)
 				end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
 			end
 		end
-		if loadToken.Cancelled or not player:IsDescendantOf(Players) then
-			-- The load may have acquired this server's lease after PlayerRemoving.
+		if
+			loadToken.Cancelled
+			or self.closing
+			or not self.running
+			or not player:IsDescendantOf(Players)
+		then
+			-- The load may have acquired this server's lease after PlayerRemoving
+			-- or after shutdown began.
 			-- Keep the loading claim until that writer is completely finished, then
 			-- clear only our own lease before allowing a replacement player to load.
 			local released = self:_retry(function()
@@ -317,7 +362,8 @@ return function(DataService)
 				})
 			end
 			finishLoading()
-			return nil, "PLAYER_LEFT"
+			return nil,
+				if self.closing or not self.running then "SERVICE_SHUTTING_DOWN" else "PLAYER_LEFT"
 		end
 		self.sessions[player.UserId] = {
 			Player = player,
