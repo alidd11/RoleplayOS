@@ -33,7 +33,13 @@ local OCCUPANCY_MAP = "RoleplayOSOfficialOccupancy"
 local PUBLIC_DIRECTORY_MAP = "RoleplayOSPublicDirectory"
 local MAXIMUM_PUBLIC_ROWS = 20
 
-local OfficialServerService = { Critical = true, codes = {}, reserving = {} }
+local OfficialServerService = {
+	Critical = true,
+	codes = {},
+	reserving = {},
+	running = false,
+	publishing = false,
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -42,7 +48,11 @@ end
 function OfficialServerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.OfficialServers
+	self.codes = {}
+	self.reserving = {}
 	self.instances = {}
+	self.running = false
+	self.publishing = false
 	-- Captured once, at process start, and republished unchanged - see
 	-- _publishOccupancy. This server's own uptime, not a shared clock.
 	self.startedAt = os.time()
@@ -173,10 +183,16 @@ function OfficialServerService:_pickInstance(
 	serverId: string,
 	preferredIndex: number?
 ): (string?, number?, string?)
+	if not self.running then
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	local entry = self.settings.Entries[serverId]
 	local placeId = self:_placeIdFor(entry)
 	local data = self.context.Services:Get("DataService")
 	local codes, codesError = self:_storedInstanceCodes(serverId)
+	if not self.running then
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if codesError then
 		return nil, nil, codesError
 	end
@@ -209,6 +225,9 @@ function OfficialServerService:_pickInstance(
 	end
 
 	local ok, fresh = pcall(TeleportService.ReserveServer, TeleportService, placeId)
+	if not self.running then
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not ok or type(fresh) ~= "string" or fresh == "" then
 		self.context.Logger:Error(
 			"Could not reserve an official server instance",
@@ -233,6 +252,9 @@ function OfficialServerService:_pickInstance(
 		record.UpdatedAt = os.time()
 		return record
 	end)
+	if not self.running then
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	local list = if type(saved) == "table" and type(saved.Instances) == "table"
 		then saved.Instances
 		else { fresh }
@@ -372,6 +394,9 @@ function OfficialServerService:Join(
 	serverId: any,
 	instanceIndex: any
 ): (any?, string?)
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -412,6 +437,9 @@ function OfficialServerService:Join(
 	-- Instance resolution can yield through shared storage and Roblox reserve
 	-- calls. Do not let a request from a Player that has since left or been
 	-- replaced continue into profile release.
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -442,6 +470,9 @@ function OfficialServerService:Join(
 	-- Save/release itself yields. If this exact Player disappeared while it ran,
 	-- the released profile is the correct state for a replacement session to
 	-- acquire; never teleport or reload the stale Player instance.
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -475,6 +506,9 @@ end
 -- expects rather than by reserved access code - a public instance has no
 -- code, only the JobId it already publishes itself under in the directory.
 function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -498,8 +532,11 @@ function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, st
 	if not listed then
 		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
-	-- Directory lookup yields. Revalidate the exact Player before a stale
-	-- request is allowed to release profile ownership.
+	-- Directory lookup yields. Revalidate service and Player ownership before a
+	-- stale request is allowed to release profile ownership.
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -516,6 +553,9 @@ function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, st
 			Error = tostring(releaseReason),
 		})
 		return nil, "PROFILE_BUSY"
+	end
+	if not self.running then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
 	end
 	if not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
@@ -543,6 +583,7 @@ function OfficialServerService:Start()
 	if self.settings.Enabled ~= true then
 		return
 	end
+	self.running = true
 	-- Which official server this one is, taken from the data the teleport carried.
 	-- A reserved server has no other way to know: the access code that opened it
 	-- is not readable from inside.
@@ -557,6 +598,9 @@ function OfficialServerService:Start()
 	-- only signal Roblox gives for it.
 	self.teleportFailed = TeleportService.TeleportInitFailed:Connect(
 		function(player, result, message)
+			if not self.running then
+				return
+			end
 			self.context.Logger:Error("Teleport failed after being accepted", {
 				UserId = player.UserId,
 				Result = tostring(result),
@@ -596,6 +640,9 @@ function OfficialServerService:_publishOccupancy()
 					#Players:GetPlayers(),
 					self.settings.OccupancyLifetimeSeconds or 45
 				)
+				if not self.publishing then
+					return
+				end
 				if not ok then
 					self.context.Logger:Warning(
 						"Could not publish occupancy",
@@ -613,6 +660,9 @@ function OfficialServerService:_publishOccupancy()
 					self.startedAt,
 					self.settings.OccupancyLifetimeSeconds or 45
 				)
+				if not self.publishing then
+					return
+				end
 				if not startedOk then
 					self.context.Logger:Warning(
 						"Could not publish start time",
@@ -638,7 +688,7 @@ function OfficialServerService:_publishPublicSelf()
 	-- published server has one - and the memory store refuses an empty key.
 	-- Skipped rather than erroring every heartbeat: there is nothing wrong to
 	-- report, this server simply cannot identify itself yet.
-	if game.JobId == "" then
+	if not self.publishing or game.JobId == "" then
 		return
 	end
 	local playerCount = #Players:GetPlayers()
@@ -702,11 +752,14 @@ function OfficialServerService:_adopt()
 end
 
 function OfficialServerService:_learnFrom(player: Player)
-	if self.currentServerId or game.PrivateServerId == "" then
+	if not self.running or self.currentServerId or game.PrivateServerId == "" then
 		return
 	end
 	do
 		local ok, data = pcall(player.GetJoinData, player)
+		if not self.running then
+			return
+		end
 		local teleportData = if ok and type(data) == "table" then data.TeleportData else nil
 		local id = if type(teleportData) == "table" then teleportData.OfficialServerId else nil
 		local arrivedEntry = if type(id) == "string" then self.settings.Entries[id] else nil
@@ -733,6 +786,7 @@ function OfficialServerService:_learnFrom(player: Player)
 end
 
 function OfficialServerService:Destroy()
+	self.running = false
 	self.publishing = false
 	if self.teleportFailed then
 		self.teleportFailed:Disconnect()
