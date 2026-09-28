@@ -21,12 +21,27 @@ local EmergencyPatterns = require(ReplicatedStorage.RoleplayOS.Shared.EmergencyP
 local EmergencyLightPatternService = {
 	Critical = false,
 	connections = {},
+	-- Per-vehicle lifetime watchers are owned separately so an unparented model
+	-- cannot leave a Destroying closure retaining this service indefinitely.
+	vehicleConnections = {},
 	-- Live state per vehicle, keyed by the model.
 	vehicles = {},
 }
 
 function EmergencyLightPatternService:Init(context: any)
 	self.context = context
+	self.connections = {}
+	self.vehicleConnections = {}
+	self.vehicles = {}
+end
+
+function EmergencyLightPatternService:_forgetVehicle(vehicle: Instance)
+	local connection = self.vehicleConnections[vehicle]
+	if connection then
+		connection:Disconnect()
+		self.vehicleConnections[vehicle] = nil
+	end
+	self.vehicles[vehicle] = nil
 end
 
 -- A lamp name against every stage that names it, built once at adoption so
@@ -104,7 +119,9 @@ function EmergencyLightPatternService:Adopt(vehicle: Instance)
 		-- write, including when the first desired result is nil.
 		Painted = painted,
 	}
-	vehicle.Destroying:Once(function()
+	self.vehicleConnections[vehicle] = vehicle.Destroying:Once(function()
+		-- Once disconnects itself before this callback runs.
+		self.vehicleConnections[vehicle] = nil
 		self.vehicles[vehicle] = nil
 	end)
 	local lampCount = 0
@@ -206,7 +223,7 @@ function EmergencyLightPatternService:Start()
 				if vehicle.Parent then
 					self:_paint(vehicle)
 				else
-					self.vehicles[vehicle] = nil
+					self:_forgetVehicle(vehicle)
 				end
 			end
 		end)
@@ -217,7 +234,11 @@ function EmergencyLightPatternService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for _, connection in self.vehicleConnections do
+		connection:Disconnect()
+	end
 	table.clear(self.connections)
+	table.clear(self.vehicleConnections)
 	table.clear(self.vehicles)
 end
 
