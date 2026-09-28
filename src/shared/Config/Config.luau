@@ -2510,6 +2510,7 @@ local Config = {
 		IndexWriteSpacingSeconds = 0.25,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
+		MaximumWarrantCacheCharacters = 512,
 		MaximumIncidentIndexEntries = 2000,
 		AllowedDepartments = { "Police", "Ambulance", "Fire", "Control", "Highways", "Prison" },
 		PermissionByDepartment = {
