@@ -433,23 +433,39 @@ function RecordIndexService:ScheduleVehicle(
 	}
 	self.pendingSync[key] = state
 	task.spawn(function()
+		-- Match the character worker: a raised DataStore/indexing error must not
+		-- strand the per-vehicle claim forever and silently suppress every later
+		-- resync for this vehicle.
 		local ok, reason
-		repeat
-			state.Resync = false
-			local currentPlayer = state.Player
-			local currentCharacter = state.Character
-			local currentVehicle = state.Vehicle
-			local previous = state.PreviousRegistration
-			state.PreviousRegistration = nil
-			if not self.running or not playerIsCurrent(currentPlayer) then
-				ok, reason = false, "INDEX_CANCELLED"
-			else
-				ok, reason =
-					self:ReindexVehicle(currentPlayer, currentCharacter, currentVehicle, previous)
-			end
-		until not self.running or not state.Resync
+		local safe, raised = pcall(function()
+			repeat
+				state.Resync = false
+				local currentPlayer = state.Player
+				local currentCharacter = state.Character
+				local currentVehicle = state.Vehicle
+				local previous = state.PreviousRegistration
+				state.PreviousRegistration = nil
+				if not self.running or not playerIsCurrent(currentPlayer) then
+					ok, reason = false, "INDEX_CANCELLED"
+				else
+					ok, reason = self:ReindexVehicle(
+						currentPlayer,
+						currentCharacter,
+						currentVehicle,
+						previous
+					)
+				end
+			until not self.running or not state.Resync
+		end)
 		if self.pendingSync[key] == state then
 			self.pendingSync[key] = nil
+		end
+		if not safe then
+			self.context.Logger:Error("Deferred MDT vehicle indexing raised", {
+				VehicleId = vehicle.VehicleId,
+				Error = tostring(raised),
+			})
+			return
 		end
 		if not ok and reason ~= "INDEX_CANCELLED" then
 			self.context.Logger:Warning("Deferred MDT vehicle indexing failed", {
