@@ -125,6 +125,26 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 	if not filtered then
 		return false, filterReason or "TEXT_FILTER_UNAVAILABLE"
 	end
+
+	-- Filtering can yield. Duty and channel authority captured before moderation
+	-- therefore cannot be treated as a lease: the sender may leave, end duty or
+	-- change channel while Roblox is filtering the message. Revalidate the exact
+	-- duty record and effective channel immediately before committing the entry.
+	local currentDuty = self:_duty(player)
+	if not currentDuty then
+		return false, "NOT_ON_DUTY"
+	end
+	local currentChannelId = self.current[player.UserId] or "Operations"
+	if currentDuty ~= duty or currentChannelId ~= channelId then
+		return false, "RADIO_STATE_CHANGED"
+	end
+	local currentChannel = findChannel(currentChannelId)
+	if not currentChannel or not self:_allowed(currentDuty, currentChannel) then
+		return false, "RADIO_CHANNEL_FORBIDDEN"
+	end
+	duty = currentDuty
+	channel = currentChannel
+
 	local entry = {
 		ChannelId = channelId,
 		Callsign = duty.Callsign
