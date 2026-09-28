@@ -18,19 +18,20 @@ return function(DataService)
 			self.mockRegistrations[registrationKey] = { UserId = userId, VehicleId = vehicleId }
 			return true, nil
 		end
-		local reserved = false
-		local ok = self:_retry(function()
+		local ok, persisted = self:_retry(function()
 			return self.registrationStore:UpdateAsync(registrationKey, function(existing)
 				if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
 					return existing
 				end
-				reserved = true
 				return { UserId = userId, VehicleId = vehicleId, UpdatedAt = os.time() }
 			end)
 		end)
 		if not ok then
 			return false, "REGISTRATION_STORE_UNAVAILABLE"
 		end
+		local reserved = type(persisted) == "table"
+			and persisted.UserId == userId
+			and persisted.VehicleId == vehicleId
 		return reserved, if reserved then nil else "REGISTRATION_ALREADY_USED"
 	end
 
