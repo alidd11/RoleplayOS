@@ -6,7 +6,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MoneyDropPolicy = require(ReplicatedStorage.RoleplayOS.Shared.MoneyDropPolicy)
 
-local MoneyDropService = { drops = {}, connections = {}, running = false }
+local MoneyDropService = {
+	drops = {},
+	connections = {},
+	running = false,
+	dropping = {},
+	pendingDrops = 0,
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -26,7 +32,46 @@ function MoneyDropService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.MoneyDrops
 	table.clear(self.connections)
+	table.clear(self.dropping)
+	self.pendingDrops = 0
 	self.running = false
+end
+
+function MoneyDropService:_claimDropSlot(player: Player): (any?, string?)
+	local userId = player.UserId
+	if self.dropping[userId] then
+		return nil, "MONEY_DROP_IN_PROGRESS"
+	end
+
+	local owned = 0
+	local activeCount = 0
+	for _, record in self.drops do
+		activeCount += 1
+		if record.OwnerUserId == userId then
+			owned += 1
+		end
+	end
+	if owned >= self.settings.MaximumActivePerPlayer then
+		return nil, "TOO_MANY_ACTIVE_DROPS"
+	end
+	if activeCount + self.pendingDrops >= self.settings.MaximumActiveGlobal then
+		return nil, "SERVER_DROP_LIMIT"
+	end
+
+	-- No yield occurs between checking the live counts and reserving this slot,
+	-- so concurrent requests cannot all observe the same spare capacity.
+	local claim = {}
+	self.dropping[userId] = claim
+	self.pendingDrops += 1
+	return claim, nil
+end
+
+function MoneyDropService:_releaseDropSlot(userId: number, claim: any)
+	if self.dropping[userId] ~= claim then
+		return
+	end
+	self.dropping[userId] = nil
+	self.pendingDrops = math.max(0, self.pendingDrops - 1)
 end
 
 function MoneyDropService:_activeCharacter(player: Player): (any?, string?)
@@ -247,98 +292,99 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 	if not position then
 		return nil, "CHARACTER_UNAVAILABLE"
 	end
-	local economy = self.context.Services:Get("EconomyService")
-	local recovered, recoveryReason = economy:ReconcileMoneyDropRefunds(player, characterId)
-	if not recovered then
-		return nil, recoveryReason or "MONEY_DROP_RECOVERY_PENDING"
-	end
-	local owned = 0
-	for _, record in self.drops do
-		if record.OwnerUserId == player.UserId then
-			owned += 1
-		end
-	end
-	if owned >= self.settings.MaximumActivePerPlayer then
-		return nil, "TOO_MANY_ACTIVE_DROPS"
-	end
-	local activeCount = 0
-	for _ in self.drops do
-		activeCount += 1
-	end
-	if activeCount >= self.settings.MaximumActiveGlobal then
-		return nil, "SERVER_DROP_LIMIT"
-	end
 	if amount > character.Economy.Cash then
 		return nil, "INSUFFICIENT_FUNDS"
 	end
 
-	local dropId = HttpService:GenerateGUID(false)
-	local debited, debitReason = economy:Apply(player, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = characterId,
-		Account = "Cash",
-		Amount = amount,
-		Direction = "Debit",
-		ReasonCode = "MoneyDrop.Drop",
-		Description = "Cash dropped",
-		RelatedEntityId = dropId,
-		Metadata = {},
-	})
-	if not debited then
-		return nil, debitReason
+	local claim, claimReason = self:_claimDropSlot(player)
+	if not claim then
+		return nil, claimReason
 	end
 
-	local created, record = pcall(function()
-		return self:_create(dropId, amount, player.UserId, characterId, position)
-	end)
-	if not created or not record then
-		local recovery = {
-			DropId = dropId,
-			OwnerUserId = player.UserId,
-			OwnerCharacterId = characterId,
+	local ok, result, dropReason = pcall(function()
+		local economy = self.context.Services:Get("EconomyService")
+		local recovered, recoveryReason = economy:ReconcileMoneyDropRefunds(player, characterId)
+		if not recovered then
+			return nil, recoveryReason or "MONEY_DROP_RECOVERY_PENDING"
+		end
+
+		local dropId = HttpService:GenerateGUID(false)
+		local debited, debitReason = economy:Apply(player, {
+			TransactionId = HttpService:GenerateGUID(false),
+			CharacterId = characterId,
+			Account = "Cash",
 			Amount = amount,
-			CreatedAt = os.time(),
-		}
-		local refunded, refundReason = economy:RefundMoneyDrop(player, recovery)
-		local recoveredRefund = refunded or refundReason == "DUPLICATE_TRANSACTION"
-		local queued = false
-		local queueReason: string? = nil
-		if not recoveredRefund then
-			queued, queueReason = economy:QueueMoneyDropRefund(player, recovery)
+			Direction = "Debit",
+			ReasonCode = "MoneyDrop.Drop",
+			Description = "Cash dropped",
+			RelatedEntityId = dropId,
+			Metadata = {},
+		})
+		if not debited then
+			return nil, debitReason
+		end
+
+		local created, record = pcall(function()
+			return self:_create(dropId, amount, player.UserId, characterId, position)
+		end)
+		if not created or not record then
+			local recovery = {
+				DropId = dropId,
+				OwnerUserId = player.UserId,
+				OwnerCharacterId = characterId,
+				Amount = amount,
+				CreatedAt = os.time(),
+			}
+			local refunded, refundReason = economy:RefundMoneyDrop(player, recovery)
+			local recoveredRefund = refunded or refundReason == "DUPLICATE_TRANSACTION"
+			local queued = false
+			local queueReason: string? = nil
+			if not recoveredRefund then
+				queued, queueReason = economy:QueueMoneyDropRefund(player, recovery)
+			end
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				CharacterId = characterId,
+				Action = "MoneyDrop.CreationRefund",
+				Target = dropId,
+				Metadata = {
+					Amount = amount,
+					Refunded = recoveredRefund,
+					RefundReason = refundReason,
+					Queued = queued,
+					QueueReason = queueReason,
+				},
+			})
+			if not recoveredRefund and not queued then
+				self.context.Logger:Error("Cash drop creation recovery could not be retained", {
+					DropId = dropId,
+					UserId = player.UserId,
+					CharacterId = characterId,
+					Amount = amount,
+					RefundReason = refundReason,
+					QueueReason = queueReason,
+				})
+			end
+			return nil, "DROP_CREATION_FAILED"
 		end
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
 			CharacterId = characterId,
-			Action = "MoneyDrop.CreationRefund",
+			Action = "MoneyDrop.Created",
 			Target = dropId,
-			Metadata = {
-				Amount = amount,
-				Refunded = recoveredRefund,
-				RefundReason = refundReason,
-				Queued = queued,
-				QueueReason = queueReason,
-			},
+			Metadata = { Amount = amount },
 		})
-		if not recoveredRefund and not queued then
-			self.context.Logger:Error("Cash drop creation recovery could not be retained", {
-				DropId = dropId,
-				UserId = player.UserId,
-				CharacterId = characterId,
-				Amount = amount,
-				RefundReason = refundReason,
-				QueueReason = queueReason,
-			})
-		end
-		return nil, "DROP_CREATION_FAILED"
+		return { DropId = dropId, Amount = amount, Cash = character.Economy.Cash }, nil
+	end)
+	self:_releaseDropSlot(player.UserId, claim)
+	if not ok then
+		self.context.Logger:Error("Cash drop request failed", {
+			UserId = player.UserId,
+			Error = tostring(result),
+		})
+		return nil, "MONEY_DROP_FAILED"
 	end
-	self.context.Services:Get("AuditService"):Record({
-		ActorUserId = player.UserId,
-		CharacterId = characterId,
-		Action = "MoneyDrop.Created",
-		Target = dropId,
-		Metadata = { Amount = amount },
-	})
-	return { DropId = dropId, Amount = amount, Cash = character.Economy.Cash }, nil
+	return result, dropReason
 end
 
 function MoneyDropService:_recoverDrop(dropId: string, player: Player, reason: string)
@@ -394,6 +440,8 @@ end
 
 function MoneyDropService:Destroy()
 	self.running = false
+	table.clear(self.dropping)
+	self.pendingDrops = 0
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
