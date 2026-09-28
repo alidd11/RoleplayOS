@@ -12,6 +12,7 @@ local DataService = {
 	connections = {},
 	loading = {},
 	budgetWarnings = {},
+	finalReleases = {},
 }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
@@ -83,6 +84,7 @@ end
 function DataService:Init(context: any)
 	self.context = context
 	self.budgetWarnings = {}
+	self.finalReleases = {}
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockSharedRecords = {}
 	self.mockRegistrations = {}
@@ -187,6 +189,45 @@ function DataService:_retry(
 	return false, lastError
 end
 
+function DataService:_beginFinalRelease(player: Player): any
+	local existing = self.finalReleases[player]
+	if existing then
+		return existing
+	end
+	local session = self.sessions[player.UserId]
+	if not session or session.Player ~= player then
+		return nil
+	end
+	local state: any = {
+		Done = false,
+		Success = false,
+		Reason = nil,
+	}
+	self.finalReleases[player] = state
+	-- Deferred so every synchronous PlayerRemoving handler gets one last chance
+	-- to commit disconnect consequences before the profile snapshot is frozen.
+	task.defer(function()
+		local ok, saved, reason = pcall(function()
+			return self:Save(player, true)
+		end)
+		state.Done = true
+		state.Success = ok and saved == true
+		state.Reason = if not ok then tostring(saved) else reason
+		if not state.Success then
+			self.context.Logger:Warning("Final profile release failed", {
+				UserId = player.UserId,
+				Reason = tostring(state.Reason),
+			})
+		end
+		-- During ordinary player churn the completed state has no further value.
+		-- During shutdown it stays until Destroy has accounted for the outcome.
+		if not self.closing then
+			self.finalReleases[player] = nil
+		end
+	end)
+	return state
+end
+
 function DataService:Start()
 	self.running = true
 	table.insert(
@@ -256,17 +297,9 @@ function DataService:Start()
 			if loading and loading.Player == player then
 				loading.Cancelled = true
 			end
-			-- Defer the final save so gameplay services can commit disconnect consequences
-			-- (for example, leaving while restrained) before the session lease is released.
-			task.defer(function()
-				local ok = self:Save(player, true)
-				if not ok then
-					self.context.Logger:Warning(
-						"Final profile release failed",
-						{ UserId = player.UserId }
-					)
-				end
-			end)
+			-- Track the deferred release so BindToClose can wait for it even after
+			-- this Player is no longer returned by Players:GetPlayers().
+			self:_beginFinalRelease(player)
 		end)
 	)
 	for _, player in Players:GetPlayers() do
@@ -302,6 +335,10 @@ end
 
 function DataService:Destroy()
 	self.running = false
+	-- Mark closing before disconnecting signals so any already-deferred final
+	-- release that finishes during teardown keeps its result for this method to
+	-- account for.
+	self.closing = true
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
@@ -310,49 +347,47 @@ function DataService:Destroy()
 	--
 	-- Roblox allows about thirty seconds to close. Waiting twelve of them for
 	-- budget, per profile, spends the window that the writes themselves need.
-	self.closing = true
+
+	-- Sessions, not Players:GetPlayers(), are the authoritative set to drain.
+	-- A PlayerRemoving callback can already have fired and removed the Player
+	-- from Players while its final DataStore write is still in flight.
+	for _, session in self.sessions do
+		local player = session.Player
+		if player then
+			self:_beginFinalRelease(player)
+		end
+	end
+
+	local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
+	local function unfinishedReleases(): number
+		local pending = 0
+		for _, state in self.finalReleases do
+			if not state.Done then
+				pending += 1
+			end
+		end
+		return pending
+	end
+	while unfinishedReleases() > 0 and os.clock() < deadline do
+		task.wait()
+	end
 
 	local pending = 0
 	local unsaved: { string } = {}
-	for _, player in Players:GetPlayers() do
-		-- PlayerRemoving can release the session immediately before BindToClose
-		-- reaches this loop. That profile is already safely finished; trying to
-		-- save it again returns NO_SESSION and previously produced a false data-loss
-		-- alarm on every clean Studio shutdown.
-		if not self.sessions[player.UserId] then
-			continue
+	for player, state in self.finalReleases do
+		if not state.Done then
+			pending += 1
+		elseif not state.Success then
+			table.insert(
+				unsaved,
+				string.format(
+					"%s (%d): %s",
+					player.Name,
+					player.UserId,
+					tostring(state.Reason or "PROFILE_SAVE_FAILED")
+				)
+			)
 		end
-		pending += 1
-		task.spawn(function()
-			-- Wrapped, because a save that throws used to skip the decrement
-			-- below and leave `pending` above zero for ever. The loop then waited
-			-- out the entire shutdown window for a save that had already failed,
-			-- spending the time the remaining profiles needed.
-			-- Both outcomes are recorded, because Save reports a failed write by
-			-- returning false rather than by raising. Only the raise was being
-			-- caught, so the list this builds was always empty and a server could
-			-- shut down having saved nobody while logging nothing. The one record
-			-- that can answer "I lost my money" did not exist.
-			local ok, saved, reason = pcall(function()
-				return self:Save(player, true)
-			end)
-			if not ok then
-				table.insert(
-					unsaved,
-					string.format("%s (%d): raised %s", player.Name, player.UserId, tostring(saved))
-				)
-			elseif not saved then
-				table.insert(
-					unsaved,
-					string.format("%s (%d): %s", player.Name, player.UserId, tostring(reason))
-				)
-			end
-			pending -= 1
-		end)
-	end
-	local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
-	while pending > 0 and os.clock() < deadline do
-		task.wait()
 	end
 	if pending > 0 or #unsaved > 0 then
 		-- Named, not counted.
@@ -366,6 +401,7 @@ function DataService:Destroy()
 			Failed = unsaved,
 		})
 	end
+	table.clear(self.finalReleases)
 end
 
 return DataService
