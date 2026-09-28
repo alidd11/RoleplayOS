@@ -66,11 +66,23 @@ function VehicleOwnershipService:_releaseRegistration(
 	player: Player,
 	registration: string,
 	vehicleId: string
-)
-	self.registrations[registration] = nil
-	self.context.Services
+): (boolean, string?)
+	local released, reason = self.context.Services
 		:Get("DataService")
 		:ReleaseCustomRegistration(registration, player.UserId, vehicleId)
+	if released then
+		self.registrations[registration] = nil
+		return true, nil
+	end
+	-- Fail closed. Retaining the local claim is safer than making a registration
+	-- available on this server while its durable reservation may still exist.
+	self.context.Logger:Warning("Custom registration release failed", {
+		Registration = registration,
+		UserId = player.UserId,
+		VehicleId = vehicleId,
+		Reason = reason,
+	})
+	return false, reason
 end
 
 function VehicleOwnershipService:_recordVehicle(
@@ -539,12 +551,11 @@ function VehicleOwnershipService:SetCustomRegistration(
 		vehicle = currentVehicle
 		character = currentCharacter
 
-		self.registrations[vehicle.Registration] = nil
 		vehicle.Registration = registration
 		vehicle.CustomRegistration = true
 		self.registrations[registration] = true
 		if previousRegistration ~= registration then
-			data:ReleaseCustomRegistration(previousRegistration, player.UserId, vehicle.VehicleId)
+			self:_releaseRegistration(player, previousRegistration, vehicle.VehicleId)
 		end
 		data:MarkDirty(player)
 		self.context.Services

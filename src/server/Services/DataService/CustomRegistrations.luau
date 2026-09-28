@@ -12,7 +12,11 @@ return function(DataService)
 		local registrationKey = self:_scopedKey(registration)
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
-			if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
+			if
+				existing
+				and existing.Released ~= true
+				and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId)
+			then
 				return false, "REGISTRATION_ALREADY_USED"
 			end
 			self.mockRegistrations[registrationKey] = { UserId = userId, VehicleId = vehicleId }
@@ -20,10 +24,19 @@ return function(DataService)
 		end
 		local ok, persisted = self:_retry(function()
 			return self.registrationStore:UpdateAsync(registrationKey, function(existing)
-				if existing and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId) then
+				if
+					existing
+					and existing.Released ~= true
+					and (existing.UserId ~= userId or existing.VehicleId ~= vehicleId)
+				then
 					return existing
 				end
-				return { UserId = userId, VehicleId = vehicleId, UpdatedAt = os.time() }
+				return {
+					UserId = userId,
+					VehicleId = vehicleId,
+					UpdatedAt = os.time(),
+					Released = false,
+				}
 			end)
 		end)
 		if not ok then
@@ -39,7 +52,7 @@ return function(DataService)
 		registration: string,
 		userId: number,
 		vehicleId: string
-	)
+	): (boolean, string?)
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
 		if self.mock then
@@ -47,21 +60,24 @@ return function(DataService)
 			if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
 				self.mockRegistrations[registrationKey] = nil
 			end
-			return
+			return true, nil
 		end
-		task.spawn(function()
-			self:_retry(function()
-				return self.registrationStore:UpdateAsync(registrationKey, function(existing)
-					if
-						existing
-						and existing.UserId == userId
-						and existing.VehicleId == vehicleId
-					then
-						return nil
-					end
-					return existing
-				end)
+		-- UpdateAsync cannot delete a key: returning nil cancels the update and
+		-- leaves the existing value untouched. Use an explicit free tombstone so
+		-- the owner check and release remain one atomic compare-and-swap. A later
+		-- reservation may overwrite Released=true, while a delayed release from an
+		-- old owner cannot erase that newer claim.
+		local ok = self:_retry(function()
+			return self.registrationStore:UpdateAsync(registrationKey, function(existing)
+				if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
+					return { Released = true, ReleasedAt = os.time() }
+				end
+				return existing
 			end)
 		end)
+		if not ok then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
+		return true, nil
 	end
 end
