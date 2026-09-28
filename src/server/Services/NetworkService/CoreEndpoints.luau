@@ -99,7 +99,10 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("JoinPublicServer", function(payload)
-		return type(payload) == "table" and type(payload.JobId) == "string"
+		return type(payload) == "table"
+			and type(payload.JobId) == "string"
+			and #payload.JobId > 0
+			and #payload.JobId <= 64
 	end, function(player, payload, requestId)
 		local result, reason =
 			self.context.Services:Get("OfficialServerService"):JoinPublic(player, payload.JobId)
@@ -112,6 +115,9 @@ return function(self: any)
 					elseif
 						reason == "PROFILE_BUSY"
 					then "Your progress is still saving. Try again in a moment."
+					elseif
+						reason == "PUBLIC_SERVER_DIRECTORY_UNAVAILABLE"
+					then "The public server list is unavailable. Refresh and try again."
 					else "That server could not be joined - it may have just closed. Refresh and try again.",
 				RequestId = requestId,
 			}
