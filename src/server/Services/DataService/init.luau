@@ -247,10 +247,15 @@ function DataService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
-			-- A load abandoned by the player leaving must not leave its claim
-			-- behind, or their next join waits the full handover on a load that
-			-- will never finish.
-			self.loading[player.UserId] = nil
+			-- Do not erase an in-flight load claim here. The DataStore request may
+			-- still be running, and clearing the slot lets an immediate rejoin start
+			-- a second UpdateAsync for the same UserId. Mark the exact load as
+			-- cancelled instead; its owner will release any lease it acquired before
+			-- handing the slot to the replacement player.
+			local loading = self.loading[player.UserId]
+			if loading and loading.Player == player then
+				loading.Cancelled = true
+			end
 			-- Defer the final save so gameplay services can commit disconnect consequences
 			-- (for example, leaving while restrained) before the session lease is released.
 			task.defer(function()
