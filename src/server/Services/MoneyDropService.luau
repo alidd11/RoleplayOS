@@ -6,7 +6,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MoneyDropPolicy = require(ReplicatedStorage.RoleplayOS.Shared.MoneyDropPolicy)
 
-local MoneyDropService = { drops = {}, connections = {} }
+local MoneyDropService = { drops = {}, connections = {}, running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 local function recoveryRecord(dropId: string, record: any): any
 	return {
@@ -22,6 +26,7 @@ function MoneyDropService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.MoneyDrops
 	table.clear(self.connections)
+	self.running = false
 end
 
 function MoneyDropService:_activeCharacter(player: Player): (any?, string?)
@@ -207,8 +212,17 @@ function MoneyDropService:Drop(player: Player, amount: any): (any?, string?)
 	if not self.settings.Enabled then
 		return nil, "MONEY_DROPS_DISABLED"
 	end
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "MONEY_DROP_UNAVAILABLE"
+	end
 	if self.context.Services:Get("DutyService"):Get(player) then
 		return nil, "CIVILIAN_REQUIRED"
+	end
+	-- DutyService:Get can yield on a group lookup. A request may outlive the
+	-- shutdown drain or its Player while that happens, so do not let the stale
+	-- continuation recreate a world drop after leave/teardown cleanup has run.
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "MONEY_DROP_UNAVAILABLE"
 	end
 	local valid, reason = MoneyDropPolicy.validateAmount(
 		amount,
@@ -359,6 +373,7 @@ function MoneyDropService:_recoverOwnedDrops(player: Player, reason: string)
 end
 
 function MoneyDropService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -371,6 +386,7 @@ function MoneyDropService:Start()
 end
 
 function MoneyDropService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
