@@ -24,6 +24,7 @@ local BRIDGE_NAME = "RoleplayOSIssueFine"
 
 local RoadSafetyService = {
 	sensors = {},
+	sensorConnections = {},
 	taggedSensors = {},
 	cooldowns = {},
 	journeys = {},
@@ -47,6 +48,8 @@ Fines(RoadSafetyService)
 function RoadSafetyService:Init(context: any)
 	self.context = context
 	self.connections = {}
+	self.sensorConnections = {}
+	self.running = false
 	self.fineEvent = context.Network:RegisterEvent("RoadSafetyFine")
 end
 
@@ -58,6 +61,7 @@ end
 -- the caller rather than raised, since a camera should not stop working because
 -- one reading was malformed.
 function RoadSafetyService:Start()
+	self.running = true
 	local bridge = Instance.new("BindableFunction")
 	bridge.Name = BRIDGE_NAME
 	bridge.OnInvoke = function(request: any)
@@ -84,11 +88,16 @@ function RoadSafetyService:Destroy()
 	for _, connection in self.taggedSensors do
 		connection:Disconnect()
 	end
+	for _, connection in self.sensorConnections do
+		connection:Disconnect()
+	end
 	table.clear(self.connections)
+	table.clear(self.sensorConnections)
 	table.clear(self.sensors)
 	table.clear(self.taggedSensors)
 	table.clear(self.cooldowns)
 	table.clear(self.journeys)
+	table.clear(self.seatByAssembly)
 	if self.bridge then
 		self.bridge:Destroy()
 		self.bridge = nil
