@@ -73,22 +73,28 @@ return function(DataService)
 		-- A session that exists is a profile that loaded. That is the successful
 		-- outcome, not a conflict, so it is returned as one.
 		local live = self.sessions[player.UserId]
-		if live and not live.Releasing then
+		if live and live.Player == player and not live.Releasing then
 			return live.Profile, nil
 		end
-		-- A load already in flight is waited on rather than duplicated, so the two
-		-- callers cannot both open an UpdateAsync on one profile.
-		if self.loading[player.UserId] then
+		-- A load already in flight is waited on rather than duplicated. The claim
+		-- belongs to one exact Player instance so a leave/rejoin cannot clear the
+		-- old slot and start a second UpdateAsync while the first one is still
+		-- capable of acquiring or publishing the same profile.
+		local existingLoad = self.loading[player.UserId]
+		if existingLoad then
 			local deadline = os.clock()
 				+ (self.context.Configuration.Framework.SessionHandoverSeconds or 10)
-			while self.loading[player.UserId] and os.clock() < deadline do
+			while self.loading[player.UserId] == existingLoad and os.clock() < deadline do
 				if not player:IsDescendantOf(Players) then
 					return nil, "PLAYER_LEFT"
 				end
 				task.wait(0.1)
 			end
+			if self.loading[player.UserId] then
+				return nil, "PROFILE_LOAD_IN_PROGRESS"
+			end
 			local settled = self.sessions[player.UserId]
-			if settled and not settled.Releasing then
+			if settled and settled.Player == player and not settled.Releasing then
 				return settled.Profile, nil
 			end
 		end
@@ -156,6 +162,7 @@ return function(DataService)
 				})
 			end
 			self.sessions[player.UserId] = {
+				Player = player,
 				Profile = profile,
 				Dirty = false,
 				Saving = false,
@@ -177,9 +184,16 @@ return function(DataService)
 		local quarantined: any = nil
 		local quarantineReason: string? = nil
 		-- Claimed for the duration of the store call so a second caller waits on this
-		-- one rather than opening its own. Cleared on every exit below, including the
-		-- failures, or a player who failed once could never be loaded again.
-		self.loading[player.UserId] = true
+		-- one rather than opening its own. The token is tied to the exact Player
+		-- instance: PlayerRemoving marks only that token cancelled, and a rejoin
+		-- cannot replace it until the old request has fully stopped touching storage.
+		local loadToken = { Player = player, Cancelled = false }
+		self.loading[player.UserId] = loadToken
+		local function finishLoading()
+			if self.loading[player.UserId] == loadToken then
+				self.loading[player.UserId] = nil
+			end
+		end
 		local ok, problem = self:_retry(function()
 			return self.store:UpdateAsync(profileKey, function(stored)
 				local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
@@ -235,7 +249,7 @@ return function(DataService)
 					Seconds = remaining,
 				})
 				task.wait(remaining + 1)
-				self.loading[player.UserId] = nil
+				finishLoading()
 				if not player:IsDescendantOf(Players) then
 					return nil, "PLAYER_LEFT"
 				end
@@ -246,7 +260,7 @@ return function(DataService)
 					UserId = player.UserId,
 					Seconds = remaining,
 				})
-				self.loading[player.UserId] = nil
+				finishLoading()
 				return nil, "PROFILE_SESSION_LOCKED:" .. tostring(math.ceil(remaining))
 			end
 		end
@@ -259,25 +273,17 @@ return function(DataService)
 			-- something went wrong forces whoever is looking into it to reach the
 			-- server console, which nobody can do from a phone and nobody does at all
 			-- once they have simply left.
-			self.loading[player.UserId] = nil
+			finishLoading()
 			return nil, "PROFILE_LOAD_FAILED: " .. string.sub(tostring(problem), 1, 180)
 		end
-		self.sessions[player.UserId] = {
-			Profile = loaded,
-			Dirty = false,
-			Saving = false,
-			ActiveCharacterId = nil,
-			Revision = 0,
-			DataKey = profileKey,
-		}
-		self.loading[player.UserId] = nil
 		if quarantined ~= nil then
 			self.context.Logger:Error("Profile could not be read and was set aside", {
 				UserId = player.UserId,
 				Reason = quarantineReason,
 			})
-			-- Written outside the transform and after the load has succeeded, so a
-			-- failure to keep the backup costs the record rather than the session.
+			-- The UpdateAsync above has already replaced the unreadable value. Keep
+			-- its recoverable copy even if the player disconnected while that load
+			-- was in flight; cancellation must not turn a safe quarantine into loss.
 			local key = "quarantine:" .. profileKey .. ":" .. tostring(os.time())
 			if self:_checkKey(key, "Profiles") then
 				self:_retry(function()
@@ -290,6 +296,39 @@ return function(DataService)
 				end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
 			end
 		end
+		if loadToken.Cancelled or not player:IsDescendantOf(Players) then
+			-- The load may have acquired this server's lease after PlayerRemoving.
+			-- Keep the loading claim until that writer is completely finished, then
+			-- clear only our own lease before allowing a replacement player to load.
+			local released = self:_retry(function()
+				return self.store:UpdateAsync(profileKey, function(stored)
+					if type(stored) == "table" and type(stored.AuditMetadata) == "table" then
+						local lock = stored.AuditMetadata.SessionLock
+						if lock and lock.ServerId == self.serverId then
+							stored.AuditMetadata.SessionLock = nil
+						end
+					end
+					return stored
+				end)
+			end)
+			if not released then
+				self.context.Logger:Warning("Abandoned profile load lease could not be released", {
+					UserId = player.UserId,
+				})
+			end
+			finishLoading()
+			return nil, "PLAYER_LEFT"
+		end
+		self.sessions[player.UserId] = {
+			Player = player,
+			Profile = loaded,
+			Dirty = false,
+			Saving = false,
+			ActiveCharacterId = nil,
+			Revision = 0,
+			DataKey = profileKey,
+		}
+		finishLoading()
 		-- Measured once per join rather than on every save, which would encode the
 		-- whole profile every forty seconds for a number that barely moves.
 		task.spawn(function()
@@ -299,12 +338,13 @@ return function(DataService)
 	end
 
 	function DataService:GetSession(player: Player): any?
-		return self.sessions[player.UserId]
+		local session = self.sessions[player.UserId]
+		return if session and session.Player == player then session else nil
 	end
 
 	function DataService:MarkDirty(player: Player)
 		local session = self.sessions[player.UserId]
-		if session then
+		if session and session.Player == player then
 			session.Dirty = true
 			session.Revision = (session.Revision or 0) + 1
 		end
@@ -312,12 +352,12 @@ return function(DataService)
 
 	function DataService:Save(player: Player, release: boolean?): (boolean, string?)
 		local session = self.sessions[player.UserId]
-		if not session then
+		if not session or session.Player ~= player then
 			return false, "NO_SESSION"
 		end
 		if session.Mock then
 			session.Dirty = false
-			if release then
+			if release and self.sessions[player.UserId] == session then
 				self.sessions[player.UserId] = nil
 			end
 			return true, nil
@@ -403,7 +443,7 @@ return function(DataService)
 			if (session.Revision or 0) == revision then
 				session.Dirty = false
 			end
-			if release then
+			if release and self.sessions[player.UserId] == session then
 				self.sessions[player.UserId] = nil
 			end
 			return true, nil
@@ -414,7 +454,9 @@ return function(DataService)
 		-- refuse, locking them out until the server itself died. The stored lease
 		-- expires on its own clock, which is what that mechanism is for.
 		if release then
-			self.sessions[player.UserId] = nil
+			if self.sessions[player.UserId] == session then
+				self.sessions[player.UserId] = nil
+			end
 		end
 		self.context.Logger:Error(
 			"Profile save failed",
