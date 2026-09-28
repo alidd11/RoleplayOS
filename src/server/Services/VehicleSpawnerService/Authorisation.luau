@@ -169,6 +169,9 @@ return function(VehicleSpawnerService)
 	-- server whose players never visit a dealership never pays to replicate them.
 
 	function VehicleSpawnerService:_ensurePreview(definitionId: string, definition: any): Instance?
+		if not self.running then
+			return nil
+		end
 		local root = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
 		if not root then
 			root = Instance.new("Folder")

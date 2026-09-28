@@ -1,6 +1,7 @@
 --!strict
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RigMechanics = require(script.RigMechanics)
 
@@ -210,6 +211,10 @@ function VehicleSpawnerService:Destroy()
 	table.clear(self.active)
 	table.clear(self.cooldowns)
 	table.clear(self.spawning)
+	local previewRoot = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
+	if previewRoot then
+		previewRoot:Destroy()
+	end
 	table.clear(self.previewLastUsed)
 end
 
