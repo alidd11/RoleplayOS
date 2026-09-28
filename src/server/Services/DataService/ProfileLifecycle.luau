@@ -287,7 +287,7 @@ return function(DataService)
 						StoredAt = os.time(),
 						Profile = quarantined,
 					})
-				end)
+				end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
 			end
 		end
 		-- Measured once per join rather than on every save, which would encode the
