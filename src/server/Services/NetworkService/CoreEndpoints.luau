@@ -131,8 +131,10 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("JoinOfficialServer", function(payload)
-		local maximumInstances =
-			math.max(1, math.floor(tonumber(self.context.Configuration.OfficialServers.MaximumInstances) or 6))
+		local maximumInstances = math.max(
+			1,
+			math.floor(tonumber(self.context.Configuration.OfficialServers.MaximumInstances) or 6)
+		)
 		return type(payload) == "table"
 			and type(payload.ServerId) == "string"
 			and (
