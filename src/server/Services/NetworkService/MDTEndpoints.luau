@@ -42,8 +42,9 @@ return function(self: any)
 			elseif duty.DepartmentId == "Highways" then
 				accessProfile = "Highways"
 			end
-			data, searchReason =
-				self.context.Services:Get("PersonRecordService"):Search(query, page, accessProfile)
+			data, searchReason = self.context.Services
+				:Get("PersonRecordService")
+				:Search(query, page, accessProfile, canReadWarrants)
 		else
 			data, searchReason = self.context.Services
 				:Get("VehicleRecordService")
