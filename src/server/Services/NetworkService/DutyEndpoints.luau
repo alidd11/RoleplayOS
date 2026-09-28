@@ -50,14 +50,27 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("RadioSetCallsign", function(payload)
-		return type(payload) == "table" and type(payload.Callsign) == "string"
+		return type(payload) == "table"
+			and type(payload.Callsign) == "string"
+			and #payload.Callsign >= 2
+			and #payload.Callsign <= 16
 	end, function(player, payload, requestId)
 		local callsign, reason =
 			self.context.Services:Get("DutyService"):SetCallsign(player, payload.Callsign)
+		local messages = {
+			INVALID_CALLSIGN = "Enter a valid callsign.",
+			NOT_ON_DUTY = "Go on duty before changing your callsign.",
+			DUTY_PROFILE_NOT_FOUND = "Your duty profile is not ready. Try again.",
+			TEXT_FILTER_BUSY = "Callsign moderation is busy. Try again shortly.",
+			TEXT_FILTER_TIMEOUT = "Roblox moderation did not respond. Try again.",
+			TEXT_FILTER_UNAVAILABLE = "Roblox could not approve that callsign. Try another.",
+		}
 		return {
 			Success = callsign ~= nil,
 			Code = if callsign then "OK" else reason,
-			Message = if callsign then "Callsign updated." else "Enter a valid callsign.",
+			Message = if callsign
+				then "Callsign updated."
+				else (reason and messages[reason]) or "The callsign could not be updated.",
 			Data = if callsign then { Callsign = callsign } else nil,
 			RequestId = requestId,
 		}
