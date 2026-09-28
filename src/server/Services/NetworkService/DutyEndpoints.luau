@@ -1,4 +1,7 @@
 --!strict
+local Validators = require(script.Parent.Validators)
+local playerUserId = Validators.playerUserId
+
 return function(self: any)
 	self.context.Network:RegisterFunction("BeginDuty", function(payload)
 		return type(payload) == "table"
@@ -60,7 +63,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("PAVASpray", function(payload)
-		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+		return type(payload) == "table" and playerUserId(payload.TargetUserId)
 	end, function(player, payload, requestId)
 		local sprayed, reason =
 			self.context.Services:Get("PAVAService"):Spray(player, payload.TargetUserId)
