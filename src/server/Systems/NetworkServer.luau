@@ -41,6 +41,22 @@ local function responseEnvelope(result: any, requestId: string): (any?, string?)
 	return envelope, nil
 end
 
+local function releaseActiveSlot(self: any, requestId: string, slot: any): boolean
+	if slot.Counted ~= true then
+		return false
+	end
+	slot.Counted = false
+	local inFlight = slot.InFlight
+	if type(inFlight) == "table" and inFlight[requestId] == slot then
+		inFlight[requestId] = nil
+	end
+	if self.activeSlots[requestId] == slot then
+		self.activeSlots[requestId] = nil
+	end
+	self.activeTotal = math.max(0, self.activeTotal - 1)
+	return true
+end
+
 function NetworkServer.new(config: any, logger: any)
 	local folder = ReplicatedStorage.RoleplayOS.Network:FindFirstChild("Remotes")
 		or Instance.new("Folder")
@@ -64,6 +80,7 @@ function NetworkServer.new(config: any, logger: any)
 		limiters = {},
 		counts = {},
 		active = {},
+		activeSlots = {},
 		activeTotal = 0,
 		accepting = true,
 		authorizer = nil,
@@ -201,12 +218,11 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		-- In-flight requests are tracked individually with a start time rather
-		-- than as a count. A handler that yields indefinitely never reaches the
-		-- release below, and a bare counter would leak that slot for the rest of
-		-- the session: once the limit was reached every later request from this
-		-- player was refused, whatever the endpoint. Presuming a long-running
-		-- request lost keeps one stuck call from wedging the whole session.
+		-- In-flight requests are counted until the handler finishes or its slot
+		-- reaches the configured abandonment ceiling. Each slot owns an independent
+		-- timer so a request that stalls after its player leaves cannot disappear
+		-- from the per-player table while permanently occupying the server-wide
+		-- concurrency budget.
 		local inFlight = self.active[player.UserId]
 		if not inFlight then
 			inFlight = {}
@@ -215,15 +231,8 @@ function NetworkServer:RegisterFunction(
 		local now = os.clock()
 		local ceiling = self.config.RequestAbandonSeconds or 30
 		local active = 0
-		for id, startedAt in inFlight do
-			if now - startedAt > ceiling then
-				inFlight[id] = nil
-				self.logger:Warning("Abandoned a stuck request slot", {
-					Endpoint = name,
-					UserId = player.UserId,
-					HeldSeconds = math.floor(now - startedAt),
-				})
-			else
+		for _, slot in inFlight do
+			if slot.Counted == true then
 				active += 1
 			end
 		end
@@ -259,8 +268,25 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		inFlight[requestId] = now
+		local slot = {
+			StartedAt = now,
+			Counted = true,
+			InFlight = inFlight,
+			Endpoint = name,
+			UserId = player.UserId,
+		}
+		inFlight[requestId] = slot
+		self.activeSlots[requestId] = slot
 		self.activeTotal += 1
+		task.delay(ceiling, function()
+			if releaseActiveSlot(self, requestId, slot) then
+				self.logger:Warning("Abandoned a stuck request slot", {
+					Endpoint = slot.Endpoint,
+					UserId = slot.UserId,
+					HeldSeconds = math.floor(os.clock() - slot.StartedAt),
+				})
+			end
+		end)
 
 		-- The handler runs alongside a deadline rather than being waited on.
 		--
@@ -282,11 +308,10 @@ function NetworkServer:RegisterFunction(
 			local handlerOk, handlerResult = pcall(handler, player, payload, requestId)
 			ok, result = handlerOk, handlerResult
 			-- A caller may already have received SERVER_TIMEOUT by the time the
-			-- handler finishes. Release its per-player slot here as well as on the
-			-- normal response path so completed work cannot keep later requests busy.
-			inFlight[requestId] = nil
+			-- handler finishes. Release exactly once: the abandonment timer may
+			-- already have reclaimed this slot.
+			releaseActiveSlot(self, requestId, slot)
 			finished = true
-			self.activeTotal = math.max(0, self.activeTotal - 1)
 		end)
 		local handlerDeadline = os.clock() + (self.config.HandlerTimeoutSeconds or 8)
 		while not finished and os.clock() < handlerDeadline do
@@ -373,6 +398,13 @@ function NetworkServer:Destroy()
 	for _, player in Players:GetPlayers() do
 		self.globalLimiter:Remove(tostring(player.UserId))
 	end
+	-- Prevent delayed abandonment/completion callbacks from adjusting counters or
+	-- emitting warnings after teardown. The callbacks retain only slot tables,
+	-- not Player instances.
+	for _, slot in self.activeSlots do
+		slot.Counted = false
+	end
+	table.clear(self.activeSlots)
 	table.clear(self.active)
 	self.activeTotal = 0
 end
