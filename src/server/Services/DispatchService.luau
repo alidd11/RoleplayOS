@@ -226,16 +226,14 @@ function DispatchService:Publish(kind: string, id: string, revision: number)
 end
 
 function DispatchService:Snapshot(player: Player): (any?, string?)
+	local mdt = self.context.Services:Get("MDTService")
 	local studioConsole = RunService:IsStudio()
 		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio == true
 		and self:IsAtConsole(player)
-	if
-		not studioConsole
-		and not self.context.Services:Get("MDTService"):CanUsePermission(player, "Dispatch")
-	then
+	local duty = if studioConsole then self:_duty(player) else mdt:GetAuthorisedDuty(player, "Dispatch")
+	if not studioConsole and not duty then
 		return nil, "DISPATCH_NOT_AUTHORISED"
 	end
-	local duty = self:_duty(player)
 	local calls = {}
 	for _, call in self.context.Services:Get("CallService"):Snapshot() do
 		if
@@ -263,10 +261,19 @@ function DispatchService:Snapshot(player: Player): (any?, string?)
 			table.insert(units, unit)
 		end
 	end
+	local atConsole = self:IsAtConsole(player)
+	-- DutyService:Get can yield while access is re-evaluated. The first
+	-- authorisation therefore cannot be treated as a lease over the remainder of
+	-- this snapshot: a player may leave, end duty or change role before the data
+	-- is returned. Require the exact authorised duty record captured above to
+	-- still be current after the final yielding check.
+	if not studioConsole and mdt:GetAuthorisedDuty(player, "Dispatch") ~= duty then
+		return nil, "DISPATCH_NOT_AUTHORISED"
+	end
 	return {
 		Calls = calls,
 		Units = units,
-		AtConsole = self:IsAtConsole(player),
+		AtConsole = atConsole,
 	}, nil
 end
 
