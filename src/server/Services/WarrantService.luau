@@ -121,8 +121,12 @@ function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { 
 		if meta then
 			self:_dropCachedCharacter(characterId)
 		end
+		-- The warrant cache has its own freshness contract. Reading through the
+		-- general person-record cache here can extend a stale wanted/not-wanted
+		-- result when another server changes a warrant shortly before this entry
+		-- expires, so TTL/cap misses go back to the durable record.
 		local record, reason =
-			self.context.Services:Get("RecordIndexService"):GetPerson(characterId)
+			self.context.Services:Get("RecordIndexService"):GetPersonFresh(characterId)
 		if reason then
 			return false, {}, reason
 		end
