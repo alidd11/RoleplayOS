@@ -137,42 +137,49 @@ end
 function MeleeWeaponService:Start()
 	self.running = true
 	self.playerConnections = {}
-	local function watch(player: Player)
-		local existing = self.playerConnections[player.UserId]
-		if existing then
-			for _, connection in existing do
-				connection:Disconnect()
-			end
+
+	local function disconnectPlayer(userId: number)
+		local connections = self.playerConnections[userId]
+		if not connections then
+			return
 		end
-		local connections = {}
-		self.playerConnections[player.UserId] = connections
-		table.insert(
-			connections,
-			player.CharacterAdded:Connect(function(character)
-				self.lastStrike[player.UserId] = nil
-				local death = character:FindFirstChildOfClass("Humanoid")
-				if death then
-					table.insert(
-						connections,
-						death.Died:Connect(function()
-							self:_clear(player)
-						end)
-					)
-				end
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		self.playerConnections[userId] = nil
+	end
+
+	local function watchCharacter(player: Player, character: Model)
+		local connections = self.playerConnections[player.UserId]
+		if not connections then
+			return
+		end
+		self.lastStrike[player.UserId] = nil
+		if connections.Death then
+			connections.Death:Disconnect()
+			connections.Death = nil
+		end
+		local death = character:FindFirstChildOfClass("Humanoid")
+		if death then
+			connections.Death = death.Died:Connect(function()
+				self:_clear(player)
 			end)
-		)
-		if player.Character then
-			local death = player.Character:FindFirstChildOfClass("Humanoid")
-			if death then
-				table.insert(
-					connections,
-					death.Died:Connect(function()
-						self:_clear(player)
-					end)
-				)
-			end
 		end
 	end
+
+	local function watch(player: Player)
+		disconnectPlayer(player.UserId)
+		local connections: any = {}
+		self.playerConnections[player.UserId] = connections
+		connections.CharacterAdded = player.CharacterAdded:Connect(function(character)
+			watchCharacter(player, character)
+		end)
+		local character = player.Character
+		if character then
+			watchCharacter(player, character)
+		end
+	end
+
 	for _, player in Players:GetPlayers() do
 		watch(player)
 	end
@@ -181,13 +188,7 @@ function MeleeWeaponService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.lastStrike[player.UserId] = nil
-			local connections = self.playerConnections[player.UserId]
-			if connections then
-				for _, connection in connections do
-					connection:Disconnect()
-				end
-				self.playerConnections[player.UserId] = nil
-			end
+			disconnectPlayer(player.UserId)
 		end)
 	)
 end
