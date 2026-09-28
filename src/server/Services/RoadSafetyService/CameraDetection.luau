@@ -17,7 +17,11 @@ return function(RoadSafetyService)
 	function RoadSafetyService:_adoptCameras()
 		local settings = self.context.Configuration.RoadSafety
 		local function consider(instance: Instance)
-			if not instance:IsA("Model") then
+			if
+				not self.running
+				or not instance:IsA("Model")
+				or not instance:IsDescendantOf(Workspace)
+			then
 				return
 			end
 			local sensor = instance:FindFirstChild(settings.SensorName)
@@ -38,6 +42,9 @@ return function(RoadSafetyService)
 		task.spawn(function()
 			local scanned = 0
 			for _, instance in Workspace:GetDescendants() do
+				if not self.running then
+					return
+				end
 				if instance:IsA("Model") then
 					consider(instance)
 				end
@@ -46,6 +53,9 @@ return function(RoadSafetyService)
 				-- holding it for however long a map of this size takes.
 				if scanned % 2000 == 0 then
 					task.wait()
+					if not self.running then
+						return
+					end
 				end
 			end
 			local count = 0
@@ -61,12 +71,20 @@ return function(RoadSafetyService)
 				-- Filtered before anything is scheduled. This fires for every part of
 				-- every model the map streams in, so deferring on all of them queues
 				-- thousands of calls that will each decide they had nothing to do.
-				if not instance:IsA("Model") then
+				if not self.running or not instance:IsA("Model") then
 					return
 				end
 				-- Deferred, because a model streams in a piece at a time and its
 				-- sensor may not have arrived at the moment the model does.
 				task.defer(consider, instance)
+			end)
+		)
+		table.insert(
+			self.connections,
+			Workspace.DescendantRemoving:Connect(function(instance)
+				if instance:IsA("BasePart") and self.sensors[instance] then
+					self:_unwatchSensor(instance)
+				end
 			end)
 		)
 	end
@@ -90,19 +108,26 @@ return function(RoadSafetyService)
 		end
 	end
 
+	function RoadSafetyService:_unwatchSensor(sensor: BasePart)
+		local connection = self.sensorConnections[sensor]
+		if connection then
+			connection:Disconnect()
+			self.sensorConnections[sensor] = nil
+		end
+		self.sensors[sensor] = nil
+		self.cooldowns[sensor] = nil
+	end
+
 	function RoadSafetyService:_watchSensor(camera: Model, sensor: BasePart)
-		if self.sensors[sensor] then
+		if not self.running or not sensor:IsDescendantOf(Workspace) or self.sensors[sensor] then
 			return
 		end
 		self.sensors[sensor] = camera:GetFullName()
 		sensor.CanCollide = false
 		sensor.CanTouch = true
-		table.insert(
-			self.connections,
-			sensor.Touched:Connect(function(hit)
-				self:_reading(camera, sensor, hit)
-			end)
-		)
+		self.sensorConnections[sensor] = sensor.Touched:Connect(function(hit)
+			self:_reading(camera, sensor, hit)
+		end)
 	end
 
 	-- Resolves any body part touching a sensor to the vehicle's driver seat. Camera
@@ -410,10 +435,12 @@ return function(RoadSafetyService)
 		self:_connectTag(settings.AverageExitTag, function(sensor, hit)
 			self:_taggedAverage(sensor, hit, false)
 		end)
-		self.running = true
 		task.spawn(function()
 			while self.running do
 				task.wait(settings.StateCleanupSeconds)
+				if not self.running then
+					break
+				end
 				local now = os.clock()
 				for sensor, perSensor in self.cooldowns do
 					for vehicle, expiresAt in perSensor do
