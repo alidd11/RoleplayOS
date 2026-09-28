@@ -226,6 +226,16 @@ function VendorService:Purchase(player: Player, payload: any): (any?, string?)
 		local owned = self.context.Services
 			:Get("GamepassService")
 			:Refresh(player, { GamepassId = item.GamepassId })
+		-- Marketplace ownership checks yield. The original stall proximity and
+		-- emergency-service restriction cannot be treated as a lease over that
+		-- wait: the player may move away or change team before an item is granted
+		-- or charged. Revalidate the same server-owned purchase boundary now.
+		if not self:_inRange(player, payload.VendorId) then
+			return nil, "VENDOR_OUT_OF_RANGE"
+		end
+		if item.EmergencyRestricted and self:_isEmergency(player) then
+			return nil, "EMERGENCY_SERVICE_RESTRICTED"
+		end
 		local session = self.context.Services:Get("DataService"):GetSession(player)
 		local cache = session and session.Profile and session.Profile.GamepassCache or {}
 		if owned == true or cache[tostring(item.GamepassId)] == true then
