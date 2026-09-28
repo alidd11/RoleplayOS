@@ -2,6 +2,7 @@
 local Validators = require(script.Parent.Validators)
 local tablePayload = Validators.tablePayload
 local boundedStringArray = Validators.boundedStringArray
+local playerUserId = Validators.playerUserId
 
 return function(self: any)
 	self.context.Network:RegisterFunction("PurchaseFromVendor", function(payload)
@@ -59,7 +60,7 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("CuffPlayer", function(payload)
 		return type(payload) == "table"
-			and type(payload.TargetUserId) == "number"
+			and playerUserId(payload.TargetUserId)
 			and (payload.Mode == nil or payload.Mode == "Apply" or payload.Mode == "Remove")
 	end, function(player, payload, requestId)
 		local result, reason = self.context.Services
@@ -77,7 +78,7 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("BookCustody", function(payload)
 		return type(payload) == "table"
-			and type(payload.TargetUserId) == "number"
+			and playerUserId(payload.TargetUserId)
 			and type(payload.Reason) == "string"
 			and boundedStringArray(
 				payload.OffenceCodes,
@@ -105,7 +106,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("MeleeStrike", function(payload)
-		return type(payload) == "table" and type(payload.TargetUserId) == "number"
+		return type(payload) == "table" and playerUserId(payload.TargetUserId)
 	end, function(player, payload, requestId)
 		local result, reason =
 			self.context.Services:Get("MeleeWeaponService"):Strike(player, payload.TargetUserId)
@@ -149,7 +150,7 @@ return function(self: any)
 	)
 	self.context.Network:RegisterFunction("CustodyAction", function(payload)
 		return type(payload) == "table"
-			and type(payload.TargetUserId) == "number"
+			and playerUserId(payload.TargetUserId)
 			and type(payload.Action) == "string"
 			and (payload.Data == nil or type(payload.Data) == "table")
 	end, function(player, payload, requestId)
@@ -167,7 +168,7 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("GetPresentedId", function(payload)
 		return type(payload) == "table"
-			and type(payload.TargetUserId) == "number"
+			and playerUserId(payload.TargetUserId)
 			and (payload.CredentialType == "Civilian" or payload.CredentialType == "Police")
 	end, function(player, payload, requestId)
 		local card, reason = self.context.Services
