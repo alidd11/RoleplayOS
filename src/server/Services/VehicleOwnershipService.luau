@@ -455,10 +455,14 @@ end
 function VehicleOwnershipService:SetCustomRegistration(
 	player: Player,
 	vehicleId: string,
-	proposed: string
+	proposed: string,
+	spawnerId: string?
 ): (any?, string?)
 	if not self.running or not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
+	end
+	if not spawnerId or spawnerId == "" or #spawnerId > 64 then
+		return nil, "CIVILIAN_FACILITY_REQUIRED"
 	end
 	if self.registrationUpdates[vehicleId] then
 		return nil, "REGISTRATION_UPDATE_IN_PROGRESS"
@@ -496,6 +500,20 @@ function VehicleOwnershipService:SetCustomRegistration(
 			data:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
 		if not reserved then
 			return nil, reserveReason
+		end
+
+		-- The network endpoint checks the civilian facility before entering this
+		-- method, but the gamepass lookup, text filter and registration reservation
+		-- above can all yield. Revalidate proximity and facility authority after
+		-- those waits and immediately before the live ownership record is changed.
+		local authorised, facilityReason = self.context.Services
+			:Get("VehicleSpawnerService")
+			:AuthoriseCivilianFacility(player, spawnerId)
+		if not authorised then
+			if registration ~= previousRegistration then
+				self:_releaseRegistration(player, registration, vehicleId)
+			end
+			return nil, facilityReason
 		end
 
 		local currentVehicle, currentCharacter = self:_find(player, vehicleId)
