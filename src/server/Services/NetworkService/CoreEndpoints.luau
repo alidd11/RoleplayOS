@@ -131,9 +131,19 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("JoinOfficialServer", function(payload)
+		local maximumInstances =
+			math.max(1, math.floor(tonumber(self.context.Configuration.OfficialServers.MaximumInstances) or 6))
 		return type(payload) == "table"
 			and type(payload.ServerId) == "string"
-			and (payload.InstanceIndex == nil or type(payload.InstanceIndex) == "number")
+			and (
+				payload.InstanceIndex == nil
+				or (
+					type(payload.InstanceIndex) == "number"
+					and payload.InstanceIndex % 1 == 0
+					and payload.InstanceIndex >= 1
+					and payload.InstanceIndex <= maximumInstances
+				)
+			)
 	end, function(player, payload, requestId)
 		local result, reason = self.context.Services
 			:Get("OfficialServerService")
