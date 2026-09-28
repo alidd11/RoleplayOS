@@ -37,21 +37,10 @@ local function indexKey(kind: string, value: string): string?
 	return kind .. ":" .. string.sub(token, 1, 2)
 end
 
-local function activeWarrants(record: any): { any }
-	local active = {}
-	local now = os.time()
-	for _, warrant in if type(record.Warrants) == "table" then record.Warrants else {} do
-		if warrant.Active == true and (warrant.ExpiresAt == nil or warrant.ExpiresAt > now) then
-			table.insert(active, warrant)
-		end
-	end
-	return active
-end
-
-local function personView(record: any, accessProfile: string): any
+local function personView(record: any, accessProfile: string, warrants: { any }?): any
 	local police = accessProfile == "Police"
 	local highways = police or accessProfile == "Highways"
-	local warrants = if police then activeWarrants(record) else {}
+	local visibleWarrants = warrants or {}
 	return {
 		CharacterId = record.CharacterId,
 		FullName = record.FullName,
@@ -60,8 +49,8 @@ local function personView(record: any, accessProfile: string): any
 		DrivingRecord = if highways then record.DrivingRecord else nil,
 		CustodyRecord = if police then record.CustodyRecord else nil,
 		CriminalRecord = if police then record.CriminalRecord else nil,
-		Warrants = if police then warrants else nil,
-		Flags = if police and #warrants > 0 then { "WANTED" } else {},
+		Warrants = if warrants ~= nil then visibleWarrants else nil,
+		Flags = if #visibleWarrants > 0 then { "WANTED" } else {},
 		AccessProfile = accessProfile,
 		UpdatedAt = record.UpdatedAt,
 	}
@@ -544,7 +533,8 @@ end
 function RecordIndexService:SearchPeople(
 	query: string,
 	page: number,
-	accessProfile: string
+	accessProfile: string,
+	includeWarrants: boolean?
 ): (any?, string?)
 	local search = normalise(query)
 	local key = indexKey("Person", search)
@@ -571,12 +561,25 @@ function RecordIndexService:SearchPeople(
 	local first = (page - 1) * size + 1
 	local items = {}
 	for index = first, math.min(#matches, first + size - 1) do
-		local record, recordReason = self:GetPerson(matches[index].CharacterId)
+		local characterId = matches[index].CharacterId
+		local warrants
+		if includeWarrants == true then
+			local _, active, warrantReason =
+				self.context.Services:Get("WarrantService"):HasActiveForCharacter(characterId)
+			if warrantReason then
+				return nil, warrantReason
+			end
+			warrants = active
+		end
+		-- On a warrant-cache miss, HasActiveForCharacter refreshed the durable
+		-- person record through GetPersonFresh, so this read reuses that cache
+		-- entry rather than spending a second DataStore read.
+		local record, recordReason = self:GetPerson(characterId)
 		if recordReason then
 			return nil, recordReason
 		end
 		if record then
-			table.insert(items, personView(record, accessProfile))
+			table.insert(items, personView(record, accessProfile, warrants))
 		end
 	end
 	return { Items = items, Page = page, Total = #matches }, nil
@@ -657,19 +660,20 @@ function RecordIndexService:SearchVehicles(
 				})
 			end
 		elseif record then
-			-- Gated the same way the person route gates it. Without this a
-			-- department denied WarrantRead learned that a keeper was wanted
-			-- simply by typing the registration, which is the exact disclosure
-			-- the person search withholds from them.
-			local owner
-			if includeWarrants then
-				local ownerReason
-				owner, ownerReason = self:GetPerson(record.OwnerCharacterId)
-				if ownerReason then
-					return nil, ownerReason
+			-- Warrant visibility is a separate permission from vehicle search.
+			-- Use the dedicated warrant cache/freshness contract rather than deriving
+			-- WANTED from the general person-record cache, which may have been filled
+			-- before another server created or revoked a warrant.
+			local wanted = false
+			if includeWarrants == true then
+				local hasWarrant, _, warrantReason = self.context.Services
+					:Get("WarrantService")
+					:HasActiveForCharacter(record.OwnerCharacterId)
+				if warrantReason then
+					return nil, warrantReason
 				end
+				wanted = hasWarrant
 			end
-			local wanted = includeWarrants == true and owner ~= nil and #activeWarrants(owner) > 0
 			table.insert(items, {
 				VehicleId = record.VehicleId,
 				Registration = record.Registration,
