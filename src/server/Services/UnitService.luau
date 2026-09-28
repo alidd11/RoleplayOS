@@ -31,6 +31,16 @@ function UnitService:SetStatus(unitId: string, status: string): (boolean, string
 	if not unit or not table.find(self.context.Configuration.Dispatch.UnitStatuses, status) then
 		return false, "INVALID_UNIT_STATUS"
 	end
+	-- Available/Unavailable mean the unit is no longer working its assigned call.
+	-- Release the server-owned membership first so UnitIds, call status and the
+	-- unit's AssignedCallId cannot disagree while the unit advertises itself free.
+	if
+		unit.AssignedCallId ~= nil
+		and (status == "Available" or status == "Unavailable")
+	then
+		self.context.Services:Get("CallService"):ReleaseUnit(unitId)
+		unit.AssignedCallId = nil
+	end
 	unit.Status = status
 	return true, nil
 end
