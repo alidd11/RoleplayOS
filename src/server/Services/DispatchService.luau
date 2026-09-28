@@ -230,7 +230,9 @@ function DispatchService:Snapshot(player: Player): (any?, string?)
 	local studioConsole = RunService:IsStudio()
 		and self.context.Configuration.Framework.GrantMockEmergencyAccessInStudio == true
 		and self:IsAtConsole(player)
-	local duty = if studioConsole then self:_duty(player) else mdt:GetAuthorisedDuty(player, "Dispatch")
+	local duty = if studioConsole
+		then self:_duty(player)
+		else mdt:GetAuthorisedDuty(player, "Dispatch")
 	if not studioConsole and not duty then
 		return nil, "DISPATCH_NOT_AUTHORISED"
 	end
