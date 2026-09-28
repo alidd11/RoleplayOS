@@ -9,6 +9,38 @@ local RateLimiter = require(ReplicatedStorage.RoleplayOS.Shared.RateLimiter)
 local NetworkServer = {}
 NetworkServer.__index = NetworkServer
 
+local MAXIMUM_RESPONSE_CODE_BYTES = 64
+local MAXIMUM_RESPONSE_MESSAGE_BYTES = 512
+
+local function responseCodeIsSafe(value: any): boolean
+	return type(value) == "string"
+		and #value > 0
+		and #value <= MAXIMUM_RESPONSE_CODE_BYTES
+		and string.match(value, "^[A-Z][A-Z0-9_]*$") ~= nil
+end
+
+local function responseEnvelope(result: any, requestId: string): (any?, string?)
+	if type(result) ~= "table" then
+		return nil, "INVALID_RESPONSE_TYPE"
+	end
+	if type(result.Success) ~= "boolean" then
+		return nil, "INVALID_SUCCESS_TYPE"
+	end
+	if not responseCodeIsSafe(result.Code) then
+		return nil, "INVALID_RESPONSE_CODE"
+	end
+	if type(result.Message) ~= "string" then
+		return nil, "INVALID_MESSAGE_TYPE"
+	end
+	if #result.Message > MAXIMUM_RESPONSE_MESSAGE_BYTES then
+		return nil, "RESPONSE_MESSAGE_TOO_LARGE"
+	end
+
+	local envelope = table.clone(result)
+	envelope.RequestId = requestId
+	return envelope, nil
+end
+
 function NetworkServer.new(config: any, logger: any)
 	local folder = ReplicatedStorage.RoleplayOS.Network:FindFirstChild("Remotes")
 		or Instance.new("Folder")
@@ -290,11 +322,13 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		if type(result) ~= "table" then
-			self.logger:Error(
-				"Remote handler returned an invalid response",
-				{ Endpoint = name, RequestId = requestId }
-			)
+		local envelope, envelopeReason = responseEnvelope(result, requestId)
+		if not envelope then
+			self.logger:Error("Remote handler returned an unsafe response envelope", {
+				Endpoint = name,
+				RequestId = requestId,
+				Reason = envelopeReason,
+			})
 			self:_count("SERVER_ERROR")
 			return {
 				Success = false,
@@ -303,8 +337,7 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		result.RequestId = requestId
-		return result
+		return envelope
 	end
 end
 
