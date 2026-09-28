@@ -212,10 +212,7 @@ function CallService:Update(callId: string, data: any): (any?, string?)
 		if data.Status ~= "OnScene" then
 			return nil, "INVALID_CALL_STATUS"
 		end
-		if
-			(call.Status ~= "Assigned" and call.Status ~= "OnScene")
-			or #call.UnitIds == 0
-		then
+		if (call.Status ~= "Assigned" and call.Status ~= "OnScene") or #call.UnitIds == 0 then
 			return nil, "INVALID_CALL_STATUS"
 		end
 		call.Status = "OnScene"
