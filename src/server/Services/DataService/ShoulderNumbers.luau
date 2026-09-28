@@ -44,7 +44,7 @@ return function(DataService)
 				holderKey,
 				{ UserId = userId, AssignedAt = os.time() }
 			)
-		end)
+		end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
 		if not recorded then
 			self.context.Logger:Warning("Shoulder number holder record failed", {
 				DepartmentId = departmentId,
@@ -65,7 +65,7 @@ return function(DataService)
 		end
 		local ok, result = self:_retry(function()
 			return self.shoulderStore:GetAsync(holderKey)
-		end)
+		end, nil, Enum.DataStoreRequestType.GetAsync)
 		return if ok then result else nil, if ok then nil else "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 	end
 end
