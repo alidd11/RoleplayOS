@@ -34,10 +34,7 @@ function UnitService:SetStatus(unitId: string, status: string): (boolean, string
 	-- Available/Unavailable mean the unit is no longer working its assigned call.
 	-- Release the server-owned membership first so UnitIds, call status and the
 	-- unit's AssignedCallId cannot disagree while the unit advertises itself free.
-	if
-		unit.AssignedCallId ~= nil
-		and (status == "Available" or status == "Unavailable")
-	then
+	if unit.AssignedCallId ~= nil and (status == "Available" or status == "Unavailable") then
 		self.context.Services:Get("CallService"):ReleaseUnit(unitId)
 		unit.AssignedCallId = nil
 	end
