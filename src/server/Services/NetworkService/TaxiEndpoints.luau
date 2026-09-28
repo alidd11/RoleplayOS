@@ -39,7 +39,10 @@ return function(self: any)
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("TaxiAccept", taxiRequestIdPayload, function(player, payload, requestId)
+	self.context.Network:RegisterFunction(
+		"TaxiAccept",
+		taxiRequestIdPayload,
+		function(player, payload, requestId)
 		local taxi, reason =
 			self.context.Services:Get("TaxiService"):Accept(player, payload.RequestId)
 		local acceptMessages = {
@@ -58,8 +61,12 @@ return function(self: any)
 			Data = taxi,
 			RequestId = requestId,
 		}
-	end)
-	self.context.Network:RegisterFunction("TaxiDecline", taxiRequestIdPayload, function(player, payload, requestId)
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"TaxiDecline",
+		taxiRequestIdPayload,
+		function(player, payload, requestId)
 		local passed, reason =
 			self.context.Services:Get("TaxiService"):Decline(player, payload.RequestId)
 		return {
@@ -73,8 +80,12 @@ return function(self: any)
 				else "That taxi booking is no longer available.",
 			RequestId = requestId,
 		}
-	end)
-	self.context.Network:RegisterFunction("TaxiComplete", taxiRequestIdPayload, function(player, payload, requestId)
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"TaxiComplete",
+		taxiRequestIdPayload,
+		function(player, payload, requestId)
 		local taxi, reason =
 			self.context.Services:Get("TaxiService"):Complete(player, payload.RequestId)
 		local messages =
@@ -88,8 +99,12 @@ return function(self: any)
 			Data = taxi,
 			RequestId = requestId,
 		}
-	end)
-	self.context.Network:RegisterFunction("TaxiCancel", taxiRequestIdPayload, function(player, payload, requestId)
+		end
+	)
+	self.context.Network:RegisterFunction(
+		"TaxiCancel",
+		taxiRequestIdPayload,
+		function(player, payload, requestId)
 		local cancelled, reason =
 			self.context.Services:Get("TaxiService"):Cancel(player, payload.RequestId)
 		return {
@@ -100,7 +115,8 @@ return function(self: any)
 				else "The taxi booking could not be cancelled.",
 			RequestId = requestId,
 		}
-	end)
+		end
+	)
 	self.context.Network:RegisterFunction(
 		"TaxiStartShift",
 		tablePayload,
