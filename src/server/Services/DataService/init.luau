@@ -251,6 +251,7 @@ function DataService:Start()
 				local settled = reason == nil
 					or string.find(tostring(reason), "PROFILE_SESSION_LOCKED", 1, true) ~= nil
 					or reason == "PLAYER_LEFT"
+					or reason == "SERVICE_SHUTTING_DOWN"
 				if settled or attempt == attempts then
 					break
 				end
@@ -264,7 +265,7 @@ function DataService:Start()
 					return
 				end
 			end
-			if profile then
+			if profile or reason == "SERVICE_SHUTTING_DOWN" then
 				return
 			end
 			-- A held lease is a wait, not a fault, and saying so with the number of
@@ -339,6 +340,12 @@ function DataService:Destroy()
 	-- release that finishes during teardown keeps its result for this method to
 	-- account for.
 	self.closing = true
+	-- Loads have no published session yet, so the final-release set cannot see
+	-- them. Cancel every exact load token and keep BindToClose open until each
+	-- owner has stopped touching profile storage (or the shared deadline expires).
+	for _, loadToken in self.loading do
+		loadToken.Cancelled = true
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
@@ -368,7 +375,14 @@ function DataService:Destroy()
 		end
 		return pending
 	end
-	while unfinishedReleases() > 0 and os.clock() < deadline do
+	local function unfinishedLoads(): number
+		local pending = 0
+		for _ in self.loading do
+			pending += 1
+		end
+		return pending
+	end
+	while (unfinishedReleases() > 0 or unfinishedLoads() > 0) and os.clock() < deadline do
 		task.wait()
 	end
 
@@ -389,7 +403,12 @@ function DataService:Destroy()
 			)
 		end
 	end
-	if pending > 0 or #unsaved > 0 then
+	local activeLoads: { number } = {}
+	for userId in self.loading do
+		table.insert(activeLoads, userId)
+	end
+	table.sort(activeLoads)
+	if pending > 0 or #unsaved > 0 or #activeLoads > 0 then
 		-- Named, not counted.
 		--
 		-- Somebody whose profile did not save has lost whatever they earned since
@@ -399,6 +418,7 @@ function DataService:Destroy()
 		self.context.Logger:Error("Profiles may not have saved at shutdown", {
 			StillWriting = pending,
 			Failed = unsaved,
+			ProfileLoadsStillWriting = activeLoads,
 		})
 	end
 	table.clear(self.finalReleases)
