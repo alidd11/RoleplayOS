@@ -182,9 +182,13 @@ return function(self: any)
 				RequestId = requestId,
 			}
 		end
-		local result, reason = self.context.Services
-			:Get("VehicleOwnershipService")
-			:SetCustomRegistration(player, payload.VehicleId, payload.Registration)
+		local result, reason =
+			self.context.Services:Get("VehicleOwnershipService"):SetCustomRegistration(
+				player,
+				payload.VehicleId,
+				payload.Registration,
+				payload.SpawnerId
+			)
 		local messages = {
 			GAMEPASS_REQUIRED = "Custom registration access is required.",
 			INVALID_REGISTRATION_LENGTH = "Enter a registration of the permitted length.",
