@@ -148,6 +148,19 @@ function BankRobberyService:_alarm(target: Instance, player: Player): (boolean, 
 	return true, alarm
 end
 
+function BankRobberyService:_cancelTimers(state: any)
+	if not state then
+		return
+	end
+	for _, key in { "FinishThread", "CooldownThread" } do
+		local thread = state[key]
+		if thread then
+			task.cancel(thread)
+			state[key] = nil
+		end
+	end
+end
+
 function BankRobberyService:_clearAlarm(state: any)
 	local alarm = state and state.Alarm
 	if alarm and alarm.Parent then
@@ -185,7 +198,8 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 		self:_clearAlarm(state)
 		self:_releasePlayerClaim(player.UserId, robberyId)
 		state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
-		task.delay(config.FailedCooldownSeconds, function()
+		state.CooldownThread = task.delay(config.FailedCooldownSeconds, function()
+			state.CooldownThread = nil
 			if
 				self.running
 				and target.Parent
@@ -230,7 +244,8 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 	self:_clearAlarm(state)
 	self:_releasePlayerClaim(player.UserId, robberyId)
 	state.CooldownUntil = os.clock() + config.CooldownSeconds
-	task.delay(config.CooldownSeconds, function()
+	state.CooldownThread = task.delay(config.CooldownSeconds, function()
+		state.CooldownThread = nil
 		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
 			prompt.Enabled = true
 		end
@@ -314,7 +329,8 @@ function BankRobberyService:Begin(target: Instance, player: Player): (boolean, s
 		Target = robberyId,
 		Metadata = { Location = target.Name },
 	})
-	task.delay(config.RobberyDurationSeconds, function()
+	state.FinishThread = task.delay(config.RobberyDurationSeconds, function()
+		state.FinishThread = nil
 		self:_finish(target, player, robberyId)
 	end)
 	return true, nil
@@ -358,6 +374,7 @@ function BankRobberyService:Start()
 		self.connections,
 		CollectionService:GetInstanceRemovedSignal(tag):Connect(function(target)
 			local state = self.states[target]
+			self:_cancelTimers(state)
 			if state and state.PlayerUserId and state.RobberyId then
 				self:_releasePlayerClaim(state.PlayerUserId, state.RobberyId)
 			end
@@ -413,6 +430,7 @@ function BankRobberyService:Destroy()
 		connection:Disconnect()
 	end
 	for _, state in self.states do
+		self:_cancelTimers(state)
 		self:_clearAlarm(state)
 	end
 	table.clear(self.connections)
