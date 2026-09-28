@@ -295,10 +295,13 @@ function RecordIndexService:IndexVehicle(
 	})
 end
 
-function RecordIndexService:_removeVehicleIndex(registration: string, vehicleId: string)
+function RecordIndexService:_removeVehicleIndex(
+	registration: string,
+	vehicleId: string
+): (boolean, string?)
 	local bucket = indexKey("Vehicle", compact(registration))
 	if not bucket then
-		return
+		return true, nil
 	end
 	local _, reason = self.context.Services
 		:Get("DataService")
@@ -313,9 +316,12 @@ function RecordIndexService:_removeVehicleIndex(registration: string, vehicleId:
 	if reason then
 		self.context.Logger:Warning("Stale vehicle index removal failed", {
 			VehicleId = vehicleId,
+			Registration = registration,
 			Error = reason,
 		})
+		return false, reason
 	end
+	return true, nil
 end
 
 function RecordIndexService:ReindexVehicle(
@@ -332,7 +338,11 @@ function RecordIndexService:ReindexVehicle(
 		and previousRegistration
 		and compact(previousRegistration) ~= compact(vehicle.Registration)
 	then
-		self:_removeVehicleIndex(previousRegistration, vehicle.VehicleId)
+		local removed, removalReason =
+			self:_removeVehicleIndex(previousRegistration, vehicle.VehicleId)
+		if not removed then
+			return false, removalReason
+		end
 	end
 	return indexed, reason
 end
@@ -558,12 +568,36 @@ function RecordIndexService:SearchVehicles(
 	page = math.max(1, math.floor(page))
 	local first = (page - 1) * size + 1
 	local items = {}
+	local total = #matches
 	for index = first, math.min(#matches, first + size - 1) do
-		local record, recordReason = self:_getRecord(recordKey("Vehicle", matches[index].VehicleId))
+		local match = matches[index]
+		local record, recordReason = self:_getRecord(recordKey("Vehicle", match.VehicleId))
 		if recordReason then
 			return nil, recordReason
 		end
-		if record then
+		local currentSearch = if record and type(record.Registration) == "string"
+			then compact(record.Registration)
+			else ""
+		local currentBucket = indexKey("Vehicle", currentSearch)
+		local currentMatches =
+			currentBucket == key and string.find(currentSearch, search, 1, true) ~= nil
+		if not record or not currentMatches then
+			-- A registration change writes the new vehicle projection before removing
+			-- the old bucket. If that cleanup exhausts its retries, the old plate must
+			-- not keep returning the vehicle under its new registration. Skip the stale
+			-- entry and retry its removal whenever somebody encounters it.
+			total = math.max(0, total - 1)
+			local removed, removalReason = self:_removeVehicleIndex(
+				if type(match.Registration) == "string" then match.Registration else search,
+				match.VehicleId
+			)
+			if not removed then
+				self.context.Logger:Warning("Vehicle search could not repair stale index", {
+					VehicleId = match.VehicleId,
+					Error = removalReason,
+				})
+			end
+		elseif record then
 			-- Gated the same way the person route gates it. Without this a
 			-- department denied WarrantRead learned that a keeper was wanted
 			-- simply by typing the registration, which is the exact disclosure
@@ -593,7 +627,7 @@ function RecordIndexService:SearchVehicles(
 			})
 		end
 	end
-	return { Items = items, Page = page, Total = #matches }, nil
+	return { Items = items, Page = page, Total = total }, nil
 end
 
 function RecordIndexService:_queueReadyPlayer(player: Player)
