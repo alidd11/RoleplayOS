@@ -22,7 +22,7 @@ Incident history reads authorise `IncidentRead` or `IncidentWrite` inside `Incid
 
 ## Warrants
 
-Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant.
+Warrants live inside the durable person record rather than server memory. Creation and revocation require the `WarrantWrite` MDT permission, filter the supplied reason, validate the expiry, use stable request-generated warrant IDs, and write an audit event. Because reason filtering can yield, creation revalidates the officer's current `WarrantWrite` authority immediately before the durable write. Repeated `UpdateAsync()` transforms do not duplicate a warrant. Revocation also carries a per-operation marker through `UpdateAsync` retries: discarded conflict transforms cannot leak stale revoker attribution, while an ambiguous retry can recognise a revocation already committed by that same operation without claiming another server's change.
 
 Active warrants appear as `WANTED` flags in both person and registered-vehicle results. The MDT exposes issue and two-step revoke controls only to authorised duties.
 
