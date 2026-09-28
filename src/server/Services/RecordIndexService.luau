@@ -579,8 +579,8 @@ function RecordIndexService:SearchVehicles(
 			then compact(record.Registration)
 			else ""
 		local currentBucket = indexKey("Vehicle", currentSearch)
-		local currentMatches =
-			currentBucket == key and string.find(currentSearch, search, 1, true) ~= nil
+		local currentMatches = currentBucket == key
+			and string.find(currentSearch, search, 1, true) ~= nil
 		if not record or not currentMatches then
 			-- A registration change writes the new vehicle projection before removing
 			-- the old bucket. If that cleanup exhausts its retries, the old plate must
