@@ -443,11 +443,25 @@ end
 -- expects rather than by reserved access code - a public instance has no
 -- code, only the JobId it already publishes itself under in the directory.
 function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
-	if type(jobId) ~= "string" or jobId == "" then
+	if type(jobId) ~= "string" or jobId == "" or #jobId > 64 then
 		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
 	if jobId == game.JobId then
 		return nil, "ALREADY_ON_THIS_SERVER"
+	end
+	local instances, directoryReason = self:ListPublicInstances()
+	if directoryReason then
+		return nil, directoryReason
+	end
+	local listed = false
+	for _, instance in instances do
+		if instance.JobId == jobId then
+			listed = true
+			break
+		end
+	end
+	if not listed then
+		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
 	-- Saved and released before the teleport, for the same reason Join does
 	-- this: a destination reached while this server still holds the lease
@@ -599,9 +613,9 @@ function OfficialServerService:_publishPublicSelf()
 end
 
 -- Every public instance currently reporting in, busiest first.
-function OfficialServerService:ListPublicInstances(): { any }
+function OfficialServerService:ListPublicInstances(): ({ any }, string?)
 	if not self.publicDirectory then
-		return {}
+		return {}, "PUBLIC_SERVER_DIRECTORY_UNAVAILABLE"
 	end
 	local ok, items = pcall(
 		self.publicDirectory.GetRangeAsync,
@@ -614,7 +628,7 @@ function OfficialServerService:ListPublicInstances(): { any }
 			"Could not read the public directory",
 			{ Error = tostring(items) }
 		)
-		return {}
+		return {}, "PUBLIC_SERVER_DIRECTORY_UNAVAILABLE"
 	end
 	local rows = {}
 	for _, item in items do
@@ -632,7 +646,7 @@ function OfficialServerService:ListPublicInstances(): { any }
 			})
 		end
 	end
-	return rows
+	return rows, nil
 end
 
 -- Players already present when this service starts carry the same teleport data
