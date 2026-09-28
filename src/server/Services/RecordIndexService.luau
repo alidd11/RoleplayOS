@@ -8,6 +8,8 @@ local RecordIndexService = {
 	waiting = {},
 	pendingSync = {},
 	cache = {},
+	cacheCount = 0,
+	cacheSweepCounter = 0,
 	running = false,
 }
 
@@ -71,41 +73,67 @@ function RecordIndexService:Init(context: any)
 	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
+end
+
+function RecordIndexService:_cacheDrop(key: string)
+	if self.cache[key] ~= nil then
+		self.cache[key] = nil
+		self.cacheCount = math.max(0, self.cacheCount - 1)
+	end
 end
 
 function RecordIndexService:_cacheSet(key: string, value: any)
 	if not self.running then
 		return
 	end
+	local replacing = self.cache[key] ~= nil
 	self.cache[key] = {
 		Value = value,
 		ExpiresAt = os.clock() + self.context.Configuration.MDT.RecordCacheSeconds,
 	}
+	if not replacing then
+		self.cacheCount += 1
+	end
 	self:_sweepCache()
 end
 
--- Drops entries whose time is up.
+-- Drops entries whose time is up and enforces a hard entry cap.
 --
--- Every entry carried an expiry and nothing ever acted on one: reading a record
--- cleared only the key it was asked for, so a server accumulated every person
--- and vehicle record anybody had ever looked at, criminal and custody histories
--- included, and never gave any of it back. Roblox servers do not release memory
--- when players leave, so this only ever grew.
---
--- Swept on write rather than on a timer, which keeps it to the moment something
--- is already being spent, and amortised so a large cache is not walked in full
--- on every single write.
+-- TTL alone bounds how long an entry can live, not how many unique records a
+-- busy server can touch inside that window. The count cap prevents a burst of
+-- searches from growing the record cache with every returned person/vehicle.
 function RecordIndexService:_sweepCache()
-	self.sweepCounter = (self.sweepCounter or 0) + 1
-	if self.sweepCounter < 32 then
-		return
-	end
-	self.sweepCounter = 0
+	self.cacheSweepCounter += 1
 	local now = os.clock()
-	for key, entry in self.cache do
-		if type(entry) ~= "table" or (entry.ExpiresAt or 0) <= now then
-			self.cache[key] = nil
+	if self.cacheSweepCounter >= 32 then
+		self.cacheSweepCounter = 0
+		for key, entry in self.cache do
+			if type(entry) ~= "table" or (entry.ExpiresAt or 0) <= now then
+				self:_cacheDrop(key)
+			end
 		end
+	end
+
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumRecordCacheEntries) or 2048)
+	)
+	while self.cacheCount > maximum do
+		local oldestKey
+		local oldestExpiry = math.huge
+		for key, entry in self.cache do
+			local expiresAt = if type(entry) == "table" then entry.ExpiresAt or 0 else 0
+			if expiresAt < oldestExpiry then
+				oldestExpiry = expiresAt
+				oldestKey = key
+			end
+		end
+		if not oldestKey then
+			break
+		end
+		self:_cacheDrop(oldestKey)
 	end
 end
 
@@ -120,7 +148,7 @@ function RecordIndexService:_getRecordFresh(key: string): (any?, string?)
 	if not self.running then
 		return nil, "INDEX_CANCELLED"
 	end
-	self.cache[key] = nil
+	self:_cacheDrop(key)
 	if value then
 		self:_cacheSet(key, value)
 	end
@@ -132,7 +160,7 @@ function RecordIndexService:_getRecord(key: string): (any?, string?)
 	if cached and cached.ExpiresAt > os.clock() then
 		return cached.Value, nil
 	end
-	self.cache[key] = nil
+	self:_cacheDrop(key)
 	return self:_getRecordFresh(key)
 end
 
@@ -768,6 +796,8 @@ function RecordIndexService:Destroy()
 	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
+	self.cacheCount = 0
+	self.cacheSweepCounter = 0
 end
 
 return RecordIndexService

@@ -2507,6 +2507,7 @@ local Config = {
 		MaximumQueryLength = 64,
 		MaximumIndexBucketEntries = 5000,
 		RecordCacheSeconds = 60,
+		MaximumRecordCacheEntries = 2048,
 		IndexWriteSpacingSeconds = 0.25,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
