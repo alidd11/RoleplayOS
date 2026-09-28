@@ -35,6 +35,10 @@ local MAXIMUM_PUBLIC_ROWS = 20
 
 local OfficialServerService = { Critical = true, codes = {}, reserving = {} }
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 function OfficialServerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.OfficialServers
@@ -368,6 +372,9 @@ function OfficialServerService:Join(
 	serverId: any,
 	instanceIndex: any
 ): (any?, string?)
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if self.settings.Enabled ~= true then
 		return nil, "OFFICIAL_SERVERS_DISABLED"
 	end
@@ -402,6 +409,12 @@ function OfficialServerService:Join(
 			return nil, reason
 		end
 	end
+	-- Instance resolution can yield through shared storage and Roblox reserve
+	-- calls. Do not let a request from a Player that has since left or been
+	-- replaced continue into profile release.
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	-- Saved and released before the teleport, not after.
 	--
 	-- A teleport is faster than a data store round trip. Leaving normally defers
@@ -425,6 +438,12 @@ function OfficialServerService:Join(
 		-- player is told to try again while they still have a working session
 		-- here rather than being sent somewhere that will refuse them.
 		return nil, "PROFILE_BUSY"
+	end
+	-- Save/release itself yields. If this exact Player disappeared while it ran,
+	-- the released profile is the correct state for a replacement session to
+	-- acquire; never teleport or reload the stale Player instance.
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
 	end
 
 	local options = Instance.new("TeleportOptions")
@@ -456,6 +475,9 @@ end
 -- expects rather than by reserved access code - a public instance has no
 -- code, only the JobId it already publishes itself under in the directory.
 function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	if type(jobId) ~= "string" or jobId == "" or #jobId > 64 then
 		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
@@ -476,6 +498,11 @@ function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, st
 	if not listed then
 		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
+	-- Directory lookup yields. Revalidate the exact Player before a stale
+	-- request is allowed to release profile ownership.
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	-- Saved and released before the teleport, for the same reason Join does
 	-- this: a destination reached while this server still holds the lease
 	-- refuses the load and kicks, and the lease then locks the player out of
@@ -489,6 +516,9 @@ function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, st
 			Error = tostring(releaseReason),
 		})
 		return nil, "PROFILE_BUSY"
+	end
+	if not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
 	end
 	local ok, problem =
 		pcall(TeleportService.TeleportToPlaceInstance, TeleportService, game.PlaceId, jobId, player)
