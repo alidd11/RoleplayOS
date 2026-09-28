@@ -18,6 +18,7 @@ local AvatarCatalogService = {
 	-- A broken catalogue degrades the creator only. It must never stop the server
 	-- starting, so this is deliberately not critical.
 	Critical = false,
+	running = false,
 	cache = {},
 	cacheOrder = {},
 }
@@ -47,11 +48,14 @@ local MAXIMUM_RESULTS = 40
 
 function AvatarCatalogService:Init(context: any)
 	self.context = context
+	self.running = false
 	self.cache = {}
 	self.cacheOrder = {}
 end
 
-function AvatarCatalogService:Start() end
+function AvatarCatalogService:Start()
+	self.running = true
+end
 
 -- The categories the client is allowed to ask for, so the creator builds its
 -- tabs from the server's list rather than from one hardcoded in the interface
@@ -109,6 +113,9 @@ end
 -- an id to wear, a name to label it and nothing else, and the raw rows carry
 -- pricing and creator metadata that would triple the payload for no benefit.
 function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, string?)
+	if not self.running then
+		return nil, "CATALOGUE_UNAVAILABLE"
+	end
 	local category = type(categoryId) == "string" and CATEGORIES[categoryId]
 	if not category then
 		return nil, "UNKNOWN_CATEGORY"
@@ -134,6 +141,11 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	local ok, pages = pcall(function()
 		return AvatarEditorService:SearchCatalog(parameters)
 	end)
+	-- The catalogue call yields. Shutdown may clear the cache while it is in
+	-- flight, so a late result must not recreate service state after Destroy.
+	if not self.running then
+		return nil, "CATALOGUE_UNAVAILABLE"
+	end
 	if not ok or not pages then
 		-- Reported rather than raised. The catalogue being briefly unavailable is
 		-- an ordinary outcome that the creator should show as an empty shelf, not
@@ -148,6 +160,9 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	local pageOk, page = pcall(function()
 		return pages:GetCurrentPage()
 	end)
+	if not self.running then
+		return nil, "CATALOGUE_UNAVAILABLE"
+	end
 	if not pageOk or type(page) ~= "table" then
 		return nil, "CATALOGUE_UNAVAILABLE"
 	end
@@ -173,6 +188,7 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 end
 
 function AvatarCatalogService:Destroy()
+	self.running = false
 	table.clear(self.cache)
 	table.clear(self.cacheOrder)
 end
