@@ -6,7 +6,7 @@ return function(DataService)
 		end
 		local ok, result = self:_retry(function()
 			return self.sharedRecordStore:GetAsync(recordId)
-		end)
+		end, nil, Enum.DataStoreRequestType.GetAsync)
 		if not ok then
 			self.context.Logger:Error("Shared record load failed", { RecordId = recordId })
 			return nil, "SHARED_RECORD_LOAD_FAILED"
