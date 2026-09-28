@@ -1,6 +1,11 @@
 --!strict
 
+local Players = game:GetService("Players")
 local RigMechanics = require(script.Parent.RigMechanics)
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 return function(VehicleSpawnerService)
 	-- Removes the player's vehicle, whatever the reason.
@@ -31,6 +36,9 @@ return function(VehicleSpawnerService)
 
 	-- Watches one player's seat, and cleans up after whatever they were riding.
 	function VehicleSpawnerService:_watchSeat(player: Player)
+		if not self.running or not playerIsCurrent(player) then
+			return
+		end
 		local previous = self.seatConnections[player.UserId]
 		if previous then
 			previous:Disconnect()
@@ -53,7 +61,13 @@ return function(VehicleSpawnerService)
 					-- R15 path left behind rather than racing it.
 					task.delay(0.4, function()
 						local body = player.Character
-						if not body or humanoid.SeatPart ~= seat or not mounted.Parent then
+						if
+							not self.running
+							or not playerIsCurrent(player)
+							or body ~= character
+							or humanoid.SeatPart ~= seat
+							or not mounted.Parent
+						then
 							return
 						end
 						local moved = RigMechanics.anchorAccessoriesToProxy(body, mounted)
@@ -79,7 +93,12 @@ return function(VehicleSpawnerService)
 				end
 				task.defer(function()
 					local body = player.Character
-					if not body or not vehicle.Parent then
+					if
+						not self.running
+						or not playerIsCurrent(player)
+						or body ~= character
+						or not vehicle.Parent
+					then
 						return
 					end
 					-- Accessories first, then the rest of the joints.
