@@ -339,12 +339,19 @@ return function(DataService)
 
 	function DataService:GetSession(player: Player): any?
 		local session = self.sessions[player.UserId]
-		return if session and session.Player == player then session else nil
+		-- Releasing is the final profile write barrier. Once the final-save owner
+		-- has claimed the session, yielding gameplay work must not reacquire the
+		-- profile and mutate state after its durable snapshot has begun.
+		return if session
+				and session.Player == player
+				and not session.Releasing
+			then session
+			else nil
 	end
 
 	function DataService:MarkDirty(player: Player)
 		local session = self.sessions[player.UserId]
-		if session and session.Player == player then
+		if session and session.Player == player and not session.Releasing then
 			session.Dirty = true
 			session.Revision = (session.Revision or 0) + 1
 		end
@@ -354,6 +361,15 @@ return function(DataService)
 		local session = self.sessions[player.UserId]
 		if not session or session.Player ~= player then
 			return false, "NO_SESSION"
+		end
+		if session.Releasing and not release then
+			return false, "SESSION_RELEASING"
+		end
+		-- Close the mutation boundary before the final snapshot is taken. This is
+		-- deliberately before the mock branch too, so runtime semantics do not
+		-- differ between Studio and production.
+		if release then
+			session.Releasing = true
 		end
 		if session.Mock then
 			session.Dirty = false
@@ -368,9 +384,6 @@ return function(DataService)
 		-- behind an autosave, see a normal live session, and adopt the profile that
 		-- this call is about to release. The final save then removes the replacement
 		-- player's session underneath them.
-		if release then
-			session.Releasing = true
-		end
 		if session.Saving then
 			if not release then
 				return false, "SAVE_IN_PROGRESS"
