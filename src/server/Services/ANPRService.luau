@@ -69,8 +69,15 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 	if not vehicle then
 		return
 	end
-	local wanted =
+	local wanted, _, warrantReason =
 		self.context.Services:Get("WarrantService"):HasActiveForCharacter(vehicle.OwnerCharacterId)
+	if warrantReason then
+		self.context.Logger:Warning("ANPR warrant lookup failed", {
+			Registration = registration,
+			Error = warrantReason,
+		})
+		return
+	end
 	if not wanted then
 		return
 	end
