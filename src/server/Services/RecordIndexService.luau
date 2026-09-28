@@ -109,20 +109,31 @@ function RecordIndexService:_sweepCache()
 	end
 end
 
+function RecordIndexService:_getRecordFresh(key: string): (any?, string?)
+	if not self.running then
+		return nil, "INDEX_CANCELLED"
+	end
+	local value, reason = self.context.Services:Get("DataService"):GetMdtRecord(key)
+	if reason then
+		return nil, reason
+	end
+	if not self.running then
+		return nil, "INDEX_CANCELLED"
+	end
+	self.cache[key] = nil
+	if value then
+		self:_cacheSet(key, value)
+	end
+	return value, nil
+end
+
 function RecordIndexService:_getRecord(key: string): (any?, string?)
 	local cached = self.cache[key]
 	if cached and cached.ExpiresAt > os.clock() then
 		return cached.Value, nil
 	end
 	self.cache[key] = nil
-	local value, reason = self.context.Services:Get("DataService"):GetMdtRecord(key)
-	if reason then
-		return nil, reason
-	end
-	if value then
-		self:_cacheSet(key, value)
-	end
-	return value, nil
+	return self:_getRecordFresh(key)
 end
 
 function RecordIndexService:_updateRecord(key: string, transform: (any?) -> any): (any?, string?)
@@ -492,21 +503,7 @@ function RecordIndexService:GetPerson(characterId: string): (any?, string?)
 end
 
 function RecordIndexService:GetPersonFresh(characterId: string): (any?, string?)
-	if not self.running then
-		return nil, "INDEX_CANCELLED"
-	end
-	local key = recordKey("Person", characterId)
-	local value, reason = self.context.Services:Get("DataService"):GetMdtRecord(key)
-	if reason then
-		return nil, reason
-	end
-	if not self.running then
-		return nil, "INDEX_CANCELLED"
-	end
-	if value then
-		self:_cacheSet(key, value)
-	end
-	return value, nil
+	return self:_getRecordFresh(recordKey("Person", characterId))
 end
 
 function RecordIndexService:UpdatePerson(
@@ -589,7 +586,8 @@ function RecordIndexService:SearchVehicles(
 	local total = #matches
 	for index = first, math.min(#matches, first + size - 1) do
 		local match = matches[index]
-		local record, recordReason = self:_getRecord(recordKey("Vehicle", match.VehicleId))
+		local keyForRecord = recordKey("Vehicle", match.VehicleId)
+		local record, recordReason = self:_getRecord(keyForRecord)
 		if recordReason then
 			return nil, recordReason
 		end
@@ -599,6 +597,21 @@ function RecordIndexService:SearchVehicles(
 		local currentBucket = indexKey("Vehicle", currentSearch)
 		local currentMatches = currentBucket == key
 			and string.find(currentSearch, search, 1, true) ~= nil
+		if record and not currentMatches then
+			-- A different server may have changed this registration after our local
+			-- record cache was filled. Never delete a global index entry from a cached
+			-- mismatch: confirm against the durable record first.
+			record, recordReason = self:_getRecordFresh(keyForRecord)
+			if recordReason then
+				return nil, recordReason
+			end
+			currentSearch = if record and type(record.Registration) == "string"
+				then compact(record.Registration)
+				else ""
+			currentBucket = indexKey("Vehicle", currentSearch)
+			currentMatches = currentBucket == key
+				and string.find(currentSearch, search, 1, true) ~= nil
+		end
 		if not record or not currentMatches then
 			-- A registration change writes the new vehicle projection before removing
 			-- the old bucket. If that cleanup exhausts its retries, the old plate must
