@@ -1,8 +1,13 @@
 --!strict
 
+local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 local RigMechanics = require(script.Parent.RigMechanics)
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 return function(VehicleSpawnerService)
 	function VehicleSpawnerService:_template(definition: any): Model?
@@ -93,8 +98,11 @@ return function(VehicleSpawnerService)
 		local rescued = false
 		task.spawn(function()
 			local deadline = os.clock() + 10
-			while vehicle.Parent and os.clock() < deadline do
+			while self.running and vehicle.Parent and os.clock() < deadline do
 				task.wait(0.25)
+				if not self.running or not vehicle.Parent then
+					return
+				end
 				local position = vehicle:GetPivot().Position
 				-- Recover relative to the bay, before Roblox's FallenPartsDestroyHeight
 				-- can delete the assembly. Waiting until the global destroy boundary is
@@ -127,12 +135,28 @@ return function(VehicleSpawnerService)
 		definitionId: string,
 		vehicleId: string?
 	): (any?, string?)
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
 		local spawner, reason = self:_authorise(player, spawnerId)
-		if not spawner then
-			return nil, reason
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		if not spawner or not spawner:IsDescendantOf(Workspace) then
+			return nil, reason or "SPAWNER_NOT_FOUND"
 		end
 		local definition = self:_vehicleDefinition(definitionId)
-		if not definition or not self:_definitionAllowed(player, spawner, definition) then
+		if not definition then
+			return nil, "VEHICLE_NOT_ALLOWED"
+		end
+		local allowed = self:_definitionAllowed(player, spawner, definition)
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		if not spawner:IsDescendantOf(Workspace) then
+			return nil, "SPAWNER_NOT_FOUND"
+		end
+		if not allowed then
 			return nil, "VEHICLE_NOT_ALLOWED"
 		end
 		local existing = self.active[player.UserId]
@@ -166,6 +190,16 @@ return function(VehicleSpawnerService)
 				or "Service"
 			local issuedRegistration, registrationReason =
 				ownership:GetOrCreateTeamRegistration(player, tostring(teamName), definitionId)
+			if not self.running or not playerIsCurrent(player) then
+				self.spawning[player.UserId] = nil
+				vehicle:Destroy()
+				return nil, "PLAYER_UNAVAILABLE"
+			end
+			if not spawner:IsDescendantOf(Workspace) then
+				self.spawning[player.UserId] = nil
+				vehicle:Destroy()
+				return nil, "SPAWNER_NOT_FOUND"
+			end
 			if not issuedRegistration then
 				self.spawning[player.UserId] = nil
 				vehicle:Destroy()
