@@ -53,6 +53,10 @@ function PAVAService:_restore(target: Player, token: number)
 	if not record or record.Token ~= token then
 		return
 	end
+	if record.ExpiryThread then
+		task.cancel(record.ExpiryThread)
+		record.ExpiryThread = nil
+	end
 	local humanoid = humanoidOf(target)
 	if humanoid and humanoid:GetAttribute("RoleplayOSPAVAOriginalWalkSpeed") ~= nil then
 		local original = humanoid:GetAttribute("RoleplayOSPAVAOriginalWalkSpeed")
@@ -107,9 +111,13 @@ function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, strin
 	targetHumanoid:SetAttribute("RoleplayOSPAVAOriginalWalkSpeed", original)
 	targetHumanoid.WalkSpeed = math.min(original, REDUCED_WALK_SPEED)
 	target:SetAttribute("RoleplayOSPAVAffectedUntil", os.time() + EFFECT_SECONDS)
-	self.effects[target.UserId] = { Token = token, ActorUserId = actor.UserId }
+	local record = { Token = token, ActorUserId = actor.UserId }
+	self.effects[target.UserId] = record
 	self.event:FireClient(target, { Active = true, Duration = EFFECT_SECONDS })
-	task.delay(EFFECT_SECONDS, function()
+	record.ExpiryThread = task.delay(EFFECT_SECONDS, function()
+		-- This callback owns the running expiry thread; clear its handle before
+		-- restoring so _restore never tries to cancel the current coroutine.
+		record.ExpiryThread = nil
 		self:_restore(target, token)
 	end)
 	self.context.Logger:Audit("Emergency.PAVAUsed", {
@@ -126,6 +134,10 @@ function PAVAService:Start()
 			self.cooldowns[player.UserId] = nil
 			local record = self.effects[player.UserId]
 			if record then
+				if record.ExpiryThread then
+					task.cancel(record.ExpiryThread)
+					record.ExpiryThread = nil
+				end
 				self.effects[player.UserId] = nil
 			end
 		end)
