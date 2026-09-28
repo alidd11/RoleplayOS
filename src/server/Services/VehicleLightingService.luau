@@ -21,12 +21,27 @@ local VehicleLightingService = {
 	-- the server starting.
 	Critical = false,
 	connections = {},
+	-- Per-vehicle lifetime watchers are separate from service-wide connections
+	-- so vehicle churn cannot leave dead Destroying closures behind.
+	vehicleConnections = {},
 	-- Live state per vehicle, keyed by the model.
 	vehicles = {},
 }
 
 function VehicleLightingService:Init(context: any)
 	self.context = context
+	self.connections = {}
+	self.vehicleConnections = {}
+	self.vehicles = {}
+end
+
+function VehicleLightingService:_forgetVehicle(vehicle: Instance)
+	local connection = self.vehicleConnections[vehicle]
+	if connection then
+		connection:Disconnect()
+		self.vehicleConnections[vehicle] = nil
+	end
+	self.vehicles[vehicle] = nil
 end
 
 -- Turns off the kit's own scripts for a vehicle.
@@ -94,6 +109,9 @@ function VehicleLightingService:Adopt(vehicle: Instance)
 		return
 	end
 	local silenced = self:_silenceKit(vehicle, lamps)
+	-- Re-adoption already replaces the live state below. Release any previous
+	-- lifetime watcher as well so replacement cannot accumulate callbacks.
+	self:_forgetVehicle(vehicle)
 	self.vehicles[vehicle] = {
 		Lamps = lamps,
 		-- These objects are stable for the life of a spawned vehicle. Keeping the
@@ -111,7 +129,9 @@ function VehicleLightingService:Adopt(vehicle: Instance)
 		Dirty = true,
 		LastFlashOn = nil,
 	}
-	vehicle.Destroying:Once(function()
+	self.vehicleConnections[vehicle] = vehicle.Destroying:Once(function()
+		-- Once disconnects itself before this callback runs.
+		self.vehicleConnections[vehicle] = nil
 		self.vehicles[vehicle] = nil
 	end)
 	self:_publish(vehicle, self.vehicles[vehicle])
@@ -316,7 +336,7 @@ function VehicleLightingService:Start()
 					self:_readChassis(vehicle, state)
 					self:_paint(vehicle)
 				else
-					self.vehicles[vehicle] = nil
+					self:_forgetVehicle(vehicle)
 				end
 			end
 		end)
@@ -327,7 +347,11 @@ function VehicleLightingService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for _, connection in self.vehicleConnections do
+		connection:Disconnect()
+	end
 	table.clear(self.connections)
+	table.clear(self.vehicleConnections)
 	table.clear(self.vehicles)
 end
 
