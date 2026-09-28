@@ -183,7 +183,12 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	end
 	unit.Status = "Assigned"
 	unit.AssignedCallId = callId
-	call.Status = "Assigned"
+	-- Adding another unit to a call already on scene must not move the whole
+	-- incident backwards to Assigned. The call advances to Assigned only from
+	-- Open; OnScene remains OnScene while additional responders are attached.
+	if call.Status == "Open" then
+		call.Status = "Assigned"
+	end
 	call.Revision += 1
 	self.revision += 1
 	self.context.Services:Get("DispatchService"):Publish("CallAssigned", callId, self.revision)
@@ -199,10 +204,18 @@ function CallService:Update(callId: string, data: any): (any?, string?)
 		return nil, "CALL_NOT_FOUND"
 	end
 	if data.Status ~= nil then
-		if not table.find(self.context.Configuration.Dispatch.CallStatuses, data.Status) then
+		-- Open and Assigned are consequences of server-owned unit membership:
+		-- ReleaseUnit owns the return to Open, and Assign owns Assigned. The only
+		-- dispatcher-driven status transition is advancing an assigned call to
+		-- OnScene. Accepting Open/Assigned here lets a modified client split the
+		-- call status from UnitIds and each unit's AssignedCallId.
+		if data.Status ~= "OnScene" then
 			return nil, "INVALID_CALL_STATUS"
 		end
-		call.Status = data.Status
+		if (call.Status ~= "Assigned" and call.Status ~= "OnScene") or #call.UnitIds == 0 then
+			return nil, "INVALID_CALL_STATUS"
+		end
+		call.Status = "OnScene"
 	end
 	if data.Priority ~= nil then
 		if not table.find(self.context.Configuration.Dispatch.CallPriorities, data.Priority) then
