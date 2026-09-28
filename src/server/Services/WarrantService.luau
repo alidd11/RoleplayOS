@@ -111,9 +111,7 @@ function WarrantService:CachePersonRecord(record: any)
 	self:_sweepCache()
 end
 
-function WarrantService:HasActiveForCharacter(
-	characterId: string
-): (boolean, { any }, string?)
+function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { any }, string?)
 	local meta = self.cacheMeta[characterId]
 	local clock = os.clock()
 	if not meta or (meta.ExpiresAt or 0) <= clock then
