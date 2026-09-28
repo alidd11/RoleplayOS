@@ -76,6 +76,9 @@ function RecordIndexService:Init(context: any)
 end
 
 function RecordIndexService:_cacheSet(key: string, value: any)
+	if not self.running then
+		return
+	end
 	self.cache[key] = {
 		Value = value,
 		ExpiresAt = os.clock() + self.context.Configuration.MDT.RecordCacheSeconds,
