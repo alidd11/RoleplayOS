@@ -1,9 +1,27 @@
 --!strict
-local StartMenuService = {}
+
+local Players = game:GetService("Players")
+
+local StartMenuService = { running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 function StartMenuService:Init(context: any)
 	self.context = context
+	self.running = false
 end
-function StartMenuService:Start() end
+
+function StartMenuService:Start()
+	self.running = true
+end
+
+function StartMenuService:_sessionIsCurrent(player: Player, session: any): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and self.context.Services:Get("DataService"):GetSession(player) == session
+end
 
 function StartMenuService:_ensureDutyProfile(player: Player, session: any, departmentId: string)
 	if type(departmentId) ~= "string" or departmentId == "" then
@@ -31,6 +49,9 @@ function StartMenuService:_ensureDutyProfile(player: Player, session: any, depar
 end
 
 function StartMenuService:Build(player: Player): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if not session then
 		return nil, "PROFILE_UNAVAILABLE"
@@ -44,6 +65,12 @@ function StartMenuService:Build(player: Player): (any?, string?)
 			continue
 		end
 		local access = self.context.Services:Get("AccessService"):Evaluate(player, role.Access)
+		-- Access evaluation can yield on Roblox group membership. Never let a
+		-- request from a departed/replaced Player mutate the captured profile after
+		-- the final-save path has already begun or the service has been destroyed.
+		if not self:_sessionIsCurrent(player, session) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
 		if access.Allowed then
 			self:_ensureDutyProfile(player, session, role.DepartmentId)
 		end
@@ -186,5 +213,8 @@ function StartMenuService:Build(player: Player): (any?, string?)
 	},
 		nil
 end
-function StartMenuService:Destroy() end
+function StartMenuService:Destroy()
+	self.running = false
+end
+
 return StartMenuService
