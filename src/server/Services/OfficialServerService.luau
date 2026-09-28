@@ -374,6 +374,20 @@ function OfficialServerService:Join(
 	if type(serverId) ~= "string" or not self.settings.Entries[serverId] then
 		return nil, "OFFICIAL_SERVER_NOT_FOUND"
 	end
+	local preferredIndex = nil
+	if instanceIndex ~= nil then
+		local maximumInstances =
+			math.max(1, math.floor(tonumber(self.settings.MaximumInstances) or 6))
+		if
+			type(instanceIndex) ~= "number"
+			or instanceIndex % 1 ~= 0
+			or instanceIndex < 1
+			or instanceIndex > maximumInstances
+		then
+			return nil, "OFFICIAL_SERVER_INSTANCE_NOT_FOUND"
+		end
+		preferredIndex = instanceIndex
+	end
 	if self:_isHere(serverId) then
 		return nil, "ALREADY_ON_THIS_SERVER"
 	end
@@ -381,7 +395,6 @@ function OfficialServerService:Join(
 	local placeId = self:_placeIdFor(entry)
 	-- The list shows a specific instance's headcount, so a player choosing one
 	-- expects to land on that instance rather than wherever has room.
-	local preferredIndex = if type(instanceIndex) == "number" then instanceIndex else nil
 	local code, index, reason = nil, nil, nil
 	if self:_usesReservedServers(entry) then
 		code, index, reason = self:_pickInstance(serverId, preferredIndex)
