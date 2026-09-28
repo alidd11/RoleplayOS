@@ -181,7 +181,7 @@ function WarrantService:Revoke(
 			-- this actor revoked a warrant another server actually changed.
 			revoked = nil
 			if type(existing) ~= "table" or type(existing.Warrants) ~= "table" then
-				return nil
+				return existing
 			end
 			for _, warrant in existing.Warrants do
 				if warrant.WarrantId == warrantId then
@@ -201,18 +201,22 @@ function WarrantService:Revoke(
 						revoked = warrant
 						return existing
 					end
-					return nil
+					return existing
 				end
 			end
-			return nil
+			return existing
 		end)
 	if storeReason then
 		return nil, storeReason
 	end
+	if record then
+		-- Even if another server won the revocation race, use the durable result
+		-- we just observed to retire any stale active-warrant cache on this server.
+		self:CachePersonRecord(record)
+	end
 	if not revoked or not record then
 		return nil, "ACTIVE_WARRANT_NOT_FOUND"
 	end
-	self:CachePersonRecord(record)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = actor.UserId,
 		Action = "Warrant.Revoked",
