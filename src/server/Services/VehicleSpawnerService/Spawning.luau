@@ -190,14 +190,15 @@ return function(VehicleSpawnerService)
 				or "Service"
 			local issuedRegistration, registrationReason =
 				ownership:GetOrCreateTeamRegistration(player, tostring(teamName), definitionId)
-			if
-				not self.running
-				or not playerIsCurrent(player)
-				or not spawner:IsDescendantOf(Workspace)
-			then
+			if not self.running or not playerIsCurrent(player) then
 				self.spawning[player.UserId] = nil
 				vehicle:Destroy()
 				return nil, "PLAYER_UNAVAILABLE"
+			end
+			if not spawner:IsDescendantOf(Workspace) then
+				self.spawning[player.UserId] = nil
+				vehicle:Destroy()
+				return nil, "SPAWNER_NOT_FOUND"
 			end
 			if not issuedRegistration then
 				self.spawning[player.UserId] = nil
