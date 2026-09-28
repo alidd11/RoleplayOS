@@ -170,24 +170,41 @@ function WarrantService:Revoke(
 	if not self.running or not authorised then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
+	local revocationOperationId = HttpService:GenerateGUID(false)
 	local revoked
 	local record, storeReason = self.context.Services
 		:Get("RecordIndexService")
 		:UpdatePerson(characterId, function(existing)
+			-- UpdateAsync may invoke this transform more than once after a conflict,
+			-- and DataService may retry the whole call after an ambiguous failure.
+			-- Reset per invocation so a discarded transform cannot later claim that
+			-- this actor revoked a warrant another server actually changed.
+			revoked = nil
 			if type(existing) ~= "table" or type(existing.Warrants) ~= "table" then
-				return existing
+				return nil
 			end
 			for _, warrant in existing.Warrants do
-				if warrant.WarrantId == warrantId and warrant.Active == true then
-					warrant.Active = false
-					warrant.RevokedAt = os.time()
-					warrant.RevokedByUserId = actor.UserId
-					revoked = warrant
-					break
+				if warrant.WarrantId == warrantId then
+					if warrant.Active == true then
+						warrant.Active = false
+						warrant.RevokedAt = os.time()
+						warrant.RevokedByUserId = actor.UserId
+						warrant.RevocationOperationId = revocationOperationId
+						revoked = warrant
+						existing.UpdatedAt = os.time()
+						return existing
+					end
+					if warrant.RevocationOperationId == revocationOperationId then
+						-- A previous retry may have committed successfully even if Roblox
+						-- reported an ambiguous failure. Recognise only this operation's
+						-- marker; never inherit another server's revocation attribution.
+						revoked = warrant
+						return existing
+					end
+					return nil
 				end
 			end
-			existing.UpdatedAt = os.time()
-			return existing
+			return nil
 		end)
 	if storeReason then
 		return nil, storeReason
