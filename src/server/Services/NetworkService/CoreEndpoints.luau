@@ -16,6 +16,8 @@ return function(self: any)
 			INSUFFICIENT_FUNDS = "You do not have enough cash.",
 			TOO_MANY_ACTIVE_DROPS = "Pick up an existing cash drop before making another.",
 			SERVER_DROP_LIMIT = "There are too many cash drops in the area. Try again shortly.",
+			MONEY_DROP_IN_PROGRESS = "Your previous cash drop is still processing.",
+			MONEY_DROP_FAILED = "Cash could not be dropped. Try again.",
 			CHARACTER_UNAVAILABLE = "Your character cannot drop cash right now.",
 			CIVILIAN_REQUIRED = "Finish your service duty before dropping cash.",
 		}
