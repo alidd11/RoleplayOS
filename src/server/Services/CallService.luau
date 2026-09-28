@@ -166,7 +166,10 @@ end
 function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	local call = self.calls[callId]
 	local unit = self.context.Services:Get("UnitService").units[unitId]
-	if not call or not unit then
+	-- Resolved calls remain in memory briefly as the bounded recovery source for
+	-- their durable incident projection. They are historical at that point and
+	-- must not be reopened by attaching a unit through a stale/malicious request.
+	if not call or call.Status == "Resolved" or not unit then
 		return false, "CALL_OR_UNIT_NOT_FOUND"
 	end
 	if unit.AssignedCallId and unit.AssignedCallId ~= callId then
