@@ -2,12 +2,24 @@
 local Validators = require(script.Parent.Validators)
 local tablePayload = Validators.tablePayload
 
+local function taxiRequestIdPayload(payload: any): boolean
+	return type(payload) == "table"
+		and type(payload.RequestId) == "string"
+		and #payload.RequestId > 0
+		and #payload.RequestId <= 128
+end
+
 return function(self: any)
 	self.context.Network:RegisterFunction("TaxiRequest", function(payload)
 		return type(payload) == "table"
 			and type(payload.Pickup) == "string"
+			and #payload.Pickup >= 2
+			and #payload.Pickup <= 80
 			and type(payload.Dropoff) == "string"
+			and #payload.Dropoff >= 2
+			and #payload.Dropoff <= 80
 			and type(payload.Band) == "string"
+			and self.context.Configuration.Taxi.Bands[payload.Band] ~= nil
 	end, function(player, payload, requestId)
 		local taxi, reason = self.context.Services
 			:Get("TaxiService")
@@ -27,9 +39,7 @@ return function(self: any)
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("TaxiAccept", function(payload)
-		return type(payload) == "table" and type(payload.RequestId) == "string"
-	end, function(player, payload, requestId)
+	self.context.Network:RegisterFunction("TaxiAccept", taxiRequestIdPayload, function(player, payload, requestId)
 		local taxi, reason =
 			self.context.Services:Get("TaxiService"):Accept(player, payload.RequestId)
 		local acceptMessages = {
@@ -49,9 +59,7 @@ return function(self: any)
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("TaxiDecline", function(payload)
-		return type(payload) == "table" and type(payload.RequestId) == "string"
-	end, function(player, payload, requestId)
+	self.context.Network:RegisterFunction("TaxiDecline", taxiRequestIdPayload, function(player, payload, requestId)
 		local passed, reason =
 			self.context.Services:Get("TaxiService"):Decline(player, payload.RequestId)
 		return {
@@ -66,9 +74,7 @@ return function(self: any)
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("TaxiComplete", function(payload)
-		return type(payload) == "table" and type(payload.RequestId) == "string"
-	end, function(player, payload, requestId)
+	self.context.Network:RegisterFunction("TaxiComplete", taxiRequestIdPayload, function(player, payload, requestId)
 		local taxi, reason =
 			self.context.Services:Get("TaxiService"):Complete(player, payload.RequestId)
 		local messages =
@@ -83,9 +89,7 @@ return function(self: any)
 			RequestId = requestId,
 		}
 	end)
-	self.context.Network:RegisterFunction("TaxiCancel", function(payload)
-		return type(payload) == "table" and type(payload.RequestId) == "string"
-	end, function(player, payload, requestId)
+	self.context.Network:RegisterFunction("TaxiCancel", taxiRequestIdPayload, function(player, payload, requestId)
 		local cancelled, reason =
 			self.context.Services:Get("TaxiService"):Cancel(player, payload.RequestId)
 		return {
