@@ -342,7 +342,9 @@ return function(DataService)
 		-- Releasing is the final profile write barrier. Once the final-save owner
 		-- has claimed the session, yielding gameplay work must not reacquire the
 		-- profile and mutate state after its durable snapshot has begun.
-		return if session and session.Player == player and not session.Releasing
+		return if session
+				and session.Player == player
+				and not session.Releasing
 			then session
 			else nil
 	end
