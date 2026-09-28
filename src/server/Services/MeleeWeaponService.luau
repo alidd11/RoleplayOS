@@ -144,33 +144,29 @@ function MeleeWeaponService:Start()
 				connection:Disconnect()
 			end
 		end
+		-- Exactly two watchers per player: CharacterAdded plus the current
+		-- character's Died signal. Replacing the latter on every respawn keeps
+		-- this table bounded for the lifetime of a long-running server.
 		local connections = {}
 		self.playerConnections[player.UserId] = connections
-		table.insert(
-			connections,
-			player.CharacterAdded:Connect(function(character)
-				self.lastStrike[player.UserId] = nil
-				local death = character:FindFirstChildOfClass("Humanoid")
-				if death then
-					table.insert(
-						connections,
-						death.Died:Connect(function()
-							self:_clear(player)
-						end)
-					)
-				end
-			end)
-		)
-		if player.Character then
-			local death = player.Character:FindFirstChildOfClass("Humanoid")
-			if death then
-				table.insert(
-					connections,
-					death.Died:Connect(function()
-						self:_clear(player)
-					end)
-				)
+		local function watchCharacter(character: Model)
+			self.lastStrike[player.UserId] = nil
+			local previousDeath = connections[2]
+			if previousDeath then
+				previousDeath:Disconnect()
+				connections[2] = nil
 			end
+			local death = character:FindFirstChildOfClass("Humanoid")
+			if death then
+				connections[2] = death.Died:Connect(function()
+					self:_clear(player)
+				end)
+			end
+		end
+		connections[1] = player.CharacterAdded:Connect(watchCharacter)
+		local character = player.Character
+		if character then
+			watchCharacter(character)
 		end
 	end
 	for _, player in Players:GetPlayers() do
