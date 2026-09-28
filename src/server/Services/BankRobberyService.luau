@@ -171,6 +171,22 @@ function BankRobberyService:_clearAlarm(state: any)
 	end
 end
 
+function BankRobberyService:_beginFailedCooldown(target: Instance, state: any)
+	local config = self.context.Configuration.BankRobbery
+	local prompt = state.Prompt
+	self:_cancelTimers(state)
+	state.Starting = false
+	state.Active = false
+	self:_clearAlarm(state)
+	state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
+	state.CooldownThread = task.delay(config.FailedCooldownSeconds, function()
+		state.CooldownThread = nil
+		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
+			prompt.Enabled = true
+		end
+	end)
+end
+
 function BankRobberyService:_finish(target: Instance, player: Player, robberyId: string)
 	local config = self.context.Configuration.BankRobbery
 	local state = self.states[target]
@@ -194,21 +210,8 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 			Target = robberyId,
 			Metadata = { Location = target.Name },
 		})
-		state.Active = false
-		self:_clearAlarm(state)
 		self:_releasePlayerClaim(player.UserId, robberyId)
-		state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
-		state.CooldownThread = task.delay(config.FailedCooldownSeconds, function()
-			state.CooldownThread = nil
-			if
-				self.running
-				and target.Parent
-				and self.states[target] == state
-				and prompt.Parent
-			then
-				prompt.Enabled = true
-			end
-		end)
+		self:_beginFailedCooldown(target, state)
 		return
 	end
 	local minimum = math.floor(config.MinimumReward)
@@ -397,22 +400,27 @@ function BankRobberyService:Start()
 			if not robberyId then
 				return
 			end
-			-- An in-progress robbery keeps its normal completion/failure path. A
-			-- start that is still yielding has not begun gameplay yet, so release
-			-- that provisional target claim immediately instead of leaving the bank
-			-- disabled until the lookup returns.
+			-- A provisional start can be released immediately. An active robbery
+			-- must also stop immediately: otherwise its alarm Instance and finish
+			-- timer survive the robber for the full robbery duration.
 			for target, state in self.states do
-				if
-					state.Starting == true
-					and state.PlayerUserId == player.UserId
-					and state.RobberyId == robberyId
-				then
-					state.Starting = false
-					state.RobberyId = nil
-					state.PlayerUserId = nil
-					local prompt = state.Prompt
-					if self.running and target.Parent and prompt and prompt.Parent then
-						prompt.Enabled = true
+				if state.PlayerUserId == player.UserId and state.RobberyId == robberyId then
+					if state.Starting == true then
+						state.Starting = false
+						state.RobberyId = nil
+						state.PlayerUserId = nil
+						local prompt = state.Prompt
+						if self.running and target.Parent and prompt and prompt.Parent then
+							prompt.Enabled = true
+						end
+					elseif state.Active == true then
+						self.context.Services:Get("AuditService"):Record({
+							ActorUserId = player.UserId,
+							Action = "BankRobbery.Failed",
+							Target = robberyId,
+							Metadata = { Location = target.Name, Reason = "PlayerLeft" },
+						})
+						self:_beginFailedCooldown(target, state)
 					end
 					break
 				end
