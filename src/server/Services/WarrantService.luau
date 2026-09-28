@@ -112,6 +112,9 @@ function WarrantService:CachePersonRecord(record: any)
 end
 
 function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { any }, string?)
+	if not self.running or not self.acceptingCache then
+		return false, {}, "WARRANT_CACHE_UNAVAILABLE"
+	end
 	local meta = self.cacheMeta[characterId]
 	local clock = os.clock()
 	if not meta or (meta.ExpiresAt or 0) <= clock then
@@ -133,7 +136,7 @@ function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { 
 		meta = self.cacheMeta[characterId]
 	end
 	if meta then
-		meta.AccessedAt = clock
+		meta.AccessedAt = os.clock()
 	end
 
 	local active = {}
