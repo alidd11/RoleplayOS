@@ -1,6 +1,31 @@
 --!strict
 
 local Players = game:GetService("Players")
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
+
+local function normaliseCallsign(raw: any): string?
+	if type(raw) ~= "string" then
+		return nil
+	end
+	local callsign = string.upper(string.sub(string.gsub(raw, "[^%w%- ]", ""), 1, 16))
+	callsign = string.gsub(callsign, "^%s+", "")
+	callsign = string.gsub(callsign, "%s+$", "")
+	return if #callsign >= 2 then callsign else nil
+end
+
+local function filterCallsign(player: Player, raw: any): (string?, string?)
+	local callsign = normaliseCallsign(raw)
+	if not callsign then
+		return nil, "INVALID_CALLSIGN"
+	end
+	local filtered, reason =
+		TextFilter.forBroadcast(callsign, player.UserId, Enum.TextFilterContext.PublicChat)
+	if not filtered or #filtered < 2 or #filtered > 16 then
+		return nil, reason or "TEXT_FILTER_UNAVAILABLE"
+	end
+	return filtered, nil
+end
+
 -- Whether a player is still in the game.
 --
 -- Parent is the reliable test: a Player instance that has left is removed from
@@ -160,7 +185,8 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if self.context.Services:Get("CustodyService"):HasActiveSentence(player) then
 		return false, "ACTIVE_CUSTODY_SENTENCE"
 	end
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local dataService = self.context.Services:Get("DataService")
+	local session = dataService:GetSession(player)
 	if not session then
 		return false, "PROFILE_UNAVAILABLE"
 	end
@@ -257,7 +283,7 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	if not self.running or not playerIsPresent(player) then
 		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
-	self.active[player.UserId] = {
+	local dutyRecord = {
 		DutyProfileId = request.DutyProfileId,
 		RoleId = request.RoleId,
 		StationId = request.StationId,
@@ -267,6 +293,7 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		DivisionId = role.DivisionId,
 		TeamName = role.TeamName,
 	}
+	self.active[player.UserId] = dutyRecord
 	if role.AutoEquipUniform == true and role.UniformId then
 		local applied, uniformReason =
 			self.context.Services:Get("UniformService"):Apply(player, role.UniformId)
@@ -291,17 +318,16 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 			})
 		end
 	end
-	-- The rank abbreviation and shoulder number, issued now if this is the first
-	-- shift in this service. An explicitly set callsign on the profile still wins,
-	-- so a unit given a bespoke one by staff keeps it.
+	-- The rank abbreviation and shoulder number is always safe to display because
+	-- it is server-authored. A stored custom callsign is user-authored text and
+	-- therefore cannot be shown until Roblox has filtered it.
 	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
 	if not self.running or not playerIsPresent(player) then
 		self.active[player.UserId] = nil
 		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
-	local callsign = if type(profile.Callsign) == "string" and #profile.Callsign >= 2
-		then profile.Callsign
-		elseif type(shoulder) == "string" and #shoulder >= 2 then shoulder
+	local callsign = if type(shoulder) == "string" and #shoulder >= 2
+		then shoulder
 		else string.format("%s-%d", role.DepartmentId, player.UserId % 100)
 	local unit, unitReason = self.context.Services:Get("UnitService"):Register(player, {
 		Callsign = callsign,
@@ -319,7 +345,54 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 		self.active[player.UserId] = nil
 		return false, "PLAYER_LEFT"
 	end
-	self.active[player.UserId].Callsign = callsign
+	dutyRecord.Callsign = callsign
+
+	-- Existing profiles may contain a custom callsign saved before callsigns were
+	-- filtered. Do not expose that legacy value while moderation is pending: the
+	-- server-generated callsign above remains visible, and a successful filter may
+	-- replace it only if this exact duty/profile is still current.
+	local storedCallsign = if type(profile.Callsign) == "string" then profile.Callsign else nil
+	if storedCallsign then
+		task.spawn(function()
+			if
+				not self.running
+				or not playerIsPresent(player)
+				or self.active[player.UserId] ~= dutyRecord
+			then
+				return
+			end
+			local filtered = filterCallsign(player, storedCallsign)
+			if not filtered then
+				return
+			end
+			-- Filtering yields. Re-run the full duty/access check before publishing
+			-- legacy user text to a unit or another player.
+			local currentDuty = self:Get(player)
+			if currentDuty ~= dutyRecord then
+				return
+			end
+			local currentSession = dataService:GetSession(player)
+			local currentProfile = currentSession
+				and currentSession.Profile.DutyProfiles[dutyRecord.DutyProfileId]
+			if
+				currentSession ~= session
+				or currentProfile ~= profile
+				or profile.Callsign ~= storedCallsign
+			then
+				return
+			end
+			local updated = self.context.Services
+				:Get("UnitService")
+				:SetCallsign(tostring(player.UserId), filtered)
+			if not updated then
+				return
+			end
+			dutyRecord.Callsign = filtered
+			profile.Callsign = filtered
+			dataService:MarkDirty(player)
+		end)
+	end
+
 	task.spawn(function()
 		if not self.running or not playerIsPresent(player) then
 			return
@@ -348,29 +421,37 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 end
 
 function DutyService:SetCallsign(player: Player, raw: string): (string?, string?)
+	-- Reject obvious off-duty abuse before spending a Roblox moderation request.
+	-- This is only a cheap pre-check; the authoritative duty check happens after
+	-- filtering because moderation yields.
+	if not self.running or not playerIsPresent(player) or not self.active[player.UserId] then
+		return nil, "NOT_ON_DUTY"
+	end
+	local callsign, filterReason = filterCallsign(player, raw)
+	if not callsign then
+		return nil, filterReason
+	end
+
+	-- Filtering yields. Resolve duty, access and the exact profile only after it
+	-- completes so stale pre-filter authority cannot be used to update a unit.
 	local duty = self:Get(player)
 	if not duty then
 		return nil, "NOT_ON_DUTY"
 	end
-	local callsign = string.upper(string.sub(string.gsub(raw, "[^%w%- ]", ""), 1, 16))
-	callsign = string.gsub(callsign, "^%s+", "")
-	callsign = string.gsub(callsign, "%s+$", "")
-	if #callsign < 2 then
-		return nil, "INVALID_CALLSIGN"
-	end
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local dataService = self.context.Services:Get("DataService")
+	local session = dataService:GetSession(player)
 	local profile = session and session.Profile.DutyProfiles[duty.DutyProfileId]
 	if not profile then
 		return nil, "DUTY_PROFILE_NOT_FOUND"
 	end
-	profile.Callsign = callsign
-	duty.Callsign = callsign
 	local updated, reason =
 		self.context.Services:Get("UnitService"):SetCallsign(tostring(player.UserId), callsign)
 	if not updated then
 		return nil, reason
 	end
-	self.context.Services:Get("DataService"):MarkDirty(player)
+	profile.Callsign = callsign
+	duty.Callsign = callsign
+	dataService:MarkDirty(player)
 	return callsign, nil
 end
 
