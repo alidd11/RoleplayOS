@@ -219,17 +219,13 @@ return function(DataService)
 				end
 				local profile, migrationError = ProfileSchema.migrate(stored, player.UserId)
 				if not profile then
-					-- A profile that cannot be read is set aside and replaced, not
-					-- thrown on. Raising here is indistinguishable from an outage: it
-					-- is retried, then kicked, on every join, forever. A schema
-					-- rollback would have locked out everybody who played the newer
-					-- build with no way back.
-					--
-					-- The unreadable original is kept, so this loses nothing that can
-					-- be recovered by hand later.
-					quarantined = stored
+					-- Never replace data this server cannot understand. In particular a
+					-- rollback can encounter a newer schema containing fields this build
+					-- does not know about; resetting that record would turn a deployment
+					-- mismatch into permanent player-data loss.
+					quarantined = deepCopy(stored)
 					quarantineReason = migrationError
-					profile = ProfileSchema.default(player.UserId)
+					error("PROFILE_QUARANTINE_REQUIRED")
 				end
 				local lock = profile.AuditMetadata.SessionLock
 				if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > os.time() then
@@ -248,11 +244,39 @@ return function(DataService)
 			local text = tostring(failure)
 			return string.find(text, "PROFILE_SESSION_LOCKED", 1, true) ~= nil
 				or string.find(text, "PROFILE_LOAD_CANCELLED", 1, true) ~= nil
+				or string.find(text, "PROFILE_QUARANTINE_REQUIRED", 1, true) ~= nil
 		end)
 		if not ok and string.find(tostring(problem), "PROFILE_LOAD_CANCELLED", 1, true) ~= nil then
 			finishLoading()
 			return nil,
 				if self.closing or not self.running then "SERVICE_SHUTTING_DOWN" else "PLAYER_LEFT"
+		end
+		if
+			not ok
+			and string.find(tostring(problem), "PROFILE_QUARANTINE_REQUIRED", 1, true) ~= nil
+		then
+			-- The primary UpdateAsync aborted, so the unreadable profile is still the
+			-- authoritative stored value. Keep a bounded recovery copy for operators,
+			-- but never make the backup a prerequisite for preserving the original.
+			local key = "q:" .. profileKey
+			local backedUp = false
+			if self:_checkKey(key, "Profiles") then
+				backedUp = self:_retry(function()
+					return self.store:SetAsync(key, {
+						UserId = player.UserId,
+						Reason = quarantineReason,
+						StoredAt = os.time(),
+						Profile = quarantined,
+					})
+				end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
+			end
+			self.context.Logger:Error("Profile could not be migrated safely", {
+				UserId = player.UserId,
+				Reason = quarantineReason,
+				QuarantineBackedUp = backedUp,
+			})
+			finishLoading()
+			return nil, if backedUp then "PROFILE_QUARANTINED" else "PROFILE_QUARANTINE_FAILED"
 		end
 		if not ok and lockedUntil and not waited then
 			-- A lease is held by another server. Retrying immediately cannot succeed,
@@ -314,26 +338,6 @@ return function(DataService)
 			-- once they have simply left.
 			finishLoading()
 			return nil, "PROFILE_LOAD_FAILED: " .. string.sub(tostring(problem), 1, 180)
-		end
-		if quarantined ~= nil then
-			self.context.Logger:Error("Profile could not be read and was set aside", {
-				UserId = player.UserId,
-				Reason = quarantineReason,
-			})
-			-- The UpdateAsync above has already replaced the unreadable value. Keep
-			-- its recoverable copy even if the player disconnected while that load
-			-- was in flight; cancellation must not turn a safe quarantine into loss.
-			local key = "quarantine:" .. profileKey .. ":" .. tostring(os.time())
-			if self:_checkKey(key, "Profiles") then
-				self:_retry(function()
-					return self.store:SetAsync(key, {
-						UserId = player.UserId,
-						Reason = quarantineReason,
-						StoredAt = os.time(),
-						Profile = quarantined,
-					})
-				end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
-			end
 		end
 		if
 			loadToken.Cancelled
