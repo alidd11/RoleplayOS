@@ -568,9 +568,14 @@ function RecordIndexService:SearchVehicles(
 			-- department denied WarrantRead learned that a keeper was wanted
 			-- simply by typing the registration, which is the exact disclosure
 			-- the person search withholds from them.
-			local owner = if includeWarrants
-				then select(1, self:GetPerson(record.OwnerCharacterId))
-				else nil
+			local owner
+			if includeWarrants then
+				local ownerReason
+				owner, ownerReason = self:GetPerson(record.OwnerCharacterId)
+				if ownerReason then
+					return nil, ownerReason
+				end
+			end
 			local wanted = includeWarrants == true and owner ~= nil and #activeWarrants(owner) > 0
 			table.insert(items, {
 				VehicleId = record.VehicleId,
