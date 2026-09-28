@@ -68,6 +68,10 @@ function MoneyDropService:_remove(dropId: string, reason: string?)
 	if record.Connection then
 		record.Connection:Disconnect()
 	end
+	if record.ExpiryThread then
+		task.cancel(record.ExpiryThread)
+		record.ExpiryThread = nil
+	end
 	if record.Part then
 		record.Part:Destroy()
 	end
@@ -202,7 +206,10 @@ function MoneyDropService:_create(
 	record.Connection = prompt.Triggered:Connect(function(player)
 		self:_collect(dropId, player)
 	end)
-	task.delay(self.settings.LifetimeSeconds, function()
+	record.ExpiryThread = task.delay(self.settings.LifetimeSeconds, function()
+		-- This is the expiry thread itself, so clear it before _remove rather than
+		-- asking _remove to cancel the currently running coroutine.
+		record.ExpiryThread = nil
 		self:_remove(dropId, "Expired")
 	end)
 	return record
