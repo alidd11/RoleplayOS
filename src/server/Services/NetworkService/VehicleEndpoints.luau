@@ -83,7 +83,10 @@ return function(self: any)
 		end
 	)
 	self.context.Network:RegisterFunction("GetVehicleSpawnerMenu", function(payload)
-		return type(payload) == "table" and type(payload.SpawnerId) == "string"
+		return type(payload) == "table"
+			and type(payload.SpawnerId) == "string"
+			and #payload.SpawnerId > 0
+			and #payload.SpawnerId <= 64
 	end, function(player, payload, requestId)
 		local menu, reason =
 			self.context.Services:Get("VehicleSpawnerService"):Menu(player, payload.SpawnerId)
@@ -100,8 +103,19 @@ return function(self: any)
 	self.context.Network:RegisterFunction("SpawnVehicle", function(payload)
 		return type(payload) == "table"
 			and type(payload.SpawnerId) == "string"
+			and #payload.SpawnerId > 0
+			and #payload.SpawnerId <= 64
 			and type(payload.DefinitionId) == "string"
-			and (payload.VehicleId == nil or type(payload.VehicleId) == "string")
+			and #payload.DefinitionId > 0
+			and #payload.DefinitionId <= 64
+			and (
+				payload.VehicleId == nil
+				or (
+					type(payload.VehicleId) == "string"
+					and #payload.VehicleId > 0
+					and #payload.VehicleId <= 64
+				)
+			)
 	end, function(player, payload, requestId)
 		local spawned, reason =
 			self.context.Services
