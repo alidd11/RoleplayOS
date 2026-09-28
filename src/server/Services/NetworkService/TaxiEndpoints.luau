@@ -19,6 +19,8 @@ return function(self: any)
 			and #payload.Dropoff >= 2
 			and #payload.Dropoff <= 80
 			and type(payload.Band) == "string"
+			and #payload.Band > 0
+			and #payload.Band <= 64
 			and self.context.Configuration.Taxi.Bands[payload.Band] ~= nil
 	end, function(player, payload, requestId)
 		local taxi, reason = self.context.Services
