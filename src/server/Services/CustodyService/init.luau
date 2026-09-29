@@ -8,7 +8,13 @@ local Players = game:GetService("Players")
 local TextChatService = game:GetService("TextChatService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local CustodyService = { cuffed = {}, connections = {}, commands = {}, running = false }
+local CustodyService = {
+	booking = {},
+	cuffed = {},
+	connections = {},
+	commands = {},
+	running = false,
+}
 
 local Utils = require(script.Utils)
 local root = Utils.root
@@ -32,6 +38,7 @@ function CustodyService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("CustodyChanged")
 	self.chairEvent = context.Network:RegisterEvent("CustodyChairProcessed")
+	self.booking = {}
 	self.chairPrompts = {}
 	self.chairPromptConnections = {}
 	self.playerConnections = {}
@@ -332,6 +339,7 @@ function CustodyService:Destroy()
 	table.clear(self.connections)
 	table.clear(self.playerConnections)
 	table.clear(self.commands)
+	table.clear(self.booking)
 	table.clear(self.cuffed)
 	for model in self.chairPrompts do
 		self:_unwatchChair(model)
