@@ -36,7 +36,11 @@ through the sensor.
 - Give both average-speed volumes the same `CorridorId` and `SpeedLimitMph`.
 
 Average speed is calculated from the distance between the two volumes and the
-server-measured journey time. Incomplete journeys expire automatically.
+server-measured journey time. Incomplete journeys expire automatically. The
+server-local outstanding journey set is also hard-capped by
+`Config.RoadSafety.MaximumAverageJourneys`; once that capacity is genuinely
+full after expired entries are removed, the oldest incomplete journey is
+dropped rather than allowing player/vehicle churn to grow memory without bound.
 
 ## The blue light exemption
 

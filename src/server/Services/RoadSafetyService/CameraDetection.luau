@@ -352,6 +352,35 @@ return function(RoadSafetyService)
 			+ (if issued then self.context.Configuration.RoadSafety.SensorCooldownSeconds else 1)
 	end
 
+	function RoadSafetyService:_rememberAverageJourney(key: string, position: Vector3)
+		local settings = self.context.Configuration.RoadSafety
+		local now = os.clock()
+		local expiry = settings.AverageJourneyExpirySeconds
+		local maximum = math.max(1, math.floor(tonumber(settings.MaximumAverageJourneys) or 256))
+		local count = 0
+		local oldestKey: string? = nil
+		local oldestTime = math.huge
+		for existingKey, journey in self.journeys do
+			local startedAt = if type(journey) == "table" then tonumber(journey.Time) else nil
+			if not startedAt or now - startedAt > expiry then
+				self.journeys[existingKey] = nil
+			else
+				count += 1
+				if startedAt < oldestTime then
+					oldestTime = startedAt
+					oldestKey = existingKey
+				end
+			end
+		end
+		-- Prefer expiry above, but never let churn inside the expiry window make
+		-- the server-local tracker unbounded. Replacing the same journey costs no
+		-- capacity; a genuinely new one evicts only the oldest outstanding entry.
+		if self.journeys[key] == nil and count >= maximum and oldestKey then
+			self.journeys[oldestKey] = nil
+		end
+		self.journeys[key] = { Time = now, Position = position }
+	end
+
 	function RoadSafetyService:_taggedAverage(sensor: BasePart, hit: BasePart, isEntry: boolean)
 		local vehicle, _, player = self:_vehicleFromPart(hit)
 		if not vehicle or not player then
@@ -364,7 +393,7 @@ return function(RoadSafetyService)
 		local corridor = sensor:GetAttribute("CorridorId") or "Default"
 		local key = identity .. ":" .. tostring(corridor)
 		if isEntry then
-			self.journeys[key] = { Time = os.clock(), Position = sensor.Position }
+			self:_rememberAverageJourney(key, sensor.Position)
 			return
 		end
 		local entry = self.journeys[key]
