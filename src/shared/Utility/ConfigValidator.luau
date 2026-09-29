@@ -323,6 +323,10 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or config.MDT.RecordCacheSeconds < 0
 		or type(config.MDT.IndexWriteSpacingSeconds) ~= "number"
 		or config.MDT.IndexWriteSpacingSeconds < 0.05
+		or type(config.MDT.PersonIndexRepairRetrySeconds) ~= "number"
+		or config.MDT.PersonIndexRepairRetrySeconds < 5
+		or type(config.MDT.MaximumPendingPersonIndexRepairs) ~= "number"
+		or config.MDT.MaximumPendingPersonIndexRepairs < 1
 		or type(config.MDT.MaximumWarrantReasonLength) ~= "number"
 		or config.MDT.MaximumWarrantReasonLength < 20
 		or type(config.MDT.MaximumWarrantDurationDays) ~= "number"
