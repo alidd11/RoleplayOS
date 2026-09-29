@@ -30,7 +30,7 @@ Vehicle, property and furniture services read prices only from configuration. Re
 
 Nothing paid anyone. Vehicles, food, furniture and property all took money and only reselling a vehicle ever returned any, so a balance could only fall and every price was arbitrary. Jobs carried a `BaseWage` that no code ever paid out.
 
-Pay now accrues while a shift is worked and is settled on an interval rather than granted in a lump when clocking off, so leaving on a crash or a disconnect costs at most one period. Payments go through the economy service like any other movement of money, so they are validated, recorded in the character's transaction history and audited.
+Pay now accrues while a shift is worked and is settled on an interval rather than granted in a lump when clocking off, so leaving on a crash or a disconnect costs at most one period. Payments go through the economy service like any other movement of money, so they are validated, recorded in the character's transaction history and audited. Duty/access resolution can yield on Roblox group checks; payroll therefore revalidates its own runtime, the exact Player and the current character session after that boundary before movement state or wages are touched.
 
 An emergency shift pays by department with a bonus for each rank above the first, so seniority is worth holding. Civilian employment pays less, so the services remain the career path. `BaseWage` on a job is what a completed task is worth and is not treated as an hourly rate; a job may declare an `HourlyRate` of its own.
 
