@@ -126,6 +126,9 @@ return function(self: any)
 						reason == "PROFILE_BUSY"
 					then "Your progress is still saving. Try again in a moment."
 					elseif
+						reason == "SERVER_TRANSFER_IN_PROGRESS"
+					then "A server transfer is already being prepared."
+					elseif
 						reason == "PUBLIC_SERVER_DIRECTORY_UNAVAILABLE"
 					then "The public server list is unavailable. Refresh and try again."
 					else "That server could not be joined - it may have just closed. Refresh and try again.",
@@ -169,6 +172,9 @@ return function(self: any)
 					elseif
 						reason == "PROFILE_BUSY"
 					then "Your progress is still saving. Try again in a moment."
+					elseif
+						reason == "SERVER_TRANSFER_IN_PROGRESS"
+					then "A server transfer is already being prepared."
 					elseif
 						reason == "OFFICIAL_SERVER_FULL"
 					then "That server is full. Try another instance."
