@@ -4,7 +4,15 @@ local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local ServerStorage = game:GetService("ServerStorage")
 
-local UniformService = { connections = {}, promptConnections = {}, originals = {} }
+local UniformService = {
+	connections = {},
+	promptConnections = {},
+	playerConnections = {},
+	generatedRooms = {},
+	generatedPrompts = {},
+	originals = {},
+	running = false,
+}
 
 local ISSUED_FOLDER_NAME = "RoleplayOSIssuedUniform"
 
@@ -134,15 +142,36 @@ end
 
 function UniformService:Init(context: any)
 	self.context = context
-	table.clear(self.connections)
-	table.clear(self.promptConnections)
-	table.clear(self.originals)
+	self.connections = {}
+	self.promptConnections = {}
+	self.playerConnections = {}
+	self.generatedRooms = {}
+	self.generatedPrompts = {}
+	self.generatedFolder = nil
+	self.originals = {}
+	self.running = false
+end
+
+function UniformService:_discardOriginal(userId: number, character: Model?)
+	local original = self.originals[userId]
+	if not original or (character and original.Character ~= character) then
+		return
+	end
+	self.originals[userId] = nil
+	for _, appearance in original.Appearance or {} do
+		if appearance.Parent == nil then
+			appearance:Destroy()
+		end
+	end
 end
 
 function UniformService:_captureOriginal(player: Player, character: Model)
 	local existing = self.originals[player.UserId]
 	if existing and existing.Character == character then
 		return
+	end
+	if existing then
+		self:_discardOriginal(player.UserId)
 	end
 	local appearance = {}
 	for _, child in character:GetChildren() do
@@ -238,6 +267,9 @@ function UniformService:_applyKit(character: Model, definition: any): (boolean, 
 end
 
 function UniformService:Apply(player: Player, uniformId: string): (boolean, string?)
+	if not self.running then
+		return false, "UNIFORM_UNAVAILABLE"
+	end
 	local definition = self.context.Configuration.Uniforms[uniformId]
 	local character = player.Character
 	local shirtTemplate = definition and template(definition.ShirtTemplate)
@@ -283,6 +315,9 @@ function UniformService:Restore(player: Player)
 end
 
 function UniformService:_equipFromRoom(player: Player, room: Instance)
+	if not self.running or not room:IsDescendantOf(workspace) then
+		return
+	end
 	local settings = self.context.Configuration.UniformChangingRooms
 	local playerPosition = rootPosition(player)
 	local roomPosition = positionOf(room)
@@ -294,6 +329,9 @@ function UniformService:_equipFromRoom(player: Player, room: Instance)
 		return
 	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	if not self.running or not room:IsDescendantOf(workspace) then
+		return
+	end
 	local uniformId = room:GetAttribute("UniformId")
 	local departmentId = room:GetAttribute("DepartmentId")
 	local role = duty and self.context.Configuration.Roles[duty.RoleId]
@@ -323,10 +361,15 @@ function UniformService:_unconfigure(room: Instance)
 		connection:Disconnect()
 		self.promptConnections[room] = nil
 	end
+	local prompt = self.generatedPrompts[room]
+	if prompt then
+		self.generatedPrompts[room] = nil
+		prompt:Destroy()
+	end
 end
 
 function UniformService:_configure(room: Instance)
-	if self.promptConnections[room] or room.Parent == nil then
+	if not self.running or self.promptConnections[room] or room.Parent == nil then
 		return
 	end
 	local settings = self.context.Configuration.UniformChangingRooms
@@ -344,6 +387,7 @@ function UniformService:_configure(room: Instance)
 		prompt = Instance.new("ProximityPrompt")
 		prompt.Name = "RoleplayOSUniformPrompt"
 		prompt.Parent = parent
+		self.generatedPrompts[room] = prompt
 	end
 	prompt.ActionText = "Wear uniform"
 	prompt.ObjectText = tostring(room:GetAttribute("DisplayName") or "Changing room")
@@ -410,17 +454,20 @@ function UniformService:_createDefaults(folder: Instance)
 			room:SetAttribute("UniformId", specification.UniformId)
 			room.CFrame = anchor.CFrame * CFrame.new(offset(specification.Offset))
 			room.Parent = folder
+			self.generatedRooms[room] = true
 		end
 	end
 end
 
 function UniformService:Start()
+	self.running = true
 	local settings = self.context.Configuration.UniformChangingRooms
 	local folder = workspace:FindFirstChild(settings.FolderName)
 	if not folder then
 		folder = Instance.new("Folder")
 		folder.Name = settings.FolderName
 		folder.Parent = workspace
+		self.generatedFolder = folder
 	end
 	self:_createDefaults(folder)
 	for _, room in folder:GetChildren() do
@@ -440,23 +487,63 @@ function UniformService:Start()
 			self:_unconfigure(room)
 		end)
 	)
-	table.insert(
-		self.connections,
-		Players.PlayerRemoving:Connect(function(player)
-			self.originals[player.UserId] = nil
+	local function forgetPlayer(player: Player)
+		local connection = self.playerConnections[player.UserId]
+		if connection then
+			connection:Disconnect()
+			self.playerConnections[player.UserId] = nil
+		end
+		self:_discardOriginal(player.UserId)
+	end
+	local function watchPlayer(player: Player)
+		local existing = self.playerConnections[player.UserId]
+		if existing then
+			existing:Disconnect()
+		end
+		self.playerConnections[player.UserId] = player.CharacterRemoving:Connect(function(character)
+			self:_discardOriginal(player.UserId, character)
 		end)
-	)
+	end
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	table.insert(self.connections, Players.PlayerAdded:Connect(watchPlayer))
+	table.insert(self.connections, Players.PlayerRemoving:Connect(forgetPlayer))
 end
 
 function UniformService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
 	for _, connection in self.promptConnections do
 		connection:Disconnect()
 	end
+	for _, connection in self.playerConnections do
+		connection:Disconnect()
+	end
+	for _, prompt in self.generatedPrompts do
+		prompt:Destroy()
+	end
+	for room in self.generatedRooms do
+		room:Destroy()
+	end
+	if self.generatedFolder then
+		self.generatedFolder:Destroy()
+		self.generatedFolder = nil
+	end
+	local userIds = {}
+	for userId in self.originals do
+		table.insert(userIds, userId)
+	end
+	for _, userId in userIds do
+		self:_discardOriginal(userId)
+	end
 	table.clear(self.connections)
 	table.clear(self.promptConnections)
+	table.clear(self.playerConnections)
+	table.clear(self.generatedPrompts)
+	table.clear(self.generatedRooms)
 	table.clear(self.originals)
 end
 
