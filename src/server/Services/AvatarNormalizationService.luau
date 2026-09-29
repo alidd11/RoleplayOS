@@ -2,7 +2,7 @@
 
 local Players = game:GetService("Players")
 
-local AvatarNormalizationService = { connections = {} }
+local AvatarNormalizationService = { connections = {}, running = false }
 
 local STANDARD_SCALES = {
 	BodyHeightScale = 1,
@@ -111,6 +111,7 @@ function AvatarNormalizationService:Init(context: any)
 	self.context = context
 	table.clear(self.connections)
 	self.playerConnections = {}
+	self.running = false
 end
 
 function AvatarNormalizationService:Normalize(character: Model)
@@ -118,6 +119,7 @@ function AvatarNormalizationService:Normalize(character: Model)
 end
 
 function AvatarNormalizationService:Start()
+	self.running = true
 	local function forget(player: Player)
 		local connection = self.playerConnections[player.UserId]
 		if connection then
@@ -129,11 +131,18 @@ function AvatarNormalizationService:Start()
 		forget(player)
 		self.playerConnections[player.UserId] = player.CharacterAppearanceLoaded:Connect(
 			function(character)
-				normalize(character)
+				if self.running then
+					normalize(character)
+				end
 			end
 		)
 		if player.Character then
-			task.defer(normalize, player.Character)
+			local character = player.Character
+			task.defer(function()
+				if self.running and character.Parent then
+					normalize(character)
+				end
+			end)
 		end
 	end
 	table.insert(self.connections, Players.PlayerAdded:Connect(watch))
@@ -144,6 +153,7 @@ function AvatarNormalizationService:Start()
 end
 
 function AvatarNormalizationService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
