@@ -153,6 +153,7 @@ return function(self: any)
 				VEHICLE_NOT_FOR_SALE = "That vehicle is not for sale here.",
 				INVALID_VEHICLE_SELECTION = "That colour is not available for this vehicle.",
 				INSUFFICIENT_FUNDS = "You cannot afford this vehicle.",
+				VEHICLE_PURCHASE_IN_PROGRESS = "A vehicle purchase is already being processed.",
 				GAMEPASS_REQUIRED = "This vehicle needs its game pass.",
 				REGISTRATION_UNAVAILABLE = "No registration could be issued. Try again.",
 			}
