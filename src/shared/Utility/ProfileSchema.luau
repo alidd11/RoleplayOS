@@ -83,13 +83,16 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		return nil, "PROFILE_VERSION_TOO_NEW"
 	end
 	data.SchemaVersion = version
-	-- The migrations below walk these, so a corrupt one has to be replaced here
-	-- rather than allowed to throw halfway through.
+	-- Never "repair" a persisted collection by replacing an unreadable value
+	-- with an empty table. Load runs migration inside UpdateAsync, so doing that
+	-- would commit the empty replacement and permanently erase the only copy of
+	-- the damaged data. Returning an error aborts the primary write and lets
+	-- DataService's quarantine path preserve the original profile for recovery.
 	if data.Characters ~= nil and type(data.Characters) ~= "table" then
-		data.Characters = {}
+		return nil, "PROFILE_CHARACTERS_NOT_TABLE"
 	end
 	if data.Applications ~= nil and type(data.Applications) ~= "table" then
-		data.Applications = {}
+		return nil, "PROFILE_APPLICATIONS_NOT_TABLE"
 	end
 	if version == 0 then
 		data.SchemaVersion = 1
