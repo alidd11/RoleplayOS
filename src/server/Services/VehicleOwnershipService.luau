@@ -7,6 +7,7 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local VehicleOwnershipService = {
 	registrations = {},
 	registrationUpdates = {},
+	purchasing = {},
 	running = false,
 }
 
@@ -16,6 +17,7 @@ end
 
 function VehicleOwnershipService:Init(context: any)
 	self.context = context
+	table.clear(self.purchasing)
 end
 
 function VehicleOwnershipService:Start()
@@ -292,7 +294,7 @@ end
 -- persistent step most likely to fail during an outage; once it succeeds, the
 -- active character is revalidated, payment is taken, and the ownership record
 -- is inserted without another yielding allocation step.
-function VehicleOwnershipService:Purchase(
+function VehicleOwnershipService:_purchase(
 	player: Player,
 	definitionId: string,
 	colour: string
@@ -387,6 +389,26 @@ function VehicleOwnershipService:Purchase(
 		registration
 	)
 	return vehicle, nil
+end
+
+function VehicleOwnershipService:Purchase(
+	player: Player,
+	definitionId: string,
+	colour: string
+): (any?, string?)
+	-- A purchase crosses several yielding authority and persistence checks. Claim
+	-- the Player instance before any of them so a burst/retry cannot reserve and
+	-- charge multiple purchases concurrently from the same client.
+	if self.purchasing[player] then
+		return nil, "VEHICLE_PURCHASE_IN_PROGRESS"
+	end
+	self.purchasing[player] = true
+	local ok, vehicle, reason = pcall(self._purchase, self, player, definitionId, colour)
+	self.purchasing[player] = nil
+	if not ok then
+		error(vehicle)
+	end
+	return vehicle, reason
 end
 
 function VehicleOwnershipService:GetOrCreateTeamRegistration(
@@ -628,6 +650,7 @@ function VehicleOwnershipService:Create(
 end
 function VehicleOwnershipService:Destroy()
 	self.running = false
+	table.clear(self.purchasing)
 	table.clear(self.registrationUpdates)
 	table.clear(self.registrations)
 end
