@@ -224,7 +224,7 @@ return function(CustodyService)
 			return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
 		end
 		if not self:_playerIsCurrent(player) then
-			if player.Parent == Players then
+			if player.Parent then
 				player.Team = previousTeam
 			end
 			return false, "PLAYER_UNAVAILABLE"
@@ -240,7 +240,7 @@ return function(CustodyService)
 			return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
 		end
 		if not self:_playerIsCurrent(player) then
-			if player.Parent == Players then
+			if player.Parent then
 				player.Team = previousTeam
 				player.RespawnLocation = previousRespawnLocation
 			end
