@@ -78,7 +78,11 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	-- number would otherwise raise "attempt to compare" inside the transform, and
 	-- a raise there is indistinguishable from an outage: retried, then a kick,
 	-- every join, forever.
-	local version = tonumber(data.SchemaVersion) or 0
+	local storedVersion = data.SchemaVersion
+	local version = if storedVersion == nil then 0 else tonumber(storedVersion)
+	if version == nil then
+		return nil, "PROFILE_VERSION_INVALID"
+	end
 	if version > ProfileSchema.CURRENT_VERSION then
 		return nil, "PROFILE_VERSION_TOO_NEW"
 	end
@@ -168,9 +172,11 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	end
 	if data.SchemaVersion == 8 then
 		local sentence = data.CustodySentence
-		if type(sentence) ~= "table" then
+		if sentence == nil then
 			sentence = {}
 			data.CustodySentence = sentence
+		elseif type(sentence) ~= "table" then
+			return nil, "PROFILE_CUSTODY_SENTENCE_NOT_TABLE"
 		end
 		-- Version 8 used an absolute wall-clock deadline, which kept counting
 		-- down while a player was offline. Preserve only the unserved portion at
@@ -256,8 +262,10 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		-- GangId is left alone: an absent key already means "not in a gang", and
 		-- there is nothing to migrate an old profile to besides that. Only the
 		-- invite list needs a container, since GangService iterates it directly.
-		if type(data.GangInvites) ~= "table" then
+		if data.GangInvites == nil then
 			data.GangInvites = {}
+		elseif type(data.GangInvites) ~= "table" then
+			return nil, "PROFILE_GANG_INVITES_NOT_TABLE"
 		end
 		data.SchemaVersion = 13
 	end
