@@ -2710,6 +2710,13 @@ local Config = {
 		MaximumDepth = 8,
 		MaximumNodes = 256,
 		MaximumStringBytes = 2048,
+		-- Responses legitimately contain larger server-built projections than
+		-- requests (start menu, phone history, vehicle lists), so they use a
+		-- separate generous ceiling rather than the hostile-input limits above.
+		MaximumResponseDepth = 12,
+		MaximumResponseNodes = 8192,
+		MaximumResponseStringBytes = 4096,
+		MaximumResponseTotalStringBytes = 131072,
 		MaximumConcurrentRequests = 4,
 		MaximumConcurrentRequestsPerServer = 64,
 		-- How long a handler is given before the server answers without it.

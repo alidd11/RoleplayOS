@@ -290,6 +290,14 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or type(network.MaximumStringBytes) ~= "number"
 		or network.MaximumStringBytes < 1
 		or network.MaximumStringBytes > network.MaximumPayloadBytes
+		or type(network.MaximumResponseDepth) ~= "number"
+		or network.MaximumResponseDepth < 1
+		or type(network.MaximumResponseNodes) ~= "number"
+		or network.MaximumResponseNodes < 1
+		or type(network.MaximumResponseStringBytes) ~= "number"
+		or network.MaximumResponseStringBytes < 1
+		or type(network.MaximumResponseTotalStringBytes) ~= "number"
+		or network.MaximumResponseTotalStringBytes < network.MaximumResponseStringBytes
 		or type(network.MaximumConcurrentRequests) ~= "number"
 		or network.MaximumConcurrentRequests < 1
 		or type(network.GlobalCapacity) ~= "number"

@@ -4,6 +4,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local PayloadInspector = require(ReplicatedStorage.RoleplayOS.Shared.PayloadInspector)
+local ResponseInspector = require(ReplicatedStorage.RoleplayOS.Shared.ResponseInspector)
 local RateLimiter = require(ReplicatedStorage.RoleplayOS.Shared.RateLimiter)
 
 local NetworkServer = {}
@@ -19,7 +20,7 @@ local function responseCodeIsSafe(value: any): boolean
 		and string.match(value, "^[A-Z][A-Z0-9_]*$") ~= nil
 end
 
-local function responseEnvelope(result: any, requestId: string): (any?, string?)
+local function responseEnvelope(result: any, requestId: string, config: any): (any?, string?)
 	if type(result) ~= "table" then
 		return nil, "INVALID_RESPONSE_TYPE"
 	end
@@ -35,10 +36,22 @@ local function responseEnvelope(result: any, requestId: string): (any?, string?)
 	if #result.Message > MAXIMUM_RESPONSE_MESSAGE_BYTES then
 		return nil, "RESPONSE_MESSAGE_TOO_LARGE"
 	end
+	local dataSafe, dataReason = ResponseInspector.validate(result.Data, config)
+	if not dataSafe then
+		return nil, "INVALID_RESPONSE_DATA:" .. tostring(dataReason)
+	end
 
-	local envelope = table.clone(result)
-	envelope.RequestId = requestId
-	return envelope, nil
+	-- Build the wire envelope from the declared fields rather than cloning the
+	-- handler result. A stray internal field must never become client-visible
+	-- merely because a handler included it alongside the supported contract.
+	return {
+		Success = result.Success,
+		Code = result.Code,
+		Message = result.Message,
+		Data = result.Data,
+		RequestId = requestId,
+	},
+		nil
 end
 
 local function releaseActiveSlot(self: any, requestId: string, slot: any): boolean
@@ -347,7 +360,7 @@ function NetworkServer:RegisterFunction(
 				RequestId = requestId,
 			}
 		end
-		local envelope, envelopeReason = responseEnvelope(result, requestId)
+		local envelope, envelopeReason = responseEnvelope(result, requestId, self.config)
 		if not envelope then
 			self.logger:Error("Remote handler returned an unsafe response envelope", {
 				Endpoint = name,
