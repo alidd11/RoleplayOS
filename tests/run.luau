@@ -293,7 +293,10 @@ H.test("profile migration fails closed on corrupt economy containers", function(
 		SchemaVersion = 9,
 		Characters = { one = { Economy = "corrupt" } },
 	}, 10)
-	H.expect(economy == nil and economyReason == "PROFILE_ECONOMY_NOT_TABLE", "corrupt economy was replaced")
+	H.expect(
+		economy == nil and economyReason == "PROFILE_ECONOMY_NOT_TABLE",
+		"corrupt economy was replaced"
+	)
 
 	local transactions, transactionsReason = ProfileSchema.migrate({
 		SchemaVersion = 9,
@@ -308,7 +311,12 @@ H.test("profile migration fails closed on corrupt economy containers", function(
 		SchemaVersion = 13,
 		Characters = {
 			one = {
-				Economy = { Balance = 10, Cash = 5, Transactions = {}, PendingCashDropRefunds = "corrupt" },
+				Economy = {
+					Balance = 10,
+					Cash = 5,
+					Transactions = {},
+					PendingCashDropRefunds = "corrupt",
+				},
 			},
 		},
 	}, 10)
