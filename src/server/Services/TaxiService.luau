@@ -221,17 +221,16 @@ function TaxiService:_forgetDeclines(requestId: string)
 end
 
 function TaxiService:_trimTerminalRequests()
-	local maximum = math.max(
-		0,
-		math.floor(tonumber(self.settings.MaximumRetainedTerminalRequests) or 200)
-	)
+	local maximum =
+		math.max(0, math.floor(tonumber(self.settings.MaximumRetainedTerminalRequests) or 200))
 	local terminal: { any } = {}
 	for requestId, request in self.requests do
 		if request.State == "Completed" or request.State == "Cancelled" then
 			table.insert(terminal, {
 				RequestId = requestId,
-				Timestamp = tonumber(request.CompletedAt or request.CancelledAt or request.CreatedAt)
-					or 0,
+				Timestamp = tonumber(
+					request.CompletedAt or request.CancelledAt or request.CreatedAt
+				) or 0,
 			})
 		end
 	end
@@ -581,8 +580,9 @@ function TaxiService:Start()
 			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
 			for requestId, request in self.requests do
 				local terminal = request.State == "Completed" or request.State == "Cancelled"
-				local timestamp =
-					tonumber(request.CompletedAt or request.CancelledAt or request.CreatedAt) or os.time()
+				local timestamp = tonumber(
+					request.CompletedAt or request.CancelledAt or request.CreatedAt
+				) or os.time()
 				if terminal and timestamp < cutoff then
 					self.requests[requestId] = nil
 					self:_forgetDeclines(requestId)
