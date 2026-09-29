@@ -585,6 +585,92 @@ function RecordIndexService:_removeVehicleIndex(
 	return true, nil
 end
 
+function RecordIndexService:_repairStaleVehicleIndex(
+	bucket: string,
+	expected: any
+): (boolean, string?, boolean)
+	local vehicleId = expected.VehicleId
+	if type(vehicleId) ~= "string" then
+		return true, nil, false
+	end
+
+	-- A search may fresh-confirm that an old registration row is stale and then
+	-- yield before deleting it. Another server can re-register the vehicle back
+	-- into this bucket during that gap. Claim only the exact row this search read,
+	-- then re-read the durable vehicle record before changing the shared index.
+	local cleanupToken = HttpService:GenerateGUID(false)
+	local claimed = false
+	local _, claimReason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex(bucket, function(stored)
+			claimed = false
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			local current = stored.Entries[vehicleId]
+			if
+				type(current) == "table"
+				and current.VehicleId == expected.VehicleId
+				and current.Registration == expected.Registration
+				and current.SearchText == expected.SearchText
+				and current.UpdatedAt == expected.UpdatedAt
+			then
+				current.CleanupToken = cleanupToken
+				stored.UpdatedAt = os.time()
+				claimed = true
+			end
+			return stored
+		end)
+	if claimReason then
+		return false, claimReason, false
+	end
+	if not claimed then
+		-- A newer projection already owns this row.
+		return true, nil, false
+	end
+
+	local record, recordReason = self:_getRecordFresh(recordKey("Vehicle", vehicleId))
+	if recordReason then
+		return false, recordReason, false
+	end
+	local currentSearch = if record and type(record.Registration) == "string"
+		then compact(record.Registration)
+		else ""
+	local currentBucket = indexKey("Vehicle", currentSearch)
+
+	local deleted = false
+	local _, finalReason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex(bucket, function(stored)
+			deleted = false
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			local current = stored.Entries[vehicleId]
+			if type(current) == "table" and current.CleanupToken == cleanupToken then
+				if record and currentBucket == bucket then
+					-- The vehicle still belongs in this bucket but the observed row was
+					-- stale. Repair it from the fresh durable record instead of deleting
+					-- the only searchable projection for the current registration.
+					current.VehicleId = record.VehicleId
+					current.Registration = record.Registration
+					current.SearchText = currentSearch
+					current.UpdatedAt = record.UpdatedAt or os.time()
+					current.CleanupToken = nil
+				else
+					stored.Entries[vehicleId] = nil
+					deleted = true
+				end
+				stored.UpdatedAt = os.time()
+			end
+			return stored
+		end)
+	if finalReason then
+		return false, finalReason, false
+	end
+	return true, nil, deleted
+end
+
 function RecordIndexService:_removeStalePersonIndex(
 	bucket: string,
 	expected: any
@@ -973,15 +1059,13 @@ function RecordIndexService:SearchVehicles(
 		end
 		if not record or not currentMatches then
 			-- A registration change writes the new vehicle projection before removing
-			-- the old bucket. If that cleanup exhausts its retries, the old plate must
-			-- not keep returning the vehicle under its new registration. Skip the stale
-			-- entry and retry its removal whenever somebody encounters it.
+			-- the old bucket. If that cleanup exhausts its retries, suppress the stale
+			-- result and repair only the exact row this search observed. The repair
+			-- claims the row and fresh-reads the durable record again before changing
+			-- shared index state, closing the confirmation-to-delete race.
 			total = math.max(0, total - 1)
-			local removed, removalReason = self:_removeVehicleIndex(
-				if type(match.Registration) == "string" then match.Registration else search,
-				match.VehicleId
-			)
-			if not removed then
+			local repaired, removalReason = self:_repairStaleVehicleIndex(key, match)
+			if not repaired then
 				self.context.Logger:Warning("Vehicle search could not repair stale index", {
 					VehicleId = match.VehicleId,
 					Error = removalReason,
