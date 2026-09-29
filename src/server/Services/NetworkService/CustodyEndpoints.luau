@@ -1,14 +1,62 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
 local tablePayload = Validators.tablePayload
 local boundedStringArray = Validators.boundedStringArray
 local playerUserId = Validators.playerUserId
 
+local CUSTODY_ACTIONS = {
+	Status = true,
+	Escort = true,
+	Search = true,
+	SeizeWeapons = true,
+	Vehicle = true,
+	Caution = true,
+	CuffPosition = true,
+	Release = true,
+}
+
+local function validOffenceCodes(value: any, settings: any): boolean
+	if not boundedStringArray(value, settings.MaximumActiveOffences) then
+		return false
+	end
+	for _, code in value or {} do
+		if not boundedString(code, 1, 64) or settings.OffenceTariffs[code] == nil then
+			return false
+		end
+	end
+	return true
+end
+
+local function validCustodyAction(payload: any, settings: any): boolean
+	if
+		type(payload) ~= "table"
+		or not playerUserId(payload.TargetUserId)
+		or not boundedString(payload.Action, 1, 32)
+		or CUSTODY_ACTIONS[payload.Action] ~= true
+	then
+		return false
+	end
+	local data = payload.Data
+	if data ~= nil and type(data) ~= "table" then
+		return false
+	end
+	if payload.Action == "Search" then
+		return type(data) == "table"
+			and boundedString(data.Grounds, 5, settings.MaximumSearchGroundsLength)
+			and boundedString(data.Power, 1, 64)
+			and table.find(settings.SearchPowers, data.Power) ~= nil
+	elseif payload.Action == "CuffPosition" then
+		return type(data) == "table" and (data.Position == "Front" or data.Position == "Rear")
+	end
+	return true
+end
+
 return function(self: any)
 	self.context.Network:RegisterFunction("PurchaseFromVendor", function(payload)
 		return type(payload) == "table"
-			and type(payload.VendorId) == "string"
-			and type(payload.ItemId) == "string"
+			and boundedString(payload.VendorId, 1, 64)
+			and boundedString(payload.ItemId, 1, 64)
 	end, function(player, payload, requestId)
 		local result, reason = self.context.Services:Get("VendorService"):Purchase(player, payload)
 		if not result then
@@ -49,7 +97,7 @@ return function(self: any)
 	-- inside a custody cell. It is kept only so an existing client build does not
 	-- break, and refuses.
 	self.context.Network:RegisterFunction("PurchaseFood", function(payload)
-		return type(payload) == "table" and type(payload.FoodId) == "string"
+		return type(payload) == "table" and boundedString(payload.FoodId, 1, 64)
 	end, function(_, _, requestId)
 		return {
 			Success = false,
@@ -77,13 +125,11 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("BookCustody", function(payload)
+		local settings = self.context.Configuration.Custody
 		return type(payload) == "table"
 			and playerUserId(payload.TargetUserId)
-			and type(payload.Reason) == "string"
-			and boundedStringArray(
-				payload.OffenceCodes,
-				self.context.Configuration.Custody.MaximumActiveOffences
-			)
+			and boundedString(payload.Reason, 5, settings.MaximumReasonLength)
+			and validOffenceCodes(payload.OffenceCodes, settings)
 	end, function(player, payload, requestId)
 		local record, reason =
 			self.context.Services
@@ -149,10 +195,7 @@ return function(self: any)
 		end
 	)
 	self.context.Network:RegisterFunction("CustodyAction", function(payload)
-		return type(payload) == "table"
-			and playerUserId(payload.TargetUserId)
-			and type(payload.Action) == "string"
-			and (payload.Data == nil or type(payload.Data) == "table")
+		return validCustodyAction(payload, self.context.Configuration.Custody)
 	end, function(player, payload, requestId)
 		local result, reason =
 			self.context.Services
