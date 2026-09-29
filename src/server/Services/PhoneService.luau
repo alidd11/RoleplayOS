@@ -7,7 +7,29 @@ local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local PhoneService = { calls = {}, userCalls = {}, connections = {}, running = false }
+local PhoneService = {
+	calls = {},
+	userCalls = {},
+	connections = {},
+	callTimers = {},
+	toolTimers = {},
+	running = false,
+}
+
+local function cancelTimer(timers: any, key: any)
+	local timer = timers[key]
+	if timer then
+		timers[key] = nil
+		task.cancel(timer)
+	end
+end
+
+local function cancelTimers(timers: any)
+	for _, timer in timers do
+		task.cancel(timer)
+	end
+	table.clear(timers)
+end
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -117,6 +139,12 @@ end
 function PhoneService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("PhoneChanged")
+	self.calls = {}
+	self.userCalls = {}
+	self.connections = {}
+	self.callTimers = {}
+	self.toolTimers = {}
+	self.running = false
 end
 
 function PhoneService:_character(player: Player): any?
@@ -479,7 +507,8 @@ function PhoneService:PlaceCall(player: Player, rawNumber: any): (any?, string?)
 	self.userCalls[recipient.UserId] = call.CallId
 	self.event:FireClient(player, { Kind = "Call", Call = call })
 	self.event:FireClient(recipient, { Kind = "Call", Call = call })
-	task.delay(45, function()
+	self.callTimers[call.CallId] = task.delay(45, function()
+		self.callTimers[call.CallId] = nil
 		if not self.running then
 			return
 		end
@@ -506,6 +535,7 @@ function PhoneService:AnswerCall(player: Player, callId: string): (any?, string?
 	if not call or call.RecipientUserId ~= player.UserId or call.State ~= "Ringing" then
 		return nil, "CALL_NOT_ANSWERABLE"
 	end
+	cancelTimer(self.callTimers, callId)
 	call.State = "Connected"
 	call.ConnectedAt = os.time()
 	local caller = Players:GetPlayerByUserId(call.CallerUserId)
@@ -536,6 +566,7 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 	then
 		return false, "CALL_NOT_FOUND"
 	end
+	cancelTimer(self.callTimers, callId)
 	call.State = "Ended"
 	call.EndedAt = os.time()
 	self.context.Services:Get("PhoneVoiceService"):DisconnectCall(callId)
@@ -546,7 +577,8 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 			self.event:FireClient(target, { Kind = "Call", Call = call })
 		end
 	end
-	task.delay(5, function()
+	self.callTimers[callId] = task.delay(5, function()
+		self.callTimers[callId] = nil
 		if self.running then
 			self.calls[callId] = nil
 		end
@@ -609,7 +641,9 @@ function PhoneService:Start()
 		if callId then
 			self:EndCall(player, callId)
 		end
-		task.delay(1, function()
+		cancelTimer(self.toolTimers, player.UserId)
+		self.toolTimers[player.UserId] = task.delay(1, function()
+			self.toolTimers[player.UserId] = nil
 			if self.running and playerIsCurrent(player) then
 				self:EnsureTool(player)
 			end
@@ -623,6 +657,7 @@ function PhoneService:Start()
 	-- same server cannot end up with two handlers running for one spawn.
 	self.playerConnections = {}
 	local function forget(player: Player)
+		cancelTimer(self.toolTimers, player.UserId)
 		local connection = self.playerConnections[player.UserId]
 		if connection then
 			connection:Disconnect()
@@ -653,6 +688,8 @@ end
 
 function PhoneService:Destroy()
 	self.running = false
+	cancelTimers(self.callTimers)
+	cancelTimers(self.toolTimers)
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
