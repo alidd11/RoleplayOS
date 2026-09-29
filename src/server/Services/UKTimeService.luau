@@ -4,6 +4,7 @@ local Lighting = game:GetService("Lighting")
 local UKTimeService = { running = false }
 function UKTimeService:Init(context: any)
 	self.context = context
+	self.running = false
 end
 
 local function lastSunday(year: number, month: number): number
@@ -46,6 +47,9 @@ function UKTimeService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(self.context.Configuration.UKTime.UpdateSeconds)
+			if not self.running then
+				break
+			end
 			self:_apply()
 		end
 	end)
