@@ -1,5 +1,6 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
 local tablePayload = Validators.tablePayload
 
 return function(self: any)
@@ -18,7 +19,7 @@ return function(self: any)
 		end
 	)
 	self.context.Network:RegisterFunction("RadioSetChannel", function(payload)
-		return type(payload) == "table" and type(payload.ChannelId) == "string"
+		return type(payload) == "table" and boundedString(payload.ChannelId, 1, 32)
 	end, function(player, payload, requestId)
 		local data, reason =
 			self.context.Services:Get("RadioService"):SetChannel(player, payload.ChannelId)
@@ -31,9 +32,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("RadioTransmit", function(payload)
-		return type(payload) == "table"
-			and type(payload.Message) == "string"
-			and #payload.Message <= 180
+		return type(payload) == "table" and boundedString(payload.Message, 1, 180)
 	end, function(player, payload, requestId)
 		local sent, reason =
 			self.context.Services:Get("RadioService"):Transmit(player, payload.Message)
