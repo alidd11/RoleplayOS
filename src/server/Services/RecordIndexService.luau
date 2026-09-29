@@ -775,19 +775,13 @@ end
 function RecordIndexService:_projectionRetryBounds(): (number, number)
 	local config = self.context.Configuration.MDT
 	local initial = math.max(5, tonumber(config.IndexProjectionRetrySeconds) or 30)
-	local maximum = math.max(
-		initial,
-		tonumber(config.MaximumIndexProjectionRetrySeconds) or 300
-	)
+	local maximum = math.max(initial, tonumber(config.MaximumIndexProjectionRetrySeconds) or 300)
 	return initial, maximum
 end
 
 function RecordIndexService:_scheduleProjectionRetry(state: any): number
 	local initial, maximum = self:_projectionRetryBounds()
-	local delay = math.min(
-		maximum,
-		math.max(initial, tonumber(state.RetrySeconds) or initial)
-	)
+	local delay = math.min(maximum, math.max(initial, tonumber(state.RetrySeconds) or initial))
 	state.RetryAt = os.clock() + delay
 	state.RetrySeconds = math.min(maximum, delay * 2)
 	return delay
@@ -810,9 +804,7 @@ function RecordIndexService:_waitForProjectionRetry(key: string, state: any): bo
 		-- several times a second during a long backoff.
 		task.wait(math.min(1, remaining))
 	end
-	return self.running
-		and self.pendingSync[key] == state
-		and playerIsCurrent(state.Player)
+	return self.running and self.pendingSync[key] == state and playerIsCurrent(state.Player)
 end
 
 -- `scope` says what changed. "Person" writes the person record and the name
@@ -895,11 +887,14 @@ function RecordIndexService:_scheduleCharacter(
 					-- owned vehicles. Preserve the strongest requested scope for repair.
 					state.Full = state.Full or full
 					local retryDelay = self:_scheduleProjectionRetry(state)
-					self.context.Logger:Warning("Deferred MDT character indexing failed; retrying", {
-						CharacterId = currentCharacter.CharacterId,
-						Error = reason,
-						RetrySeconds = retryDelay,
-					})
+					self.context.Logger:Warning(
+						"Deferred MDT character indexing failed; retrying",
+						{
+							CharacterId = currentCharacter.CharacterId,
+							Error = reason,
+							RetrySeconds = retryDelay,
+						}
+					)
 				end
 			end
 		end)
