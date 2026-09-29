@@ -16,6 +16,14 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
+function ANPRService:_isCurrentWatch(sensor: BasePart, token: any): boolean
+	local state = self.watched[sensor]
+	return self.running
+		and state ~= nil
+		and state.Token == token
+		and sensor:IsDescendantOf(workspace)
+end
+
 function ANPRService:Init(context: any)
 	self.context = context
 	self.alertEvent = context.Network:RegisterEvent("ANPRAlert")
@@ -26,17 +34,18 @@ function ANPRService:Init(context: any)
 	self.running = false
 end
 
-function ANPRService:_alertPlayers(): { Player }
+function ANPRService:_alertPlayers(sensor: BasePart, token: any): { Player }?
 	local result = {}
-	if not self.running then
-		return result
+	if not self:_isCurrentWatch(sensor, token) then
+		return nil
 	end
 	for _, player in Players:GetPlayers() do
 		local duty = self.context.Services:Get("DutyService"):Get(player)
 		-- DutyService:Get can yield on group access. Do not resume a stale ANPR
-		-- notification pass after this service has already torn down.
-		if not self.running then
-			return {}
+		-- notification pass after teardown or after this sensor was untagged and
+		-- re-tagged under a new watch generation.
+		if not self:_isCurrentWatch(sensor, token) then
+			return nil
 		end
 		if
 			playerIsCurrent(player)
@@ -66,8 +75,8 @@ function ANPRService:_vehicleFromHit(hit: BasePart): Model?
 	return nil
 end
 
-function ANPRService:_scan(sensor: BasePart, hit: BasePart)
-	if not self.running or not self.watched[sensor] then
+function ANPRService:_scan(sensor: BasePart, hit: BasePart, token: any)
+	if not self:_isCurrentWatch(sensor, token) then
 		return
 	end
 	local model = self:_vehicleFromHit(hit)
@@ -126,7 +135,7 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		self.context.Services:Get("WarrantService"):HasActiveForCharacter(vehicle.OwnerCharacterId)
 	-- Warrant refresh can yield through durable person-record recovery. A sensor
 	-- may be untagged or this service destroyed while that lookup is in flight.
-	if not self.running or not self.watched[sensor] or not sensor:IsDescendantOf(workspace) then
+	if not self:_isCurrentWatch(sensor, token) then
 		return
 	end
 	if warrantReason then
@@ -137,6 +146,13 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		return
 	end
 	if not wanted then
+		return
+	end
+	-- Resolve recipients before creating the dispatch call. Duty lookup can
+	-- yield, so this keeps all externally visible hit side effects behind the
+	-- final watch-generation revalidation.
+	local alertPlayers = self:_alertPlayers(sensor, token)
+	if not alertPlayers or not self:_isCurrentWatch(sensor, token) then
 		return
 	end
 	local location = sensor:GetAttribute("Location") or sensor.Name
@@ -160,14 +176,8 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		CallId = if call then call.CallId else nil,
 		DetectedAt = os.time(),
 	}
-	for _, player in self:_alertPlayers() do
-		if not self.running then
-			return
-		end
+	for _, player in alertPlayers do
 		self.alertEvent:FireClient(player, payload)
-	end
-	if not self.running then
-		return
 	end
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = 0,
@@ -188,16 +198,21 @@ function ANPRService:_watch(instance: Instance)
 	if self.watchedCount >= self.context.Configuration.ANPR.MaximumSensors then
 		return
 	end
-	self.watched[instance] = instance.Touched:Connect(function(hit)
-		self:_scan(instance, hit)
+	local token = {}
+	local connection = instance.Touched:Connect(function(hit)
+		self:_scan(instance, hit, token)
 	end)
+	self.watched[instance] = {
+		Connection = connection,
+		Token = token,
+	}
 	self.watchedCount += 1
 end
 
 function ANPRService:_unwatch(instance: Instance)
-	local connection = self.watched[instance]
-	if connection then
-		connection:Disconnect()
+	local state = self.watched[instance]
+	if state then
+		state.Connection:Disconnect()
 		self.watched[instance] = nil
 		self.watchedCount -= 1
 	end
