@@ -21,6 +21,7 @@ local ProgressionVisibility = require(Shared.ProgressionVisibility)
 local DispatchPolicy = require(Shared.DispatchPolicy)
 local PhoneValidator = require(Shared.PhoneValidator)
 local PayloadInspector = require(Shared.PayloadInspector)
+local ResponseInspector = require(Shared.ResponseInspector)
 local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Coalescer = require(Shared.Coalescer)
 local Fuel = require(Shared.FuelConsumption)
@@ -206,6 +207,26 @@ H.test("remote payload inspector rejects abusive structures", function()
 	local cyclic = {}
 	cyclic.Self = cyclic
 	H.expect(not PayloadInspector.validate(cyclic), "cyclic table accepted")
+end)
+H.test("remote response inspector bounds data while preserving waypoints", function()
+	H.expect(
+		ResponseInspector.validate({ PickupPosition = Vector3.new(1, 2, 3), Name = "Taxi" }),
+		"safe Vector3 response rejected"
+	)
+	H.expect(not ResponseInspector.validate({ Value = math.huge }), "infinite response accepted")
+	H.expect(
+		not ResponseInspector.validate(
+			{ Value = string.rep("x", 20) },
+			{ MaximumResponseStringBytes = 10 }
+		),
+		"oversized response string accepted"
+	)
+	local cyclic = {}
+	cyclic.Self = cyclic
+	H.expect(not ResponseInspector.validate(cyclic), "cyclic response accepted")
+	local instance = Instance.new("Folder")
+	H.expect(not ResponseInspector.validate({ Value = instance }), "Instance response accepted")
+	instance:Destroy()
 end)
 H.test("economy rejects unsafe amounts", function()
 	H.expect(
