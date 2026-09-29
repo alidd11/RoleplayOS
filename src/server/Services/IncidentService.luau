@@ -8,6 +8,8 @@ local IncidentService = {
 	pending = {},
 	cacheCount = 0,
 	cacheSweepCounter = 0,
+	shuttingDown = false,
+	shutdownDeadline = nil,
 	running = false,
 }
 
@@ -17,6 +19,8 @@ function IncidentService:Init(context: any)
 	table.clear(self.pending)
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
+	self.shuttingDown = false
+	self.shutdownDeadline = nil
 	self.running = false
 end
 
@@ -86,6 +90,15 @@ end
 
 function IncidentService:Start()
 	self.running = true
+end
+
+function IncidentService:BeginShutdown()
+	if self.shuttingDown then
+		return
+	end
+	self.shuttingDown = true
+	self.shutdownDeadline = os.clock()
+		+ self.context.Configuration.Framework.ShutdownSaveSeconds / 2
 end
 
 function IncidentService:_getReadDuty(player: Player): any?
@@ -329,44 +342,65 @@ function IncidentService:ScheduleFromCall(call: any, closedByUserId: number)
 		Revision = call.Revision or 1,
 	}
 	task.spawn(function()
-		-- The claim is released whether persistence returns or raises. A partial
-		-- success remembers that the record is already durable, so the next retry
-		-- repairs only Incident:Recent rather than rewriting the record.
-		local ok, stored, reason, recordWritten, durableRecord = pcall(function()
-			if call.IncidentRecordPersisted == true then
-				local record = call.IncidentRecordSnapshot or snapshot
-				local indexed, indexReason = self:_indexIncident(record)
-				return if indexed then record else nil, indexReason, true, record
+		-- Keep one claim across shutdown retries. CallService releases its in-memory
+		-- call table before IncidentService is destroyed, so this worker's call
+		-- reference is the recovery source during the existing incident shutdown
+		-- budget. Ordinary runtime failures still return to the minute sweep.
+		while true do
+			local ok, stored, reason, recordWritten, durableRecord = pcall(function()
+				if call.IncidentRecordPersisted == true then
+					local record = call.IncidentRecordSnapshot or snapshot
+					local indexed, indexReason = self:_indexIncident(record)
+					return if indexed then record else nil, indexReason, true, record
+				end
+				return self:_persist(snapshot)
+			end)
+			if not ok then
+				self.context.Logger:Error("Closed dispatch incident persistence raised", {
+					IncidentId = incidentId,
+					Error = tostring(stored),
+				})
+				break
 			end
-			return self:_persist(snapshot)
-		end)
+			if recordWritten then
+				call.IncidentRecordPersisted = true
+				if not stored and durableRecord then
+					-- Keep the exact record UpdateAsync committed only while its index is
+					-- missing. This handles a newer revision returned by the record store
+					-- without making the repair perform another read.
+					call.IncidentRecordSnapshot = durableRecord
+				end
+			end
+			if stored then
+				call.IncidentPersisted = true
+				call.IncidentRecordSnapshot = nil
+				break
+			end
+
+			local deadline = tonumber(self.shutdownDeadline) or -math.huge
+			if not self.shuttingDown or os.clock() >= deadline then
+				self.context.Logger:Warning("Closed dispatch incident persistence will retry", {
+					IncidentId = incidentId,
+					Error = reason,
+					RecordPersisted = call.IncidentRecordPersisted == true,
+				})
+				break
+			end
+
+			-- DataService already exhausted its bounded retry policy for this stage.
+			-- During orderly shutdown, immediately spend the remaining incident
+			-- budget on the unresolved projection instead of discarding its source.
+			self.context.Logger:Warning(
+				"Closed dispatch incident persistence retrying at shutdown",
+				{
+					IncidentId = incidentId,
+					Error = reason,
+					RecordPersisted = call.IncidentRecordPersisted == true,
+				}
+			)
+			task.wait()
+		end
 		self.pending[incidentId] = nil
-		if not ok then
-			self.context.Logger:Error("Closed dispatch incident persistence raised", {
-				IncidentId = incidentId,
-				Error = tostring(stored),
-			})
-			return
-		end
-		if recordWritten then
-			call.IncidentRecordPersisted = true
-			if not stored and durableRecord then
-				-- Keep the exact record UpdateAsync committed only while its index is
-				-- missing. This handles a newer revision returned by the record store
-				-- without making the repair perform another read.
-				call.IncidentRecordSnapshot = durableRecord
-			end
-		end
-		if stored then
-			call.IncidentPersisted = true
-			call.IncidentRecordSnapshot = nil
-			return
-		end
-		self.context.Logger:Warning("Closed dispatch incident persistence will retry", {
-			IncidentId = incidentId,
-			Error = reason,
-			RecordPersisted = call.IncidentRecordPersisted == true,
-		})
 	end)
 end
 function IncidentService:Close(player: Player, incidentId: string): (any?, string?)
@@ -511,7 +545,8 @@ function IncidentService:Recent(
 end
 
 function IncidentService:Destroy()
-	local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds / 2
+	self:BeginShutdown()
+	local deadline = tonumber(self.shutdownDeadline) or os.clock()
 	while next(self.pending) ~= nil and os.clock() < deadline do
 		task.wait()
 	end
@@ -523,6 +558,8 @@ function IncidentService:Destroy()
 	table.clear(self.pending)
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
+	self.shuttingDown = false
+	self.shutdownDeadline = nil
 end
 
 return IncidentService
