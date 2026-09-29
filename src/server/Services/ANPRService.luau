@@ -54,16 +54,55 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 	-- Keyed on the sensor instance itself. GetDebugId is not available to a
 	-- script at game security, so the first vehicle to touch a camera raised
 	-- inside the Touched handler and no plate was ever read.
-	local perSensor = self.cooldowns[sensor]
-	if not perSensor then
-		perSensor = {}
-		self.cooldowns[sensor] = perSensor
+	local cooldown = self.cooldowns[sensor]
+	if not cooldown then
+		cooldown = {
+			Entries = {},
+			Count = 0,
+			NextSweepAt = 0,
+		}
+		self.cooldowns[sensor] = cooldown
 	end
 	local now = os.clock()
-	if (perSensor[registration] or 0) > now then
+	local entries = cooldown.Entries
+	if now >= cooldown.NextSweepAt then
+		local count = 0
+		for plate, expiresAt in entries do
+			if type(expiresAt) ~= "number" or expiresAt <= now then
+				entries[plate] = nil
+			else
+				count += 1
+			end
+		end
+		cooldown.Count = count
+		cooldown.NextSweepAt = now + self.context.Configuration.ANPR.CooldownSeconds
+	end
+	if (entries[registration] or 0) > now then
 		return
 	end
-	perSensor[registration] = now + self.context.Configuration.ANPR.CooldownSeconds
+
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.ANPR.MaximumCooldownEntriesPerSensor) or 256)
+	)
+	if entries[registration] == nil and cooldown.Count >= maximum then
+		local oldestPlate
+		local oldestExpiry = math.huge
+		for plate, expiresAt in entries do
+			if type(expiresAt) == "number" and expiresAt < oldestExpiry then
+				oldestExpiry = expiresAt
+				oldestPlate = plate
+			end
+		end
+		if oldestPlate then
+			entries[oldestPlate] = nil
+			cooldown.Count = math.max(0, cooldown.Count - 1)
+		end
+	end
+	if entries[registration] == nil then
+		cooldown.Count += 1
+	end
+	entries[registration] = now + self.context.Configuration.ANPR.CooldownSeconds
 	local vehicle =
 		self.context.Services:Get("VehicleOwnershipService"):GetByRegistration(registration)
 	if not vehicle then

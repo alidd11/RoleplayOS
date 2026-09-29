@@ -834,6 +834,7 @@ local Config = {
 		SensorTag = "RoleplayOSANPR",
 		CooldownSeconds = 15,
 		MaximumSensors = 128,
+		MaximumCooldownEntriesPerSensor = 256,
 		RoadsRoleId = "RoadsPolicingOfficer",
 	},
 	DeveloperProducts = {
