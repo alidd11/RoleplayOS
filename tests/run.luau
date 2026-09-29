@@ -447,6 +447,33 @@ H.test("migration reconciles missing fields", function()
 	)
 end)
 
+H.test("profile migration fails closed on unreadable authoritative state", function()
+	local invalidVersion, invalidVersionReason = ProfileSchema.migrate({
+		SchemaVersion = "corrupt",
+	}, 42)
+	H.expect(
+		invalidVersion == nil and invalidVersionReason == "PROFILE_VERSION_INVALID",
+		"invalid schema version was treated as a legacy profile"
+	)
+
+	local custody, custodyReason = ProfileSchema.migrate({
+		SchemaVersion = 8,
+		CustodySentence = "corrupt",
+	}, 42)
+	H.expect(
+		custody == nil and custodyReason == "PROFILE_CUSTODY_SENTENCE_NOT_TABLE",
+		"corrupt custody state was replaced"
+	)
+
+	local invites, invitesReason = ProfileSchema.migrate({
+		SchemaVersion = 12,
+		GangInvites = "corrupt",
+	}, 42)
+	H.expect(
+		invites == nil and invitesReason == "PROFILE_GANG_INVITES_NOT_TABLE",
+		"corrupt gang invites were replaced"
+	)
+end)
 H.test("profile migration preserves developer receipt replay protection", function()
 	local consumables, consumablesReason = ProfileSchema.migrate({
 		SchemaVersion = 10,
