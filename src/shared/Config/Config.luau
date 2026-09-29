@@ -146,6 +146,15 @@ local Config = {
 		-- the list cannot go stale against the tiles again.
 		Background = {},
 	},
+	AvatarCatalog = {
+		-- SearchCatalog is metered against the server, not the individual player.
+		-- Keep an interactive burst, then cap aggregate misses so a room full of
+		-- clients cannot multiply the per-player remote rate into a Roblox outage.
+		SharedSearchCapacity = 6,
+		SharedSearchRefillPerSecond = 2,
+		MaximumConcurrentSearches = 4,
+		MaximumKeywordLength = 60,
+	},
 	ContentQuality = {
 		RequireCertification = true,
 		CertificationVersion = 1,
