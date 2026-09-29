@@ -13,6 +13,8 @@
 -- write endpoint without ever calling this one.
 
 local AvatarEditorService = game:GetService("AvatarEditorService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RateLimiter = require(ReplicatedStorage.RoleplayOS.Shared.RateLimiter)
 
 local AvatarCatalogService = {
 	-- A broken catalogue degrades the creator only. It must never stop the server
@@ -21,6 +23,8 @@ local AvatarCatalogService = {
 	running = false,
 	cache = {},
 	cacheOrder = {},
+	inFlight = {},
+	activeSearches = 0,
 }
 
 -- What the creator can browse, and the HumanoidDescription field each fills.
@@ -48,9 +52,16 @@ local MAXIMUM_RESULTS = 40
 
 function AvatarCatalogService:Init(context: any)
 	self.context = context
+	self.settings = context.Configuration.AvatarCatalog
 	self.running = false
 	self.cache = {}
 	self.cacheOrder = {}
+	self.inFlight = {}
+	self.activeSearches = 0
+	self.searchLimiter = RateLimiter.new(
+		self.settings.SharedSearchCapacity,
+		self.settings.SharedSearchRefillPerSecond
+	)
 end
 
 function AvatarCatalogService:Start()
@@ -124,12 +135,44 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	if type(keyword) == "string" then
 		-- Trimmed and bounded. The keyword reaches an external service, so its
 		-- length is not the client's to decide.
-		search = string.sub(string.match(keyword, "^%s*(.-)%s*$") or "", 1, 60)
+		search = string.sub(
+			string.match(keyword, "^%s*(.-)%s*$") or "",
+			1,
+			self.settings.MaximumKeywordLength
+		)
 	end
 	local key = categoryId .. "\0" .. string.lower(search)
 	local cached = self:_cached(key)
 	if cached then
 		return cached, nil
+	end
+
+	-- The RemoteFunction token bucket is per player, while Roblox meters catalogue
+	-- search against the whole server. Bound aggregate cache misses here too, and
+	-- refuse rather than queue so abuse cannot create work that runs after the
+	-- caller has already hit NetworkServer's request timeout.
+	if self.inFlight[key] then
+		return nil, "CATALOGUE_BUSY"
+	end
+	if self.activeSearches >= self.settings.MaximumConcurrentSearches then
+		return nil, "CATALOGUE_BUSY"
+	end
+	if not self.searchLimiter:Allow("server") then
+		return nil, "CATALOGUE_BUSY"
+	end
+
+	local claim = { Active = true }
+	self.inFlight[key] = claim
+	self.activeSearches += 1
+	local function releaseClaim()
+		if claim.Active ~= true then
+			return
+		end
+		claim.Active = false
+		if self.inFlight[key] == claim then
+			self.inFlight[key] = nil
+		end
+		self.activeSearches = math.max(0, self.activeSearches - 1)
 	end
 
 	local parameters = CatalogSearchParams.new()
@@ -144,9 +187,11 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	-- The catalogue call yields. Shutdown may clear the cache while it is in
 	-- flight, so a late result must not recreate service state after Destroy.
 	if not self.running then
+		releaseClaim()
 		return nil, "CATALOGUE_UNAVAILABLE"
 	end
 	if not ok or not pages then
+		releaseClaim()
 		-- Reported rather than raised. The catalogue being briefly unavailable is
 		-- an ordinary outcome that the creator should show as an empty shelf, not
 		-- an error that takes the menu down.
@@ -160,6 +205,7 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	local pageOk, page = pcall(function()
 		return pages:GetCurrentPage()
 	end)
+	releaseClaim()
 	if not self.running then
 		return nil, "CATALOGUE_UNAVAILABLE"
 	end
@@ -189,6 +235,11 @@ end
 
 function AvatarCatalogService:Destroy()
 	self.running = false
+	for _, claim in self.inFlight do
+		claim.Active = false
+	end
+	table.clear(self.inFlight)
+	self.activeSearches = 0
 	table.clear(self.cache)
 	table.clear(self.cacheOrder)
 end
