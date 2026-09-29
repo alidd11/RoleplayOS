@@ -88,6 +88,7 @@ end
 export type Gang = {
 	Id: string,
 	Name: string,
+	NameModerated: boolean?,
 	LeaderUserId: number,
 	MemberUserIds: { number },
 	TerritoryId: string?,
