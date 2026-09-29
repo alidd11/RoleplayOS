@@ -150,6 +150,80 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 	return indexed ~= nil, indexReason
 end
 
+function IncidentService:_removeStaleRecentIndex(expected: any): (boolean, string?, boolean)
+	local incidentId = expected.IncidentId
+	if type(incidentId) ~= "string" then
+		return true, nil, false
+	end
+
+	-- The recent index and incident record are separate durable writes. Claim only
+	-- the exact row this search observed, then re-read the durable record before
+	-- deleting anything so a concurrent projection cannot be mistaken for stale
+	-- history merely because this server read an older index snapshot.
+	local cleanupToken = HttpService:GenerateGUID(false)
+	local claimed = false
+	local _, claimReason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex("Incident:Recent", function(stored)
+			claimed = false
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			local current = stored.Entries[incidentId]
+			if
+				type(current) == "table"
+				and current.IncidentId == expected.IncidentId
+				and current.Title == expected.Title
+				and current.Status == expected.Status
+				and current.CreatedAt == expected.CreatedAt
+				and current.UpdatedAt == expected.UpdatedAt
+			then
+				current.CleanupToken = cleanupToken
+				stored.UpdatedAt = os.time()
+				claimed = true
+			end
+			return stored
+		end)
+	if claimReason then
+		return false, claimReason, false
+	end
+	if not claimed then
+		return true, nil, false
+	end
+
+	local record, recordReason = self.context.Services
+		:Get("DataService")
+		:GetMdtRecord("Incident:" .. incidentId)
+	if recordReason then
+		return false, recordReason, false
+	end
+
+	local deleted = false
+	local _, finalReason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex("Incident:Recent", function(stored)
+			deleted = false
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			local current = stored.Entries[incidentId]
+			if type(current) == "table" and current.CleanupToken == cleanupToken then
+				if record then
+					current.CleanupToken = nil
+				else
+					stored.Entries[incidentId] = nil
+					deleted = true
+				end
+				stored.UpdatedAt = os.time()
+			end
+			return stored
+		end)
+	if finalReason then
+		return false, finalReason, false
+	end
+	return true, nil, deleted
+end
+
 function IncidentService:_persist(incident: any): (any?, string?, boolean, any?)
 	local key = "Incident:" .. incident.IncidentId
 	local stored, reason = self.context.Services
@@ -395,6 +469,7 @@ function IncidentService:Recent(
 	page = math.max(1, math.floor(page))
 	local first = (page - 1) * size + 1
 	local items = {}
+	local total = #entries
 	for indexPosition = first, math.min(#entries, first + size - 1) do
 		local summary = entries[indexPosition]
 		local record = if summary.LiveDispatchCall
@@ -413,6 +488,16 @@ function IncidentService:Recent(
 		end
 		if record then
 			table.insert(items, record)
+		elseif not summary.LiveDispatchCall then
+			local repaired, removalReason, deleted = self:_removeStaleRecentIndex(summary)
+			if not repaired then
+				self.context.Logger:Warning("Incident search could not repair stale index", {
+					IncidentId = summary.IncidentId,
+					Error = removalReason,
+				})
+			elseif deleted then
+				total = math.max(0, total - 1)
+			end
 		end
 	end
 	-- Index and record reads can yield on DataStore budget, retries and network
@@ -423,7 +508,7 @@ function IncidentService:Recent(
 	if not self.running or currentDuty ~= duty then
 		return nil, "MDT_NOT_AUTHORISED"
 	end
-	return { Items = items, Page = page, Total = #entries }, nil
+	return { Items = items, Page = page, Total = total }, nil
 end
 
 function IncidentService:Destroy()
