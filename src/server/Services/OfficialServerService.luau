@@ -245,7 +245,13 @@ function OfficialServerService:_pickInstance(
 			then record.Instances
 			elseif type(record.AccessCode) == "string" then { record.AccessCode }
 			else {}
-		table.insert(list, fresh)
+		-- UpdateAsync may invoke this transform more than once, and DataService
+		-- retries an ambiguous request outcome. The reserved access code is the
+		-- operation identity, so replaying this write must converge on one row
+		-- rather than consuming another MaximumInstances slot each time.
+		if not table.find(list, fresh) then
+			table.insert(list, fresh)
+		end
 		record.ServerId = serverId
 		record.Instances = list
 		record.AccessCode = list[1]
