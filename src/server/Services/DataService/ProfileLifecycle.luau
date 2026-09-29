@@ -188,7 +188,6 @@ return function(DataService)
 			self.context.Logger:Info("Loaded in-memory Studio profile", { UserId = player.UserId })
 			return profile, nil
 		end
-		local now = os.time()
 		local loaded
 		-- Recorded so a lease held by a server that has gone away can be waited out
 		-- rather than treated as an unrecoverable failure.
@@ -233,9 +232,12 @@ return function(DataService)
 					error("PROFILE_SESSION_LOCKED")
 				end
 				lockedUntil = nil
+				-- Budget waits and retries happen outside this transform, so expiry
+				-- must be based on the attempt that actually acquires and can commit the lease.
 				profile.AuditMetadata.SessionLock = {
 					ServerId = self.serverId,
-					ExpiresAt = now + self.context.Configuration.Framework.SessionLeaseSeconds,
+					ExpiresAt = os.time()
+						+ self.context.Configuration.Framework.SessionLeaseSeconds,
 				}
 				loaded = profile
 				return profile
@@ -469,12 +471,14 @@ return function(DataService)
 		session.Saving = true
 		local revision = session.Revision or 0
 		local snapshot = deepCopy(session.Profile)
-		local now = os.time()
 		local profileKey = session.DataKey or self:_profileKey(player)
 		local ok, problem = self:_retry(function()
 			self.store:UpdateAsync(profileKey, function(stored)
+				-- Retry/budget waits happen before this transform. Stamp the lease from
+				-- the attempt that can actually commit, not from the start of Save.
+				local writeNow = os.time()
 				local lock = stored and stored.AuditMetadata and stored.AuditMetadata.SessionLock
-				if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > now then
+				if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > writeNow then
 					error("SESSION_OWNERSHIP_LOST")
 				end
 				-- Written as a statement, not as `release and nil or {...}`.
@@ -490,7 +494,8 @@ return function(DataService)
 				else
 					snapshot.AuditMetadata.SessionLock = {
 						ServerId = self.serverId,
-						ExpiresAt = now + self.context.Configuration.Framework.SessionLeaseSeconds,
+						ExpiresAt = writeNow
+							+ self.context.Configuration.Framework.SessionLeaseSeconds,
 					}
 				end
 				return snapshot
