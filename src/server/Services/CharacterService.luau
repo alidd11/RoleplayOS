@@ -10,6 +10,7 @@ local CharacterService = {
 	Critical = true,
 	appearanceWrites = {},
 	creating = {},
+	selecting = {},
 	running = false,
 }
 
@@ -311,6 +312,7 @@ function CharacterService:Init(context: any)
 	self.context = context
 	table.clear(self.appearanceWrites)
 	table.clear(self.creating)
+	table.clear(self.selecting)
 end
 
 function CharacterService:Start()
@@ -577,7 +579,7 @@ function CharacterService:SaveCurrentAppearance(
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	return true, nil
 end
-function CharacterService:Select(player: Player, characterId: string): (any?, string?)
+function CharacterService:_select(player: Player, characterId: string): (any?, string?)
 	if not self.running or not playerIsCurrent(player) then
 		return nil, "PLAYER_UNAVAILABLE"
 	end
@@ -628,6 +630,30 @@ function CharacterService:Select(player: Player, characterId: string): (any?, st
 	end
 	return character, nil
 end
+function CharacterService:Select(player: Player, characterId: string): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+	if self.selecting[player] then
+		return nil, "CHARACTER_SELECTION_IN_PROGRESS"
+	end
+
+	-- Selection can yield while repairing a pending starter vehicle and while
+	-- reconciling bounded cash-drop recovery. Hold one exact-Player claim across
+	-- those waits so retries cannot race the active-character pointer or repeat
+	-- the same recovery work.
+	local claim = {}
+	self.selecting[player] = claim
+	local ok, result, reason = pcall(self._select, self, player, characterId)
+	if self.selecting[player] == claim then
+		self.selecting[player] = nil
+	end
+	if not ok then
+		error(result)
+	end
+	return result, reason
+end
+
 function CharacterService:Delete(
 	player: Player,
 	characterId: string,
@@ -789,5 +815,6 @@ function CharacterService:Destroy()
 	self.running = false
 	table.clear(self.appearanceWrites)
 	table.clear(self.creating)
+	table.clear(self.selecting)
 end
 return CharacterService
