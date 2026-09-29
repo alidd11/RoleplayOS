@@ -3,11 +3,25 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
-local NeedsService = { states = {}, connections = {}, failureLog = {}, running = false }
+local NeedsService = {
+	states = {},
+	connections = {},
+	failureLog = {},
+	running = false,
+	workerThread = nil,
+}
+
+local GENERATED_FOOD_ATTRIBUTE = "RoleplayOSNeedsFoodId"
 
 function NeedsService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("NeedsChanged")
+	table.clear(self.states)
+	table.clear(self.connections)
+	table.clear(self.failureLog)
+	self.playerConnections = {}
+	self.workerThread = nil
+	self.running = false
 end
 
 function NeedsService:_character(player: Player): any?
@@ -163,11 +177,12 @@ end
 -- reports twenty one assets missing and every tool that depends on one is
 -- currently unavailable. A first item that does not appear is worse than no
 -- first item, so this one has no asset to be missing.
-function NeedsService:_makeFoodTool(name: string): Tool
+function NeedsService:_makeFoodTool(name: string, foodId: string): Tool
 	local tool = Instance.new("Tool")
 	tool.Name = name
 	tool.ToolTip = "Eat it. There is only the one."
 	tool.CanBeDropped = false
+	tool:SetAttribute(GENERATED_FOOD_ATTRIBUTE, foodId)
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
 	handle.Size = Vector3.new(0.9, 0.28, 0.72)
@@ -279,7 +294,7 @@ function NeedsService:EnsureStarterFood(player: Player)
 	then
 		return
 	end
-	local tool = self:_makeFoodTool(food.Name)
+	local tool = self:_makeFoodTool(food.Name, foodId)
 	tool.Activated:Connect(function()
 		self:_eat(player, tool, foodId)
 	end)
@@ -395,7 +410,7 @@ end
 
 function NeedsService:Start()
 	self.running = true
-	task.spawn(function()
+	self.workerThread = task.spawn(function()
 		local last = os.clock()
 		while self.running do
 			task.wait(0.5)
@@ -418,6 +433,7 @@ function NeedsService:Start()
 				end
 			end
 		end
+		self.workerThread = nil
 	end)
 	-- Per-player handlers are held against the player rather than pushed onto the
 	-- service-wide list, which is only emptied when the server shuts down. Every
@@ -425,7 +441,6 @@ function NeedsService:Start()
 	-- an evening accumulating one dead closure per join and walked the lot at
 	-- shutdown. Disconnecting on the way out also means a player who rejoins the
 	-- same server cannot end up with two handlers running for one spawn.
-	self.playerConnections = {}
 	local function forget(player: Player)
 		local connection = self.playerConnections[player.UserId]
 		if connection then
@@ -481,6 +496,11 @@ end
 
 function NeedsService:Destroy()
 	self.running = false
+	local workerThread = self.workerThread
+	self.workerThread = nil
+	if workerThread and coroutine.status(workerThread) ~= "dead" then
+		task.cancel(workerThread)
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
@@ -489,6 +509,20 @@ function NeedsService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.playerConnections or {})
+	-- Starter-food tools are runtime projections of inventory ownership. Remove
+	-- only the tools this service generated; the inventory item remains durable
+	-- and can be re-issued if the service starts again.
+	for _, player in Players:GetPlayers() do
+		for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
+			if container then
+				for _, child in container:GetChildren() do
+					if child:IsA("Tool") and child:GetAttribute(GENERATED_FOOD_ATTRIBUTE) ~= nil then
+						child:Destroy()
+					end
+				end
+			end
+		end
+	end
 	table.clear(self.states)
 	table.clear(self.failureLog)
 end
