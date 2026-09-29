@@ -172,6 +172,12 @@ function CallService:Assign(callId: string, unitId: string): (boolean, string?)
 	if not call or call.Status == "Resolved" or not unit then
 		return false, "CALL_OR_UNIT_NOT_FOUND"
 	end
+	if unit.AssignedCallId == callId and table.find(call.UnitIds, unitId) then
+		-- Assignment requests can be retried by the client/network layer. Treat an
+		-- already-linked unit as success without rewriting its status: an officer
+		-- that already reached OnScene must not be pushed backwards to Assigned.
+		return true, nil
+	end
 	if unit.AssignedCallId and unit.AssignedCallId ~= callId then
 		return false, "UNIT_ALREADY_ASSIGNED"
 	end
