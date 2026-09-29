@@ -1,5 +1,6 @@
 --!strict
 
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
 local RecordIndexService = {
@@ -460,22 +461,76 @@ function RecordIndexService:_removeVehicleIndex(
 	return true, nil
 end
 
-function RecordIndexService:_removePersonIndex(
+function RecordIndexService:_removeStalePersonIndex(
 	bucket: string,
-	characterId: string
+	expected: any
 ): (boolean, string?)
-	local _, reason = self.context.Services
+	local characterId = expected.CharacterId
+	if type(characterId) ~= "string" then
+		return true, nil
+	end
+
+	-- The person record and search bucket live in separate DataStores, so a
+	-- confirmed missing record cannot by itself authorise a destructive index
+	-- write. Another server may re-index this character between the record read
+	-- and cleanup. Claim the exact row first, then re-read the durable record.
+	local cleanupToken = HttpService:GenerateGUID(false)
+	local claimed = false
+	local _, claimReason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex(bucket, function(stored)
+			claimed = false
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			local current = stored.Entries[characterId]
+			if
+				type(current) == "table"
+				and current.CharacterId == expected.CharacterId
+				and current.FullName == expected.FullName
+				and current.SearchText == expected.SearchText
+				and current.UpdatedAt == expected.UpdatedAt
+			then
+				current.CleanupToken = cleanupToken
+				stored.UpdatedAt = os.time()
+				claimed = true
+			end
+			return stored
+		end)
+	if claimReason then
+		return false, claimReason
+	end
+	if not claimed then
+		-- The row changed after this search read it. A newer projection owns it.
+		return true, nil
+	end
+
+	local record, recordReason = self:_getRecordFresh(recordKey("Person", characterId))
+	if recordReason then
+		return false, recordReason
+	end
+
+	local _, finalReason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex(bucket, function(stored)
 			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
 				return stored
 			end
-			stored.Entries[characterId] = nil
-			stored.UpdatedAt = os.time()
+			local current = stored.Entries[characterId]
+			if type(current) == "table" and current.CleanupToken == cleanupToken then
+				if record then
+					-- A concurrent re-index wrote the durable record before our claim.
+					-- Keep the row and remove only our private cleanup marker.
+					current.CleanupToken = nil
+				else
+					stored.Entries[characterId] = nil
+				end
+				stored.UpdatedAt = os.time()
+			end
 			return stored
 		end)
-	if reason then
-		return false, reason
+	if finalReason then
+		return false, finalReason
 	end
 	return true, nil
 end
@@ -714,14 +769,15 @@ function RecordIndexService:SearchPeople(
 			-- name bucket. A successful durable miss therefore proves this row is
 			-- dead projection state, not valid retained history. Remove only the
 			-- queried bucket row; a store error above never reaches this cleanup.
-			total = math.max(0, total - 1)
-			local removed, removalReason = self:_removePersonIndex(key, characterId)
+			local removed, removalReason = self:_removeStalePersonIndex(key, matches[index])
 			if not removed then
 				self.context.Logger:Warning("Person search could not repair stale index", {
 					CharacterId = characterId,
 					Bucket = key,
 					Error = removalReason,
 				})
+			else
+				total = math.max(0, total - 1)
 			end
 		end
 	end
