@@ -27,7 +27,7 @@ Road speed is measured from the seat's own velocity rather than read from the ch
 
 Fuel is not read from the chassis. RoleplayOS owns fuel on the server and publishes it as an attribute; a client-side value could not be trusted in any case.
 
-Emergency lighting and siren systems are left alone. They are part of the vehicle and are presented in the world rather than on screen, so they do not compete with the interface for space.
+Emergency lighting and sirens are owned by RoleplayOS. The server accepts only the current driver's intent, verifies live duty/role authority, and revalidates the exact driven vehicle after any yielding access check before changing warning-light state. Clients render the configured pattern from server-owned vehicle attributes.
 
 
 ## Driving on a phone
