@@ -146,6 +146,9 @@ return function(self: any)
 				elseif
 					reason == "TARGET_NOT_CUFFED"
 				then "The detainee must be handcuffed before processing."
+				elseif
+					reason == "CUSTODY_BOOKING_IN_PROGRESS"
+				then "That detainee is already being processed."
 				else "The custody booking could not be completed.",
 			Data = record,
 			RequestId = requestId,
