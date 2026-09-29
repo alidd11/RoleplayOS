@@ -2,12 +2,39 @@
 local Validators = require(script.Parent.Validators)
 local boundedString = Validators.boundedString
 
+local function validCharacterIdentity(value: any): boolean
+	if type(value) ~= "table" then
+		return false
+	end
+	if
+		type(value.FirstName) ~= "string"
+		or type(value.LastName) ~= "string"
+		or type(value.DateOfBirth) ~= "string"
+	then
+		return false
+	end
+	for key in value do
+		if key ~= "FirstName" and key ~= "LastName" and key ~= "DateOfBirth" then
+			return false
+		end
+	end
+	return true
+end
+
 return function(self: any)
 	self.context.Network:RegisterFunction("CreateCharacter", function(payload)
-		return type(payload) == "table" and type(payload.Identity) == "table"
+		return type(payload) == "table" and validCharacterIdentity(payload.Identity)
 	end, function(player, payload, requestId)
+		-- Identity is persistent data. Project only the declared wire fields before
+		-- crossing into CharacterService so a future schema change cannot turn an
+		-- unexpected client key into stored profile state.
+		local identity = {
+			FirstName = payload.Identity.FirstName,
+			LastName = payload.Identity.LastName,
+			DateOfBirth = payload.Identity.DateOfBirth,
+		}
 		local summary, reason =
-			self.context.Services:Get("CharacterService"):Create(player, payload.Identity)
+			self.context.Services:Get("CharacterService"):Create(player, identity)
 		if not summary then
 			local messages = {
 				INVALID_NAME = "Use 2-24 letters for both names.",
