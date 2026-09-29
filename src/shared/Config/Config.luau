@@ -2524,6 +2524,10 @@ local Config = {
 		-- Keep their repair pressure independently bounded.
 		VehicleIndexRepairRetrySeconds = 60,
 		MaximumPendingVehicleIndexRepairs = 128,
+		-- Failed scheduled record projections retry with bounded backoff after the
+		-- DataService retry budget is exhausted.
+		IndexProjectionRetrySeconds = 30,
+		MaximumIndexProjectionRetrySeconds = 300,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
 		MaximumActiveWarrantsPerPerson = 16,
