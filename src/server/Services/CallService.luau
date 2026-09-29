@@ -323,14 +323,13 @@ function CallService:Close(callId: string, closedByUserId: number?): (boolean, s
 end
 function CallService:Snapshot(): { any }
 	local result = {}
-	-- Resolved calls remain the bounded recovery source for their durable incident
-	-- projection. The first persistence attempt happens at Close; this sweep runs
-	-- every minute even with no MDT readers, and retries only when the configured
-	-- interval has elapsed. A successful projection can then expire normally.
-	local now = os.time()
+	-- Resolved calls remain the bounded recovery source until their durable incident
+	-- projection succeeds. Close() caps the number of unresolved recovery entries,
+	-- so retaining a failed projection cannot grow this state without bound. The
+	-- sweep runs every minute even with no MDT readers and retries only when the
+	-- configured interval has elapsed.
 	local clock = os.clock()
 	local dispatch = self.context.Configuration.Dispatch
-	local ttl = (dispatch and tonumber(dispatch.ActiveStateTtlSeconds)) or 300
 	local retrySeconds =
 		math.max(5, (dispatch and tonumber(dispatch.IncidentPersistenceRetrySeconds)) or 60)
 	local incidentService = self.context.Services:Get("IncidentService")
@@ -339,8 +338,6 @@ function CallService:Snapshot(): { any }
 			table.insert(result, table.clone(call))
 			continue
 		end
-		local closedAt = tonumber(call.ClosedAt) or now
-		local age = now - closedAt
 		if call.IncidentPersisted == true then
 			-- Once both the durable incident and its recent index are confirmed, the
 			-- resolved call is no longer recovery state and can be released at once.
@@ -351,19 +348,6 @@ function CallService:Snapshot(): { any }
 		local lastAttempt = tonumber(call.IncidentLastAttemptAt) or -math.huge
 		if clock - lastAttempt >= retrySeconds then
 			incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
-		end
-		if age > ttl then
-			-- Do not retain failed history indefinitely. By this point the
-			-- projection has had its immediate attempt plus the periodic retries
-			-- inside the same hard TTL that already bounds resolved call state.
-			self.context.Logger:Error(
-				"Resolved call incident projection exhausted recovery window",
-				{
-					CallId = call.CallId,
-					RecordPersisted = call.IncidentRecordPersisted == true,
-				}
-			)
-			self.calls[callId] = nil
 		end
 	end
 	table.sort(result, function(a, b)
