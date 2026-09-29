@@ -6,6 +6,10 @@ local root = Utils.root
 local humanoid = Utils.humanoid
 local trimToMaximum = Utils.trimToMaximum
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 return function(CustodyService)
 	-- Seated in a tagged custody chair, not merely standing near one. Booking used
 	-- to require standing near a RoleplayOSCustodyDesk part, a distance nobody
@@ -29,8 +33,14 @@ return function(CustodyService)
 	-- wearing them. This is the E-prompt path onto the same panel rather than a
 	-- parallel one, so every action on it behaves exactly as it already does.
 	function CustodyService:_processChair(actor: Player, chair: Instance): (any?, string?)
+		if not self.running or not playerIsCurrent(actor) then
+			return nil, "CUSTODY_UNAVAILABLE"
+		end
 		if not self:_authorised(actor) then
 			return nil, "NOT_AUTHORISED"
+		end
+		if not self.running or not playerIsCurrent(actor) then
+			return nil, "CUSTODY_UNAVAILABLE"
 		end
 		local anchor = if chair:IsA("BasePart")
 			then chair
@@ -60,7 +70,7 @@ return function(CustodyService)
 	-- handling, and the trigger is validated exactly once, server-side, rather
 	-- than trusted from a client request naming a chair by id.
 	function CustodyService:_watchChair(model: Instance)
-		if self.chairPrompts[model] then
+		if not self.running or self.chairPrompts[model] then
 			return
 		end
 		local anchor = if model:IsA("BasePart")

@@ -1,5 +1,11 @@
 --!strict
+
+local Players = game:GetService("Players")
 local trimToMaximum = require(script.Parent.Utils).trimToMaximum
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 return function(CustodyService)
 	function CustodyService:_sentence(player: Player): any?
@@ -198,6 +204,14 @@ return function(CustodyService)
 		source: string,
 		receiptId: string?
 	): (boolean, string?)
+		if not self.running or not playerIsCurrent(player) then
+			return false, "CUSTODY_UNAVAILABLE"
+		end
+		local dataService = self.context.Services:Get("DataService")
+		local session = dataService:GetSession(player)
+		if not session then
+			return false, "PLAYER_LEFT"
+		end
 		local civilianSpawnId = nil
 		local civilianStationId = nil
 		for spawnId, definition in self.context.Configuration.Spawns do
@@ -210,9 +224,6 @@ return function(CustodyService)
 		if not civilianSpawnId or not civilianStationId then
 			return false, "CIVILIAN_SPAWN_NOT_CONFIGURED"
 		end
-		if not player.Parent then
-			return false, "PLAYER_LEFT"
-		end
 		local previousTeam = player.Team
 		local previousRespawnLocation = player.RespawnLocation
 		local assigned, assignReason =
@@ -220,9 +231,16 @@ return function(CustodyService)
 		if not assigned then
 			return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
 		end
-		if not player.Parent then
-			player.Team = previousTeam
-			return false, "PLAYER_LEFT"
+		if
+			not self.running
+			or not playerIsCurrent(player)
+			or dataService:GetSession(player) ~= session
+		then
+			if playerIsCurrent(player) then
+				player.Team = previousTeam
+				player.RespawnLocation = previousRespawnLocation
+			end
+			return false, "CUSTODY_UNAVAILABLE"
 		end
 		local spawned, spawnReason = self.context.Services:Get("SpawnService"):Spawn(player, {
 			RoleId = "Civilian",
@@ -230,14 +248,20 @@ return function(CustodyService)
 			SpawnId = civilianSpawnId,
 		})
 		if not spawned then
-			player.Team = previousTeam
-			player.RespawnLocation = previousRespawnLocation
+			if playerIsCurrent(player) then
+				player.Team = previousTeam
+				player.RespawnLocation = previousRespawnLocation
+			end
 			return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
 		end
-		if not player.Parent then
-			return false, "PLAYER_LEFT"
+		if
+			not self.running
+			or not playerIsCurrent(player)
+			or dataService:GetSession(player) ~= session
+		then
+			return false, "CUSTODY_UNAVAILABLE"
 		end
-		local sentence = self:_sentence(player)
+		local sentence = session.Profile.CustodySentence
 		if sentence then
 			sentence.RemainingSeconds = 0
 			sentence.ReleaseAt = 0
@@ -246,7 +270,7 @@ return function(CustodyService)
 		player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
 		player:SetAttribute("RoleplayOSCustodyRemaining", 0)
 		player.RespawnLocation = nil
-		self.context.Services:Get("DataService"):MarkDirty(player)
+		dataService:MarkDirty(player)
 		self.context.Services:Get("AuditService"):Record({
 			ActorUserId = player.UserId,
 			Action = "Custody.SentenceCompleted",
