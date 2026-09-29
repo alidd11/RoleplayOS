@@ -452,8 +452,8 @@ function UniformService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
-	for room in self.promptConnections do
-		self:_unconfigure(room)
+	for _, connection in self.promptConnections do
+		connection:Disconnect()
 	end
 	table.clear(self.connections)
 	table.clear(self.promptConnections)
