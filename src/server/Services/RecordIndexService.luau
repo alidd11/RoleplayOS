@@ -44,6 +44,20 @@ local function indexKey(kind: string, value: string): string?
 	return kind .. ":" .. string.sub(token, 1, 2)
 end
 
+local function validPersonIndexEntry(entry: any): boolean
+	return type(entry) == "table"
+		and type(entry.CharacterId) == "string"
+		and type(entry.FullName) == "string"
+		and type(entry.SearchText) == "string"
+end
+
+local function validVehicleIndexEntry(entry: any): boolean
+	return type(entry) == "table"
+		and type(entry.VehicleId) == "string"
+		and type(entry.Registration) == "string"
+		and type(entry.SearchText) == "string"
+end
+
 local function personView(record: any, accessProfile: string, warrants: { any }?): any
 	local police = accessProfile == "Police"
 	local highways = police or accessProfile == "Highways"
@@ -1172,9 +1186,7 @@ function RecordIndexService:SearchPeople(
 	end
 	local matches = {}
 	for _, entry in if bucket and type(bucket.Entries) == "table" then bucket.Entries else {} do
-		if
-			type(entry.SearchText) == "string" and string.find(entry.SearchText, search, 1, true)
-		then
+		if validPersonIndexEntry(entry) and string.find(entry.SearchText, search, 1, true) then
 			table.insert(matches, entry)
 		end
 	end
@@ -1243,9 +1255,7 @@ function RecordIndexService:SearchVehicles(
 	end
 	local matches = {}
 	for _, entry in if bucket and type(bucket.Entries) == "table" then bucket.Entries else {} do
-		if
-			type(entry.SearchText) == "string" and string.find(entry.SearchText, search, 1, true)
-		then
+		if validVehicleIndexEntry(entry) and string.find(entry.SearchText, search, 1, true) then
 			table.insert(matches, entry)
 		end
 	end
