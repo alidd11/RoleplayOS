@@ -1,10 +1,11 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
 local tablePayload = Validators.tablePayload
 
 return function(self: any)
 	self.context.Network:RegisterFunction("SetVehicleLights", function(payload)
-		return type(payload) == "table" and type(payload.Action) == "string"
+		return type(payload) == "table" and boundedString(payload.Action, 1, 32)
 	end, function(player, payload, requestId)
 		local ok, reason = self.context.Services:Get("VehicleLightingService"):Set(player, payload)
 		if not ok then
@@ -24,13 +25,13 @@ return function(self: any)
 		return type(payload) == "table"
 			and (payload.Stage == nil or type(payload.Stage) == "number")
 			and (payload.Lights == nil or type(payload.Lights) == "boolean")
-			and (payload.Siren == nil or type(payload.Siren) == "string")
-			and (payload.Circuit == nil or type(payload.Circuit) == "string")
+			and (payload.Siren == nil or boundedString(payload.Siren, 0, 64))
+			and (payload.Circuit == nil or boundedString(payload.Circuit, 1, 64))
 			and (payload.Enabled == nil or type(payload.Enabled) == "boolean")
 			and (payload.RunLock == nil or type(payload.RunLock) == "boolean")
 			and (payload.LowPower == nil or type(payload.LowPower) == "boolean")
 			and (payload.Reset == nil or type(payload.Reset) == "boolean")
-			and (payload.Director == nil or type(payload.Director) == "string")
+			and (payload.Director == nil or boundedString(payload.Director, 0, 64))
 	end, function(player, payload, requestId)
 		local ok, reason = self.context.Services:Get("EmergencyLightsService"):Set(player, payload)
 		if not ok then
@@ -141,8 +142,8 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("PurchaseVehicle", function(payload)
 		return type(payload) == "table"
-			and type(payload.DefinitionId) == "string"
-			and type(payload.Colour) == "string"
+			and boundedString(payload.DefinitionId, 1, 64)
+			and boundedString(payload.Colour, 1, 64)
 	end, function(player, payload, requestId)
 		local vehicle, reason = self.context.Services
 			:Get("VehicleOwnershipService")
@@ -179,12 +180,9 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("SetCustomVehicleRegistration", function(payload)
 		return type(payload) == "table"
-			and type(payload.SpawnerId) == "string"
-			and #payload.SpawnerId <= 64
-			and type(payload.VehicleId) == "string"
-			and #payload.VehicleId <= 64
-			and type(payload.Registration) == "string"
-			and #payload.Registration <= 16
+			and boundedString(payload.SpawnerId, 1, 64)
+			and boundedString(payload.VehicleId, 1, 64)
+			and boundedString(payload.Registration, 1, 16)
 	end, function(player, payload, requestId)
 		local authorised, facilityReason = self.context.Services
 			:Get("VehicleSpawnerService")
