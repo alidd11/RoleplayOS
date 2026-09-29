@@ -317,6 +317,14 @@ function UniformService:_equipFromRoom(player: Player, room: Instance)
 	})
 end
 
+function UniformService:_unconfigure(room: Instance)
+	local connection = self.promptConnections[room]
+	if connection then
+		connection:Disconnect()
+		self.promptConnections[room] = nil
+	end
+end
+
 function UniformService:_configure(room: Instance)
 	if self.promptConnections[room] or room.Parent == nil then
 		return
@@ -424,6 +432,12 @@ function UniformService:Start()
 			task.defer(function()
 				self:_configure(room)
 			end)
+		end)
+	)
+	table.insert(
+		self.connections,
+		folder.ChildRemoved:Connect(function(room)
+			self:_unconfigure(room)
 		end)
 	)
 	table.insert(
