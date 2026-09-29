@@ -17,10 +17,15 @@ local Players = game:GetService("Players")
 
 local PayrollService = {}
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 function PayrollService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.Payroll
 	self.running = false
+	self.connection = nil
 	-- Where each player was standing at the last payment, used to tell working
 	-- from standing still.
 	self.marks = {}
@@ -30,8 +35,17 @@ end
 -- working. Emergency duty pays by department and rank; civilian employment pays
 -- the job's own wage.
 function PayrollService:_hourlyRate(player: Player): (number?, string?)
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, nil
+	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	-- DutyService:Get can yield while Roblox resolves group access. The payroll
+	-- worker owns this continuation, so revalidate service/player liveness before
+	-- reading any session state or calculating a payment from the result.
+	if not self.running or not playerIsCurrent(player) then
+		return nil, nil
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
 	if duty then
 		local rate = self.settings.DepartmentHourlyRates[duty.DepartmentId]
 			or self.settings.DefaultDepartmentHourlyRate
@@ -90,12 +104,18 @@ function PayrollService:_hasWorked(player: Player): boolean
 end
 
 function PayrollService:_pay(player: Player)
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
+	local rate, source = self:_hourlyRate(player)
+	if not self.running or not playerIsCurrent(player) then
+		return
+	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local characterId = session and session.ActiveCharacterId
 	if not characterId then
 		return
 	end
-	local rate, source = self:_hourlyRate(player)
 	if not rate or rate <= 0 then
 		self.marks[player.UserId] = nil
 		return
@@ -137,8 +157,9 @@ function PayrollService:Start()
 				if not self.running then
 					break
 				end
-				-- _pay does not yield, so keep it inside the service-owned worker instead
-				-- of spawning detached tasks that can outlive Destroy.
+				-- _pay may yield through DutyService:Get, so keep it inside this
+				-- service-owned worker rather than spawning detached tasks. _pay
+				-- revalidates runtime and exact-Player liveness after that yield.
 				local ok, problem = pcall(function()
 					self:_pay(player)
 				end)
@@ -157,6 +178,7 @@ function PayrollService:Destroy()
 	self.running = false
 	if self.connection then
 		self.connection:Disconnect()
+		self.connection = nil
 	end
 	table.clear(self.marks)
 end
