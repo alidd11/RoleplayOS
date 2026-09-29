@@ -25,6 +25,10 @@ local BRIDGE_NAME = "RoleplayOSIssueFine"
 local RoadSafetyService = {
 	sensors = {},
 	sensorConnections = {},
+	sensorCameras = {},
+	sensorRestores = {},
+	cameraScriptRestores = {},
+	flashStates = {},
 	taggedSensors = {},
 	cooldowns = {},
 	journeys = {},
@@ -48,7 +52,16 @@ Fines(RoadSafetyService)
 function RoadSafetyService:Init(context: any)
 	self.context = context
 	self.connections = {}
+	self.sensors = {}
 	self.sensorConnections = {}
+	self.sensorCameras = {}
+	self.sensorRestores = {}
+	self.cameraScriptRestores = {}
+	self.flashStates = {}
+	self.taggedSensors = {}
+	self.cooldowns = {}
+	self.journeys = {}
+	self.seatByAssembly = setmetatable({}, { __mode = "k" })
 	self.running = false
 	self.fineEvent = context.Network:RegisterEvent("RoadSafetyFine")
 end
@@ -88,11 +101,33 @@ function RoadSafetyService:Destroy()
 	for _, connection in self.taggedSensors do
 		connection:Disconnect()
 	end
-	for _, connection in self.sensorConnections do
-		connection:Disconnect()
+	local sensors = {}
+	for sensor in self.sensors do
+		table.insert(sensors, sensor)
+	end
+	for _, sensor in sensors do
+		self:_unwatchSensor(sensor)
+	end
+	local flashes = {}
+	for camera, state in self.flashStates do
+		table.insert(flashes, { Camera = camera, State = state })
+	end
+	for _, flash in flashes do
+		self:_restoreFlash(flash.Camera, flash.State)
+	end
+	local cameras = {}
+	for camera in self.cameraScriptRestores do
+		table.insert(cameras, camera)
+	end
+	for _, camera in cameras do
+		self:_restoreCameraScripts(camera)
 	end
 	table.clear(self.connections)
 	table.clear(self.sensorConnections)
+	table.clear(self.sensorCameras)
+	table.clear(self.sensorRestores)
+	table.clear(self.cameraScriptRestores)
+	table.clear(self.flashStates)
 	table.clear(self.sensors)
 	table.clear(self.taggedSensors)
 	table.clear(self.cooldowns)
