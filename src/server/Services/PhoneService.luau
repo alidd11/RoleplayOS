@@ -13,6 +13,7 @@ local PhoneService = {
 	connections = {},
 	callTimers = {},
 	toolTimers = {},
+	emergencySubmitting = {},
 	running = false,
 }
 
@@ -144,6 +145,7 @@ function PhoneService:Init(context: any)
 	self.connections = {}
 	self.callTimers = {}
 	self.toolTimers = {}
+	self.emergencySubmitting = {}
 	self.running = false
 end
 
@@ -596,43 +598,61 @@ function PhoneService:Emergency(player: Player, rawSummary: any, rawLocation: an
 		return nil, "INVALID_EMERGENCY_CALL"
 	end
 
-	local data = self.context.Services:Get("DataService")
-	local session = data:GetSession(player)
-	local characterId = session and session.ActiveCharacterId
-	local character = characterId and session.Profile.Characters[characterId]
-	if not session or not characterId or not character then
-		return nil, "INVALID_EMERGENCY_CALL"
+	-- A 999 submission yields while Roblox moderates both public fields. Without
+	-- a claim, two parallel requests from the same client can both pass the
+	-- pre-filter checks and create separate dispatch calls when moderation
+	-- returns. Key by the exact Player instance so a later rejoin never inherits
+	-- an old request.
+	if self.emergencySubmitting[player] then
+		return nil, "EMERGENCY_CALL_IN_PROGRESS"
 	end
+	self.emergencySubmitting[player] = true
 
-	-- Both public fields can be filtered together, so a 999 submission costs the
-	-- slowest filter instead of the sum of two web waits.
-	local filtered, reason = TextFilter.manyForBroadcast({
-		Summary = summary,
-		Location = location,
-	}, player.UserId, Enum.TextFilterContext.PublicChat)
-	if not filtered then
-		return nil, reason
-	end
-	if not self:_characterIsCurrent(player, session, characterId, character) then
-		return nil, "PLAYER_UNAVAILABLE"
-	end
+	local ok, result, resultReason = pcall(function(): (any?, string?)
+		local data = self.context.Services:Get("DataService")
+		local session = data:GetSession(player)
+		local characterId = session and session.ActiveCharacterId
+		local character = characterId and session.Profile.Characters[characterId]
+		if not session or not characterId or not character then
+			return nil, "INVALID_EMERGENCY_CALL"
+		end
 
-	-- Plot the call where the caller actually stands after filtering. Resolved
-	-- server-side so a client cannot place an incident somewhere it is not, and a
-	-- stale pre-filter position cannot survive a respawn or character switch.
-	local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	return self.context.Services:Get("CallService"):Create({
-		Priority = "Immediate",
-		Summary = "999 · " .. filtered.Summary,
-		Location = filtered.Location,
-		Position = if rootPart and rootPart:IsA("BasePart")
-			then MapProjection.serialise(rootPart.Position)
-			else nil,
-		CallerNumber = self:_ensurePhone(character).Number,
-		DepartmentIds = { "Police", "Ambulance", "Fire", "Control" },
-		IncidentType = "Emergency",
-		CallerName = character.Identity.FirstName .. " " .. character.Identity.LastName,
-	})
+		-- Both public fields can be filtered together, so a 999 submission costs the
+		-- slowest filter instead of the sum of two web waits.
+		local filtered, reason = TextFilter.manyForBroadcast({
+			Summary = summary,
+			Location = location,
+		}, player.UserId, Enum.TextFilterContext.PublicChat)
+		if not filtered then
+			return nil, reason
+		end
+		if not self:_characterIsCurrent(player, session, characterId, character) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+
+		-- Plot the call where the caller actually stands after filtering. Resolved
+		-- server-side so a client cannot place an incident somewhere it is not, and a
+		-- stale pre-filter position cannot survive a respawn or character switch.
+		local rootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		return self.context.Services:Get("CallService"):Create({
+			Priority = "Immediate",
+			Summary = "999 · " .. filtered.Summary,
+			Location = filtered.Location,
+			Position = if rootPart and rootPart:IsA("BasePart")
+				then MapProjection.serialise(rootPart.Position)
+				else nil,
+			CallerNumber = self:_ensurePhone(character).Number,
+			DepartmentIds = { "Police", "Ambulance", "Fire", "Control" },
+			IncidentType = "Emergency",
+			CallerName = character.Identity.FirstName .. " " .. character.Identity.LastName,
+		})
+	end)
+
+	self.emergencySubmitting[player] = nil
+	if not ok then
+		error(result)
+	end
+	return result, resultReason
 end
 function PhoneService:Start()
 	self.running = true
@@ -678,6 +698,7 @@ function PhoneService:Start()
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			forget(player)
+			self.emergencySubmitting[player] = nil
 			local callId = self.userCalls[player.UserId]
 			if callId then
 				self:EndCall(player, callId)
@@ -698,6 +719,7 @@ function PhoneService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.playerConnections or {})
+	table.clear(self.emergencySubmitting)
 	table.clear(self.calls)
 	table.clear(self.userCalls)
 end
