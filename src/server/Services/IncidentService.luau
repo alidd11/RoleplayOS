@@ -191,9 +191,8 @@ function IncidentService:_removeStaleRecentIndex(expected: any): (boolean, strin
 		return true, nil, false
 	end
 
-	local record, recordReason = self.context.Services
-		:Get("DataService")
-		:GetMdtRecord("Incident:" .. incidentId)
+	local record, recordReason =
+		self.context.Services:Get("DataService"):GetMdtRecord("Incident:" .. incidentId)
 	if recordReason then
 		return false, recordReason, false
 	end
