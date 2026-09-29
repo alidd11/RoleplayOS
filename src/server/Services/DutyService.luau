@@ -35,10 +35,11 @@ local function playerIsPresent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
-local DutyService = { active = {}, running = false }
+local DutyService = { active = {}, beginning = {}, running = false }
 
 function DutyService:Init(context: any)
 	self.context = context
+	table.clear(self.beginning)
 end
 
 function DutyService:Start()
@@ -175,7 +176,7 @@ function DutyService:Get(player: Player): any?
 	return duty
 end
 
-function DutyService:Begin(player: Player, request: any): (boolean, string?)
+function DutyService:_begin(player: Player, request: any): (boolean, string?)
 	if not self.running or not playerIsPresent(player) then
 		return false, "DUTY_UNAVAILABLE"
 	end
@@ -420,6 +421,23 @@ function DutyService:Begin(player: Player, request: any): (boolean, string?)
 	return true, nil
 end
 
+function DutyService:Begin(player: Player, request: any): (boolean, string?)
+	-- A duty start crosses group access, character spawn, loadout and shoulder
+	-- number work before the live duty record exists. Claim the exact Player
+	-- instance first so duplicate/retried remotes cannot run those side effects
+	-- concurrently and race to overwrite the final duty state.
+	if self.beginning[player] then
+		return false, "DUTY_START_IN_PROGRESS"
+	end
+	self.beginning[player] = true
+	local ok, started, reason = pcall(self._begin, self, player, request)
+	self.beginning[player] = nil
+	if not ok then
+		error(started)
+	end
+	return started, reason
+end
+
 function DutyService:SetCallsign(player: Player, raw: string): (string?, string?)
 	-- Reject obvious off-duty abuse before spending a Roblox moderation request.
 	-- This is only a cheap pre-check; the authoritative duty check happens after
@@ -486,6 +504,7 @@ function DutyService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.playerConnections or {})
+	table.clear(self.beginning)
 	table.clear(self.active)
 end
 
