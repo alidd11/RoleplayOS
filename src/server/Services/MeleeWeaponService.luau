@@ -15,6 +15,10 @@ local function humanoid(player: Player): Humanoid?
 	return if player.Character then player.Character:FindFirstChildOfClass("Humanoid") else nil
 end
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 local function weaponId(tool: Instance): string?
 	local id = tool:GetAttribute("RoleplayOSWeaponId") or tool:GetAttribute("RoleplayOSToolId")
 	return if type(id) == "string" then id else nil
@@ -23,6 +27,7 @@ end
 function MeleeWeaponService:Init(context: any)
 	self.context = context
 	self.lastStrike = {}
+	self.running = false
 end
 
 function MeleeWeaponService:_definition(tool: Instance): any?
@@ -61,8 +66,17 @@ function MeleeWeaponService:_clear(player: Player)
 end
 
 function MeleeWeaponService:Seize(actor: Player, targetUserId: number): (any?, string?)
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "MELEE_UNAVAILABLE"
+	end
 	local custody = self.context.Services:Get("CustodyService")
-	if not custody:IsAuthorisedForSeizure(actor) then
+	local authorised = custody:IsAuthorisedForSeizure(actor)
+	-- The custody check can yield while DutyService resolves Roblox group access.
+	-- Revalidate the exact Player and this service before using that authority.
+	if not self.running or not playerIsCurrent(actor) then
+		return nil, "MELEE_UNAVAILABLE"
+	end
+	if not authorised then
 		return nil, "NOT_AUTHORISED"
 	end
 	local target = Players:GetPlayerByUserId(targetUserId)
@@ -97,6 +111,9 @@ function MeleeWeaponService:Seize(actor: Player, targetUserId: number): (any?, s
 end
 
 function MeleeWeaponService:Strike(player: Player, targetUserId: number): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "MELEE_UNAVAILABLE"
+	end
 	local character = player.Character
 	local tool = character and character:FindFirstChildOfClass("Tool")
 	local definition = tool and self:_definition(tool)
@@ -173,6 +190,13 @@ function MeleeWeaponService:Start()
 		self.playerConnections[player.UserId] = connections
 		connections.CharacterAdded = player.CharacterAdded:Connect(function(character)
 			watchCharacter(player, character)
+		end)
+		connections.CharacterRemoving = player.CharacterRemoving:Connect(function()
+			self.lastStrike[player.UserId] = nil
+			if connections.Death then
+				connections.Death:Disconnect()
+				connections.Death = nil
+			end
 		end)
 		local character = player.Character
 		if character then
