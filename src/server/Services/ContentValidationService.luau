@@ -836,6 +836,9 @@ function ContentValidationService:Destroy()
 	table.clear(self.report.WorldReady)
 	table.clear(self.assetIdentities)
 	table.clear(self.replacements)
+	table.clear(self.discoveredVehicles)
+	table.clear(self.discoveredTools)
+	table.clear(self.discoveredLoadoutTools)
 end
 
 return ContentValidationService
