@@ -238,6 +238,9 @@ function WarrantService:Create(
 	end
 	local now = os.time()
 	if expiresAt ~= nil then
+		if expiresAt ~= expiresAt or expiresAt == math.huge or expiresAt == -math.huge then
+			return nil, "INVALID_WARRANT_EXPIRY"
+		end
 		expiresAt = math.floor(expiresAt)
 		local latest = now + self.context.Configuration.MDT.MaximumWarrantDurationDays * 86400
 		if expiresAt <= now or expiresAt > latest then
