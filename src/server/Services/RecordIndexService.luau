@@ -704,27 +704,23 @@ function RecordIndexService:_waitForSession(player: Player)
 	local userId = player.UserId
 	self.waiting[userId] = player
 	task.spawn(function()
-		local deadline = os.clock() + 30
-		local session
-		repeat
-			if
-				not self.running
-				or self.waiting[userId] ~= player
-				or not playerIsCurrent(player)
-			then
+		while
+			self.running
+			and self.waiting[userId] == player
+			and playerIsCurrent(player)
+		do
+			local session = self.context.Services:Get("DataService"):GetSession(player)
+			if session then
+				self.waiting[userId] = nil
+				self:_queueReadyPlayer(player)
 				return
 			end
-			session = self.context.Services:Get("DataService"):GetSession(player)
-			if not session then
-				task.wait(0.25)
-			end
-		until session or os.clock() >= deadline
-		if self.waiting[userId] ~= player then
-			return
-		end
-		self.waiting[userId] = nil
-		if self.running and session and playerIsCurrent(player) then
-			self:_queueReadyPlayer(player)
+			-- DataService owns the join-load retry/deadline policy and kicks a player
+			-- whose profile cannot be loaded. Do not race it with a shorter local
+			-- timeout: a legitimate load can exceed thirty seconds after budget waits
+			-- and retry backoff, which previously left that player's records unindexed
+			-- for the rest of an otherwise successful server session.
+			task.wait(0.25)
 		end
 	end)
 end
