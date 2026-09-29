@@ -4,7 +4,11 @@ local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerStorage = game:GetService("ServerStorage")
 
-local ImportedSystemAdapterService = { Critical = false }
+local ImportedSystemAdapterService = {
+	Critical = false,
+	mountedInstances = {},
+	bankInteraction = nil,
+}
 
 type WiringReport = {
 	BankSource: boolean,
@@ -74,7 +78,12 @@ local function stripExecutableContent(root: Instance)
 	end
 end
 
-local function mergeChildren(source: Instance?, destination: Instance, stripCode: boolean?)
+local function mergeChildren(
+	source: Instance?,
+	destination: Instance,
+	stripCode: boolean?,
+	mountedInstances: { Instance }
+)
 	if not source then
 		return
 	end
@@ -85,6 +94,7 @@ local function mergeChildren(source: Instance?, destination: Instance, stripCode
 				stripExecutableContent(clone)
 			end
 			clone.Parent = destination
+			table.insert(mountedInstances, clone)
 		end
 	end
 end
@@ -103,6 +113,8 @@ end
 function ImportedSystemAdapterService:Init(context: any)
 	self.context = context
 	self.report = blankReport()
+	table.clear(self.mountedInstances)
+	self.bankInteraction = nil
 end
 
 function ImportedSystemAdapterService:_adoptStudioImports()
@@ -168,8 +180,8 @@ function ImportedSystemAdapterService:_installBank()
 		})
 		return
 	end
-	mergeChildren(replicatedInstaller, ReplicatedStorage)
-	mergeChildren(workspaceInstaller, workspace, true)
+	mergeChildren(replicatedInstaller, ReplicatedStorage, false, self.mountedInstances)
+	mergeChildren(workspaceInstaller, workspace, true, self.mountedInstances)
 	-- Do not mount the vendor's executable server installer. The supplied
 	-- package contains obfuscated third-party code that requires external assets
 	-- and HTTP, while RoleplayOS owns the server-authoritative robbery flow in
@@ -199,11 +211,19 @@ function ImportedSystemAdapterService:_installBank()
 			prompt.HoldDuration = 2
 			prompt.RequiresLineOfSight = true
 			prompt.Parent = target
+			table.insert(self.mountedInstances, prompt)
 		end
 	end
 	if target and prompt then
+		local tag = self.context.Configuration.BankRobbery.Tag
+		self.bankInteraction = {
+			Target = target,
+			AddedTag = not CollectionService:HasTag(target, tag),
+			HadLocation = target:GetAttribute("Location") ~= nil,
+			PreviousLocation = target:GetAttribute("Location"),
+		}
 		target:SetAttribute("Location", "Portsmouth Bank")
-		CollectionService:AddTag(target, self.context.Configuration.BankRobbery.Tag)
+		CollectionService:AddTag(target, tag)
 		self.report.BankInteraction = true
 		self.context.Logger:Info("Bank robbery package connected", {
 			Target = target:GetFullName(),
@@ -351,10 +371,48 @@ function ImportedSystemAdapterService:ApplyEpaulettes(
 	return true, nil
 end
 
+function ImportedSystemAdapterService:_clearRuntimeMounts()
+	local interaction = self.bankInteraction
+	self.bankInteraction = nil
+	if interaction then
+		local target = interaction.Target
+		if target and target.Parent then
+			local tag = self.context.Configuration.BankRobbery.Tag
+			if interaction.AddedTag and CollectionService:HasTag(target, tag) then
+				CollectionService:RemoveTag(target, tag)
+			end
+			if target:GetAttribute("Location") == "Portsmouth Bank" then
+				if interaction.HadLocation then
+					target:SetAttribute("Location", interaction.PreviousLocation)
+				else
+					target:SetAttribute("Location", nil)
+				end
+			end
+		end
+	end
+	for index = #self.mountedInstances, 1, -1 do
+		local instance = self.mountedInstances[index]
+		if instance.Parent then
+			instance:Destroy()
+		end
+	end
+	table.clear(self.mountedInstances)
+end
+
 function ImportedSystemAdapterService:Start()
-	self:_adoptStudioImports()
-	self:_installBank()
-	self:_auditEpauletteSource()
+	local ok, problem = pcall(function()
+		self:_adoptStudioImports()
+		self:_installBank()
+		self:_auditEpauletteSource()
+	end)
+	if not ok then
+		-- Optional services are stepped over when Start fails. Roll back anything
+		-- mounted before the failure so degraded startup does not retain a partial
+		-- imported system for the lifetime of the server.
+		self:_clearRuntimeMounts()
+		self.report = blankReport()
+		error(problem, 0)
+	end
 	self.context.Logger:Info("Imported asset wiring audit complete", self.report)
 end
 
@@ -363,6 +421,7 @@ function ImportedSystemAdapterService:GetWiringReport(): WiringReport
 end
 
 function ImportedSystemAdapterService:Destroy()
+	self:_clearRuntimeMounts()
 	self.report = blankReport()
 end
 
