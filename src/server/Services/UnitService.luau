@@ -31,6 +31,15 @@ function UnitService:SetStatus(unitId: string, status: string): (boolean, string
 	if not unit or not table.find(self.context.Configuration.Dispatch.UnitStatuses, status) then
 		return false, "INVALID_UNIT_STATUS"
 	end
+	if status == "OnScene" and not unit.AssignedCallId then
+		return false, "UNIT_NOT_ASSIGNED"
+	end
+	if unit.AssignedCallId and status ~= "Assigned" and status ~= "OnScene" then
+		-- CallService owns attachment/release. Letting an attached unit mark itself
+		-- Available/Unavailable would leave AssignedCallId and call.UnitIds intact
+		-- while the dispatch board claimed the unit was free.
+		return false, "UNIT_ASSIGNED_TO_CALL"
+	end
 	unit.Status = status
 	return true, nil
 end
