@@ -200,8 +200,14 @@ end
 function DispatchService:_fireAuthorised(payload: any, callId: string?, unitDepartmentId: string?)
 	local call = callId and self.context.Services:Get("CallService").calls[callId] or nil
 	local unitScoped = payload.Kind == "UnitChanged"
+	local mdt = self.context.Services:Get("MDTService")
 	for _, player in Players:GetPlayers() do
-		local duty = self:_duty(player)
+		-- GetAuthorisedDuty may yield while Roblox resolves group access, but the
+		-- returned duty is revalidated by DutyService after that yield. Use that
+		-- exact snapshot for relevance as well as MDT access; a second lookup could
+		-- otherwise authorise a newer duty while relevance still came from an older
+		-- department and leak this hint across departments.
+		local duty = mdt:GetAuthorisedDuty(player, nil)
 		local relevant = duty
 			and (
 				duty.DepartmentId == "Control"
@@ -209,7 +215,7 @@ function DispatchService:_fireAuthorised(payload: any, callId: string?, unitDepa
 				or (unitScoped and unitDepartmentId ~= nil and duty.DepartmentId == unitDepartmentId)
 				or (call == nil and not unitScoped)
 			)
-		if relevant and self.context.Services:Get("MDTService"):CanUse(player) then
+		if relevant then
 			self.changedEvent:FireClient(player, payload)
 		end
 	end
