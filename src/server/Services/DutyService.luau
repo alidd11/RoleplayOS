@@ -42,14 +42,15 @@ function DutyService:Init(context: any)
 	table.clear(self.beginning)
 end
 
-function DutyService:_publishUnitChanged(userId: number)
+function DutyService:_publishUnitChanged(userId: number, departmentId: string?)
 	-- Dispatch recipient checks can yield on duty/group access. Keep those reads
 	-- out of duty mutation latency, but never publish into a service that has
-	-- already stopped during teardown.
+	-- already stopped during teardown. Pass the authoritative department even
+	-- after unit removal so the refresh hint cannot leak the unit id cross-service.
 	task.defer(function()
 		local dispatch = self.context.Services:Get("DispatchService")
 		if dispatch.running then
-			dispatch:Publish("UnitChanged", tostring(userId), 0)
+			dispatch:PublishUnitChanged(tostring(userId), departmentId, 0)
 		end
 	end)
 end
@@ -359,7 +360,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		return false, "PLAYER_LEFT"
 	end
 	dutyRecord.Callsign = callsign
-	self:_publishUnitChanged(player.UserId)
+	self:_publishUnitChanged(player.UserId, role.DepartmentId)
 
 	-- Existing profiles may contain a custom callsign saved before callsigns were
 	-- filtered. Do not expose that legacy value while moderation is pending: the
@@ -404,7 +405,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 			dutyRecord.Callsign = filtered
 			profile.Callsign = filtered
 			dataService:MarkDirty(player)
-			self:_publishUnitChanged(player.UserId)
+			self:_publishUnitChanged(player.UserId, dutyRecord.DepartmentId)
 		end)
 	end
 
@@ -484,7 +485,7 @@ function DutyService:SetCallsign(player: Player, raw: string): (string?, string?
 	profile.Callsign = callsign
 	duty.Callsign = callsign
 	dataService:MarkDirty(player)
-	self:_publishUnitChanged(player.UserId)
+	self:_publishUnitChanged(player.UserId, duty.DepartmentId)
 	return callsign, nil
 end
 
@@ -494,8 +495,12 @@ function DutyService:End(player: Player)
 	if not self.running then
 		return
 	end
-	self.context.Services:Get("UnitService"):Unregister(player)
-	self:_publishUnitChanged(player.UserId)
+	local unitId = tostring(player.UserId)
+	local unitService = self.context.Services:Get("UnitService")
+	local unit = unitService.units[unitId]
+	local departmentId = if duty then duty.DepartmentId else if unit then unit.DepartmentId else nil
+	unitService:Unregister(player)
+	self:_publishUnitChanged(player.UserId, departmentId)
 	self.context.Services:Get("LoadoutService"):ClearIssued(player)
 	self.context.Services:Get("UniformService"):Restore(player)
 	self.context.Services:Get("ImportedSystemAdapterService"):ClearEpaulettes(player)
