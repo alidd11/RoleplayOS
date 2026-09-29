@@ -71,6 +71,7 @@ local GangTerritoryService = {
 }
 
 local TERRITORY_OWNERS_RECORD = "gang-territory-owners"
+local MAXIMUM_OWNER_OPERATIONS = 32
 
 local function gangKey(gangId: string): string
 	return "gang:" .. gangId
@@ -412,28 +413,76 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 	end
 	local dataService = self.context.Services:Get("DataService")
 	local changedAt = os.time()
-	local previousGangId: string? = nil
-	local _, ownersReason = dataService:UpdateSharedRecord(TERRITORY_OWNERS_RECORD, function(owners)
-		owners = if type(owners) == "table" then owners else {}
-		local existing = owners[territoryId]
-		previousGangId = if type(existing) == "table"
-				and type(existing.GangId) == "string"
-				and existing.GangId ~= ""
-			then existing.GangId
-			else nil
-		if newGangId then
-			owners[territoryId] = { GangId = newGangId, ChangedAt = changedAt }
-		else
-			owners[territoryId] = nil
+	local operationId = HttpService:GenerateGUID(false)
+	local storedOwners, ownersReason = dataService:UpdateSharedRecord(
+		TERRITORY_OWNERS_RECORD,
+		function(owners)
+			owners = if type(owners) == "table" then owners else {}
+			local existing = if type(owners[territoryId]) == "table"
+				then owners[territoryId]
+				else {}
+			local operations = if type(existing.RecentOperations) == "table"
+				then existing.RecentOperations
+				else {}
+			for _, operation in operations do
+				if type(operation) == "table" and operation.Id == operationId then
+					-- UpdateAsync may replay this transform internally, and DataService
+					-- may retry an ambiguous request after the first one committed. Once
+					-- this operation exists, never apply it again.
+					return owners
+				end
+			end
+			local previousGangId = if type(existing.GangId) == "string"
+					and existing.GangId ~= ""
+				then existing.GangId
+				else nil
+			table.insert(operations, {
+				Id = operationId,
+				FromGangId = previousGangId or "",
+				ToGangId = newGangId or "",
+				ChangedAt = changedAt,
+			})
+			while #operations > MAXIMUM_OWNER_OPERATIONS do
+				table.remove(operations, 1)
+			end
+			owners[territoryId] = {
+				GangId = newGangId,
+				ChangedAt = changedAt,
+				RecentOperations = operations,
+			}
+			return owners
 		end
-		return owners
-	end)
+	)
 	if ownersReason then
 		return false, "TERRITORY_UPDATE_FAILED"
 	end
-	territory.Part:SetAttribute("OwnerGangId", newGangId or "")
-	territory.Part:SetAttribute("OwnerChangedAt", changedAt)
-	if previousGangId and previousGangId ~= newGangId then
+	local storedRecord = if type(storedOwners) == "table"
+			and type(storedOwners[territoryId]) == "table"
+		then storedOwners[territoryId]
+		else {}
+	local currentGangId = if type(storedRecord.GangId) == "string"
+			and storedRecord.GangId ~= ""
+		then storedRecord.GangId
+		else nil
+	local currentChangedAt = if type(storedRecord.ChangedAt) == "number"
+		then storedRecord.ChangedAt
+		else changedAt
+	local previousGangId: string? = nil
+	local operations = storedRecord.RecentOperations
+	if type(operations) == "table" then
+		for _, operation in operations do
+			if type(operation) == "table" and operation.Id == operationId then
+				previousGangId = if type(operation.FromGangId) == "string"
+						and operation.FromGangId ~= ""
+					then operation.FromGangId
+					else nil
+				break
+			end
+		end
+	end
+	territory.Part:SetAttribute("OwnerGangId", currentGangId or "")
+	territory.Part:SetAttribute("OwnerChangedAt", currentChangedAt)
+	if previousGangId and previousGangId ~= currentGangId then
 		dataService:UpdateSharedRecord(gangKey(previousGangId), function(gang)
 			if type(gang) == "table" and gang.TerritoryId == territoryId then
 				gang.TerritoryId = nil
@@ -441,8 +490,8 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 			return gang
 		end)
 	end
-	if newGangId and newGangId ~= previousGangId then
-		dataService:UpdateSharedRecord(gangKey(newGangId), function(gang)
+	if currentGangId and currentGangId ~= previousGangId then
+		dataService:UpdateSharedRecord(gangKey(currentGangId), function(gang)
 			if type(gang) == "table" then
 				gang.TerritoryId = territoryId
 			end
@@ -453,7 +502,7 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 		ActorUserId = 0,
 		Action = "GangTerritory.OwnerChanged",
 		Target = territoryId,
-		Metadata = { From = previousGangId, To = newGangId },
+		Metadata = { From = previousGangId, To = currentGangId },
 	})
 	return true, nil
 end
