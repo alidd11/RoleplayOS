@@ -107,7 +107,7 @@ return function(CustodyService)
 		end
 	end
 
-	function CustodyService:Book(
+	function CustodyService:_book(
 		actor: Player,
 		targetUserId: number,
 		reason: string,
@@ -241,5 +241,28 @@ return function(CustodyService)
 			})
 		end
 		return record, nil
+	end
+
+	function CustodyService:Book(
+		actor: Player,
+		targetUserId: number,
+		reason: string,
+		offenceCodes: { string }?
+	): (any?, string?)
+		-- Booking crosses text moderation and then mutates sentence, custody and
+		-- criminal-record state. Serialise by detainee so duplicate/retried remotes
+		-- or two officers cannot both pass the pre-yield checks and apply the same
+		-- booking twice.
+		if self.booking[targetUserId] then
+			return nil, "CUSTODY_BOOKING_IN_PROGRESS"
+		end
+		self.booking[targetUserId] = true
+		local ok, record, resultReason =
+			pcall(self._book, self, actor, targetUserId, reason, offenceCodes)
+		self.booking[targetUserId] = nil
+		if not ok then
+			error(record)
+		end
+		return record, resultReason
 	end
 end
