@@ -1,6 +1,38 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
+local boundedStringArray = Validators.boundedStringArray
 local tablePayload = Validators.tablePayload
+
+local function listed(value: any, values: any): boolean
+	return type(values) == "table" and table.find(values, value) ~= nil
+end
+
+local function optionalString(value: any, maximum: number): boolean
+	return value == nil or boundedString(value, 0, maximum)
+end
+
+local function validDepartmentIds(value: any, departments: any): boolean
+	if value == nil then
+		return true
+	end
+	if type(departments) ~= "table" then
+		return false
+	end
+	local maximum = 0
+	for _ in departments do
+		maximum += 1
+	end
+	if not boundedStringArray(value, maximum) then
+		return false
+	end
+	for _, departmentId in value do
+		if not boundedString(departmentId, 1, 64) or departments[departmentId] == nil then
+			return false
+		end
+	end
+	return true
+end
 
 return function(self: any)
 	self.context.Network:RegisterFunction(
@@ -40,11 +72,16 @@ return function(self: any)
 		end
 	)
 	self.context.Network:RegisterFunction("DispatchCreateCall", function(payload)
+		local settings = self.context.Configuration.Dispatch
 		return type(payload) == "table"
-			and type(payload.Summary) == "string"
-			and type(payload.Priority) == "string"
-			and type(payload.Location) == "string"
-			and type(payload.IncidentType) == "string"
+			and boundedString(payload.Summary, 3, 160)
+			and listed(payload.Priority, settings.CallPriorities)
+			and boundedString(payload.Location, 1, 120)
+			and listed(payload.IncidentType, settings.IncidentTypes)
+			and optionalString(payload.CallerName, 60)
+			and optionalString(payload.CallerNumber, 20)
+			and optionalString(payload.Notes, 300)
+			and validDepartmentIds(payload.DepartmentIds, self.context.Configuration.Departments)
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
 			return {
@@ -88,10 +125,11 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("DispatchUpdateCall", function(payload)
+		local settings = self.context.Configuration.Dispatch
 		return type(payload) == "table"
-			and type(payload.CallId) == "string"
-			and (payload.Status == nil or type(payload.Status) == "string")
-			and (payload.Priority == nil or type(payload.Priority) == "string")
+			and boundedString(payload.CallId, 1, 64)
+			and (payload.Status == nil or payload.Status == "OnScene")
+			and (payload.Priority == nil or listed(payload.Priority, settings.CallPriorities))
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
 			return {
@@ -115,8 +153,8 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("DispatchAssignUnit", function(payload)
 		return type(payload) == "table"
-			and type(payload.CallId) == "string"
-			and type(payload.UnitId) == "string"
+			and boundedString(payload.CallId, 1, 64)
+			and boundedString(payload.UnitId, 1, 32)
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
 			return {
@@ -136,7 +174,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("DispatchCloseCall", function(payload)
-		return type(payload) == "table" and type(payload.CallId) == "string"
+		return type(payload) == "table" and boundedString(payload.CallId, 1, 64)
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
 			return {
@@ -156,7 +194,8 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("DispatchSetUnitStatus", function(payload)
-		return type(payload) == "table" and type(payload.Status) == "string"
+		return type(payload) == "table"
+			and listed(payload.Status, self.context.Configuration.Dispatch.UnitStatuses)
 	end, function(player, payload, requestId)
 		if not self.context.Services:Get("MDTService"):CanUse(player) then
 			return {
