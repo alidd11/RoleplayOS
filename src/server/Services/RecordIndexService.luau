@@ -10,6 +10,8 @@ local RecordIndexService = {
 	pendingSync = {},
 	personIndexRepairs = {},
 	personIndexRepairCount = 0,
+	vehicleIndexRepairs = {},
+	vehicleIndexRepairCount = 0,
 	cache = {},
 	cacheCount = 0,
 	cacheSweepCounter = 0,
@@ -67,6 +69,8 @@ function RecordIndexService:Init(context: any)
 	table.clear(self.pendingSync)
 	table.clear(self.personIndexRepairs)
 	self.personIndexRepairCount = 0
+	table.clear(self.vehicleIndexRepairs)
+	self.vehicleIndexRepairCount = 0
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
 end
@@ -284,6 +288,97 @@ function RecordIndexService:_schedulePersonIndexRepair(
 	return false
 end
 
+function RecordIndexService:_dropVehicleIndexRepair(vehicleId: string, state: any)
+	if self.vehicleIndexRepairs[vehicleId] == state then
+		self.vehicleIndexRepairs[vehicleId] = nil
+		self.vehicleIndexRepairCount = math.max(0, self.vehicleIndexRepairCount - 1)
+	end
+end
+
+function RecordIndexService:_scheduleVehicleIndexRepair(
+	player: Player,
+	vehicleId: string,
+	bucket: string,
+	entry: any
+): boolean
+	local maximum = math.max(
+		1,
+		math.floor(
+			tonumber(self.context.Configuration.MDT.MaximumPendingVehicleIndexRepairs) or 128
+		)
+	)
+	while self.running and playerIsCurrent(player) do
+		local existing = self.vehicleIndexRepairs[vehicleId]
+		if existing then
+			existing.Player = player
+			existing.Bucket = bucket
+			existing.Entry = entry
+			existing.Generation += 1
+			return true
+		end
+
+		if self.vehicleIndexRepairCount < maximum then
+			local state = {
+				Player = player,
+				Bucket = bucket,
+				Entry = entry,
+				Generation = 1,
+			}
+			self.vehicleIndexRepairs[vehicleId] = state
+			self.vehicleIndexRepairCount += 1
+			task.spawn(function()
+				local retrySeconds = math.max(
+					5,
+					tonumber(self.context.Configuration.MDT.VehicleIndexRepairRetrySeconds) or 60
+				)
+				while
+					self.running
+					and self.vehicleIndexRepairs[vehicleId] == state
+					and playerIsCurrent(state.Player)
+				do
+					-- The durable vehicle record is already committed. Retry only the
+					-- missing registration bucket after a backoff, never the record write.
+					task.wait(retrySeconds)
+					if
+						not self.running
+						or self.vehicleIndexRepairs[vehicleId] ~= state
+						or not playerIsCurrent(state.Player)
+					then
+						break
+					end
+					local generation = state.Generation
+					local attemptedBucket = state.Bucket
+					local attemptedEntry = state.Entry
+					local indexed, reason =
+						self:_upsertIndex(attemptedBucket, vehicleId, attemptedEntry)
+					if self.vehicleIndexRepairs[vehicleId] ~= state then
+						break
+					end
+					if indexed and state.Generation == generation then
+						self:_dropVehicleIndexRepair(vehicleId, state)
+						return
+					end
+					if not indexed and state.Generation == generation then
+						self.context.Logger:Warning("Vehicle search index repair will retry", {
+							VehicleId = vehicleId,
+							Bucket = attemptedBucket,
+							Error = reason,
+						})
+					end
+				end
+				self:_dropVehicleIndexRepair(vehicleId, state)
+			end)
+			return true
+		end
+
+		-- Keep the repair map hard-capped without abandoning a durable vehicle
+		-- whose search projection is missing. This caller is already a background
+		-- projection worker, so waiting for capacity adds no extra DataStore load.
+		task.wait(1)
+	end
+	return false
+end
+
 -- The person record and the name index, and nothing else.
 function RecordIndexService:IndexPerson(player: Player, character: any): (boolean, string?)
 	if not self.running or not playerIsCurrent(player) then
@@ -398,9 +493,9 @@ function RecordIndexService:IndexVehicle(
 	player: Player,
 	character: any,
 	vehicle: any
-): (boolean, string?)
+): (boolean, string?, boolean)
 	if not self.running or not playerIsCurrent(player) then
-		return false, "INDEX_CANCELLED"
+		return false, "INDEX_CANCELLED", false
 	end
 	local key = recordKey("Vehicle", vehicle.VehicleId)
 	local updated, reason = self:_updateRecord(key, function(_existing)
@@ -421,22 +516,44 @@ function RecordIndexService:IndexVehicle(
 		}
 	end)
 	if not updated then
-		return false, reason
+		return false, reason, false
 	end
 	if not self.running or not playerIsCurrent(player) then
-		return false, "INDEX_CANCELLED"
+		return false, "INDEX_CANCELLED", false
 	end
 	local search = compact(vehicle.Registration)
 	local bucket = indexKey("Vehicle", search)
 	if not bucket then
-		return false, "INVALID_REGISTRATION_INDEX"
+		return false, "INVALID_REGISTRATION_INDEX", false
 	end
-	return self:_upsertIndex(bucket, vehicle.VehicleId, {
+	local entry = {
 		VehicleId = vehicle.VehicleId,
 		Registration = vehicle.Registration,
 		SearchText = search,
 		UpdatedAt = os.time(),
-	})
+	}
+	local indexed, indexReason = self:_upsertIndex(bucket, vehicle.VehicleId, entry)
+	if not indexed then
+		local scheduled = self:_scheduleVehicleIndexRepair(player, vehicle.VehicleId, bucket, entry)
+		if not scheduled then
+			return false, "INDEX_CANCELLED", false
+		end
+		self.context.Logger:Warning("Vehicle search index write deferred for repair", {
+			VehicleId = vehicle.VehicleId,
+			Bucket = bucket,
+			Error = indexReason,
+		})
+		-- The durable record is already committed. Treat the projection as accepted
+		-- so join/full-character indexing can continue with later vehicles while the
+		-- bounded repair worker restores discoverability.
+		return true, nil, true
+	end
+
+	local pending = self.vehicleIndexRepairs[vehicle.VehicleId]
+	if pending then
+		self:_dropVehicleIndexRepair(vehicle.VehicleId, pending)
+	end
+	return true, nil, false
 end
 
 function RecordIndexService:_removeVehicleIndex(
@@ -551,9 +668,10 @@ function RecordIndexService:ReindexVehicle(
 	vehicle: any,
 	previousRegistration: string?
 ): (boolean, string?)
-	local indexed, reason = self:IndexVehicle(player, character, vehicle)
+	local indexed, reason, indexDeferred = self:IndexVehicle(player, character, vehicle)
 	if
 		indexed
+		and not indexDeferred
 		and self.running
 		and playerIsCurrent(player)
 		and previousRegistration
@@ -981,6 +1099,15 @@ function RecordIndexService:Start()
 			for _, repair in repairs do
 				self:_dropPersonIndexRepair(repair.CharacterId, repair.State)
 			end
+			local vehicleRepairs = {}
+			for vehicleId, repair in self.vehicleIndexRepairs do
+				if repair.Player == player then
+					table.insert(vehicleRepairs, { VehicleId = vehicleId, State = repair })
+				end
+			end
+			for _, repair in vehicleRepairs do
+				self:_dropVehicleIndexRepair(repair.VehicleId, repair.State)
+			end
 		end)
 	)
 	for _, player in Players:GetPlayers() do
@@ -1013,6 +1140,8 @@ function RecordIndexService:Destroy()
 	table.clear(self.pendingSync)
 	table.clear(self.personIndexRepairs)
 	self.personIndexRepairCount = 0
+	table.clear(self.vehicleIndexRepairs)
+	self.vehicleIndexRepairCount = 0
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
 end
