@@ -184,7 +184,13 @@ function DataService:_retry(
 		if final and final(result) then
 			return false, result
 		end
-		task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25)
+		-- Backoff only separates one attempt from the next. Sleeping after the
+		-- final failed attempt cannot enable another write and, during shutdown,
+		-- needlessly consumes the bounded final-save window before the caller can
+		-- account for the failure.
+		if attempt < self.context.Configuration.Framework.MaxSaveAttempts then
+			task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25)
+		end
 	end
 	return false, lastError
 end
