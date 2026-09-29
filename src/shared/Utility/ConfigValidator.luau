@@ -335,6 +335,10 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or config.MDT.PersonIndexRepairRetrySeconds < 5
 		or type(config.MDT.MaximumPendingPersonIndexRepairs) ~= "number"
 		or config.MDT.MaximumPendingPersonIndexRepairs < 1
+		or type(config.MDT.VehicleIndexRepairRetrySeconds) ~= "number"
+		or config.MDT.VehicleIndexRepairRetrySeconds < 5
+		or type(config.MDT.MaximumPendingVehicleIndexRepairs) ~= "number"
+		or config.MDT.MaximumPendingVehicleIndexRepairs < 1
 		or type(config.MDT.MaximumWarrantReasonLength) ~= "number"
 		or config.MDT.MaximumWarrantReasonLength < 20
 		or type(config.MDT.MaximumWarrantDurationDays) ~= "number"

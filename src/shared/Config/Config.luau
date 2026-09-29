@@ -2520,6 +2520,10 @@ local Config = {
 		-- retry budget, so repair is intentionally slower and separately bounded.
 		PersonIndexRepairRetrySeconds = 60,
 		MaximumPendingPersonIndexRepairs = 128,
+		-- Vehicle records and registration buckets are separate durable writes too.
+		-- Keep their repair pressure independently bounded.
+		VehicleIndexRepairRetrySeconds = 60,
+		MaximumPendingVehicleIndexRepairs = 128,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
 		MaximumActiveWarrantsPerPerson = 16,
