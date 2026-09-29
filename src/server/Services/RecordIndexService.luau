@@ -460,6 +460,26 @@ function RecordIndexService:_removeVehicleIndex(
 	return true, nil
 end
 
+function RecordIndexService:_removePersonIndex(
+	bucket: string,
+	characterId: string
+): (boolean, string?)
+	local _, reason = self.context.Services
+		:Get("DataService")
+		:UpdateMdtIndex(bucket, function(stored)
+			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
+				return stored
+			end
+			stored.Entries[characterId] = nil
+			stored.UpdatedAt = os.time()
+			return stored
+		end)
+	if reason then
+		return false, reason
+	end
+	return true, nil
+end
+
 function RecordIndexService:ReindexVehicle(
 	player: Player,
 	character: any,
@@ -668,6 +688,7 @@ function RecordIndexService:SearchPeople(
 	page = math.max(1, math.floor(page))
 	local first = (page - 1) * size + 1
 	local items = {}
+	local total = #matches
 	for index = first, math.min(#matches, first + size - 1) do
 		local characterId = matches[index].CharacterId
 		local warrants
@@ -688,9 +709,23 @@ function RecordIndexService:SearchPeople(
 		end
 		if record then
 			table.insert(items, personView(record, accessProfile, warrants))
+		else
+			-- Person projection always writes the durable record before either
+			-- name bucket. A successful durable miss therefore proves this row is
+			-- dead projection state, not valid retained history. Remove only the
+			-- queried bucket row; a store error above never reaches this cleanup.
+			total = math.max(0, total - 1)
+			local removed, removalReason = self:_removePersonIndex(key, characterId)
+			if not removed then
+				self.context.Logger:Warning("Person search could not repair stale index", {
+					CharacterId = characterId,
+					Bucket = key,
+					Error = removalReason,
+				})
+			end
 		end
 	end
-	return { Items = items, Page = page, Total = #matches }, nil
+	return { Items = items, Page = page, Total = total }, nil
 end
 
 function RecordIndexService:SearchVehicles(
