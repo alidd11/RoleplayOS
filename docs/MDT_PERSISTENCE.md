@@ -18,7 +18,7 @@ Incident creation requires `IncidentWrite` both before and after title filtering
 
 Manual incident closure performs one authoritative record update and then projects that committed record to the recent-incidents index. Closing an already-closed incident is idempotent: retries preserve the original closure actor, timestamp and revision, allowing a failed index projection to be repaired without rewriting closure history.
 
-Incident history reads authorise `IncidentRead` or `IncidentWrite` inside `IncidentService`, then revalidate the exact same duty snapshot after any index/record DataStore reads have completed. A player who leaves duty, changes role or disconnects while persistence is yielding receives no incident records, and the network endpoint does not spend a separate duplicate permission lookup.
+Incident history reads authorise `IncidentRead` or `IncidentWrite` inside `IncidentService`, then revalidate the exact same duty snapshot after any index/record DataStore reads have completed. A player who leaves duty, changes role or disconnects while persistence is yielding receives no incident records, and the network endpoint does not spend a separate duplicate permission lookup. If a recent-index row points at a confirmed-missing durable incident, the search claims only the exact row it observed, re-reads the durable record, and removes the row only if it is still missing; concurrent projection therefore wins, while genuinely dead rows stop inflating pagination totals.
 
 ## Warrants
 
