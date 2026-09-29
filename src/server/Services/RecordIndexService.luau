@@ -146,12 +146,7 @@ function RecordIndexService:_disposeFreshReadState(state: any)
 	end
 end
 
-function RecordIndexService:_finishFreshRead(
-	key: string,
-	state: any,
-	value: any?,
-	reason: string?
-)
+function RecordIndexService:_finishFreshRead(key: string, state: any, value: any?, reason: string?)
 	if self.freshReads[key] ~= state then
 		return
 	end
