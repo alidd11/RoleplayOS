@@ -2,7 +2,7 @@
 
 local Players = game:GetService("Players")
 
-local PAVAService = { effects = {}, cooldowns = {} }
+local PAVAService = { effects = {}, cooldowns = {}, running = false }
 
 local EFFECT_SECONDS = 30
 local MAX_DISTANCE = 18
@@ -17,6 +17,10 @@ end
 local function humanoidOf(player: Player): Humanoid?
 	local character = player.Character
 	return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
 local function hasPAVA(player: Player): boolean
@@ -46,6 +50,7 @@ function PAVAService:Init(context: any)
 	self.effects = {}
 	self.cooldowns = {}
 	self.connections = {}
+	self.running = false
 end
 
 function PAVAService:_restore(target: Player, token: number)
@@ -75,8 +80,17 @@ function PAVAService:_restore(target: Player, token: number)
 end
 
 function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, string?)
+	if not self.running or not playerIsCurrent(actor) then
+		return false, "PAVA_UNAVAILABLE"
+	end
 	if not policeDuty(self.context, actor) then
 		return false, "POLICE_DUTY_REQUIRED"
+	end
+	-- DutyService:Get can yield while Roblox resolves group access. A request may
+	-- outlive its Player or the shutdown request drain during that wait, so do not
+	-- let the stale continuation apply a fresh effect after teardown has begun.
+	if not self.running or not playerIsCurrent(actor) then
+		return false, "PAVA_UNAVAILABLE"
 	end
 	if not hasPAVA(actor) then
 		return false, "PAVA_NOT_EQUIPPED"
@@ -128,6 +142,7 @@ function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, strin
 end
 
 function PAVAService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -145,6 +160,7 @@ function PAVAService:Start()
 end
 
 function PAVAService:Destroy()
+	self.running = false
 	for _, connection in self.connections or {} do
 		connection:Disconnect()
 	end
