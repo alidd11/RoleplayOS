@@ -211,70 +211,77 @@ function RecordIndexService:_schedulePersonIndexRepair(
 	entry: any,
 	keys: { string }
 ): boolean
-	local existing = self.personIndexRepairs[characterId]
-	if existing then
-		existing.Player = player
-		existing.Entry = entry
-		for _, key in keys do
-			if not table.find(existing.Keys, key) then
-				table.insert(existing.Keys, key)
-			end
-		end
-		return true
-	end
-
 	local maximum = math.max(
 		1,
 		math.floor(tonumber(self.context.Configuration.MDT.MaximumPendingPersonIndexRepairs) or 128)
 	)
-	if self.personIndexRepairCount >= maximum then
-		return false
-	end
-
-	local state = {
-		Player = player,
-		Entry = entry,
-		Keys = table.clone(keys),
-	}
-	self.personIndexRepairs[characterId] = state
-	self.personIndexRepairCount += 1
-	task.spawn(function()
-		local retrySeconds = math.max(
-			5,
-			tonumber(self.context.Configuration.MDT.PersonIndexRepairRetrySeconds) or 60
-		)
-		while
-			self.running
-			and self.personIndexRepairs[characterId] == state
-			and playerIsCurrent(state.Player)
-			and #state.Keys > 0
-		do
-			-- The first write already exhausted DataService's bounded retry budget.
-			-- Back off before trying the missing bucket again so a store outage does
-			-- not turn eventual consistency into a tight retry storm.
-			task.wait(retrySeconds)
-			if
-				not self.running
-				or self.personIndexRepairs[characterId] ~= state
-				or not playerIsCurrent(state.Player)
-			then
-				break
+	while self.running and playerIsCurrent(player) do
+		local existing = self.personIndexRepairs[characterId]
+		if existing then
+			existing.Player = player
+			existing.Entry = entry
+			for _, key in keys do
+				if not table.find(existing.Keys, key) then
+					table.insert(existing.Keys, key)
+				end
 			end
-			local key = state.Keys[1]
-			local indexed, reason = self:_upsertIndex(key, characterId, state.Entry)
-			if indexed then
-				table.remove(state.Keys, 1)
-			else
-				self.context.Logger:Warning("Person search index repair will retry", {
-					CharacterId = characterId,
-					Bucket = key,
-					Error = reason,
-				})
-			end
+			return true
 		end
-		self:_dropPersonIndexRepair(characterId, state)
-	end)
-	return true
+
+		if self.personIndexRepairCount < maximum then
+			local state = {
+				Player = player,
+				Entry = entry,
+				Keys = table.clone(keys),
+			}
+			self.personIndexRepairs[characterId] = state
+			self.personIndexRepairCount += 1
+			task.spawn(function()
+				local retrySeconds = math.max(
+					5,
+					tonumber(self.context.Configuration.MDT.PersonIndexRepairRetrySeconds) or 60
+				)
+				while
+					self.running
+					and self.personIndexRepairs[characterId] == state
+					and playerIsCurrent(state.Player)
+					and #state.Keys > 0
+				do
+					-- The first write already exhausted DataService's bounded retry budget.
+					-- Back off before trying the missing bucket again so a store outage does
+					-- not turn eventual consistency into a tight retry storm.
+					task.wait(retrySeconds)
+					if
+						not self.running
+						or self.personIndexRepairs[characterId] ~= state
+						or not playerIsCurrent(state.Player)
+					then
+						break
+					end
+					local key = state.Keys[1]
+					local indexed, reason = self:_upsertIndex(key, characterId, state.Entry)
+					if indexed then
+						table.remove(state.Keys, 1)
+					else
+						self.context.Logger:Warning("Person search index repair will retry", {
+							CharacterId = characterId,
+							Bucket = key,
+							Error = reason,
+						})
+					end
+				end
+				self:_dropPersonIndexRepair(characterId, state)
+			end)
+			return true
+		end
+
+		-- The repair set is deliberately hard-capped. Do not discard this already
+		-- committed projection merely because every recovery slot is occupied.
+		-- The caller is an existing background projection worker, so apply
+		-- backpressure without issuing another DataStore request until a slot frees.
+		task.wait(1)
+	end
+	return false
 end
 
 -- The person record and the name index, and nothing else.
@@ -338,7 +345,7 @@ function RecordIndexService:IndexPerson(player: Player, character: any): (boolea
 			local scheduled =
 				self:_schedulePersonIndexRepair(player, character.CharacterId, entry, remaining)
 			if not scheduled then
-				return false, "PERSON_INDEX_REPAIR_CAPACITY_REACHED"
+				return false, "INDEX_CANCELLED"
 			end
 			self.context.Logger:Warning("Person search index write deferred for repair", {
 				CharacterId = character.CharacterId,
