@@ -1,8 +1,34 @@
 --!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PhoneValidator = require(ReplicatedStorage.RoleplayOS.Shared.PhoneValidator)
 local Validators = require(script.Parent.Validators)
 local tablePayload = Validators.tablePayload
 
+local function validPhoneNumber(value: any): boolean
+	if type(value) ~= "string" or #value > 32 then
+		return false
+	end
+	return PhoneValidator.number(value) ~= nil
+end
+
+local function validCallId(value: any): boolean
+	return type(value) == "string" and #value > 0 and #value <= 64
+end
+
+local function validRecipientName(value: any): boolean
+	if type(value) ~= "string" or #value > 64 then
+		return false
+	end
+	return (string.match(value, "^%s*(.-)%s*$") or "") ~= ""
+end
+
+local function validMessage(value: any, maximumLength: number): boolean
+	return PhoneValidator.message(value, maximumLength) ~= nil
+end
+
 return function(self: any)
+	local maximumMessageLength = self.context.Configuration.Phone.MaximumMessageLength
+	local transferMaximum = self.context.Configuration.Economy.TransferMaximum
 	self.context.Network:RegisterFunction("GetPhone", tablePayload, function(player, _, requestId)
 		local snapshot, reason = self.context.Services:Get("PhoneService"):Snapshot(player)
 		if not snapshot then
@@ -17,8 +43,8 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("PhoneSendText", function(payload)
 		return type(payload) == "table"
-			and type(payload.Number) == "string"
-			and type(payload.Message) == "string"
+			and validPhoneNumber(payload.Number)
+			and validMessage(payload.Message, maximumMessageLength)
 	end, function(player, payload, requestId)
 		local message, reason = self.context.Services
 			:Get("PhoneService")
@@ -33,8 +59,11 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("PhoneTransferFunds", function(payload)
 		return type(payload) == "table"
-			and type(payload.Recipient) == "string"
+			and validRecipientName(payload.Recipient)
 			and type(payload.Amount) == "number"
+			and payload.Amount > 0
+			and payload.Amount % 1 == 0
+			and payload.Amount <= transferMaximum
 	end, function(player, payload, requestId)
 		local transfer, reason = self.context.Services
 			:Get("PhoneService")
@@ -59,7 +88,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("PhonePlaceCall", function(payload)
-		return type(payload) == "table" and type(payload.Number) == "string"
+		return type(payload) == "table" and validPhoneNumber(payload.Number)
 	end, function(player, payload, requestId)
 		local call, reason =
 			self.context.Services:Get("PhoneService"):PlaceCall(player, payload.Number)
@@ -72,7 +101,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("PhoneAnswerCall", function(payload)
-		return type(payload) == "table" and type(payload.CallId) == "string"
+		return type(payload) == "table" and validCallId(payload.CallId)
 	end, function(player, payload, requestId)
 		local call, reason =
 			self.context.Services:Get("PhoneService"):AnswerCall(player, payload.CallId)
@@ -85,7 +114,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("PhoneEndCall", function(payload)
-		return type(payload) == "table" and type(payload.CallId) == "string"
+		return type(payload) == "table" and validCallId(payload.CallId)
 	end, function(player, payload, requestId)
 		local ended, reason =
 			self.context.Services:Get("PhoneService"):EndCall(player, payload.CallId)
@@ -98,8 +127,8 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("PhoneEmergency", function(payload)
 		return type(payload) == "table"
-			and type(payload.Summary) == "string"
-			and type(payload.Location) == "string"
+			and validMessage(payload.Summary, 120)
+			and validMessage(payload.Location, 80)
 	end, function(player, payload, requestId)
 		local call, reason = self.context.Services
 			:Get("PhoneService")
