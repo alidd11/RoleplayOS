@@ -70,7 +70,9 @@ return function(self: any)
 			return {
 				Success = false,
 				Code = reason,
-				Message = "The character could not be selected.",
+				Message = if reason == "CHARACTER_SELECTION_IN_PROGRESS"
+					then "Your previous character selection is still being processed."
+					else "The character could not be selected.",
 				RequestId = requestId,
 			}
 		end
