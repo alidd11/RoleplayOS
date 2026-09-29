@@ -1,11 +1,19 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 
-local SpawnService = { points = {} }
+local SpawnService = { points = {}, pointStates = {}, running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function SpawnService:Init(context: any)
 	self.context = context
+	table.clear(self.points)
+	table.clear(self.pointStates)
+	self.running = false
 end
 
 -- Spawn pads to consider. Walking every descendant of the workspace is fine on
@@ -59,6 +67,16 @@ function SpawnService:_registerConfiguredPoints()
 			self.context.Logger:Error("Spawn team is unavailable", { SpawnId = spawnId })
 			self.points[spawnId] = nil
 		else
+			if not self.pointStates[point] then
+				self.pointStates[point] = {
+					OriginalName = point.Name,
+					OriginalTeamColor = point.TeamColor,
+					OriginalNeutral = point.Neutral,
+					OriginalAllowTeamChangeOnTouch = point.AllowTeamChangeOnTouch,
+					ManagedName = team.Name,
+					ManagedTeamColor = team.TeamColor,
+				}
+			end
 			point.Name = team.Name
 			point.TeamColor = team.TeamColor
 			point.Neutral = false
@@ -67,11 +85,44 @@ function SpawnService:_registerConfiguredPoints()
 	end
 end
 
+function SpawnService:_restorePointState()
+	for point, state in self.pointStates do
+		if point.Parent then
+			-- Restore only properties that still carry the values this service
+			-- applied. A later map/runtime owner must not be overwritten on teardown.
+			if point.Name == state.ManagedName then
+				point.Name = state.OriginalName
+			end
+			if point.TeamColor == state.ManagedTeamColor then
+				point.TeamColor = state.OriginalTeamColor
+			end
+			if point.Neutral == false then
+				point.Neutral = state.OriginalNeutral
+			end
+			if point.AllowTeamChangeOnTouch == false then
+				point.AllowTeamChangeOnTouch = state.OriginalAllowTeamChangeOnTouch
+			end
+		end
+	end
+	table.clear(self.pointStates)
+end
+
 function SpawnService:Start()
-	self:_registerConfiguredPoints()
+	local ok, problem = pcall(function()
+		self:_registerConfiguredPoints()
+	end)
+	if not ok then
+		self:_restorePointState()
+		table.clear(self.points)
+		error(problem, 0)
+	end
+	self.running = true
 end
 
 function SpawnService:Resolve(request: any): (SpawnLocation?, string?)
+	if not self.running then
+		return nil, "SPAWN_UNAVAILABLE"
+	end
 	local role = self.context.Configuration.Roles[request.RoleId]
 	if not role then
 		return nil, "ROLE_NOT_FOUND"
@@ -95,14 +146,23 @@ function SpawnService:Resolve(request: any): (SpawnLocation?, string?)
 end
 
 function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "SPAWN_UNAVAILABLE"
+	end
 	local point, reason = self:Resolve(request)
 	if not point then
 		return false, reason
+	end
+	if not self.running or not playerIsCurrent(player) then
+		return false, "SPAWN_UNAVAILABLE"
 	end
 	player.RespawnLocation = point
 	local loaded, loadError = pcall(function()
 		player:LoadCharacterAsync()
 	end)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "SPAWN_UNAVAILABLE"
+	end
 	if not loaded or not player.Character then
 		self.context.Logger:Error("Character spawn failed", {
 			UserId = player.UserId,
@@ -236,11 +296,19 @@ function SpawnService:EnterCivilianAtTerritory(
 	if not assigned then
 		return false, roleReason
 	end
+	if not self.running or not playerIsCurrent(player) then
+		player.Team = previousTeam
+		return false, "SPAWN_UNAVAILABLE"
+	end
 	player.RespawnLocation = civilianPoint
 	local loaded, loadError = pcall(function()
 		player:LoadCharacterAsync()
 	end)
-	if not loaded or not player.Character then
+	if not self.running or not playerIsCurrent(player) then
+		return false, "SPAWN_UNAVAILABLE"
+	end
+	local loadedCharacter = player.Character
+	if not loaded or not loadedCharacter then
 		self.context.Logger:Error("Character spawn failed", {
 			UserId = player.UserId,
 			TerritoryId = territoryId,
@@ -249,7 +317,7 @@ function SpawnService:EnterCivilianAtTerritory(
 		player.Team = previousTeam
 		return false, "CHARACTER_SPAWN_FAILED"
 	end
-	local root = player.Character:FindFirstChild("HumanoidRootPart")
+	local root = loadedCharacter:FindFirstChild("HumanoidRootPart")
 	if root and root:IsA("BasePart") then
 		root.CFrame =
 			CFrame.new(territoryPart.Position + Vector3.new(0, territoryPart.Size.Y / 2 + 3, 0))
@@ -273,6 +341,8 @@ function SpawnService:EnterCivilianAtTerritory(
 end
 
 function SpawnService:Destroy()
+	self.running = false
+	self:_restorePointState()
 	table.clear(self.points)
 end
 
