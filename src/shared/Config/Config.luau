@@ -2630,6 +2630,10 @@ local Config = {
 	},
 	Taxi = {
 		RequestRetentionSeconds = 900,
+		-- Completed/cancelled requests are short-lived operational history. Keep a
+		-- hard count bound as well as the TTL so burst churn cannot grow the
+		-- server-local request table without limit between cleanup sweeps.
+		MaximumRetainedTerminalRequests = 200,
 		MinimumJourneyStuds = 60,
 		Bands = {
 			Local = { Id = "Local", Name = "Local trip", Fare = 8 },
