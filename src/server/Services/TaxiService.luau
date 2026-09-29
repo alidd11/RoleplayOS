@@ -220,6 +220,36 @@ function TaxiService:_forgetDeclines(requestId: string)
 	end
 end
 
+function TaxiService:_trimTerminalRequests()
+	local maximum =
+		math.max(0, math.floor(tonumber(self.settings.MaximumRetainedTerminalRequests) or 200))
+	local terminal: { any } = {}
+	for requestId, request in self.requests do
+		if request.State == "Completed" or request.State == "Cancelled" then
+			table.insert(terminal, {
+				RequestId = requestId,
+				Timestamp = tonumber(
+					request.CompletedAt or request.CancelledAt or request.CreatedAt
+				) or 0,
+			})
+		end
+	end
+	if #terminal <= maximum then
+		return
+	end
+	table.sort(terminal, function(a, b)
+		if a.Timestamp == b.Timestamp then
+			return a.RequestId < b.RequestId
+		end
+		return a.Timestamp < b.Timestamp
+	end)
+	for index = 1, #terminal - maximum do
+		local requestId = terminal[index].RequestId
+		self.requests[requestId] = nil
+		self:_forgetDeclines(requestId)
+	end
+end
+
 function TaxiService:_activeTaxi(player: Player): Model?
 	local vehicleService = self.context.Services:Get("VehicleSpawnerService")
 	local vehicle = vehicleService and vehicleService.active[player.UserId]
@@ -481,6 +511,7 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	if self.byDriver[player.UserId] == requestId then
 		self.byDriver[player.UserId] = nil
 	end
+	self:_trimTerminalRequests()
 	if playerIsCurrent(passenger) then
 		self:_notify(passenger, {
 			Kind = "TaxiStatus",
@@ -509,11 +540,13 @@ function TaxiService:Cancel(player: Player, requestId: any): (boolean, string?)
 		return false, "TAXI_REQUEST_UNAVAILABLE"
 	end
 	request.State = "Cancelled"
+	request.CancelledAt = os.time()
 	self:_forgetDeclines(requestId)
 	self.byPassenger[request.PassengerUserId] = nil
 	if request.DriverUserId then
 		self.byDriver[request.DriverUserId] = nil
 	end
+	self:_trimTerminalRequests()
 	-- A booking nobody has accepted yet has no driver to tell, and passing that
 	-- nil to GetPlayerByUserId throws. The cancellation itself is already
 	-- recorded above, so this threw after the work was done: the ride really was
@@ -547,12 +580,15 @@ function TaxiService:Start()
 			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
 			for requestId, request in self.requests do
 				local terminal = request.State == "Completed" or request.State == "Cancelled"
-				local timestamp = tonumber(request.CompletedAt or request.CreatedAt) or os.time()
+				local timestamp = tonumber(
+					request.CompletedAt or request.CancelledAt or request.CreatedAt
+				) or os.time()
 				if terminal and timestamp < cutoff then
 					self.requests[requestId] = nil
 					self:_forgetDeclines(requestId)
 				end
 			end
+			self:_trimTerminalRequests()
 		end
 	end)
 	table.insert(
