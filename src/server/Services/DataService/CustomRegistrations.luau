@@ -30,6 +30,7 @@ return function(DataService)
 			self.mockRegistrations[registrationKey] = { UserId = userId, VehicleId = vehicleId }
 			return true, nil
 		end
+		-- Keep retry metadata stable if UpdateAsync replays this transform.
 		local updatedAt = os.time()
 		local ok, persisted = self:_retry(function()
 			return self.registrationStore:UpdateAsync(registrationKey, function(existing)
