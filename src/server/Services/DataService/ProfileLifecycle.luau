@@ -511,8 +511,8 @@ return function(DataService)
 			end
 			return true, nil
 		end
-		local ownershipLost =
-			string.find(tostring(problem), "SESSION_OWNERSHIP_LOST", 1, true) ~= nil
+		local ownershipLost = string.find(tostring(problem), "SESSION_OWNERSHIP_LOST", 1, true)
+			~= nil
 		local playerStillPresent = player.Parent == Players
 			and Players:GetPlayerByUserId(player.UserId) == player
 		local retainedSession = false
