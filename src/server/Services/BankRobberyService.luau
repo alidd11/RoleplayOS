@@ -75,6 +75,35 @@ function BankRobberyService:_releasePlayerClaim(userId: number, robberyId: strin
 	end
 end
 
+function BankRobberyService:_restorePromptEnabled(state: any)
+	if not state or state.RestorePromptEnabled == nil then
+		return
+	end
+	local prompt = state.Prompt
+	local restoreEnabled = state.RestorePromptEnabled
+	state.RestorePromptEnabled = nil
+	if prompt and prompt.Parent then
+		prompt.Enabled = restoreEnabled
+	end
+end
+
+function BankRobberyService:_restoreWatchedPrompt(state: any)
+	if not state then
+		return
+	end
+	self:_restorePromptEnabled(state)
+	local prompt = state.Prompt
+	if
+		prompt
+		and prompt.Parent
+		and state.OriginalMaxActivationDistance ~= nil
+		and state.ManagedMaxActivationDistance ~= nil
+		and prompt.MaxActivationDistance == state.ManagedMaxActivationDistance
+	then
+		prompt.MaxActivationDistance = state.OriginalMaxActivationDistance
+	end
+end
+
 function BankRobberyService:_releaseStartClaim(
 	target: Instance,
 	state: any,
@@ -85,9 +114,8 @@ function BankRobberyService:_releaseStartClaim(
 		state.Starting = false
 		state.RobberyId = nil
 		state.PlayerUserId = nil
-		local prompt = state.Prompt
-		if self.running and target.Parent and prompt and prompt.Parent then
-			prompt.Enabled = true
+		if self.running and target.Parent then
+			self:_restorePromptEnabled(state)
 		end
 	end
 	self:_releasePlayerClaim(player.UserId, robberyId)
@@ -173,7 +201,6 @@ end
 
 function BankRobberyService:_beginFailedCooldown(target: Instance, state: any)
 	local config = self.context.Configuration.BankRobbery
-	local prompt = state.Prompt
 	self:_cancelTimers(state)
 	state.Starting = false
 	state.Active = false
@@ -181,8 +208,8 @@ function BankRobberyService:_beginFailedCooldown(target: Instance, state: any)
 	state.CooldownUntil = os.clock() + config.FailedCooldownSeconds
 	state.CooldownThread = task.delay(config.FailedCooldownSeconds, function()
 		state.CooldownThread = nil
-		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
-			prompt.Enabled = true
+		if self.running and target.Parent and self.states[target] == state then
+			self:_restorePromptEnabled(state)
 		end
 	end)
 end
@@ -193,7 +220,6 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 	if not self.running or not state or state.RobberyId ~= robberyId then
 		return
 	end
-	local prompt = state.Prompt
 	local characterId, character = self:_activeCharacter(player)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if
@@ -249,8 +275,8 @@ function BankRobberyService:_finish(target: Instance, player: Player, robberyId:
 	state.CooldownUntil = os.clock() + config.CooldownSeconds
 	state.CooldownThread = task.delay(config.CooldownSeconds, function()
 		state.CooldownThread = nil
-		if self.running and target.Parent and self.states[target] == state and prompt.Parent then
-			prompt.Enabled = true
+		if self.running and target.Parent and self.states[target] == state then
+			self:_restorePromptEnabled(state)
 		end
 	end)
 end
@@ -287,6 +313,7 @@ function BankRobberyService:Begin(target: Instance, player: Player): (boolean, s
 	state.RobberyId = robberyId
 	state.PlayerUserId = player.UserId
 	self.activePlayers[player.UserId] = robberyId
+	state.RestorePromptEnabled = state.Prompt.Enabled
 	state.Prompt.Enabled = false
 
 	local dutyChecked, duty = pcall(function()
@@ -351,11 +378,20 @@ function BankRobberyService:_watch(target: Instance)
 		)
 		return
 	end
-	prompt.MaxActivationDistance = math.min(
-		prompt.MaxActivationDistance,
+	local originalMaxActivationDistance = prompt.MaxActivationDistance
+	local managedMaxActivationDistance = math.min(
+		originalMaxActivationDistance,
 		self.context.Configuration.BankRobbery.ActivationDistance
 	)
-	self.states[target] = { Active = false, Starting = false, CooldownUntil = 0, Prompt = prompt }
+	prompt.MaxActivationDistance = managedMaxActivationDistance
+	self.states[target] = {
+		Active = false,
+		Starting = false,
+		CooldownUntil = 0,
+		Prompt = prompt,
+		OriginalMaxActivationDistance = originalMaxActivationDistance,
+		ManagedMaxActivationDistance = managedMaxActivationDistance,
+	}
 	self.promptConnections[target] = prompt.Triggered:Connect(function(player)
 		self:Begin(target, player)
 	end)
@@ -382,6 +418,7 @@ function BankRobberyService:Start()
 				self:_releasePlayerClaim(state.PlayerUserId, state.RobberyId)
 			end
 			self:_clearAlarm(state)
+			self:_restoreWatchedPrompt(state)
 			local connection = self.promptConnections[target]
 			if connection then
 				connection:Disconnect()
@@ -409,9 +446,8 @@ function BankRobberyService:Start()
 						state.Starting = false
 						state.RobberyId = nil
 						state.PlayerUserId = nil
-						local prompt = state.Prompt
-						if self.running and target.Parent and prompt and prompt.Parent then
-							prompt.Enabled = true
+						if self.running and target.Parent then
+							self:_restorePromptEnabled(state)
 						end
 					elseif state.Active == true then
 						self.context.Services:Get("AuditService"):Record({
@@ -440,6 +476,7 @@ function BankRobberyService:Destroy()
 	for _, state in self.states do
 		self:_cancelTimers(state)
 		self:_clearAlarm(state)
+		self:_restoreWatchedPrompt(state)
 	end
 	table.clear(self.connections)
 	table.clear(self.promptConnections)
