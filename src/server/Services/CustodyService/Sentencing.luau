@@ -198,6 +198,9 @@ return function(CustodyService)
 		source: string,
 		receiptId: string?
 	): (boolean, string?)
+		if not self:_playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		local civilianSpawnId = nil
 		local civilianStationId = nil
 		for spawnId, definition in self.context.Configuration.Spawns do
@@ -220,9 +223,11 @@ return function(CustodyService)
 		if not assigned then
 			return false, assignReason or "CIVILIAN_ROLE_ASSIGNMENT_FAILED"
 		end
-		if not player.Parent then
-			player.Team = previousTeam
-			return false, "PLAYER_LEFT"
+		if not self:_playerIsCurrent(player) then
+			if player.Parent == Players then
+				player.Team = previousTeam
+			end
+			return false, "PLAYER_UNAVAILABLE"
 		end
 		local spawned, spawnReason = self.context.Services:Get("SpawnService"):Spawn(player, {
 			RoleId = "Civilian",
@@ -234,8 +239,12 @@ return function(CustodyService)
 			player.RespawnLocation = previousRespawnLocation
 			return false, spawnReason or "CIVILIAN_SPAWN_FAILED"
 		end
-		if not player.Parent then
-			return false, "PLAYER_LEFT"
+		if not self:_playerIsCurrent(player) then
+			if player.Parent == Players then
+				player.Team = previousTeam
+				player.RespawnLocation = previousRespawnLocation
+			end
+			return false, "PLAYER_UNAVAILABLE"
 		end
 		local sentence = self:_sentence(player)
 		if sentence then
