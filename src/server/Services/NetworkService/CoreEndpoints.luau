@@ -3,6 +3,13 @@ local Validators = require(script.Parent.Validators)
 local boundedString = Validators.boundedString
 local tablePayload = Validators.tablePayload
 
+local function progressionPayload(payload: any): boolean
+	if type(payload) ~= "table" then
+		return false
+	end
+	return payload.CharacterId == nil or boundedString(payload.CharacterId, 1, 64)
+end
+
 return function(self: any)
 	self.context.Network:RegisterFunction("DropCash", function(payload)
 		return type(payload) == "table" and type(payload.Amount) == "number"
@@ -280,10 +287,7 @@ return function(self: any)
 	)
 	self.context.Network:RegisterFunction(
 		"GetProgression",
-		function(payload)
-			return type(payload) == "table"
-				and (payload.CharacterId == nil or boundedString(payload.CharacterId, 1, 64))
-		end,
+		progressionPayload,
 		function(player, payload, requestId)
 			local characterId = if type(payload.CharacterId) == "string"
 				then payload.CharacterId
