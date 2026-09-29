@@ -23,18 +23,23 @@ local EmergencyPatterns =
 -- the attribute and a shared clock, so a lightbar strobing twice a second costs
 -- nothing on the network however many are running, and a vehicle nobody can see
 -- costs nothing at all.
-local EmergencyLightsService = { connections = {} }
+local EmergencyLightsService = {
+	connections = {},
+	parkedStates = {},
+	parkedConnections = {},
+	running = false,
+}
 
-local function silenceEasyLS(model: Instance): number
+local function silenceEasyLS(model: Instance): { BaseScript }
 	local remote = model:FindFirstChild("EasyLS_Remote", true)
 	if not remote then
-		return 0
+		return {}
 	end
-	local silenced = 0
+	local silenced: { BaseScript } = {}
 	for _, descendant in remote:GetDescendants() do
 		if descendant:IsA("BaseScript") and not descendant.Disabled then
 			descendant.Disabled = true
-			silenced += 1
+			table.insert(silenced, descendant)
 		end
 	end
 	return silenced
@@ -42,11 +47,77 @@ end
 
 function EmergencyLightsService:Init(context: any)
 	self.context = context
+	self.connections = {}
+	self.parkedStates = {}
+	self.parkedConnections = {}
 	self.running = false
 end
 
 function EmergencyLightsService:_settings(): any
 	return self.context.Configuration.EmergencyLighting
+end
+
+function EmergencyLightsService:_captureParkedState(model: Instance, settings: any): any
+	local existing = self.parkedStates[model]
+	if existing then
+		return existing
+	end
+	local attributes = {}
+	local function remember(name: string)
+		table.insert(attributes, {
+			Name = name,
+			Value = model:GetAttribute(name),
+		})
+	end
+	remember(settings.StateAttribute)
+	remember(settings.StageAttribute)
+	remember(settings.SirenAttribute)
+	remember(settings.DirectorAttribute)
+	remember(settings.RunLockAttribute)
+	remember(settings.LowPowerAttribute)
+	for circuit in settings.Circuits do
+		remember(settings.CircuitAttributePrefix .. circuit)
+	end
+	remember("RoleplayOSLightPrimary")
+	remember("RoleplayOSLightSecondary")
+	local state = {
+		Attributes = attributes,
+		SilencedScripts = {},
+		HadTag = CollectionService:HasTag(model, settings.Tag),
+	}
+	self.parkedStates[model] = state
+	self.parkedConnections[model] = model.Destroying:Once(function()
+		self.parkedConnections[model] = nil
+		self.parkedStates[model] = nil
+	end)
+	return state
+end
+
+function EmergencyLightsService:_restoreParkedState(model: Instance)
+	local state = self.parkedStates[model]
+	if not state then
+		return
+	end
+	for _, scriptInstance in state.SilencedScripts do
+		if scriptInstance.Parent and scriptInstance.Disabled then
+			scriptInstance.Disabled = false
+		end
+	end
+	if model.Parent then
+		for _, attribute in state.Attributes do
+			model:SetAttribute(attribute.Name, attribute.Value)
+		end
+		local settings = self:_settings()
+		if not state.HadTag and CollectionService:HasTag(model, settings.Tag) then
+			CollectionService:RemoveTag(model, settings.Tag)
+		end
+	end
+	local connection = self.parkedConnections[model]
+	if connection then
+		connection:Disconnect()
+		self.parkedConnections[model] = nil
+	end
+	self.parkedStates[model] = nil
 end
 
 -- Whether a part is one of the vehicle's warning lights.
@@ -87,7 +158,11 @@ end
 -- Tagging is how clients find it. They watch the tag through CollectionService
 -- rather than scanning the world, so a vehicle streaming in is picked up
 -- natively and one that never comes near a player is never looked at.
-function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
+function EmergencyLightsService:Adopt(
+	model: Instance,
+	departmentId: string?,
+	restoreOnDestroy: boolean?
+)
 	local settings = self:_settings()
 	if not settings.Enabled then
 		return
@@ -102,11 +177,21 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 		-- defaulting to blue and putting them on a prison van.
 		return
 	end
+	-- Parked map vehicles outlive this service on startup rollback, unlike
+	-- VehicleSpawner-owned clones which are destroyed later in teardown. Capture
+	-- only the parked vehicle's original state so map content is restored without
+	-- briefly restarting third-party scripts on framework-owned vehicles.
+	local parkedState = if restoreOnDestroy then self:_captureParkedState(model, settings) else nil
 	-- Keep the imported EasyLS hierarchy available for inspection and pattern
 	-- migration, but stop its scripts from competing with the framework renderer.
 	-- The live clone is the only thing changed; the ServerStorage template remains
 	-- untouched and can still be re-exported or inspected by an asset owner.
 	local silencedEasyLS = silenceEasyLS(model)
+	if parkedState then
+		for _, scriptInstance in silencedEasyLS do
+			table.insert(parkedState.SilencedScripts, scriptInstance)
+		end
+	end
 	model:SetAttribute(settings.StateAttribute, false)
 	model:SetAttribute(settings.StageAttribute, 0)
 	model:SetAttribute(settings.SirenAttribute, "")
@@ -119,10 +204,10 @@ function EmergencyLightsService:Adopt(model: Instance, departmentId: string?)
 	model:SetAttribute("RoleplayOSLightPrimary", department.Primary)
 	model:SetAttribute("RoleplayOSLightSecondary", department.Secondary)
 	CollectionService:AddTag(model, settings.Tag)
-	if silencedEasyLS > 0 then
+	if #silencedEasyLS > 0 then
 		self.context.Logger:Info("EasyLS scripts silenced; RoleplayOS owns emergency lighting", {
 			Vehicle = model.Name,
-			Scripts = silencedEasyLS,
+			Scripts = #silencedEasyLS,
 		})
 	end
 end
@@ -409,7 +494,7 @@ function EmergencyLightsService:Start()
 				table.insert(unknown, child.Name)
 				continue
 			end
-			self:Adopt(child, departmentId)
+			self:Adopt(child, departmentId, true)
 			self.context.Services:Get("EmergencyLightPatternService"):Adopt(child)
 			if CollectionService:HasTag(child, settings.Tag) then
 				adopted += 1
@@ -447,6 +532,15 @@ function EmergencyLightsService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	local parkedModels = {}
+	for model in self.parkedStates do
+		table.insert(parkedModels, model)
+	end
+	for _, model in parkedModels do
+		self:_restoreParkedState(model)
+	end
+	table.clear(self.parkedConnections)
+	table.clear(self.parkedStates)
 end
 
 return EmergencyLightsService
