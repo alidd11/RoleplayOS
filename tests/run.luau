@@ -447,6 +447,25 @@ H.test("migration reconciles missing fields", function()
 	)
 end)
 
+H.test("profile migration preserves developer receipt replay protection", function()
+	local consumables, consumablesReason = ProfileSchema.migrate({
+		SchemaVersion = 10,
+		Consumables = "corrupt",
+	}, 42)
+	H.expect(
+		consumables == nil and consumablesReason == "PROFILE_CONSUMABLES_NOT_TABLE",
+		"corrupt consumables were replaced"
+	)
+
+	local receipts, receiptsReason = ProfileSchema.migrate({
+		SchemaVersion = 10,
+		Consumables = { ProcessedDeveloperReceipts = "corrupt" },
+	}, 42)
+	H.expect(
+		receipts == nil and receiptsReason == "PROFILE_DEVELOPER_RECEIPTS_NOT_TABLE",
+		"corrupt developer receipt history was replaced"
+	)
+end)
 H.test("migration adds bounded cash-drop recovery state", function()
 	local profile = ProfileSchema.migrate({
 		SchemaVersion = 13,
