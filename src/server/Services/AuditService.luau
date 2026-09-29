@@ -1,5 +1,7 @@
 --!strict
 
+local HttpService = game:GetService("HttpService")
+
 -- Critical, because EconomyService records here after it has already moved the
 -- money and marked the profile dirty. Stepped over, every transaction in the
 -- game would raise once the balance had changed: the player is told the request
@@ -154,8 +156,20 @@ function AuditService:Flush(): boolean
 	local ok, updated, reason = pcall(function()
 		return data:UpdateSharedRecord(auditKey(), function(existing)
 			local combined = if type(existing) == "table" then existing else {}
+			local seen = {}
+			for _, entry in combined do
+				if type(entry) == "table" and type(entry.AuditId) == "string" then
+					seen[entry.AuditId] = true
+				end
+			end
 			for _, entry in batch do
-				table.insert(combined, entry)
+				local auditId = type(entry) == "table" and entry.AuditId
+				if type(auditId) ~= "string" or not seen[auditId] then
+					table.insert(combined, entry)
+					if type(auditId) == "string" then
+						seen[auditId] = true
+					end
+				end
 			end
 			if #combined <= MAX_ENTRIES then
 				return combined
@@ -195,6 +209,9 @@ function AuditService:Flush(): boolean
 end
 
 function AuditService:Record(entry: any)
+	entry.AuditId = if type(entry.AuditId) == "string" and entry.AuditId ~= ""
+		then entry.AuditId
+		else HttpService:GenerateGUID(false)
 	entry.Timestamp = entry.Timestamp or os.time()
 	entry.ServerJobId = game.JobId
 	-- Keep a bounded ring instead of removing index 1, which shifts every
