@@ -3,6 +3,48 @@
 local HttpService = game:GetService("HttpService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
+local function isCurrentWarrant(warrant: any, now: number): boolean
+	return type(warrant) == "table"
+		and warrant.Active == true
+		and (warrant.ExpiresAt == nil or warrant.ExpiresAt > now)
+end
+
+local function trimWarrantHistory(warrants: { any }, now: number, maximum: number)
+	if #warrants <= maximum then
+		return
+	end
+
+	local removable = {}
+	for index, warrant in warrants do
+		if not isCurrentWarrant(warrant, now) then
+			table.insert(removable, {
+				Index = index,
+				At = tonumber(warrant.RevokedAt) or tonumber(warrant.ExpiresAt) or tonumber(
+					warrant.IssuedAt
+				) or 0,
+			})
+		end
+	end
+	table.sort(removable, function(a, b)
+		if a.At == b.At then
+			return a.Index < b.Index
+		end
+		return a.At < b.At
+	end)
+
+	local removeCount = math.min(#removable, #warrants - maximum)
+	local indexes = {}
+	for position = 1, removeCount do
+		table.insert(indexes, removable[position].Index)
+	end
+	table.sort(indexes, function(a, b)
+		return a > b
+	end)
+	for _, index in indexes do
+		table.remove(warrants, index)
+	end
+end
+
 local WarrantService = {
 	warrants = {},
 	byCharacter = {},
@@ -147,11 +189,7 @@ function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { 
 	local now = os.time()
 	for warrantId in self.byCharacter[characterId] or {} do
 		local warrant = self.warrants[warrantId]
-		if
-			warrant
-			and warrant.Active == true
-			and (warrant.ExpiresAt == nil or warrant.ExpiresAt > now)
-		then
+		if isCurrentWarrant(warrant, now) then
 			table.insert(active, warrant)
 		end
 	end
@@ -215,39 +253,59 @@ function WarrantService:Create(
 		ExpiresAt = expiresAt,
 		Active = true,
 	}
-	local found = false
+	local maximumActive = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumActiveWarrantsPerPerson) or 16)
+	)
+	local maximumHistory = math.max(
+		maximumActive,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumWarrantHistoryEntries) or 100)
+	)
 	local record, storeReason = self.context.Services
 		:Get("RecordIndexService")
 		:UpdatePerson(characterId, function(existing)
 			if type(existing) ~= "table" then
 				return nil
 			end
-			found = true
 			existing.Warrants = if type(existing.Warrants) == "table" then existing.Warrants else {}
-			local alreadyWritten = false
+			local activeCount = 0
 			for _, storedWarrant in existing.Warrants do
 				if storedWarrant.WarrantId == warrant.WarrantId then
-					alreadyWritten = true
-					break
+					return existing
+				end
+				if isCurrentWarrant(storedWarrant, now) then
+					activeCount += 1
 				end
 			end
-			if not alreadyWritten then
-				table.insert(existing.Warrants, warrant)
+			if activeCount >= maximumActive then
+				return existing
 			end
-			existing.UpdatedAt = os.time()
+			table.insert(existing.Warrants, warrant)
+			trimWarrantHistory(existing.Warrants, now, maximumHistory)
+			existing.UpdatedAt = now
 			return existing
 		end)
-	if not found or not record then
+	if not record then
 		return nil, storeReason or "PERSON_RECORD_NOT_FOUND"
 	end
 	self:CachePersonRecord(record)
+	local storedWarrant
+	for _, candidate in if type(record.Warrants) == "table" then record.Warrants else {} do
+		if candidate.WarrantId == warrant.WarrantId then
+			storedWarrant = candidate
+			break
+		end
+	end
+	if not storedWarrant then
+		return nil, "ACTIVE_WARRANT_LIMIT_REACHED"
+	end
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = actor.UserId,
 		Action = "Warrant.Created",
 		Target = warrant.WarrantId,
 		Metadata = { CharacterId = characterId },
 	})
-	return warrant, nil
+	return storedWarrant, nil
 end
 
 function WarrantService:Revoke(
@@ -264,6 +322,11 @@ function WarrantService:Revoke(
 		return nil, "MDT_NOT_AUTHORISED"
 	end
 	local revocationOperationId = HttpService:GenerateGUID(false)
+	local revokedAt = os.time()
+	local maximumHistory = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumWarrantHistoryEntries) or 100)
+	)
 	local revoked
 	local record, storeReason = self.context.Services
 		:Get("RecordIndexService")
@@ -280,11 +343,12 @@ function WarrantService:Revoke(
 				if warrant.WarrantId == warrantId then
 					if warrant.Active == true then
 						warrant.Active = false
-						warrant.RevokedAt = os.time()
+						warrant.RevokedAt = revokedAt
 						warrant.RevokedByUserId = actor.UserId
 						warrant.RevocationOperationId = revocationOperationId
 						revoked = warrant
-						existing.UpdatedAt = os.time()
+						trimWarrantHistory(existing.Warrants, revokedAt, maximumHistory)
+						existing.UpdatedAt = revokedAt
 						return existing
 					end
 					if warrant.RevocationOperationId == revocationOperationId then
