@@ -138,6 +138,9 @@ return function(self: any)
 			Code = if call then "OK" else reason,
 			Message = if call
 				then "Your 999 call has been sent to control."
+				elseif
+					reason == "EMERGENCY_CALL_IN_PROGRESS"
+				then "Your previous 999 call is still being sent."
 				else "The emergency call failed. Try again.",
 			Data = call,
 			RequestId = requestId,
