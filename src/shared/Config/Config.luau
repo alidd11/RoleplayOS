@@ -834,6 +834,10 @@ local Config = {
 		SensorTag = "RoleplayOSANPR",
 		CooldownSeconds = 15,
 		MaximumSensors = 128,
+		-- Cooldowns are server-local duplicate suppression, not durable history.
+		-- Keep a hard per-sensor cap as well as the TTL so a burst of unique
+		-- registrations cannot retain unbounded state inside the cooldown window.
+		MaximumCooldownRegistrationsPerSensor = 256,
 		RoadsRoleId = "RoadsPolicingOfficer",
 	},
 	DeveloperProducts = {

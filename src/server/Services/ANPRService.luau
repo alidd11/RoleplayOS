@@ -4,19 +4,43 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
-local ANPRService = { connections = {}, cooldowns = {}, watched = {}, watchedCount = 0 }
+local ANPRService = {
+	connections = {},
+	cooldowns = {},
+	watched = {},
+	watchedCount = 0,
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function ANPRService:Init(context: any)
 	self.context = context
 	self.alertEvent = context.Network:RegisterEvent("ANPRAlert")
+	self.connections = {}
+	self.cooldowns = {}
+	self.watched = {}
+	self.watchedCount = 0
+	self.running = false
 end
 
 function ANPRService:_alertPlayers(): { Player }
 	local result = {}
+	if not self.running then
+		return result
+	end
 	for _, player in Players:GetPlayers() do
 		local duty = self.context.Services:Get("DutyService"):Get(player)
+		-- DutyService:Get can yield on group access. Do not resume a stale ANPR
+		-- notification pass after this service has already torn down.
+		if not self.running then
+			return {}
+		end
 		if
-			duty
+			playerIsCurrent(player)
+			and duty
 			and (
 				duty.RoleId == self.context.Configuration.ANPR.RoadsRoleId
 				or duty.DepartmentId == "Control"
@@ -43,6 +67,9 @@ function ANPRService:_vehicleFromHit(hit: BasePart): Model?
 end
 
 function ANPRService:_scan(sensor: BasePart, hit: BasePart)
+	if not self.running or not self.watched[sensor] then
+		return
+	end
 	local model = self:_vehicleFromHit(hit)
 	if not model then
 		return
@@ -60,16 +87,34 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		self.cooldowns[sensor] = perSensor
 	end
 	local now = os.clock()
+	local count = 0
+	local oldestPlate: string? = nil
+	local oldestExpiry = math.huge
 	-- Expired registrations have no future purpose. Sweep them lazily on the
 	-- next camera touch so a long-running sensor retains only plates seen within
 	-- the current cooldown window instead of every registration it has ever seen.
 	for plate, expiresAt in perSensor do
 		if type(expiresAt) ~= "number" or expiresAt <= now then
 			perSensor[plate] = nil
+		else
+			count += 1
+			if expiresAt < oldestExpiry then
+				oldestExpiry = expiresAt
+				oldestPlate = plate
+			end
 		end
 	end
 	if (perSensor[registration] or 0) > now then
 		return
+	end
+	local maximumCooldownRegistrations = math.max(
+		1,
+		math.floor(
+			tonumber(self.context.Configuration.ANPR.MaximumCooldownRegistrationsPerSensor) or 256
+		)
+	)
+	if count >= maximumCooldownRegistrations and oldestPlate then
+		perSensor[oldestPlate] = nil
 	end
 	perSensor[registration] = now + self.context.Configuration.ANPR.CooldownSeconds
 	local vehicle =
@@ -79,6 +124,11 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 	end
 	local wanted, _, warrantReason =
 		self.context.Services:Get("WarrantService"):HasActiveForCharacter(vehicle.OwnerCharacterId)
+	-- Warrant refresh can yield through durable person-record recovery. A sensor
+	-- may be untagged or this service destroyed while that lookup is in flight.
+	if not self.running or not self.watched[sensor] or not sensor:IsDescendantOf(workspace) then
+		return
+	end
 	if warrantReason then
 		self.context.Logger:Warning("ANPR warrant lookup failed", {
 			Registration = registration,
@@ -111,7 +161,13 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		DetectedAt = os.time(),
 	}
 	for _, player in self:_alertPlayers() do
+		if not self.running then
+			return
+		end
 		self.alertEvent:FireClient(player, payload)
+	end
+	if not self.running then
+		return
 	end
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = 0,
@@ -122,7 +178,7 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 end
 
 function ANPRService:_watch(instance: Instance)
-	if not instance:IsA("BasePart") or self.watched[instance] then
+	if not self.running or not instance:IsA("BasePart") or self.watched[instance] then
 		return
 	end
 	-- Counted against the sensors actually being watched, not against every
@@ -152,6 +208,7 @@ function ANPRService:_unwatch(instance: Instance)
 end
 
 function ANPRService:Start()
+	self.running = true
 	for _, sensor in CollectionService:GetTagged(self.context.Configuration.ANPR.SensorTag) do
 		self:_watch(sensor)
 	end
@@ -172,15 +229,20 @@ function ANPRService:Start()
 end
 
 function ANPRService:Destroy()
-	for instance in self.watched do
-		self:_unwatch(instance)
-	end
-	table.clear(self.watched)
-	self.watchedCount = 0
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	local watched = {}
+	for instance in self.watched do
+		table.insert(watched, instance)
+	end
+	for _, instance in watched do
+		self:_unwatch(instance)
+	end
+	table.clear(self.watched)
+	self.watchedCount = 0
 	table.clear(self.cooldowns)
 end
 

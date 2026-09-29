@@ -10,4 +10,4 @@ Tag the lens or view-origin `BasePart` of a CCTV model with `RoleplayOSCCTV`. Se
 
 Tag an invisible road detection volume with `RoleplayOSANPR`. Optional attributes are `Location` and the linked `CameraId`. The server accepts only vehicles carrying a server-authored RoleplayOS registration, applies a sensor/registration cooldown, resolves the persistent vehicle owner and checks active warrants. A positive hit creates an immediate ANPR dispatch call and sends the popup only to players currently on the `RoadsPolicingOfficer` role. Every hit is audited.
 
-Keep sensors simple and localised. `Touched` connections are created only for tagged sensors and capped by configuration; no global per-frame vehicle scan is used.
+Keep sensors simple and localised. `Touched` connections are created only for tagged sensors and capped by configuration; no global per-frame vehicle scan is used. Per-sensor cooldown state is both TTL-bound and hard-capped by `ANPR.MaximumCooldownRegistrationsPerSensor`. Untagging a sensor releases its connection and cooldown state, and in-flight warrant/role lookups are discarded if the sensor or service is no longer live.
