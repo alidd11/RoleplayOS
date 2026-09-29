@@ -42,6 +42,18 @@ function DutyService:Init(context: any)
 	table.clear(self.beginning)
 end
 
+function DutyService:_publishUnitChanged(userId: number)
+	-- Dispatch recipient checks can yield on duty/group access. Keep those reads
+	-- out of duty mutation latency, but never publish into a service that has
+	-- already stopped during teardown.
+	task.defer(function()
+		local dispatch = self.context.Services:Get("DispatchService")
+		if dispatch.running then
+			dispatch:Publish("UnitChanged", tostring(userId), 0)
+		end
+	end)
+end
+
 function DutyService:Start()
 	self.running = true
 	self.connections = self.connections or {}
@@ -347,6 +359,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		return false, "PLAYER_LEFT"
 	end
 	dutyRecord.Callsign = callsign
+	self:_publishUnitChanged(player.UserId)
 
 	-- Existing profiles may contain a custom callsign saved before callsigns were
 	-- filtered. Do not expose that legacy value while moderation is pending: the
@@ -391,6 +404,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 			dutyRecord.Callsign = filtered
 			profile.Callsign = filtered
 			dataService:MarkDirty(player)
+			self:_publishUnitChanged(player.UserId)
 		end)
 	end
 
@@ -470,6 +484,7 @@ function DutyService:SetCallsign(player: Player, raw: string): (string?, string?
 	profile.Callsign = callsign
 	duty.Callsign = callsign
 	dataService:MarkDirty(player)
+	self:_publishUnitChanged(player.UserId)
 	return callsign, nil
 end
 
@@ -480,6 +495,7 @@ function DutyService:End(player: Player)
 		return
 	end
 	self.context.Services:Get("UnitService"):Unregister(player)
+	self:_publishUnitChanged(player.UserId)
 	self.context.Services:Get("LoadoutService"):ClearIssued(player)
 	self.context.Services:Get("UniformService"):Restore(player)
 	self.context.Services:Get("ImportedSystemAdapterService"):ClearEpaulettes(player)
