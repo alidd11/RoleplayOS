@@ -169,6 +169,17 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 	if not duty or type(duty.DepartmentId) ~= "string" then
 		return false, "NOT_ON_DUTY"
 	end
+	-- DutyService:Get can yield while Roblox resolves group access. The vehicle
+	-- captured before that wait is not an authority lease: the player may have
+	-- left the driver's seat or moved into a different vehicle while the lookup
+	-- was outstanding. Revalidate the exact driven model immediately before any
+	-- warning-light state is mutated.
+	if self:_drivenVehicle(player) ~= model then
+		return false, "NOT_DRIVING"
+	end
+	if not CollectionService:HasTag(model, settings.Tag) then
+		return false, "VEHICLE_HAS_NO_LIGHTS"
+	end
 	if not settings.Departments[duty.DepartmentId] then
 		return false, "DEPARTMENT_HAS_NO_LIGHTS"
 	end
