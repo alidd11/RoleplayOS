@@ -3,6 +3,7 @@
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local GangRules = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.GangRules)
+local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 -- Gang membership: the first piece of docs/GANG_SYSTEM_SPEC.md, on top of the
 -- rules GangRules already validates.
@@ -135,7 +136,8 @@ end
 -- What a client needs to show its own gang panel: the gang, if any, and every
 -- invite waiting on an answer.
 function GangService:GetStatus(player: Player): any
-	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local dataService = self.context.Services:Get("DataService")
+	local session = dataService:GetSession(player)
 	if not session then
 		return nil
 	end
@@ -143,11 +145,34 @@ function GangService:GetStatus(player: Player): any
 	if reconcileReason or not self:_sessionIsCurrent(player, session) then
 		return nil
 	end
-	local invites = {}
-	for _, invite in session.Profile.GangInvites do
-		table.insert(invites, invite)
+
+	-- Gang names created before moderation was enforced cannot be safely shown:
+	-- the original author may be offline, and Roblox filtering must be attributed
+	-- to the author. Quarantine those legacy values from client responses rather
+	-- than guessing at a filtering identity.
+	local clientGang = gang
+	if gang and gang.NameModerated ~= true then
+		clientGang = table.clone(gang)
+		clientGang.Name = "Gang"
 	end
-	return { Gang = gang, Invites = invites }
+
+	local invites = {}
+	local invitesSanitised = false
+	for _, invite in session.Profile.GangInvites do
+		-- Old invite rows copied the unmoderated gang name into the invitee's
+		-- profile. Replace it with server-authored text so the unsafe value does
+		-- not remain client-visible or keep being persisted on later saves.
+		if invite.GangNameModerated ~= true then
+			invite.GangName = "Gang invitation"
+			invite.GangNameModerated = true
+			invitesSanitised = true
+		end
+		table.insert(invites, table.clone(invite))
+	end
+	if invitesSanitised then
+		dataService:MarkDirty(player)
+	end
+	return { Gang = clientGang, Invites = invites }
 end
 
 function GangService:Create(player: Player, name: any): (GangRules.Gang?, string?)
@@ -187,6 +212,25 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 		if not cleanName then
 			return nil, nameReason
 		end
+		local filteredName, filterReason =
+			TextFilter.forBroadcast(cleanName, player.UserId, Enum.TextFilterContext.PublicChat)
+		if not filteredName then
+			return nil, filterReason or "TEXT_FILTER_UNAVAILABLE"
+		end
+		-- Gang names are identifiers, not chat messages. A censored or rewritten
+		-- name is refused rather than persisted under a value different from the
+		-- unique-name reservation the player asked for.
+		if filteredName ~= cleanName or string.find(filteredName, "#", 1, true) then
+			return nil, "NAME_NOT_PERMITTED"
+		end
+		-- Filtering yields. Revalidate the exact profile session and entitlement
+		-- before reserving a shared name or mutating membership state.
+		if not self:_sessionIsCurrent(player, session) then
+			return nil, "PROFILE_UNAVAILABLE"
+		end
+		if not self:_ownsPass(session) then
+			return nil, "GANG_PASS_REQUIRED"
+		end
 
 		local gangId = HttpService:GenerateGUID(false)
 		local nameKey = GangRules.nameKey(cleanName)
@@ -218,6 +262,7 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 		local gang: GangRules.Gang = {
 			Id = gangId,
 			Name = cleanName,
+			NameModerated = true,
 			LeaderUserId = player.UserId,
 			MemberUserIds = {},
 			TerritoryId = nil,
@@ -334,9 +379,11 @@ function GangService:Invite(leader: Player, targetUserId: any): (boolean, string
 	if #targetSession.Profile.GangInvites >= maximumPending then
 		return false, "TOO_MANY_PENDING_INVITES"
 	end
+	local inviteName = if gang.NameModerated == true then gang.Name else "Gang invitation"
 	table.insert(targetSession.Profile.GangInvites, {
 		GangId = gang.Id,
-		GangName = gang.Name,
+		GangName = inviteName,
+		GangNameModerated = true,
 		InvitedByUserId = leader.UserId,
 		InvitedAt = os.time(),
 	})
@@ -591,7 +638,9 @@ function GangService:Leave(player: Player): (boolean, string?)
 				ActorUserId = player.UserId,
 				Action = "Gang.Disbanded",
 				Target = gang.Id,
-				Metadata = { Name = gang.Name },
+				Metadata = {
+					Name = if gang.NameModerated == true then gang.Name else "Legacy gang",
+				},
 			})
 			return true, nil
 		end

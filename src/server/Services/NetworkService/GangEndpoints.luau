@@ -1,4 +1,6 @@
 --!strict
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GangRules = require(ReplicatedStorage.RoleplayOS.Shared.GangRules)
 local Validators = require(script.Parent.Validators)
 local playerUserId = Validators.playerUserId
 
@@ -38,7 +40,11 @@ return function(self: any)
 		NAME_REQUIRED = "Enter a name for the gang.",
 		NAME_LENGTH = "Gang names are 3-24 characters.",
 		NAME_CHARACTERS = "Use letters, numbers, spaces, apostrophes and hyphens only.",
+		NAME_NOT_PERMITTED = "That gang name is not permitted.",
 		NAME_TAKEN = "That name is already taken.",
+		TEXT_FILTER_BUSY = "Gang-name moderation is busy. Try again shortly.",
+		TEXT_FILTER_TIMEOUT = "Roblox moderation did not respond. Try again.",
+		TEXT_FILTER_UNAVAILABLE = "Roblox could not approve that gang name. Try another.",
 		INVALID_TARGET = "Choose a player to invite.",
 		PLAYER_NOT_ONLINE = "That player is not on this server.",
 		ALREADY_INVITED = "That player already has a pending invite.",
@@ -51,7 +57,7 @@ return function(self: any)
 		GANG_LEAVE_FAILED = "The gang could not be left. Try again.",
 	}
 	self.context.Network:RegisterFunction("CreateGang", function(payload)
-		return type(payload) == "table" and type(payload.Name) == "string"
+		return type(payload) == "table" and GangRules.validateName(payload.Name) ~= nil
 	end, function(player, payload, requestId)
 		local gang, reason = self.context.Services:Get("GangService"):Create(player, payload.Name)
 		return {
@@ -81,6 +87,8 @@ return function(self: any)
 	self.context.Network:RegisterFunction("RespondToGangInvite", function(payload)
 		return type(payload) == "table"
 			and type(payload.GangId) == "string"
+			and #payload.GangId > 0
+			and #payload.GangId <= 64
 			and type(payload.Accept) == "boolean"
 	end, function(player, payload, requestId)
 		local responded, reason = self.context.Services
