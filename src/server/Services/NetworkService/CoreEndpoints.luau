@@ -1,6 +1,14 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
 local tablePayload = Validators.tablePayload
+
+local function progressionPayload(payload: any): boolean
+	if type(payload) ~= "table" then
+		return false
+	end
+	return payload.CharacterId == nil or boundedString(payload.CharacterId, 1, 64)
+end
 
 return function(self: any)
 	self.context.Network:RegisterFunction("DropCash", function(payload)
@@ -138,7 +146,7 @@ return function(self: any)
 			math.floor(tonumber(self.context.Configuration.OfficialServers.MaximumInstances) or 6)
 		)
 		return type(payload) == "table"
-			and type(payload.ServerId) == "string"
+			and boundedString(payload.ServerId, 1, 128)
 			and (
 				payload.InstanceIndex == nil
 				or (
@@ -279,7 +287,7 @@ return function(self: any)
 	)
 	self.context.Network:RegisterFunction(
 		"GetProgression",
-		tablePayload,
+		progressionPayload,
 		function(player, payload, requestId)
 			local characterId = if type(payload.CharacterId) == "string"
 				then payload.CharacterId
