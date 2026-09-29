@@ -79,6 +79,10 @@ function OfficialServerService:Init(context: any)
 	self.reserving = {}
 	self.transferring = {}
 	self.instances = {}
+	self.currentServerId = nil
+	self.currentInstanceIndex = nil
+	self.connection = nil
+	self.teleportFailed = nil
 	self.running = false
 	self.publishing = false
 	-- Captured once, at process start, and republished unchanged - see
@@ -840,13 +844,21 @@ function OfficialServerService:Destroy()
 	self.publishing = false
 	if self.teleportFailed then
 		self.teleportFailed:Disconnect()
+		self.teleportFailed = nil
 	end
 	if self.connection then
 		self.connection:Disconnect()
+		self.connection = nil
 	end
+	self.currentServerId = nil
+	self.currentInstanceIndex = nil
+	self.occupancy = nil
+	self.publicDirectory = nil
+	self.startedAt = nil
 	table.clear(self.codes)
 	table.clear(self.reserving)
 	table.clear(self.transferring)
+	table.clear(self.instances)
 end
 
 return OfficialServerService
