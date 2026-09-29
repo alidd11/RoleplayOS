@@ -37,6 +37,7 @@ local OfficialServerService = {
 	Critical = true,
 	codes = {},
 	reserving = {},
+	transferring = {},
 	running = false,
 	publishing = false,
 }
@@ -45,11 +46,38 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
+function OfficialServerService:_withTransferClaim(
+	player: Player,
+	callback: () -> (any?, string?)
+): (any?, string?)
+	local userId = player.UserId
+	if self.transferring[userId] then
+		return nil, "SERVER_TRANSFER_IN_PROGRESS"
+	end
+
+	-- JoinOfficialServer and JoinPublicServer share this claim. Both paths can
+	-- yield before/while releasing the profile, and DataService deliberately
+	-- treats a second concurrent release as already settled once the first one
+	-- finishes. Without a service-level claim, both requests can therefore reach
+	-- separate Roblox teleport calls for the same Player.
+	local claim = {}
+	self.transferring[userId] = claim
+	local ok, result, reason = pcall(callback)
+	if self.transferring[userId] == claim then
+		self.transferring[userId] = nil
+	end
+	if not ok then
+		error(result)
+	end
+	return result, reason
+end
+
 function OfficialServerService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.OfficialServers
 	self.codes = {}
 	self.reserving = {}
+	self.transferring = {}
 	self.instances = {}
 	self.running = false
 	self.publishing = false
@@ -395,7 +423,7 @@ function OfficialServerService:_isHere(serverId: string): boolean
 	return entry ~= nil and entry.Id == serverId
 end
 
-function OfficialServerService:Join(
+function OfficialServerService:_join(
 	player: Player,
 	serverId: any,
 	instanceIndex: any
@@ -511,7 +539,7 @@ end
 -- Joins a specific public instance by JobId, the way TeleportToPlaceInstance
 -- expects rather than by reserved access code - a public instance has no
 -- code, only the JobId it already publishes itself under in the directory.
-function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
+function OfficialServerService:_joinPublic(player: Player, jobId: any): (any?, string?)
 	if not self.running then
 		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
 	end
@@ -583,6 +611,22 @@ function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, st
 		return nil, "TELEPORT_FAILED"
 	end
 	return { JobId = jobId }, nil
+end
+
+function OfficialServerService:Join(
+	player: Player,
+	serverId: any,
+	instanceIndex: any
+): (any?, string?)
+	return self:_withTransferClaim(player, function()
+		return self:_join(player, serverId, instanceIndex)
+	end)
+end
+
+function OfficialServerService:JoinPublic(player: Player, jobId: any): (any?, string?)
+	return self:_withTransferClaim(player, function()
+		return self:_joinPublic(player, jobId)
+	end)
 end
 
 function OfficialServerService:Start()
@@ -802,6 +846,7 @@ function OfficialServerService:Destroy()
 	end
 	table.clear(self.codes)
 	table.clear(self.reserving)
+	table.clear(self.transferring)
 end
 
 return OfficialServerService
