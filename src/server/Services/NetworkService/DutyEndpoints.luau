@@ -1,14 +1,15 @@
 --!strict
 local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
 local playerUserId = Validators.playerUserId
 
 return function(self: any)
 	self.context.Network:RegisterFunction("BeginDuty", function(payload)
 		return type(payload) == "table"
-			and type(payload.DutyProfileId) == "string"
-			and type(payload.RoleId) == "string"
-			and type(payload.StationId) == "string"
-			and type(payload.SpawnId) == "string"
+			and boundedString(payload.DutyProfileId, 1, 128)
+			and boundedString(payload.RoleId, 1, 128)
+			and boundedString(payload.StationId, 1, 128)
+			and boundedString(payload.SpawnId, 1, 128)
 	end, function(player, payload, requestId)
 		local started, reason = self.context.Services:Get("DutyService"):Begin(player, payload)
 		if not started then
@@ -99,8 +100,8 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("EnterCivilian", function(payload)
 		return type(payload) == "table"
-			and type(payload.CharacterId) == "string"
-			and type(payload.SpawnId) == "string"
+			and boundedString(payload.CharacterId, 1, 128)
+			and boundedString(payload.SpawnId, 1, 128)
 	end, function(player, payload, requestId)
 		self.context.Services:Get("DutyService"):End(player)
 		local entered, reason = self.context.Services
@@ -123,7 +124,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("EnterCivilianAtGangTerritory", function(payload)
-		return type(payload) == "table" and type(payload.CharacterId) == "string"
+		return type(payload) == "table" and boundedString(payload.CharacterId, 1, 128)
 	end, function(player, payload, requestId)
 		self.context.Services:Get("DutyService"):End(player)
 		local entered, reason = self.context.Services
