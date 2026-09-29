@@ -2513,6 +2513,10 @@ local Config = {
 		RecordCacheSeconds = 60,
 		MaximumRecordCacheEntries = 2048,
 		IndexWriteSpacingSeconds = 0.25,
+		-- A failed name-bucket write has already exhausted DataService's own
+		-- retry budget, so repair is intentionally slower and separately bounded.
+		PersonIndexRepairRetrySeconds = 60,
+		MaximumPendingPersonIndexRepairs = 128,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
 		MaximumActiveWarrantsPerPerson = 16,
