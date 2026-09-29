@@ -84,6 +84,14 @@ return function(RoadSafetyService)
 			Workspace.DescendantRemoving:Connect(function(instance)
 				if instance:IsA("BasePart") and self.sensors[instance] then
 					self:_unwatchSensor(instance)
+				elseif instance:IsA("Model") then
+					local state = self.flashStates[instance]
+					if state then
+						self:_restoreFlash(instance, state)
+					end
+					if self.cameraScriptRestores[instance] then
+						self:_restoreCameraScripts(instance)
+					end
 				end
 			end)
 		)
@@ -97,14 +105,64 @@ return function(RoadSafetyService)
 	-- which cannot express the rule that matters here, since an emergency driver is
 	-- exempt while responding and not otherwise.
 	--
-	-- Disabled rather than destroyed, so the model is still the kit's model and the
-	-- change is undone by ticking one box.
+	-- Disabled rather than destroyed, so the model stays intact and teardown can
+	-- restore the exact script state RoleplayOS temporarily replaced.
 	function RoadSafetyService:_disableKitScripts(camera: Model)
+		local restores = self.cameraScriptRestores[camera]
+		if not restores then
+			restores = {}
+			self.cameraScriptRestores[camera] = restores
+		end
 		for _, child in camera:GetDescendants() do
 			if child:IsA("Script") and not child:GetAttribute("RoleplayOSManaged") then
+				restores[child] = {
+					Disabled = child.Disabled,
+					ManagedAttribute = child:GetAttribute("RoleplayOSManaged"),
+				}
 				child.Disabled = true
 				child:SetAttribute("RoleplayOSManaged", true)
 			end
+		end
+		if next(restores) == nil then
+			self.cameraScriptRestores[camera] = nil
+		end
+	end
+
+	function RoadSafetyService:_restoreCameraScripts(camera: Model)
+		local restores = self.cameraScriptRestores[camera]
+		if not restores then
+			return
+		end
+		self.cameraScriptRestores[camera] = nil
+		for scriptInstance, original in restores do
+			if
+				scriptInstance.Parent
+				and scriptInstance:GetAttribute("RoleplayOSManaged") == true
+			then
+				-- Only restore the value RoleplayOS still owns. If another system has
+				-- explicitly re-enabled the script, teardown must not undo that change.
+				if scriptInstance.Disabled == true then
+					scriptInstance.Disabled = original.Disabled
+				end
+				scriptInstance:SetAttribute("RoleplayOSManaged", original.ManagedAttribute)
+			end
+		end
+	end
+
+	function RoadSafetyService:_restoreSensor(sensor: BasePart)
+		local original = self.sensorRestores[sensor]
+		if not original then
+			return
+		end
+		self.sensorRestores[sensor] = nil
+		if not sensor.Parent then
+			return
+		end
+		if sensor.CanCollide == false then
+			sensor.CanCollide = original.CanCollide
+		end
+		if sensor.CanTouch == true then
+			sensor.CanTouch = original.CanTouch
 		end
 	end
 
@@ -114,8 +172,18 @@ return function(RoadSafetyService)
 			connection:Disconnect()
 			self.sensorConnections[sensor] = nil
 		end
+		local camera = self.sensorCameras[sensor]
+		self.sensorCameras[sensor] = nil
 		self.sensors[sensor] = nil
 		self.cooldowns[sensor] = nil
+		self:_restoreSensor(sensor)
+		if camera then
+			local flashState = self.flashStates[camera]
+			if flashState then
+				self:_restoreFlash(camera, flashState)
+			end
+			self:_restoreCameraScripts(camera)
+		end
 	end
 
 	function RoadSafetyService:_watchSensor(camera: Model, sensor: BasePart)
@@ -123,6 +191,11 @@ return function(RoadSafetyService)
 			return
 		end
 		self.sensors[sensor] = camera:GetFullName()
+		self.sensorCameras[sensor] = camera
+		self.sensorRestores[sensor] = {
+			CanCollide = sensor.CanCollide,
+			CanTouch = sensor.CanTouch,
+		}
 		sensor.CanCollide = false
 		sensor.CanTouch = true
 		self.sensorConnections[sensor] = sensor.Touched:Connect(function(hit)
@@ -183,29 +256,61 @@ return function(RoadSafetyService)
 		return found
 	end
 
-	-- Flashes the camera, where it has a light to flash with.
-	function RoadSafetyService:_flash(camera: Model)
-		local settings = self.context.Configuration.RoadSafety
-		local head = camera:FindFirstChild(settings.CameraPartName)
-		local light = head and head:FindFirstChild(settings.LightPartName)
-		if not light then
+	function RoadSafetyService:_restoreFlash(camera: Model, state: any)
+		if self.flashStates[camera] ~= state then
 			return
 		end
+		self.flashStates[camera] = nil
+		for light, enabled in state.Lights do
+			if light.Parent then
+				light.Enabled = enabled
+			end
+		end
+	end
+
+	-- Flashes the camera, where it has a light to flash with.
+	function RoadSafetyService:_flash(camera: Model)
+		if not self.running or self.flashStates[camera] then
+			return
+		end
+		local settings = self.context.Configuration.RoadSafety
+		local head = camera:FindFirstChild(settings.CameraPartName)
+		local lightContainer = head and head:FindFirstChild(settings.LightPartName)
+		if not lightContainer then
+			return
+		end
+		local state = { Lights = {} }
+		for _, child in lightContainer:GetChildren() do
+			if child:IsA("Light") then
+				state.Lights[child] = child.Enabled
+			end
+		end
+		if next(state.Lights) == nil then
+			return
+		end
+		self.flashStates[camera] = state
 		task.spawn(function()
 			for _ = 1, 2 do
-				for _, child in light:GetChildren() do
-					if child:IsA("Light") then
-						child.Enabled = true
+				if not self.running or self.flashStates[camera] ~= state then
+					return
+				end
+				for light in state.Lights do
+					if light.Parent then
+						light.Enabled = true
 					end
 				end
 				task.wait(0.1)
-				for _, child in light:GetChildren() do
-					if child:IsA("Light") then
-						child.Enabled = false
+				if not self.running or self.flashStates[camera] ~= state then
+					return
+				end
+				for light in state.Lights do
+					if light.Parent then
+						light.Enabled = false
 					end
 				end
 				task.wait(0.4)
 			end
+			self:_restoreFlash(camera, state)
 		end)
 	end
 

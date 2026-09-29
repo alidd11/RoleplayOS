@@ -13,8 +13,10 @@ map works on the next server start and no list anywhere needs updating.
 The kit's own script inside the model is **disabled automatically**. Leaving it
 running would fine twice, and its own attempt fails regardless: it subtracts
 from a `leaderstats` value this game does not have, so it raises rather than
-charging anybody. It is disabled rather than destroyed, so the model is still
-the kit's model and the change is undone by ticking one box.
+charging anybody. It is disabled rather than destroyed, so the model remains
+intact. RoleplayOS records the original script and sensor properties it changes
+and restores them when the camera is no longer watched or the service tears
+down; an in-progress flash likewise restores each light to its pre-flash state.
 
 Speed limits are still read from each model's `Configuration.SpeedLimit`, so
 setting a limit works exactly as the kit intends.
