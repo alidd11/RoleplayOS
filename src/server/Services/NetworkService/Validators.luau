@@ -13,6 +13,10 @@ function Validators.playerUserId(value: any): boolean
 		and math.abs(value) <= MAXIMUM_SAFE_INTEGER
 end
 
+function Validators.boundedString(value: any, minimum: number, maximum: number): boolean
+	return type(value) == "string" and #value >= minimum and #value <= maximum
+end
+
 function Validators.tablePayload(value: any): (boolean, string?)
 	return type(value) == "table", "EXPECTED_TABLE"
 end
