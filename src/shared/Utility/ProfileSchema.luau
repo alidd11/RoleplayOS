@@ -211,14 +211,18 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	end
 	if data.SchemaVersion == 10 then
 		local consumables = data.Consumables
-		if type(consumables) ~= "table" then
+		if consumables == nil then
 			consumables = {}
 			data.Consumables = consumables
+		elseif type(consumables) ~= "table" then
+			return nil, "PROFILE_CONSUMABLES_NOT_TABLE"
 		end
 		consumables.EarlyReleaseCredits =
 			math.max(0, math.floor(tonumber(consumables.EarlyReleaseCredits) or 0))
-		if type(consumables.ProcessedDeveloperReceipts) ~= "table" then
+		if consumables.ProcessedDeveloperReceipts == nil then
 			consumables.ProcessedDeveloperReceipts = {}
+		elseif type(consumables.ProcessedDeveloperReceipts) ~= "table" then
+			return nil, "PROFILE_DEVELOPER_RECEIPTS_NOT_TABLE"
 		end
 		data.SchemaVersion = 11
 	end
@@ -227,9 +231,11 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		-- Reopening the editor is a purchase, so the right to do it is counted
 		-- here alongside the other consumables.
 		local consumables = data.Consumables
-		if type(consumables) ~= "table" then
+		if consumables == nil then
 			consumables = {}
 			data.Consumables = consumables
+		elseif type(consumables) ~= "table" then
+			return nil, "PROFILE_CONSUMABLES_NOT_TABLE"
 		end
 		consumables.AppearanceEdits =
 			math.max(0, math.floor(tonumber(consumables.AppearanceEdits) or 0))
