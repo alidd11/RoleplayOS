@@ -521,6 +521,7 @@ return function(DataService)
 		local playerStillPresent = player.Parent == Players
 			and Players:GetPlayerByUserId(player.UserId) == player
 		local retainedSession = false
+		local reacquireReason: string? = nil
 		if release then
 			if
 				not self.closing
@@ -528,13 +529,42 @@ return function(DataService)
 				and not ownershipLost
 				and self.sessions[player.UserId] == session
 			then
-				-- Pre-teleport release uses the same durable write as PlayerRemoving,
-				-- but the player is still here when a teleport is merely being
-				-- prepared. If that write fails, the journey is cancelled and this
-				-- exact session must remain usable rather than leaving the player in
-				-- the server with no profile at all.
-				session.Releasing = false
-				retainedSession = true
+				-- A failed UpdateAsync is ambiguous: the release may already have
+				-- committed and cleared this server's lease. Before reopening mutation
+				-- access for a cancelled teleport, atomically reacquire ownership while
+				-- preserving whichever profile snapshot is actually durable.
+				local reacquired, reacquireProblem = self:_retry(function()
+					return self.store:UpdateAsync(profileKey, function(stored)
+						if type(stored) ~= "table" or type(stored.AuditMetadata) ~= "table" then
+							error("PROFILE_REACQUIRE_INVALID")
+						end
+						local reacquireNow = os.time()
+						local lock = stored.AuditMetadata.SessionLock
+						if
+							lock
+							and lock.ServerId ~= self.serverId
+							and lock.ExpiresAt > reacquireNow
+						then
+							error("SESSION_OWNERSHIP_LOST")
+						end
+						stored.AuditMetadata.SessionLock = {
+							ServerId = self.serverId,
+							ExpiresAt = reacquireNow
+								+ self.context.Configuration.Framework.SessionLeaseSeconds,
+						}
+						return stored
+					end)
+				end, function(failure)
+					local text = tostring(failure)
+					return string.find(text, "SESSION_OWNERSHIP_LOST", 1, true) ~= nil
+						or string.find(text, "PROFILE_REACQUIRE_INVALID", 1, true) ~= nil
+				end)
+				if reacquired and self.sessions[player.UserId] == session then
+					session.Releasing = false
+					retainedSession = true
+				else
+					reacquireReason = tostring(reacquireProblem)
+				end
 			elseif self.sessions[player.UserId] == session then
 				-- A genuine disconnect/shutdown has no live session to resume. A lost
 				-- lease is also fail-closed: another server is authoritative, so this
@@ -548,6 +578,7 @@ return function(DataService)
 			Error = tostring(problem),
 			Released = release == true,
 			SessionRetained = retainedSession,
+			ReacquireError = reacquireReason,
 		})
 		return false, "PROFILE_SAVE_FAILED"
 	end
