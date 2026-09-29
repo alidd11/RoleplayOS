@@ -118,11 +118,21 @@ export type VehicleDefinition = {
 	Colours: { string },
 	Access: AccessRule,
 }
+export type PendingRegistrationSwap = {
+	OperationId: string,
+	FromRegistration: string,
+	ToRegistration: string,
+	State: "Prepared" | "Committed",
+	PreparedAt: number,
+	CommittedAt: number?,
+}
 export type OwnedVehicle = {
 	VehicleId: string,
 	OwnerCharacterId: string,
 	DefinitionId: string,
 	Registration: string,
+	CustomRegistration: boolean?,
+	PendingRegistrationSwap: PendingRegistrationSwap?,
 	Colour: string,
 	Mileage: number,
 	Fuel: number,
