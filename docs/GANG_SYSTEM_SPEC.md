@@ -43,7 +43,11 @@ Roughly in dependency order.
    the invite only after that shared membership is confirmed; this prevents a
    disconnect or retry from leaving an invisible member in the shared roster.
    Invite and accept through the network layer, with the leader's pass checked
-   server-side on invite rather than trusted from the client.
+   server-side on invite rather than trusted from the client. Disbanding records
+   a bounded durable name-cleanup marker before deleting the gang; a failed or
+   ambiguous delete therefore cannot permanently strand a unique-name
+   reservation, and a later attempt to use that name repairs only the exact old
+   gang's reservation after confirming the gang no longer exists.
 2. **Territory zones.** Tagged parts in the map the way `RoleplayOSZone` already
    works for `LocationController`, each with an id and a name. Claim state lives
    on the server and replicates as attributes.
