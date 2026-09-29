@@ -86,13 +86,22 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("SearchAvatarCatalog", function(payload)
-		return type(payload) == "table" and type(payload.CategoryId) == "string"
+		local maximumKeywordLength = self.context.Configuration.AvatarCatalog.MaximumKeywordLength
+		return type(payload) == "table"
+			and type(payload.CategoryId) == "string"
+			and #payload.CategoryId > 0
+			and #payload.CategoryId <= 32
+			and (
+				payload.Keyword == nil
+				or (type(payload.Keyword) == "string" and #payload.Keyword <= maximumKeywordLength)
+			)
 	end, function(_player, payload, requestId)
 		local results, reason = self.context.Services
 			:Get("AvatarCatalogService")
 			:Search(payload.CategoryId, payload.Keyword)
 		local messages = {
 			UNKNOWN_CATEGORY = "That category is not available.",
+			CATALOGUE_BUSY = "The catalogue is busy. Try again shortly.",
 			CATALOGUE_UNAVAILABLE = "The catalogue is unavailable right now. Try again shortly.",
 		}
 		return {
