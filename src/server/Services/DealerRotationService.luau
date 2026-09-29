@@ -35,6 +35,8 @@ function DealerRotationService:Init(context: any)
 	self.settings = context.Configuration.DealerRotation
 	self.lastRotation = nil
 	self.connections = {}
+	self.generatedInstances = {}
+	self.generatedFolder = nil
 	self.stopped = false
 end
 
@@ -47,6 +49,7 @@ function DealerRotationService:_generatedFolder(): Folder
 	local created = Instance.new("Folder")
 	created.Name = name
 	created.Parent = workspace
+	self.generatedFolder = created
 	return created
 end
 
@@ -78,6 +81,7 @@ function DealerRotationService:_createPoints()
 		point:SetAttribute("RoleplayOSDealerPointId", string.format("DealerPoint%d", index))
 		point.Parent = folder
 		CollectionService:AddTag(point, self.settings.PointTag)
+		self.generatedInstances[point] = true
 	end
 end
 
@@ -134,8 +138,9 @@ function DealerRotationService:_createAvatars()
 			})
 			continue
 		end
-		model.Parent = folder
 		self:_prepareAvatar(model, index)
+		model.Parent = folder
+		self.generatedInstances[model] = true
 	end
 end
 
@@ -237,7 +242,15 @@ function DealerRotationService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
+	for instance in self.generatedInstances do
+		instance:Destroy()
+	end
+	if self.generatedFolder then
+		self.generatedFolder:Destroy()
+		self.generatedFolder = nil
+	end
 	self.connections = {}
+	self.generatedInstances = {}
 end
 
 return DealerRotationService
