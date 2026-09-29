@@ -196,7 +196,14 @@ function VehicleSpawnerService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	-- Destroying a vehicle clears its own active entry through the spawn-time
+	-- Destroying watcher. Snapshot first so mutating self.active from that callback
+	-- cannot make this teardown iterator skip another framework-owned vehicle.
+	local activeVehicles = {}
 	for _, vehicle in self.active do
+		table.insert(activeVehicles, vehicle)
+	end
+	for _, vehicle in activeVehicles do
 		if vehicle.Parent then
 			RigMechanics.ejectOccupants(vehicle)
 			vehicle:Destroy()
