@@ -141,14 +141,10 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 	-- the completed cache entry or fail without issuing another Roblox request.
 	local existingSearch = self.searching[key]
 	if existingSearch then
-		local handlerTimeout =
-			tonumber(self.context.Configuration.Network.HandlerTimeoutSeconds) or 8
+		local handlerTimeout = tonumber(self.context.Configuration.Network.HandlerTimeoutSeconds)
+			or 8
 		local deadline = os.clock() + math.max(0.1, handlerTimeout - 0.5)
-		while
-			self.running
-			and self.searching[key] == existingSearch
-			and os.clock() < deadline
-		do
+		while self.running and self.searching[key] == existingSearch and os.clock() < deadline do
 			task.wait(0.03)
 		end
 		if not self.running then
