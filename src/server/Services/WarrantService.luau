@@ -19,10 +19,9 @@ local function trimWarrantHistory(warrants: { any }, now: number, maximum: numbe
 		if not isCurrentWarrant(warrant, now) then
 			table.insert(removable, {
 				Index = index,
-				At = tonumber(warrant.RevokedAt)
-					or tonumber(warrant.ExpiresAt)
-					or tonumber(warrant.IssuedAt)
-					or 0,
+				At = tonumber(warrant.RevokedAt) or tonumber(warrant.ExpiresAt) or tonumber(
+					warrant.IssuedAt
+				) or 0,
 			})
 		end
 	end
