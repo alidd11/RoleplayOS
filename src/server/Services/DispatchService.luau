@@ -197,15 +197,17 @@ function DispatchService:_watchSeat(instance: Instance)
 	changed()
 end
 
-function DispatchService:_fireAuthorised(payload: any, callId: string?)
+function DispatchService:_fireAuthorised(payload: any, callId: string?, unitDepartmentId: string?)
 	local call = callId and self.context.Services:Get("CallService").calls[callId] or nil
+	local unitScoped = payload.Kind == "UnitChanged"
 	for _, player in Players:GetPlayers() do
 		local duty = self:_duty(player)
 		local relevant = duty
 			and (
 				duty.DepartmentId == "Control"
-				or not call
-				or table.find(call.DepartmentIds, duty.DepartmentId)
+				or (call ~= nil and table.find(call.DepartmentIds, duty.DepartmentId) ~= nil)
+				or (unitScoped and unitDepartmentId ~= nil and duty.DepartmentId == unitDepartmentId)
+				or (call == nil and not unitScoped)
 			)
 		if relevant and self.context.Services:Get("MDTService"):CanUse(player) then
 			self.changedEvent:FireClient(player, payload)
@@ -220,9 +222,28 @@ function DispatchService:_fireAuthorised(payload: any, callId: string?)
 	end
 end
 
+function DispatchService:PublishUnitChanged(
+	unitId: string,
+	departmentId: string?,
+	revision: number?
+)
+	local payload = {
+		Kind = "UnitChanged",
+		Id = unitId,
+		Revision = revision or 0,
+		ServerId = game.JobId,
+	}
+	self:_fireAuthorised(payload, nil, departmentId)
+end
+
 function DispatchService:Publish(kind: string, id: string, revision: number)
+	if kind == "UnitChanged" then
+		local unit = self.context.Services:Get("UnitService").units[id]
+		self:PublishUnitChanged(id, if unit then unit.DepartmentId else nil, revision)
+		return
+	end
 	local payload = { Kind = kind, Id = id, Revision = revision, ServerId = game.JobId }
-	self:_fireAuthorised(payload, id)
+	self:_fireAuthorised(payload, id, nil)
 end
 
 function DispatchService:Snapshot(player: Player): (any?, string?)
