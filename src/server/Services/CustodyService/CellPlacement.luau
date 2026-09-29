@@ -21,6 +21,9 @@ return function(CustodyService)
 	end
 
 	function CustodyService:_placeInCell(player: Player): (boolean, string?)
+		if not self:_playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		local cell = self:_cellSpawn()
 		if not cell or not player.Character then
 			return false, "CUSTODY_CELL_UNAVAILABLE"
@@ -30,6 +33,9 @@ return function(CustodyService)
 	end
 
 	function CustodyService:SpawnInCell(player: Player): (boolean, string?)
+		if not self:_playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		if not self:HasActiveSentence(player) then
 			return false, "NO_ACTIVE_CUSTODY_SENTENCE"
 		end
@@ -41,10 +47,16 @@ return function(CustodyService)
 		if not assigned then
 			return false, reason
 		end
+		if not self:_playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		player.RespawnLocation = if cell:IsA("SpawnLocation") then cell else nil
 		local loaded, problem = pcall(function()
 			player:LoadCharacterAsync()
 		end)
+		if not self:_playerIsCurrent(player) then
+			return false, "PLAYER_UNAVAILABLE"
+		end
 		if not loaded or not player.Character then
 			self.context.Logger:Error("Custody cell spawn failed", {
 				UserId = player.UserId,
