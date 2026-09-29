@@ -1,4 +1,7 @@
 --!strict
+local Validators = require(script.Parent.Validators)
+local boundedString = Validators.boundedString
+
 return function(self: any)
 	self.context.Network:RegisterFunction("CreateCharacter", function(payload)
 		return type(payload) == "table" and type(payload.Identity) == "table"
@@ -31,7 +34,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("SelectCharacter", function(payload)
-		return type(payload) == "table" and type(payload.CharacterId) == "string",
+		return type(payload) == "table" and boundedString(payload.CharacterId, 1, 64),
 			"INVALID_CHARACTER_ID"
 	end, function(player, payload, requestId)
 		local character, reason =
@@ -54,7 +57,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("SaveCivilianAppearance", function(payload)
-		return type(payload) == "table" and type(payload.CharacterId) == "string"
+		return type(payload) == "table" and boundedString(payload.CharacterId, 1, 64)
 	end, function(player, payload, requestId)
 		local saved, reason = self.context.Services
 			:Get("CharacterService")
@@ -86,7 +89,9 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("SearchAvatarCatalog", function(payload)
-		return type(payload) == "table" and type(payload.CategoryId) == "string"
+		return type(payload) == "table"
+			and boundedString(payload.CategoryId, 1, 32)
+			and (payload.Keyword == nil or boundedString(payload.Keyword, 0, 60))
 	end, function(_player, payload, requestId)
 		local results, reason = self.context.Services
 			:Get("AvatarCatalogService")
@@ -104,7 +109,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("GetAppearanceEditState", function(payload)
-		return type(payload) == "table" and type(payload.CharacterId) == "string"
+		return type(payload) == "table" and boundedString(payload.CharacterId, 1, 64)
 	end, function(player, payload, requestId)
 		local state, reason = self.context.Services
 			:Get("CharacterService")
@@ -119,7 +124,7 @@ return function(self: any)
 	end)
 	self.context.Network:RegisterFunction("SetAuthoredAppearance", function(payload)
 		return type(payload) == "table"
-			and type(payload.CharacterId) == "string"
+			and boundedString(payload.CharacterId, 1, 64)
 			and type(payload.Appearance) == "table"
 	end, function(player, payload, requestId)
 		local saved, reason =
@@ -148,7 +153,7 @@ return function(self: any)
 		}
 	end)
 	self.context.Network:RegisterFunction("SubmitApplication", function(payload)
-		return type(payload) == "table" and type(payload.FormId) == "string" and type(
+		return type(payload) == "table" and boundedString(payload.FormId, 1, 128) and type(
 			payload.Answers
 		) == "table",
 			"INVALID_APPLICATION"
