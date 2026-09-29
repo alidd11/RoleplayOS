@@ -16,6 +16,10 @@ local CustodyService = {
 	running = false,
 }
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 local Utils = require(script.Utils)
 local root = Utils.root
 local humanoid = Utils.humanoid
@@ -39,9 +43,13 @@ function CustodyService:Init(context: any)
 	self.event = context.Network:RegisterEvent("CustodyChanged")
 	self.chairEvent = context.Network:RegisterEvent("CustodyChairProcessed")
 	self.booking = {}
+	self.cuffed = {}
+	self.connections = {}
+	self.commands = {}
 	self.chairPrompts = {}
 	self.chairPromptConnections = {}
 	self.playerConnections = {}
+	self.running = false
 end
 
 -- Custody is a power the role holds, not a department it belongs to.
@@ -167,13 +175,17 @@ function CustodyService:Start()
 		task.spawn(function()
 			local deadline = os.clock() + 20
 			while
-				player.Parent
+				self.running
+				and playerIsCurrent(player)
 				and not self.context.Services:Get("DataService"):GetSession(player)
 				and os.clock() < deadline
 			do
 				task.wait(0.1)
 			end
-			if player.Parent and self:HasActiveSentence(player) then
+			if not self.running or not playerIsCurrent(player) then
+				return
+			end
+			if self:HasActiveSentence(player) then
 				local summary = self:GetSentence(player)
 				player:SetAttribute("RoleplayOSCustodyReleaseAt", summary.ReleaseAt)
 				player:SetAttribute("RoleplayOSCustodyRemaining", summary.RemainingSeconds)
@@ -182,12 +194,22 @@ function CustodyService:Start()
 		end)
 	end
 	local function watch(player: Player)
+		if not self.running or not playerIsCurrent(player) then
+			return
+		end
 		local previous = self.playerConnections[player.UserId]
 		if previous then
 			previous:Disconnect()
 		end
-		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
+		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function(character)
 			task.defer(function()
+				if
+					not self.running
+					or not playerIsCurrent(player)
+					or player.Character ~= character
+				then
+					return
+				end
 				if self:HasActiveSentence(player) then
 					self:_placeInCell(player)
 					return
@@ -243,6 +265,9 @@ function CustodyService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(1)
+			if not self.running then
+				break
+			end
 			local now = os.time()
 			for _, player in Players:GetPlayers() do
 				-- Guarded per prisoner. This loop is the only thing that ends a
@@ -263,6 +288,13 @@ function CustodyService:Start()
 							if remaining == 0 then
 								local completed, completeReason =
 									self:_completeSentence(player, "Served", nil)
+								if
+									not self.running
+									or not playerIsCurrent(player)
+									or self:_sentence(player) ~= sentence
+								then
+									return
+								end
 								if not completed then
 									-- Retried rather than left at a permanently zeroed
 									-- timer. _completeSentence can fail for reasons that
@@ -321,7 +353,11 @@ end
 
 function CustodyService:Destroy()
 	self.running = false
+	local cuffedUserIds = {}
 	for userId in self.cuffed do
+		table.insert(cuffedUserIds, userId)
+	end
+	for _, userId in cuffedUserIds do
 		local target = Players:GetPlayerByUserId(userId)
 		if target then
 			self:_release(target)
@@ -341,7 +377,11 @@ function CustodyService:Destroy()
 	table.clear(self.commands)
 	table.clear(self.booking)
 	table.clear(self.cuffed)
+	local chairModels = {}
 	for model in self.chairPrompts do
+		table.insert(chairModels, model)
+	end
+	for _, model in chairModels do
 		self:_unwatchChair(model)
 	end
 	table.clear(self.chairPrompts)

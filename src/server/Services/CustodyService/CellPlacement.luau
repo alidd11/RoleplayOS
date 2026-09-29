@@ -1,5 +1,10 @@
 --!strict
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 return function(CustodyService)
 	function CustodyService:_cellSpawn(): BasePart?
@@ -30,21 +35,50 @@ return function(CustodyService)
 	end
 
 	function CustodyService:SpawnInCell(player: Player): (boolean, string?)
-		if not self:HasActiveSentence(player) then
+		if not self.running or not playerIsCurrent(player) then
+			return false, "CUSTODY_UNAVAILABLE"
+		end
+		local dataService = self.context.Services:Get("DataService")
+		local session = dataService:GetSession(player)
+		if not session or not self:HasActiveSentence(player) then
 			return false, "NO_ACTIVE_CUSTODY_SENTENCE"
 		end
 		local cell = self:_cellSpawn()
 		if not cell then
 			return false, "CUSTODY_CELL_UNAVAILABLE"
 		end
+		local previousTeam = player.Team
+		local previousRespawnLocation = player.RespawnLocation
 		local assigned, reason = self.context.Services:Get("RoleService"):Assign(player, "Civilian")
 		if not assigned then
 			return false, reason
+		end
+		if
+			not self.running
+			or not playerIsCurrent(player)
+			or dataService:GetSession(player) ~= session
+		then
+			if playerIsCurrent(player) then
+				player.Team = previousTeam
+				player.RespawnLocation = previousRespawnLocation
+			end
+			return false, "CUSTODY_UNAVAILABLE"
 		end
 		player.RespawnLocation = if cell:IsA("SpawnLocation") then cell else nil
 		local loaded, problem = pcall(function()
 			player:LoadCharacterAsync()
 		end)
+		if
+			not self.running
+			or not playerIsCurrent(player)
+			or dataService:GetSession(player) ~= session
+		then
+			if playerIsCurrent(player) then
+				player.Team = previousTeam
+				player.RespawnLocation = previousRespawnLocation
+			end
+			return false, "CUSTODY_UNAVAILABLE"
+		end
 		if not loaded or not player.Character then
 			self.context.Logger:Error("Custody cell spawn failed", {
 				UserId = player.UserId,
