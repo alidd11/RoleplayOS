@@ -197,11 +197,7 @@ function DispatchService:_watchSeat(instance: Instance)
 	changed()
 end
 
-function DispatchService:_fireAuthorised(
-	payload: any,
-	callId: string?,
-	unitDepartmentId: string?
-)
+function DispatchService:_fireAuthorised(payload: any, callId: string?, unitDepartmentId: string?)
 	local call = callId and self.context.Services:Get("CallService").calls[callId] or nil
 	local unitScoped = payload.Kind == "UnitChanged"
 	for _, player in Players:GetPlayers() do
@@ -210,11 +206,7 @@ function DispatchService:_fireAuthorised(
 			and (
 				duty.DepartmentId == "Control"
 				or (call ~= nil and table.find(call.DepartmentIds, duty.DepartmentId) ~= nil)
-				or (
-					unitScoped
-					and unitDepartmentId ~= nil
-					and duty.DepartmentId == unitDepartmentId
-				)
+				or (unitScoped and unitDepartmentId ~= nil and duty.DepartmentId == unitDepartmentId)
 				or (call == nil and not unitScoped)
 			)
 		if relevant and self.context.Services:Get("MDTService"):CanUse(player) then
