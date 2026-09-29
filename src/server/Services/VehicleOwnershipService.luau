@@ -336,6 +336,24 @@ function VehicleOwnershipService:_find(player: Player, vehicleId: string): (any?
 	return nil, nil
 end
 
+function VehicleOwnershipService:_findActive(player: Player, vehicleId: string): (any?, any?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, nil
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local characterId = session and session.ActiveCharacterId
+	local character = characterId and session.Profile.Characters[characterId]
+	if not character then
+		return nil, nil
+	end
+	for _, vehicle in character.Vehicles do
+		if vehicle.VehicleId == vehicleId then
+			return vehicle, character
+		end
+	end
+	return nil, nil
+end
+
 function VehicleOwnershipService:GetByRegistration(registration: string): (any?, Player?)
 	registration = string.upper(registration)
 	for _, player in game:GetService("Players"):GetPlayers() do
@@ -693,6 +711,12 @@ function VehicleOwnershipService:SetCustomRegistration(
 	if not spawnerId or spawnerId == "" or #spawnerId > 64 then
 		return nil, "CIVILIAN_FACILITY_REQUIRED"
 	end
+	-- The update claim is shared with registration recovery, so do not let an
+	-- arbitrary client-supplied vehicle id reserve it. Vehicle ids are replicated
+	-- on spawned models; only the active character's owner may acquire the claim.
+	if not self:_findActive(player, vehicleId) then
+		return nil, "VEHICLE_NOT_OWNED"
+	end
 	if self.registrationUpdates[vehicleId] then
 		return nil, "REGISTRATION_UPDATE_IN_PROGRESS"
 	end
@@ -709,7 +733,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 		end
 
 		local data = self.context.Services:Get("DataService")
-		local vehicle = self:_find(player, vehicleId)
+		local vehicle = self:_findActive(player, vehicleId)
 		if not vehicle then
 			return nil, "VEHICLE_NOT_OWNED"
 		end
@@ -718,7 +742,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 			if not recovered then
 				return nil, recoveryReason or "REGISTRATION_RECOVERY_PENDING"
 			end
-			vehicle = self:_find(player, vehicleId)
+			vehicle = self:_findActive(player, vehicleId)
 			if not vehicle then
 				return nil, "VEHICLE_NOT_OWNED"
 			end
@@ -728,7 +752,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 		if not registration then
 			return nil, reason
 		end
-		vehicle = self:_find(player, vehicleId)
+		vehicle = self:_findActive(player, vehicleId)
 		if not vehicle then
 			return nil, "VEHICLE_NOT_OWNED"
 		end
@@ -771,7 +795,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 				return nil, prepareReason or "PROFILE_SAVE_FAILED"
 			end
 
-			local preparedVehicle = self:_find(player, vehicleId)
+			local preparedVehicle = self:_findActive(player, vehicleId)
 			if
 				preparedVehicle ~= vehicle
 				or string.upper(tostring(vehicle.Registration)) ~= previousRegistration
@@ -818,7 +842,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 			return nil, facilityReason
 		end
 
-		local currentVehicle = self:_find(player, vehicleId)
+		local currentVehicle = self:_findActive(player, vehicleId)
 		if not currentVehicle then
 			if operationId then
 				self:_recoverRegistrationSwap(player, vehicle, false)
@@ -881,7 +905,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 			end
 		end
 
-		local liveVehicle, liveCharacter = self:_find(player, vehicleId)
+		local liveVehicle, liveCharacter = self:_findActive(player, vehicleId)
 		if liveVehicle == vehicle and liveCharacter then
 			self.context.Services
 				:Get("VehiclePlateService")
