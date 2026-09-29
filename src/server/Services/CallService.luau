@@ -357,10 +357,11 @@ function CallService:Snapshot(): { any }
 end
 function CallService:Destroy()
 	self.running = false
-	-- One final orderly-shutdown attempt before the source calls are released.
-	-- IncidentService is destroyed later (reverse service order) and waits for its
-	-- tracked persistence workers, while DataService remains alive until last.
+	-- Start IncidentService's existing half-shutdown budget before releasing the
+	-- call table. Every unresolved call is then owned by a tracked persistence
+	-- worker whose local call reference survives this table being cleared.
 	local incidentService = self.context.Services:Get("IncidentService")
+	incidentService:BeginShutdown()
 	for _, call in self.calls do
 		if call.Status == "Resolved" and call.IncidentPersisted ~= true then
 			incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
