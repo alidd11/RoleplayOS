@@ -511,20 +511,39 @@ return function(DataService)
 			end
 			return true, nil
 		end
-		-- A release that failed still drops the session. The player has gone, so
-		-- holding their profile in memory saves nothing and blocks their return:
-		-- every later load on this server would find the session still present and
-		-- refuse, locking them out until the server itself died. The stored lease
-		-- expires on its own clock, which is what that mechanism is for.
+		local ownershipLost = string.find(tostring(problem), "SESSION_OWNERSHIP_LOST", 1, true)
+			~= nil
+		local playerStillPresent = player.Parent == Players
+			and Players:GetPlayerByUserId(player.UserId) == player
+		local retainedSession = false
 		if release then
-			if self.sessions[player.UserId] == session then
+			if
+				not self.closing
+				and playerStillPresent
+				and not ownershipLost
+				and self.sessions[player.UserId] == session
+			then
+				-- Pre-teleport release uses the same durable write as PlayerRemoving,
+				-- but the player is still here when a teleport is merely being
+				-- prepared. If that write fails, the journey is cancelled and this
+				-- exact session must remain usable rather than leaving the player in
+				-- the server with no profile at all.
+				session.Releasing = false
+				retainedSession = true
+			elseif self.sessions[player.UserId] == session then
+				-- A genuine disconnect/shutdown has no live session to resume. A lost
+				-- lease is also fail-closed: another server is authoritative, so this
+				-- process must not reopen mutation access even if the Player instance
+				-- has not disappeared yet.
 				self.sessions[player.UserId] = nil
 			end
 		end
-		self.context.Logger:Error(
-			"Profile save failed",
-			{ UserId = player.UserId, Error = tostring(problem), Released = release == true }
-		)
+		self.context.Logger:Error("Profile save failed", {
+			UserId = player.UserId,
+			Error = tostring(problem),
+			Released = release == true,
+			SessionRetained = retainedSession,
+		})
 		return false, "PROFILE_SAVE_FAILED"
 	end
 end
