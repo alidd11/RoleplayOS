@@ -269,6 +269,25 @@ H.test("profile migration reconciles carried cash", function()
 	H.expect(profile.SchemaVersion == 11, "profile schema did not advance")
 	H.expect(profile.Characters.old.Economy.Cash == 0, "missing carried cash was not reconciled")
 end)
+H.test("profile migration fails closed on corrupt persisted collections", function()
+	local characters, charactersReason = ProfileSchema.migrate({
+		SchemaVersion = ProfileSchema.CURRENT_VERSION,
+		Characters = "corrupt",
+	}, 10)
+	H.expect(
+		characters == nil and charactersReason == "PROFILE_CHARACTERS_NOT_TABLE",
+		"corrupt characters were replaced instead of quarantined"
+	)
+
+	local applications, applicationsReason = ProfileSchema.migrate({
+		SchemaVersion = ProfileSchema.CURRENT_VERSION,
+		Applications = 42,
+	}, 10)
+	H.expect(
+		applications == nil and applicationsReason == "PROFILE_APPLICATIONS_NOT_TABLE",
+		"corrupt applications were replaced instead of quarantined"
+	)
+end)
 H.test("character identity validates age and names", function()
 	local valid = Characters.identity(
 		{ FirstName = "Alice", LastName = "Jones", DateOfBirth = "1990-02-10" },
