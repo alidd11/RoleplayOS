@@ -127,25 +127,16 @@ function WarrantService:_refreshCharacter(characterId: string): (boolean, string
 	end
 
 	-- The in-flight table is working state, not a cache. Reuse the warrant cache
-	-- character cap as its hard memory bound. Reaching this bound is pathological
-	-- (ordinary request concurrency is far lower), so preserve the previous direct
-	-- read behaviour rather than refusing a legitimate lookup.
+	-- character cap as its hard memory bound. Do not bypass that bound with an
+	-- untracked durable read: under pathological pressure a temporary unavailable
+	-- result is safer than multiplying DataStore load or allowing a late read to
+	-- overwrite a newer local warrant mutation.
 	local maximum = math.max(
 		1,
 		math.floor(tonumber(self.context.Configuration.MDT.MaximumWarrantCacheCharacters) or 512)
 	)
 	if self.refreshCount >= maximum then
-		local record, reason = self:_loadFreshPerson(characterId)
-		if reason then
-			return false, reason
-		end
-		if not self.running or not self.acceptingCache then
-			return false, "WARRANT_CACHE_UNAVAILABLE"
-		end
-		if record then
-			self:CachePersonRecord(record)
-		end
-		return true, nil
+		return false, "WARRANT_CACHE_UNAVAILABLE"
 	end
 
 	local state = {
@@ -153,6 +144,7 @@ function WarrantService:_refreshCharacter(characterId: string): (boolean, string
 		Waiters = 0,
 		Done = false,
 		Reason = nil,
+		LatestRecord = nil,
 	}
 	self.refreshing[characterId] = state
 	self.refreshCount += 1
@@ -170,8 +162,13 @@ function WarrantService:_refreshCharacter(characterId: string): (boolean, string
 		self:_finishRefresh(characterId, state, "WARRANT_CACHE_UNAVAILABLE")
 		return false, "WARRANT_CACHE_UNAVAILABLE"
 	end
-	if record then
-		self:CachePersonRecord(record)
+	-- A warrant create/revoke or person re-index can commit while the durable
+	-- refresh above is yielding. CachePersonRecord records that later authoritative
+	-- result on this refresh state. Prefer it over the refresh snapshot so a late
+	-- read cannot roll wanted state backwards on this server.
+	local cacheRecord = state.LatestRecord or record
+	if cacheRecord then
+		self:CachePersonRecord(cacheRecord)
 	end
 	self:_finishRefresh(characterId, state, nil)
 	return true, nil
@@ -231,6 +228,13 @@ function WarrantService:CachePersonRecord(record: any)
 	local characterId = record.CharacterId
 	if type(characterId) ~= "string" then
 		return
+	end
+	local refreshState = self.refreshing[characterId]
+	if refreshState then
+		-- This cache write completed while a fresh durable read was in flight. Keep
+		-- the most recent local durable result attached to that read so its older
+		-- snapshot cannot overwrite us when it resumes.
+		refreshState.LatestRecord = record
 	end
 	local previous = self.byCharacter[characterId]
 	if previous then
