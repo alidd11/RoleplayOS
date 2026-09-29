@@ -7,6 +7,8 @@ local RecordIndexService = {
 	queued = {},
 	waiting = {},
 	pendingSync = {},
+	personIndexRepairs = {},
+	personIndexRepairCount = 0,
 	cache = {},
 	cacheCount = 0,
 	cacheSweepCounter = 0,
@@ -62,6 +64,8 @@ function RecordIndexService:Init(context: any)
 	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
+	table.clear(self.personIndexRepairs)
+	self.personIndexRepairCount = 0
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
 end
@@ -193,6 +197,85 @@ function RecordIndexService:_upsertIndex(key: string, id: string, entry: any): (
 	return updated ~= nil, reason
 end
 
+function RecordIndexService:_dropPersonIndexRepair(characterId: string, state: any)
+	if self.personIndexRepairs[characterId] == state then
+		self.personIndexRepairs[characterId] = nil
+		self.personIndexRepairCount = math.max(0, self.personIndexRepairCount - 1)
+	end
+end
+
+function RecordIndexService:_schedulePersonIndexRepair(
+	player: Player,
+	characterId: string,
+	entry: any,
+	keys: { string }
+): boolean
+	local existing = self.personIndexRepairs[characterId]
+	if existing then
+		existing.Player = player
+		existing.Entry = entry
+		for _, key in keys do
+			if not table.find(existing.Keys, key) then
+				table.insert(existing.Keys, key)
+			end
+		end
+		return true
+	end
+
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumPendingPersonIndexRepairs) or 128)
+	)
+	if self.personIndexRepairCount >= maximum then
+		return false
+	end
+
+	local state = {
+		Player = player,
+		Entry = entry,
+		Keys = table.clone(keys),
+	}
+	self.personIndexRepairs[characterId] = state
+	self.personIndexRepairCount += 1
+	task.spawn(function()
+		local retrySeconds = math.max(
+			5,
+			tonumber(self.context.Configuration.MDT.PersonIndexRepairRetrySeconds) or 60
+		)
+		while
+			self.running
+			and self.personIndexRepairs[characterId] == state
+			and playerIsCurrent(state.Player)
+			and #state.Keys > 0
+		do
+			-- The first write already exhausted DataService's bounded retry budget.
+			-- Back off before trying the missing bucket again so a store outage does
+			-- not turn eventual consistency into a tight retry storm.
+			task.wait(retrySeconds)
+			if
+				not self.running
+				or self.personIndexRepairs[characterId] ~= state
+				or not playerIsCurrent(state.Player)
+			then
+				break
+			end
+			local key = state.Keys[1]
+			local indexed, reason = self:_upsertIndex(key, characterId, state.Entry)
+			if indexed then
+				table.remove(state.Keys, 1)
+			else
+				self.context.Logger:Warning("Person search index repair will retry", {
+					CharacterId = characterId,
+					Bucket = key,
+					Error = reason,
+				})
+			end
+		end
+		self:_dropPersonIndexRepair(characterId, state)
+	end)
+	return true
+end
+
 -- The person record and the name index, and nothing else.
 function RecordIndexService:IndexPerson(player: Player, character: any): (boolean, string?)
 	if not self.running or not playerIsCurrent(player) then
@@ -233,18 +316,43 @@ function RecordIndexService:IndexPerson(player: Player, character: any): (boolea
 		UpdatedAt = os.time(),
 	}
 	local seen = {}
+	local keys = {}
 	for _, token in { character.Identity.FirstName, character.Identity.LastName } do
-		if not self.running or not playerIsCurrent(player) then
-			return false, "INDEX_CANCELLED"
-		end
 		local key = indexKey("Person", token)
 		if key and not seen[key] then
 			seen[key] = true
-			local indexed, indexReason = self:_upsertIndex(key, character.CharacterId, entry)
-			if not indexed then
-				return false, indexReason
-			end
+			table.insert(keys, key)
 		end
+	end
+	for position, key in keys do
+		if not self.running or not playerIsCurrent(player) then
+			return false, "INDEX_CANCELLED"
+		end
+		local indexed, indexReason = self:_upsertIndex(key, character.CharacterId, entry)
+		if not indexed then
+			local remaining = {}
+			for remainingPosition = position, #keys do
+				table.insert(remaining, keys[remainingPosition])
+			end
+			local scheduled =
+				self:_schedulePersonIndexRepair(player, character.CharacterId, entry, remaining)
+			if not scheduled then
+				return false, "PERSON_INDEX_REPAIR_CAPACITY_REACHED"
+			end
+			self.context.Logger:Warning("Person search index write deferred for repair", {
+				CharacterId = character.CharacterId,
+				Bucket = key,
+				Error = indexReason,
+			})
+			-- The durable person record is already committed. Keep vehicle projection
+			-- moving while a dedicated bounded worker repairs only the missing name
+			-- buckets; rewriting the person record would spend budget without helping.
+			return true, nil
+		end
+	end
+	local pending = self.personIndexRepairs[character.CharacterId]
+	if pending then
+		self:_dropPersonIndexRepair(character.CharacterId, pending)
 	end
 	return true, nil
 end
@@ -762,6 +870,11 @@ function RecordIndexService:Start()
 			if self.queued[userId] == player then
 				self.queued[userId] = nil
 			end
+			for characterId, repair in self.personIndexRepairs do
+				if repair.Player == player then
+					self:_dropPersonIndexRepair(characterId, repair)
+				end
+			end
 		end)
 	)
 	for _, player in Players:GetPlayers() do
@@ -792,6 +905,8 @@ function RecordIndexService:Destroy()
 	table.clear(self.waiting)
 	table.clear(self.cache)
 	table.clear(self.pendingSync)
+	table.clear(self.personIndexRepairs)
+	self.personIndexRepairCount = 0
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
 end
