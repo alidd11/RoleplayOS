@@ -72,6 +72,7 @@ local GangTerritoryService = {
 
 local TERRITORY_OWNERS_RECORD = "gang-territory-owners"
 local MAXIMUM_OWNER_OPERATIONS = 32
+local MAXIMUM_PENDING_OWNER_RECONCILIATIONS = 64
 
 local function gangKey(gangId: string): string
 	return "gang:" .. gangId
@@ -161,6 +162,92 @@ function GangTerritoryService:_seedMirror(territoryId: string)
 		"OwnerChangedAt",
 		if type(changedAt) == "number" then changedAt else 0
 	)
+	if type(record) == "table" then
+		self:_reconcilePendingOwnerPointers(territoryId, record, nil)
+	end
+end
+
+function GangTerritoryService:_reconcilePendingOwnerPointers(
+	territoryId: string,
+	record: any,
+	operationId: string?
+): boolean
+	local pending = type(record) == "table" and record.PendingReconciliations
+	if type(pending) ~= "table" or #pending == 0 then
+		return true
+	end
+	local currentGangId = if type(record.GangId) == "string" and record.GangId ~= ""
+		then record.GangId
+		else nil
+	local dataService = self.context.Services:Get("DataService")
+	local completed: { [string]: boolean } = {}
+	local allSucceeded = true
+	for _, entry in pending do
+		if
+			type(entry) == "table"
+			and type(entry.Id) == "string"
+			and type(entry.GangId) == "string"
+			and entry.GangId ~= ""
+			and (operationId == nil or entry.OperationId == operationId)
+		then
+			local gangId = entry.GangId
+			local _, reason = dataService:UpdateSharedRecord(gangKey(gangId), function(gang)
+				if type(gang) == "table" then
+					if gangId == currentGangId then
+						gang.TerritoryId = territoryId
+					elseif gang.TerritoryId == territoryId then
+						gang.TerritoryId = nil
+					end
+				end
+				return gang
+			end)
+			if reason then
+				allSucceeded = false
+				self.context.Logger:Warning("Gang territory pointer reconciliation failed", {
+					TerritoryId = territoryId,
+					GangId = gangId,
+					Reason = reason,
+				})
+			else
+				completed[entry.Id] = true
+			end
+		end
+	end
+	if next(completed) == nil then
+		return allSucceeded
+	end
+	local _, cleanupReason = dataService:UpdateSharedRecord(
+		TERRITORY_OWNERS_RECORD,
+		function(owners)
+			if type(owners) ~= "table" then
+				return owners
+			end
+			local stored = owners[territoryId]
+			if type(stored) ~= "table" or type(stored.PendingReconciliations) ~= "table" then
+				return owners
+			end
+			local remaining = {}
+			for _, entry in stored.PendingReconciliations do
+				if
+					type(entry) ~= "table"
+					or type(entry.Id) ~= "string"
+					or not completed[entry.Id]
+				then
+					table.insert(remaining, entry)
+				end
+			end
+			stored.PendingReconciliations = if #remaining > 0 then remaining else nil
+			return owners
+		end
+	)
+	if cleanupReason then
+		allSucceeded = false
+		self.context.Logger:Warning("Gang territory reconciliation cleanup failed", {
+			TerritoryId = territoryId,
+			Reason = cleanupReason,
+		})
+	end
+	return allSucceeded
 end
 
 function GangTerritoryService:Start()
@@ -436,6 +523,33 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 					and existing.GangId ~= ""
 				then existing.GangId
 				else nil
+			local pending = if type(existing.PendingReconciliations) == "table"
+				then existing.PendingReconciliations
+				else {}
+			local additions = {}
+			if previousGangId and previousGangId ~= newGangId then
+				table.insert(additions, {
+					Id = operationId .. ":previous",
+					OperationId = operationId,
+					GangId = previousGangId,
+				})
+			end
+			if newGangId and newGangId ~= previousGangId then
+				table.insert(additions, {
+					Id = operationId .. ":current",
+					OperationId = operationId,
+					GangId = newGangId,
+				})
+			end
+			if #pending + #additions > MAXIMUM_PENDING_OWNER_RECONCILIATIONS then
+				-- Recovery obligations are never evicted to make room for a new
+				-- ownership change. Leaving the owner untouched is safer than making
+				-- an older split-write inconsistency impossible to repair.
+				return owners
+			end
+			for _, entry in additions do
+				table.insert(pending, entry)
+			end
 			table.insert(operations, {
 				Id = operationId,
 				FromGangId = previousGangId or "",
@@ -449,6 +563,7 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 				GangId = newGangId,
 				ChangedAt = changedAt,
 				RecentOperations = operations,
+				PendingReconciliations = pending,
 			}
 			return owners
 		end
@@ -468,10 +583,12 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 		then storedRecord.ChangedAt
 		else changedAt
 	local previousGangId: string? = nil
+	local operationApplied = false
 	local operations = storedRecord.RecentOperations
 	if type(operations) == "table" then
 		for _, operation in operations do
 			if type(operation) == "table" and operation.Id == operationId then
+				operationApplied = true
 				previousGangId = if type(operation.FromGangId) == "string"
 						and operation.FromGangId ~= ""
 					then operation.FromGangId
@@ -480,24 +597,19 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 			end
 		end
 	end
+	if not operationApplied then
+		self.context.Logger:Warning(
+			"Gang territory ownership change blocked by reconciliation backlog",
+			{
+				TerritoryId = territoryId,
+				RequestedGangId = newGangId,
+			}
+		)
+		return false, "TERRITORY_RECONCILIATION_BACKLOG"
+	end
 	territory.Part:SetAttribute("OwnerGangId", currentGangId or "")
 	territory.Part:SetAttribute("OwnerChangedAt", currentChangedAt)
-	if previousGangId and previousGangId ~= currentGangId then
-		dataService:UpdateSharedRecord(gangKey(previousGangId), function(gang)
-			if type(gang) == "table" and gang.TerritoryId == territoryId then
-				gang.TerritoryId = nil
-			end
-			return gang
-		end)
-	end
-	if currentGangId and currentGangId ~= previousGangId then
-		dataService:UpdateSharedRecord(gangKey(currentGangId), function(gang)
-			if type(gang) == "table" then
-				gang.TerritoryId = territoryId
-			end
-			return gang
-		end)
-	end
+	self:_reconcilePendingOwnerPointers(territoryId, storedRecord, operationId)
 	self.context.Services:Get("AuditService"):Record({
 		ActorUserId = 0,
 		Action = "GangTerritory.OwnerChanged",
