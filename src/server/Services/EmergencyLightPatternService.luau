@@ -35,7 +35,29 @@ function EmergencyLightPatternService:Init(context: any)
 	self.vehicles = {}
 end
 
+function EmergencyLightPatternService:_restoreVehicle(vehicle: Instance, state: any)
+	if self.vehicles[vehicle] ~= state then
+		return
+	end
+	for name, part in state.Kit.Lamps do
+		local original = state.Original[name]
+		if original and part.Parent then
+			part.Color = original.Color
+			part.Material = original.Material
+			part.Transparency = original.Transparency
+			local light = part:FindFirstChildWhichIsA("Light")
+			if light and original.LightEnabled ~= nil then
+				light.Enabled = original.LightEnabled
+			end
+		end
+	end
+end
+
 function EmergencyLightPatternService:_forgetVehicle(vehicle: Instance)
+	local state = self.vehicles[vehicle]
+	if state then
+		self:_restoreVehicle(vehicle, state)
+	end
 	local connection = self.vehicleConnections[vehicle]
 	if connection then
 		connection:Disconnect()
@@ -81,10 +103,12 @@ function EmergencyLightPatternService:Adopt(vehicle: Instance)
 	-- on-state capture, not a trustworthy off-state appearance.
 	local original = {}
 	for name, part in kit.Lamps do
+		local light = part:FindFirstChildWhichIsA("Light")
 		original[name] = {
 			Color = part.Color,
 			Material = part.Material,
 			Transparency = if part.Transparency >= 0.99 then part.Transparency else 1,
+			LightEnabled = if light then light.Enabled else nil,
 		}
 	end
 	-- Which of the kit's own Stage1/Stage2/Stage3 this vehicle actually
@@ -233,6 +257,9 @@ end
 function EmergencyLightPatternService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
+	end
+	for vehicle, state in self.vehicles do
+		self:_restoreVehicle(vehicle, state)
 	end
 	for _, connection in self.vehicleConnections do
 		connection:Disconnect()
