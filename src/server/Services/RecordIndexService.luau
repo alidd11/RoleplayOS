@@ -464,10 +464,10 @@ end
 function RecordIndexService:_removeStalePersonIndex(
 	bucket: string,
 	expected: any
-): (boolean, string?)
+): (boolean, string?, boolean)
 	local characterId = expected.CharacterId
 	if type(characterId) ~= "string" then
-		return true, nil
+		return true, nil, false
 	end
 
 	-- The person record and search bucket live in separate DataStores, so a
@@ -498,21 +498,23 @@ function RecordIndexService:_removeStalePersonIndex(
 			return stored
 		end)
 	if claimReason then
-		return false, claimReason
+		return false, claimReason, false
 	end
 	if not claimed then
 		-- The row changed after this search read it. A newer projection owns it.
-		return true, nil
+		return true, nil, false
 	end
 
 	local record, recordReason = self:_getRecordFresh(recordKey("Person", characterId))
 	if recordReason then
-		return false, recordReason
+		return false, recordReason, false
 	end
 
+	local deleted = false
 	local _, finalReason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex(bucket, function(stored)
+			deleted = false
 			if type(stored) ~= "table" or type(stored.Entries) ~= "table" then
 				return stored
 			end
@@ -524,15 +526,16 @@ function RecordIndexService:_removeStalePersonIndex(
 					current.CleanupToken = nil
 				else
 					stored.Entries[characterId] = nil
+					deleted = true
 				end
 				stored.UpdatedAt = os.time()
 			end
 			return stored
 		end)
 	if finalReason then
-		return false, finalReason
+		return false, finalReason, false
 	end
-	return true, nil
+	return true, nil, deleted
 end
 
 function RecordIndexService:ReindexVehicle(
@@ -769,14 +772,15 @@ function RecordIndexService:SearchPeople(
 			-- name bucket. A successful durable miss therefore proves this row is
 			-- dead projection state, not valid retained history. Remove only the
 			-- queried bucket row; a store error above never reaches this cleanup.
-			local removed, removalReason = self:_removeStalePersonIndex(key, matches[index])
-			if not removed then
+			local repaired, removalReason, deleted =
+				self:_removeStalePersonIndex(key, matches[index])
+			if not repaired then
 				self.context.Logger:Warning("Person search could not repair stale index", {
 					CharacterId = characterId,
 					Bucket = key,
 					Error = removalReason,
 				})
-			else
+			elseif deleted then
 				total = math.max(0, total - 1)
 			end
 		end
