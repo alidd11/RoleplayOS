@@ -288,6 +288,23 @@ function CallService:Close(callId: string, closedByUserId: number?): (boolean, s
 	if not call or call.Status == "Resolved" then
 		return false, "CALL_NOT_FOUND"
 	end
+
+	local maximumRecovery = math.max(
+		1,
+		math.floor(
+			tonumber(self.context.Configuration.Dispatch.MaximumResolvedRecoveryCalls) or 100
+		)
+	)
+	local pendingRecovery = 0
+	for _, existing in self.calls do
+		if existing.Status == "Resolved" and existing.IncidentPersisted ~= true then
+			pendingRecovery += 1
+			if pendingRecovery >= maximumRecovery then
+				return false, "INCIDENT_RECOVERY_CAPACITY_REACHED"
+			end
+		end
+	end
+
 	call.Status = "Resolved"
 	call.ClosedAt = os.time()
 	call.ClosedByUserId = closedByUserId or 0
@@ -324,25 +341,28 @@ function CallService:Snapshot(): { any }
 		end
 		local closedAt = tonumber(call.ClosedAt) or now
 		local age = now - closedAt
-		if call.IncidentPersisted ~= true then
-			local lastAttempt = tonumber(call.IncidentLastAttemptAt) or -math.huge
-			if clock - lastAttempt >= retrySeconds then
-				incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
-			end
-			if age > ttl then
-				-- Do not retain failed history indefinitely. By this point the
-				-- projection has had its immediate attempt plus the periodic retries
-				-- inside the same hard TTL that already bounds resolved call state.
-				self.context.Logger:Error(
-					"Resolved call incident projection exhausted recovery window",
-					{
-						CallId = call.CallId,
-						RecordPersisted = call.IncidentRecordPersisted == true,
-					}
-				)
-				self.calls[callId] = nil
-			end
-		elseif age > ttl then
+		if call.IncidentPersisted == true then
+			-- Once both the durable incident and its recent index are confirmed, the
+			-- resolved call is no longer recovery state and can be released at once.
+			self.calls[callId] = nil
+			continue
+		end
+
+		local lastAttempt = tonumber(call.IncidentLastAttemptAt) or -math.huge
+		if clock - lastAttempt >= retrySeconds then
+			incidentService:ScheduleFromCall(call, tonumber(call.ClosedByUserId) or 0)
+		end
+		if age > ttl then
+			-- Do not retain failed history indefinitely. By this point the
+			-- projection has had its immediate attempt plus the periodic retries
+			-- inside the same hard TTL that already bounds resolved call state.
+			self.context.Logger:Error(
+				"Resolved call incident projection exhausted recovery window",
+				{
+					CallId = call.CallId,
+					RecordPersisted = call.IncidentRecordPersisted == true,
+				}
+			)
 			self.calls[callId] = nil
 		end
 	end

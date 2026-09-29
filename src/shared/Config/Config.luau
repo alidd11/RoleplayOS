@@ -2567,6 +2567,7 @@ local Config = {
 		},
 		CallStatuses = { "Open", "Assigned", "OnScene" },
 		MaximumActiveCalls = 100,
+		MaximumResolvedRecoveryCalls = 100,
 		ActiveStateTtlSeconds = 300,
 		-- A resolved call remains the bounded in-memory recovery source while its
 		-- durable incident record/index projection settles.
