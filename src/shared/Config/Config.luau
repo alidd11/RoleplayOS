@@ -2743,6 +2743,12 @@ local Config = {
 		RequestAbandonSeconds = 30,
 		GlobalCapacity = 30,
 		GlobalRefillPerSecond = 10,
+		-- Roblox's avatar catalogue quota is shared by the whole server, unlike
+		-- endpoint buckets which are keyed per player. Twelve tokens allow every
+		-- server-declared creator category to cold-load at once; after that, only
+		-- one new uncached external search per second is admitted.
+		AvatarCatalogSharedCapacity = 12,
+		AvatarCatalogSharedRefillPerSecond = 1,
 		Endpoints = {
 			DropCash = { Capacity = 3, RefillPerSecond = 0.2 },
 			GetRadioSnapshot = { Capacity = 5, RefillPerSecond = 1 },
@@ -2782,10 +2788,10 @@ local Config = {
 			GetAppearanceEditState = { Capacity = 6, RefillPerSecond = 1 },
 			-- Answered from a table on the server, so effectively free.
 			GetAvatarCatalogCategories = { Capacity = 4, RefillPerSecond = 0.5 },
-			-- Reaches Roblox's catalogue when the answer is not already cached, and
-			-- that quota is shared by everyone on the server. Generous enough to
-			-- browse and type comfortably, tight enough that one client cannot
-			-- spend the whole server's allowance.
+			-- Reaches Roblox's catalogue when the answer is not already cached.
+			-- This endpoint bucket shapes one player's requests; AvatarCatalogService
+			-- separately enforces the server-wide bucket above for the shared Roblox
+			-- quota.
 			SearchAvatarCatalog = { Capacity = 8, RefillPerSecond = 1 },
 			-- Writing an appearance ends the edit and may spend a purchase, so it
 			-- is deliberately slow: a player has no legitimate reason to submit

@@ -4,6 +4,6 @@ Civilian characters and emergency duty profiles are separate. Free and gamepass 
 
 Deletion requires an exact confirmation ID, cannot delete the active character and refuses records with vehicles, properties or employment. A production UI should add a timed confirmation interaction and recovery policy.
 
-The avatar creator queries Roblox's catalogue through the server. Category and keyword searches remain bounded and rate-limited, and simultaneous cache misses for the same normalised query share one in-flight catalogue request. Waiting callers reuse the resulting cache entry instead of multiplying pressure on the server-wide Roblox catalogue quota.
+The avatar creator queries Roblox's catalogue through the server. Category and keyword searches remain bounded and rate-limited, and simultaneous cache misses for the same normalised query share one in-flight catalogue request. Waiting callers reuse the resulting cache entry instead of multiplying pressure on the server-wide Roblox catalogue quota. Distinct cache-miss leaders also pass through a server-wide token bucket, so modified clients cannot multiply that shared external quota by spreading different keywords across many players.
 
 After selection, civilian entry sends only the owned character ID and configured spawn ID. The server confirms the active character, forces the Civilian Team, selects the exact native team pad and respawns. The menu dismisses only after a successful response.

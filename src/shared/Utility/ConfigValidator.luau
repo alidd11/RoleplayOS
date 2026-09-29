@@ -304,6 +304,10 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or network.GlobalCapacity < 1
 		or type(network.GlobalRefillPerSecond) ~= "number"
 		or network.GlobalRefillPerSecond <= 0
+		or type(network.AvatarCatalogSharedCapacity) ~= "number"
+		or network.AvatarCatalogSharedCapacity < 1
+		or type(network.AvatarCatalogSharedRefillPerSecond) ~= "number"
+		or network.AvatarCatalogSharedRefillPerSecond <= 0
 	then
 		table.insert(errors, "Invalid global network safety configuration")
 	end

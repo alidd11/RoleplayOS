@@ -13,6 +13,8 @@
 -- write endpoint without ever calling this one.
 
 local AvatarEditorService = game:GetService("AvatarEditorService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RateLimiter = require(ReplicatedStorage.RoleplayOS.Shared.RateLimiter)
 
 local AvatarCatalogService = {
 	-- A broken catalogue degrades the creator only. It must never stop the server
@@ -22,6 +24,7 @@ local AvatarCatalogService = {
 	cache = {},
 	cacheOrder = {},
 	searching = {},
+	sharedLimiter = nil :: any,
 }
 
 -- What the creator can browse, and the HumanoidDescription field each fills.
@@ -53,6 +56,11 @@ function AvatarCatalogService:Init(context: any)
 	self.cache = {}
 	self.cacheOrder = {}
 	self.searching = {}
+	local network = context.Configuration.Network
+	local sharedCapacity =
+		math.max(1, math.floor(tonumber(network.AvatarCatalogSharedCapacity) or 12))
+	local sharedRefill = math.max(0, tonumber(network.AvatarCatalogSharedRefillPerSecond) or 1)
+	self.sharedLimiter = RateLimiter.new(sharedCapacity, sharedRefill)
 end
 
 function AvatarCatalogService:Start()
@@ -157,6 +165,14 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 		return nil, "CATALOGUE_UNAVAILABLE"
 	end
 
+	-- Per-player endpoint buckets cannot protect a quota shared by the whole
+	-- server: many modified clients can use different keywords and make every
+	-- request a distinct cache miss. Only leaders reach this point, so charging
+	-- the shared bucket here leaves cached hits and coalesced waiters free.
+	if not self.sharedLimiter:Allow("catalogue") then
+		return nil, "CATALOGUE_BUSY"
+	end
+
 	local searchToken = {}
 	self.searching[key] = searchToken
 	local searchOk, result, resultReason = pcall(function(): (any?, string?)
@@ -226,6 +242,7 @@ end
 
 function AvatarCatalogService:Destroy()
 	self.running = false
+	self.sharedLimiter:Remove("catalogue")
 	table.clear(self.searching)
 	table.clear(self.cache)
 	table.clear(self.cacheOrder)
