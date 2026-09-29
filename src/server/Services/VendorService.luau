@@ -13,13 +13,24 @@
 
 local CollectionService = game:GetService("CollectionService")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 
-local VendorService = { connections = {}, prompts = {}, promptConnections = {} }
+local VendorService = {
+	connections = {},
+	prompts = {},
+	promptConnections = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function VendorService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.Vendors
 	self.openEvent = context.Network:RegisterEvent("VendorOpened")
+	self.running = false
 end
 
 function VendorService:_definition(vendorId: any): any?
@@ -178,6 +189,9 @@ function VendorService:_inRange(player: Player, vendorId: string): boolean
 end
 
 function VendorService:Purchase(player: Player, payload: any): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "VENDOR_UNAVAILABLE"
+	end
 	if type(payload) ~= "table" then
 		return nil, "INVALID_REQUEST"
 	end
@@ -226,6 +240,9 @@ function VendorService:Purchase(player: Player, payload: any): (any?, string?)
 		local owned = self.context.Services
 			:Get("GamepassService")
 			:Refresh(player, { GamepassId = item.GamepassId })
+		if not self.running or not playerIsCurrent(player) then
+			return nil, "VENDOR_UNAVAILABLE"
+		end
 		-- Marketplace ownership checks yield. The original stall proximity and
 		-- emergency-service restriction cannot be treated as a lease over that
 		-- wait: the player may move away or change team before an item is granted
@@ -287,6 +304,7 @@ function VendorService:_characterId(player: Player): string?
 end
 
 function VendorService:Start()
+	self.running = true
 	local tag = self.settings.Tag
 	for _, model in CollectionService:GetTagged(tag) do
 		self:_watch(model)
@@ -306,6 +324,7 @@ function VendorService:Start()
 end
 
 function VendorService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
