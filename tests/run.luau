@@ -392,6 +392,37 @@ H.test("migration adds bounded cash-drop recovery state", function()
 		"cash-drop recovery container missing"
 	)
 end)
+H.test("migration preserves pending registration swap recovery", function()
+	local profile = ProfileSchema.migrate({
+		SchemaVersion = ProfileSchema.CURRENT_VERSION,
+		Characters = {
+			character = {
+				Vehicles = {
+					{
+						VehicleId = "vehicle-1",
+						Registration = "AB12 CDE",
+						PendingRegistrationSwap = {
+							OperationId = "swap-1",
+							FromRegistration = "AB12 CDE",
+							ToRegistration = "XY34 ZZZ",
+							State = "Prepared",
+							PreparedAt = 123,
+						},
+					},
+				},
+			},
+		},
+	}, 42)
+	local pending = profile.Characters.character.Vehicles[1].PendingRegistrationSwap
+	H.expect(
+		type(pending) == "table"
+			and pending.OperationId == "swap-1"
+			and pending.FromRegistration == "AB12 CDE"
+			and pending.ToRegistration == "XY34 ZZZ"
+			and pending.State == "Prepared",
+		"registration swap recovery marker was dropped during migration"
+	)
+end)
 H.test("settings reject unknown and invalid values", function()
 	H.expect(
 		SettingsValidator.validatePatch({ InterfaceScale = "Large" }) ~= nil,
