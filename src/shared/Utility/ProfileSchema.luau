@@ -192,14 +192,18 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		for _, character in data.Characters or {} do
 			if type(character) == "table" then
 				local economy = character.Economy
-				if type(economy) ~= "table" then
+				if economy == nil then
 					economy = {}
 					character.Economy = economy
+				elseif type(economy) ~= "table" then
+					return nil, "PROFILE_ECONOMY_NOT_TABLE"
 				end
 				economy.Balance = math.max(0, math.floor(tonumber(economy.Balance) or 0))
 				economy.Cash = math.max(0, math.floor(tonumber(economy.Cash) or 0))
-				if type(economy.Transactions) ~= "table" then
+				if economy.Transactions == nil then
 					economy.Transactions = {}
+				elseif type(economy.Transactions) ~= "table" then
+					return nil, "PROFILE_ECONOMY_TRANSACTIONS_NOT_TABLE"
 				end
 			end
 		end
@@ -259,16 +263,20 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		for _, character in data.Characters or {} do
 			if type(character) == "table" then
 				local economy = character.Economy
-				if type(economy) ~= "table" then
+				if economy == nil then
 					economy = {
 						Balance = 0,
 						Cash = 0,
 						Transactions = {},
 					}
 					character.Economy = economy
+				elseif type(economy) ~= "table" then
+					return nil, "PROFILE_ECONOMY_NOT_TABLE"
 				end
-				if type(economy.PendingCashDropRefunds) ~= "table" then
+				if economy.PendingCashDropRefunds == nil then
 					economy.PendingCashDropRefunds = {}
+				elseif type(economy.PendingCashDropRefunds) ~= "table" then
+					return nil, "PROFILE_PENDING_CASH_REFUNDS_NOT_TABLE"
 				end
 			end
 		end
