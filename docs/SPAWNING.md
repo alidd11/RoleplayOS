@@ -4,7 +4,7 @@ Every RoleplayOS spawn is a native `SpawnLocation` bound to a configured Team th
 
 Duty start preflights the complete profile, role, department, station and spawn combination before changing runtime state. The server re-evaluates role access, assigns the configured Team, sets `RespawnLocation` to the exact pad, and calls `LoadCharacter`. Roblox performs the native spawn. RoleplayOS then applies the uniform and clones only the ServerStorage loadout. The active duty record is created last. Failure rolls back team assignment and does not register an active unit.
 
-The registry scans the Workspace once during service startup. There is no frame loop, polling or repeated map search. Native Roblox spawning handles simultaneous arrivals. Production maps should provide clear space above every pad and keep `AllowTeamChangeOnTouch` disabled.
+The registry scans the Workspace once during service startup. There is no frame loop, polling or repeated map search. Native Roblox spawning handles simultaneous arrivals. Civilian entry is serialised per exact Player instance across `LoadCharacterAsync`, so a retry or parallel ordinary/territory spawn cannot run overlapping character loads for one player. Production maps should provide clear space above every pad and keep `AllowTeamChangeOnTouch` disabled.
 
 Development pad attributes:
 

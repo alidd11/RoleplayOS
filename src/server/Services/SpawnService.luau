@@ -3,7 +3,12 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 
-local SpawnService = { points = {}, pointStates = {}, running = false }
+local SpawnService = {
+	points = {},
+	pointStates = {},
+	civilianEntering = {},
+	running = false,
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -13,6 +18,7 @@ function SpawnService:Init(context: any)
 	self.context = context
 	table.clear(self.points)
 	table.clear(self.pointStates)
+	table.clear(self.civilianEntering)
 	self.running = false
 end
 
@@ -180,7 +186,7 @@ function SpawnService:Spawn(player: Player, request: any): (boolean, string?)
 	return true, nil
 end
 
-function SpawnService:EnterCivilian(
+function SpawnService:_enterCivilian(
 	player: Player,
 	characterId: string,
 	spawnId: string
@@ -254,7 +260,7 @@ end
 -- Roblox place the character; a territory part is just a tagged Part with no
 -- Team of its own, so the same trick does not apply and a teleport after
 -- loading is what actually gets a character there.
-function SpawnService:EnterCivilianAtTerritory(
+function SpawnService:_enterCivilianAtTerritory(
 	player: Player,
 	characterId: string
 ): (boolean, string?)
@@ -340,8 +346,52 @@ function SpawnService:EnterCivilianAtTerritory(
 	return true, nil
 end
 
+function SpawnService:_withCivilianEntryClaim(
+	player: Player,
+	callback: () -> (boolean, string?)
+): (boolean, string?)
+	if self.civilianEntering[player] then
+		return false, "CIVILIAN_ENTRY_IN_PROGRESS"
+	end
+
+	-- Character loading yields. Hold one claim across both ordinary and gang
+	-- territory entry so duplicate/retried remotes cannot run two overlapping
+	-- LoadCharacterAsync calls or apply appearance/team state to competing
+	-- character instances.
+	local claim = {}
+	self.civilianEntering[player] = claim
+	local ok, entered, reason = pcall(callback)
+	if self.civilianEntering[player] == claim then
+		self.civilianEntering[player] = nil
+	end
+	if not ok then
+		error(entered)
+	end
+	return entered, reason
+end
+
+function SpawnService:EnterCivilian(
+	player: Player,
+	characterId: string,
+	spawnId: string
+): (boolean, string?)
+	return self:_withCivilianEntryClaim(player, function()
+		return self:_enterCivilian(player, characterId, spawnId)
+	end)
+end
+
+function SpawnService:EnterCivilianAtTerritory(
+	player: Player,
+	characterId: string
+): (boolean, string?)
+	return self:_withCivilianEntryClaim(player, function()
+		return self:_enterCivilianAtTerritory(player, characterId)
+	end)
+end
+
 function SpawnService:Destroy()
 	self.running = false
+	table.clear(self.civilianEntering)
 	self:_restorePointState()
 	table.clear(self.points)
 end

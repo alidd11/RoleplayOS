@@ -111,7 +111,9 @@ return function(self: any)
 			return {
 				Success = false,
 				Code = reason,
-				Message = "The civilian spawn could not be completed.",
+				Message = if reason == "CIVILIAN_ENTRY_IN_PROGRESS"
+					then "Your previous civilian spawn is still being processed."
+					else "The civilian spawn could not be completed.",
 				RequestId = requestId,
 			}
 		end
@@ -135,6 +137,7 @@ return function(self: any)
 				NOT_IN_A_GANG = "You are not in a gang.",
 				GANG_HAS_NO_TERRITORY = "Your gang does not hold a territory.",
 				TERRITORY_UNAVAILABLE = "That territory is not available right now.",
+				CIVILIAN_ENTRY_IN_PROGRESS = "Your previous civilian spawn is still being processed.",
 			}
 			return {
 				Success = false,
