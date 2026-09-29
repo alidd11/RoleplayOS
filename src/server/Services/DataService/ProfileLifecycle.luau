@@ -233,7 +233,7 @@ return function(DataService)
 				end
 				lockedUntil = nil
 				-- Budget waits and retries happen outside this transform, so expiry
-				-- must be based on the attempt that actually acquires the lease.
+				-- must be based on the attempt that actually acquires and can commit the lease.
 				profile.AuditMetadata.SessionLock = {
 					ServerId = self.serverId,
 					ExpiresAt = os.time()
