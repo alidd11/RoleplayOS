@@ -34,6 +34,12 @@ CellPlacement(CustodyService)
 RoadsideActions(CustodyService)
 ChairBooking(CustodyService)
 
+function CustodyService:_playerIsCurrent(player: Player): boolean
+	return self.running
+		and player.Parent == Players
+		and Players:GetPlayerByUserId(player.UserId) == player
+end
+
 function CustodyService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("CustodyChanged")
@@ -188,6 +194,9 @@ function CustodyService:Start()
 		end
 		self.playerConnections[player.UserId] = player.CharacterAdded:Connect(function()
 			task.defer(function()
+				if not self:_playerIsCurrent(player) then
+					return
+				end
 				if self:HasActiveSentence(player) then
 					self:_placeInCell(player)
 					return
@@ -243,8 +252,14 @@ function CustodyService:Start()
 	task.spawn(function()
 		while self.running do
 			task.wait(1)
+			if not self.running then
+				break
+			end
 			local now = os.time()
 			for _, player in Players:GetPlayers() do
+				if not self.running then
+					break
+				end
 				-- Guarded per prisoner. This loop is the only thing that ends a
 				-- sentence, so a throw for one detainee left every detainee in the
 				-- server serving theirs for ever, with the server restarting as the
