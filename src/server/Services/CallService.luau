@@ -17,6 +17,20 @@ function CallService:Start()
 	end)
 end
 function CallService:Create(data: any): (any?, string?)
+	local maximumActiveCalls = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.Dispatch.MaximumActiveCalls) or 100)
+	)
+	local activeCalls = 0
+	for _, existing in self.calls do
+		if existing.Status ~= "Resolved" then
+			activeCalls += 1
+			if activeCalls >= maximumActiveCalls then
+				return nil, "CALL_CAPACITY_REACHED"
+			end
+		end
+	end
+
 	local incidentType = if table.find(
 			self.context.Configuration.Dispatch.IncidentTypes,
 			data.IncidentType
