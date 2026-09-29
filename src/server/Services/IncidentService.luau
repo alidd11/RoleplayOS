@@ -13,6 +13,17 @@ local IncidentService = {
 	running = false,
 }
 
+local function validRecentIndexEntry(entry: any): boolean
+	return type(entry) == "table"
+		and type(entry.IncidentId) == "string"
+		and entry.IncidentId ~= ""
+		and type(entry.Title) == "string"
+		and type(entry.Status) == "string"
+		and type(entry.CreatedAt) == "number"
+		and type(entry.DepartmentIds) == "table"
+		and type(entry.UpdatedAt) == "number"
+end
+
 function IncidentService:Init(context: any)
 	self.context = context
 	table.clear(self.cache)
@@ -486,13 +497,17 @@ function IncidentService:Recent(
 		end
 	end
 	for _, entry in if index and type(index.Entries) == "table" then index.Entries else {} do
-		local departments = if type(entry.DepartmentIds) == "table" then entry.DepartmentIds else {}
-		local isResolved = entry.Status == "Closed"
-		if
-			isResolved == (resolvedOnly == true)
-			and (duty.DepartmentId == "Control" or table.find(departments, duty.DepartmentId))
-		then
-			table.insert(entries, entry)
+		if validRecentIndexEntry(entry) then
+			local isResolved = entry.Status == "Closed"
+			if
+				isResolved == (resolvedOnly == true)
+				and (
+					duty.DepartmentId == "Control"
+					or table.find(entry.DepartmentIds, duty.DepartmentId)
+				)
+			then
+				table.insert(entries, entry)
+			end
 		end
 	end
 	table.sort(entries, function(a, b)
