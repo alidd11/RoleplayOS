@@ -15,6 +15,8 @@ local RecordIndexService = {
 	cache = {},
 	cacheCount = 0,
 	cacheSweepCounter = 0,
+	freshReads = {},
+	freshReadCount = 0,
 	running = false,
 }
 
@@ -66,6 +68,8 @@ function RecordIndexService:Init(context: any)
 	table.clear(self.queued)
 	table.clear(self.waiting)
 	table.clear(self.cache)
+	table.clear(self.freshReads)
+	self.freshReadCount = 0
 	table.clear(self.pendingSync)
 	table.clear(self.personIndexRepairs)
 	self.personIndexRepairCount = 0
@@ -135,21 +139,103 @@ function RecordIndexService:_sweepCache()
 	end
 end
 
+function RecordIndexService:_disposeFreshReadState(state: any)
+	if state.Event and state.Waiters == 0 then
+		state.Event:Destroy()
+		state.Event = nil
+	end
+end
+
+function RecordIndexService:_finishFreshRead(key: string, state: any, value: any?, reason: string?)
+	if self.freshReads[key] ~= state then
+		return
+	end
+	self.freshReads[key] = nil
+	self.freshReadCount = math.max(0, self.freshReadCount - 1)
+	state.Value = value
+	state.Reason = reason
+	state.Done = true
+	if state.Event then
+		state.Event:Fire()
+	end
+	self:_disposeFreshReadState(state)
+end
+
 function RecordIndexService:_getRecordFresh(key: string): (any?, string?)
 	if not self.running then
 		return nil, "INDEX_CANCELLED"
 	end
-	local value, reason = self.context.Services:Get("DataService"):GetMdtRecord(key)
-	if reason then
-		return nil, reason
+
+	local existing = self.freshReads[key]
+	if existing then
+		existing.Waiters += 1
+		existing.Event.Event:Wait()
+		existing.Waiters -= 1
+		local value = existing.Value
+		local reason = existing.Reason
+		self:_disposeFreshReadState(existing)
+		return value, reason
 	end
-	if not self.running then
+
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumRecordCacheEntries) or 2048)
+	)
+	if self.freshReadCount >= maximum then
+		return nil, "MDT_RECORD_READ_CAPACITY"
+	end
+
+	local state = {
+		Event = Instance.new("BindableEvent"),
+		Waiters = 0,
+		Done = false,
+		Value = nil,
+		Reason = nil,
+		LatestRecord = nil,
+	}
+	self.freshReads[key] = state
+	self.freshReadCount += 1
+
+	local safe, value, reason = pcall(function()
+		return self.context.Services:Get("DataService"):GetMdtRecord(key)
+	end)
+	if self.freshReads[key] ~= state then
+		-- Destroy may have released the state while the DataStore read yielded.
 		return nil, "INDEX_CANCELLED"
 	end
+	if not self.running then
+		self:_finishFreshRead(key, state, nil, "INDEX_CANCELLED")
+		return nil, "INDEX_CANCELLED"
+	end
+
+	-- A local UpdateAsync can commit while this GetAsync is yielding. Its returned
+	-- record is authoritative for this server and has already populated the cache;
+	-- never let the earlier read snapshot roll that state backwards when it resumes.
+	if state.LatestRecord then
+		self:_cacheDrop(key)
+		self:_cacheSet(key, state.LatestRecord)
+		self:_finishFreshRead(key, state, state.LatestRecord, nil)
+		return state.LatestRecord, nil
+	end
+
+	if not safe then
+		self.context.Logger:Error("Fresh MDT record read raised", {
+			Key = key,
+			Error = tostring(value),
+		})
+		self:_finishFreshRead(key, state, nil, "MDT_RECORD_UNAVAILABLE")
+		return nil, "MDT_RECORD_UNAVAILABLE"
+	end
+	if reason then
+		self:_finishFreshRead(key, state, nil, reason)
+		return nil, reason
+	end
+
 	self:_cacheDrop(key)
 	if value then
 		self:_cacheSet(key, value)
 	end
+	self:_finishFreshRead(key, state, value, nil)
 	return value, nil
 end
 
@@ -165,6 +251,12 @@ end
 function RecordIndexService:_updateRecord(key: string, transform: (any?) -> any): (any?, string?)
 	local updated, reason = self.context.Services:Get("DataService"):UpdateMdtRecord(key, transform)
 	if updated then
+		local freshRead = self.freshReads[key]
+		if freshRead then
+			-- Preserve the later durable write for the in-flight read leader and all
+			-- of its waiters. The leader will prefer this over its older snapshot.
+			freshRead.LatestRecord = updated
+		end
 		self:_cacheSet(key, updated)
 	end
 	return updated, reason
@@ -1357,6 +1449,15 @@ function RecordIndexService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	local freshReads = {}
+	for key, state in self.freshReads do
+		table.insert(freshReads, { Key = key, State = state })
+	end
+	for _, pending in freshReads do
+		self:_finishFreshRead(pending.Key, pending.State, nil, "INDEX_CANCELLED")
+	end
+	table.clear(self.freshReads)
+	self.freshReadCount = 0
 	table.clear(self.queued)
 	table.clear(self.waiting)
 	table.clear(self.cache)
