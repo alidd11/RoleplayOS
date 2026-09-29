@@ -125,6 +125,7 @@ return function(self: any)
 			:Search(payload.CategoryId, payload.Keyword)
 		local messages = {
 			UNKNOWN_CATEGORY = "That category is not available.",
+			CATALOGUE_BUSY = "The catalogue is busy right now. Try again shortly.",
 			CATALOGUE_UNAVAILABLE = "The catalogue is unavailable right now. Try again shortly.",
 		}
 		return {
