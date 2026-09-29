@@ -16,11 +16,18 @@
 -- Numbers are kept through promotion even past the ranks that display them, so
 -- an inspector demoted back to sergeant wears the number they always had.
 
-local ShoulderNumberService = {}
+local Players = game:GetService("Players")
+
+local ShoulderNumberService = { running = false }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function ShoulderNumberService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.ShoulderNumbers
+	self.running = false
 end
 
 -- The departments this player may read a roster for.
@@ -49,7 +56,26 @@ function ShoulderNumberService:_readableDepartments(player: Player): { [string]:
 	return allowed
 end
 
-function ShoulderNumberService:Start() end
+function ShoulderNumberService:Start()
+	self.running = true
+end
+
+function ShoulderNumberService:_profileIsCurrent(player: Player, profile: any): boolean
+	if not self.running or not playerIsCurrent(player) then
+		return false
+	end
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	local profiles = session and session.Profile and session.Profile.DutyProfiles
+	if type(profiles) ~= "table" then
+		return false
+	end
+	for _, current in profiles do
+		if current == profile then
+			return true
+		end
+	end
+	return false
+end
 
 -- The roster a given player may see: their own services only, and only where
 -- they hold a management rank. Read-only. Nothing here assigns, reassigns or
@@ -120,7 +146,7 @@ function ShoulderNumberService:Resolve(player: Player, profile: any): number?
 		return existing
 	end
 	local departmentId = profile.DepartmentId
-	if type(departmentId) ~= "string" then
+	if type(departmentId) ~= "string" or not self:_profileIsCurrent(player, profile) then
 		return nil
 	end
 	local start = (self.settings.Start and self.settings.Start[departmentId])
@@ -135,6 +161,13 @@ function ShoulderNumberService:Resolve(player: Player, profile: any): number?
 			DepartmentId = departmentId,
 			Error = problem,
 		})
+		return nil
+	end
+	-- Allocation can yield on DataStore budget/retries. A duty attempt can end,
+	-- the player can leave, or the service can tear down while that durable claim
+	-- is in flight. Never publish the result into a stale profile table or emit an
+	-- audit line for state that no longer belongs to the live session.
+	if not self:_profileIsCurrent(player, profile) then
 		return nil
 	end
 	profile.ShoulderNumber = issued
@@ -217,6 +250,8 @@ function ShoulderNumberService:Lookup(departmentId: string, number: number): (an
 	return self.context.Services:Get("DataService"):GetShoulderNumberHolder(departmentId, number)
 end
 
-function ShoulderNumberService:Destroy() end
+function ShoulderNumberService:Destroy()
+	self.running = false
+end
 
 return ShoulderNumberService

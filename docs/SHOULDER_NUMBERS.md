@@ -31,7 +31,11 @@ Each service starts its own block, so the number alone identifies the service:
 Numbers only ever move forward. A server that dies between claiming the counter
 and writing the holder record burns a number without assigning it; that is the
 safe direction to fail, because a gap in the sequence is invisible whereas a
-number issued twice would put two officers on air as the same unit.
+number issued twice would put two officers on air as the same unit. Allocation
+can also outlive a duty request while DataStore budget/retries yield; after the
+durable allocation returns, RoleplayOS publishes it into a duty profile only if
+that exact profile still belongs to the current Player session and the service is
+still running, so teardown or player churn cannot dirty/audit stale profile state.
 
 Numbers are held **per department**. Somebody serving in both Police and Fire
 holds one in each, which is how the real services work and costs nothing extra:
