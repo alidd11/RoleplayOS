@@ -317,6 +317,14 @@ function UniformService:_equipFromRoom(player: Player, room: Instance)
 	})
 end
 
+function UniformService:_unconfigure(room: Instance)
+	local connection = self.promptConnections[room]
+	if connection then
+		connection:Disconnect()
+		self.promptConnections[room] = nil
+	end
+end
+
 function UniformService:_configure(room: Instance)
 	if self.promptConnections[room] or room.Parent == nil then
 		return
@@ -428,6 +436,12 @@ function UniformService:Start()
 	)
 	table.insert(
 		self.connections,
+		folder.ChildRemoved:Connect(function(room)
+			self:_unconfigure(room)
+		end)
+	)
+	table.insert(
+		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
 			self.originals[player.UserId] = nil
 		end)
@@ -438,8 +452,8 @@ function UniformService:Destroy()
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
-	for _, connection in self.promptConnections do
-		connection:Disconnect()
+	for room in self.promptConnections do
+		self:_unconfigure(room)
 	end
 	table.clear(self.connections)
 	table.clear(self.promptConnections)
