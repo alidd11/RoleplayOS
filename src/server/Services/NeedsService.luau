@@ -516,7 +516,10 @@ function NeedsService:Destroy()
 		for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
 			if container then
 				for _, child in container:GetChildren() do
-					if child:IsA("Tool") and child:GetAttribute(GENERATED_FOOD_ATTRIBUTE) ~= nil then
+					if
+						child:IsA("Tool")
+						and child:GetAttribute(GENERATED_FOOD_ATTRIBUTE) ~= nil
+					then
 						child:Destroy()
 					end
 				end
