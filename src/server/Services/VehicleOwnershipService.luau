@@ -8,6 +8,7 @@ local VehicleOwnershipService = {
 	registrations = {},
 	registrationUpdates = {},
 	purchasing = {},
+	connections = {},
 	running = false,
 }
 
@@ -17,11 +18,23 @@ end
 
 function VehicleOwnershipService:Init(context: any)
 	self.context = context
+	self.connections = {}
 	table.clear(self.purchasing)
+	table.clear(self.registrationUpdates)
+	table.clear(self.registrations)
 end
 
 function VehicleOwnershipService:Start()
 	self.running = true
+	table.insert(
+		self.connections,
+		Players.PlayerAdded:Connect(function(player)
+			self:_scheduleRegistrationRecovery(player)
+		end)
+	)
+	for _, player in Players:GetPlayers() do
+		self:_scheduleRegistrationRecovery(player)
+	end
 end
 
 function VehicleOwnershipService:_vehicleDefinition(definitionId: string): any?
@@ -85,6 +98,188 @@ function VehicleOwnershipService:_releaseRegistration(
 		Reason = reason,
 	})
 	return false, reason
+end
+
+local function pendingRegistrationSwap(vehicle: any): (any?, string?)
+	local pending = vehicle.PendingRegistrationSwap
+	if pending == nil then
+		return nil, nil
+	end
+	if
+		type(pending) ~= "table"
+		or type(pending.OperationId) ~= "string"
+		or pending.OperationId == ""
+		or type(pending.FromRegistration) ~= "string"
+		or type(pending.ToRegistration) ~= "string"
+		or (pending.State ~= "Prepared" and pending.State ~= "Committed")
+	then
+		return nil, "REGISTRATION_RECOVERY_INVALID"
+	end
+	return pending, nil
+end
+
+function VehicleOwnershipService:_clearRegistrationSwapMarker(
+	player: Player,
+	vehicle: any,
+	operationId: string
+): boolean
+	local pending = vehicle.PendingRegistrationSwap
+	if type(pending) ~= "table" or pending.OperationId ~= operationId then
+		return false
+	end
+	vehicle.PendingRegistrationSwap = nil
+	self.context.Services:Get("DataService"):MarkDirty(player)
+	return true
+end
+
+function VehicleOwnershipService:_recoverRegistrationSwap(
+	player: Player,
+	vehicle: any,
+	committedIsDurable: boolean
+): (boolean, string?)
+	local pending, pendingReason = pendingRegistrationSwap(vehicle)
+	if pendingReason then
+		return false, pendingReason
+	end
+	if not pending then
+		return true, nil
+	end
+
+	local data = self.context.Services:Get("DataService")
+	local currentRegistration = string.upper(tostring(vehicle.Registration or ""))
+	local fromRegistration = string.upper(pending.FromRegistration)
+	local toRegistration = string.upper(pending.ToRegistration)
+	local operationId = pending.OperationId
+	local maximumLength = self.context.Configuration.VehicleIdentity.MaximumRegistrationLength or 8
+	if
+		type(vehicle.VehicleId) ~= "string"
+		or vehicle.VehicleId == ""
+		or #operationId > 64
+		or #fromRegistration == 0
+		or #fromRegistration > maximumLength
+		or #toRegistration == 0
+		or #toRegistration > maximumLength
+		or fromRegistration == toRegistration
+	then
+		return false, "REGISTRATION_RECOVERY_INVALID"
+	end
+
+	if pending.State == "Prepared" then
+		if currentRegistration ~= fromRegistration then
+			return false, "REGISTRATION_RECOVERY_CONFLICT"
+		end
+		local released, releaseReason = data:ReleaseCustomRegistrationSwap(
+			toRegistration,
+			player.UserId,
+			vehicle.VehicleId,
+			operationId
+		)
+		if not released then
+			return false, releaseReason
+		end
+		self.registrations[toRegistration] = nil
+	elseif pending.State == "Committed" then
+		if currentRegistration ~= toRegistration then
+			return false, "REGISTRATION_RECOVERY_CONFLICT"
+		end
+		-- A failed ordinary Save is ambiguous: Roblox may have committed the
+		-- snapshot before the request reported an error. Before freeing the old
+		-- plate, make the current committed state durable unless the caller just
+		-- received a successful Save for this exact transition.
+		if not committedIsDurable then
+			local saved, saveReason = data:Save(player)
+			if not saved then
+				return false, saveReason or "PROFILE_SAVE_FAILED"
+			end
+		end
+		local released, releaseReason =
+			self:_releaseRegistration(player, fromRegistration, vehicle.VehicleId)
+		if not released then
+			return false, releaseReason
+		end
+		local completed, completeReason = data:CompleteCustomRegistrationSwap(
+			toRegistration,
+			player.UserId,
+			vehicle.VehicleId,
+			operationId
+		)
+		if not completed then
+			return false, completeReason
+		end
+	else
+		return false, "REGISTRATION_RECOVERY_INVALID"
+	end
+
+	local currentVehicle = self:_find(player, vehicle.VehicleId)
+	if currentVehicle == vehicle then
+		self:_clearRegistrationSwapMarker(player, vehicle, operationId)
+	end
+	return true, nil
+end
+
+function VehicleOwnershipService:_recoverLoadedRegistrationSwaps(player: Player)
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	if not session then
+		return
+	end
+
+	local cleaned = false
+	for _, character in session.Profile.Characters do
+		for _, vehicle in character.Vehicles do
+			if vehicle.PendingRegistrationSwap ~= nil and type(vehicle.VehicleId) == "string" then
+				local vehicleId = vehicle.VehicleId
+				if not self.registrationUpdates[vehicleId] then
+					self.registrationUpdates[vehicleId] = true
+					local ok, recovered, reason =
+						pcall(self._recoverRegistrationSwap, self, player, vehicle, false)
+					self.registrationUpdates[vehicleId] = nil
+					if not ok then
+						self.context.Logger:Error("Custom registration recovery raised", {
+							UserId = player.UserId,
+							VehicleId = vehicleId,
+							Error = tostring(recovered),
+						})
+					elseif not recovered then
+						self.context.Logger:Warning(
+							"Custom registration recovery remains pending",
+							{
+								UserId = player.UserId,
+								VehicleId = vehicleId,
+								Reason = reason,
+							}
+						)
+					elseif vehicle.PendingRegistrationSwap == nil then
+						cleaned = true
+					end
+				end
+			end
+		end
+	end
+
+	if cleaned and data:GetSession(player) == session then
+		local saved, saveReason = data:Save(player)
+		if not saved then
+			-- Cleanup is idempotent. If this marker-clear save fails, the durable
+			-- marker simply causes the same ownership-checked recovery next time.
+			self.context.Logger:Warning("Recovered registration marker save failed", {
+				UserId = player.UserId,
+				Reason = saveReason,
+			})
+		end
+	end
+end
+
+function VehicleOwnershipService:_scheduleRegistrationRecovery(player: Player)
+	task.spawn(function()
+		local data = self.context.Services:Get("DataService")
+		while self.running and playerIsCurrent(player) and not data:GetSession(player) do
+			task.wait(0.1)
+		end
+		if self.running and playerIsCurrent(player) and data:GetSession(player) then
+			self:_recoverLoadedRegistrationSwaps(player)
+		end
+	end)
 end
 
 function VehicleOwnershipService:_recordVehicle(
@@ -512,86 +707,195 @@ function VehicleOwnershipService:SetCustomRegistration(
 		if not owned then
 			return nil, ownershipReason or "GAMEPASS_REQUIRED"
 		end
-		local vehicle, character = self:_find(player, vehicleId)
+
+		local data = self.context.Services:Get("DataService")
+		local vehicle = self:_find(player, vehicleId)
 		if not vehicle then
 			return nil, "VEHICLE_NOT_OWNED"
 		end
+		if vehicle.PendingRegistrationSwap ~= nil then
+			local recovered, recoveryReason = self:_recoverRegistrationSwap(player, vehicle, false)
+			if not recovered then
+				return nil, recoveryReason or "REGISTRATION_RECOVERY_PENDING"
+			end
+			vehicle = self:_find(player, vehicleId)
+			if not vehicle then
+				return nil, "VEHICLE_NOT_OWNED"
+			end
+		end
+
 		local registration, reason = self:_moderate(player, proposed)
 		if not registration then
 			return nil, reason
 		end
-		vehicle, character = self:_find(player, vehicleId)
+		vehicle = self:_find(player, vehicleId)
 		if not vehicle then
 			return nil, "VEHICLE_NOT_OWNED"
 		end
-		local previousRegistration = vehicle.Registration
+		if type(vehicle.Registration) ~= "string" then
+			return nil, "VEHICLE_REGISTRATION_INVALID"
+		end
+		local previousRegistration = string.upper(vehicle.Registration)
 		local existing = self:GetByRegistration(registration)
 		if existing and existing.VehicleId ~= vehicle.VehicleId then
 			return nil, "REGISTRATION_ALREADY_USED"
 		end
-		local data = self.context.Services:Get("DataService")
-		local reserved, reserveReason =
-			data:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
+
+		local operationId: string? = nil
+		local pending: any = nil
+		local reserved: boolean
+		local reserveReason: string?
+		if registration ~= previousRegistration then
+			-- First make the recovery intent durable while the vehicle still points
+			-- at its old registration. No replacement reservation is created until
+			-- this Save succeeds, so an ambiguous prepare failure cannot leak a
+			-- plate. The marker survives a later crash and tells the next server
+			-- whether it must roll the replacement back or finish the old release.
+			operationId = HttpService:GenerateGUID(false)
+			pending = {
+				OperationId = operationId,
+				FromRegistration = previousRegistration,
+				ToRegistration = registration,
+				State = "Prepared",
+				PreparedAt = os.time(),
+			}
+			vehicle.PendingRegistrationSwap = pending
+			data:MarkDirty(player)
+			local prepared, prepareReason = data:Save(player)
+			if not prepared then
+				-- No registration-side effect has started yet. Clearing the local
+				-- marker is safe even if the failed Save was actually committed:
+				-- a later autosave may retire it, while a rejoin will harmlessly
+				-- run a Prepared rollback against an operation that owns nothing.
+				self:_clearRegistrationSwapMarker(player, vehicle, operationId)
+				return nil, prepareReason or "PROFILE_SAVE_FAILED"
+			end
+
+			local preparedVehicle = self:_find(player, vehicleId)
+			if
+				preparedVehicle ~= vehicle
+				or string.upper(tostring(vehicle.Registration)) ~= previousRegistration
+				or vehicle.PendingRegistrationSwap ~= pending
+			then
+				self:_clearRegistrationSwapMarker(player, vehicle, operationId)
+				return nil, "REGISTRATION_UPDATE_CONFLICT"
+			end
+			reserved, reserveReason = data:ReserveCustomRegistrationSwap(
+				registration,
+				player.UserId,
+				vehicle.VehicleId,
+				operationId
+			)
+		else
+			reserved, reserveReason =
+				data:ReserveCustomRegistration(registration, player.UserId, vehicle.VehicleId)
+		end
 		if not reserved then
+			-- An unavailable swap reservation may have committed before reporting
+			-- failure, so retain the durable Prepared marker for operation-scoped
+			-- recovery. Settled conflicts own no reservation for this operation.
+			if
+				operationId
+				and reserveReason ~= "REGISTRATION_STORE_UNAVAILABLE"
+				and vehicle.PendingRegistrationSwap == pending
+			then
+				self:_clearRegistrationSwapMarker(player, vehicle, operationId)
+			end
 			return nil, reserveReason
 		end
 
 		-- The network endpoint checks the civilian facility before entering this
-		-- method, but the gamepass lookup, text filter and registration reservation
-		-- above can all yield. Revalidate proximity and facility authority after
-		-- those waits and immediately before the live ownership record is changed.
+		-- method, but the gamepass lookup, text filter, profile prepare and
+		-- registration reservation above can all yield. Revalidate proximity and
+		-- facility authority immediately before changing the live ownership record.
 		local authorised, facilityReason = self.context.Services
 			:Get("VehicleSpawnerService")
 			:AuthoriseCivilianFacility(player, spawnerId)
 		if not authorised then
-			if registration ~= previousRegistration then
-				self:_releaseRegistration(player, registration, vehicleId)
+			if operationId then
+				self:_recoverRegistrationSwap(player, vehicle, false)
 			end
 			return nil, facilityReason
 		end
 
-		local currentVehicle, currentCharacter = self:_find(player, vehicleId)
+		local currentVehicle = self:_find(player, vehicleId)
 		if not currentVehicle then
-			if registration ~= previousRegistration then
-				self:_releaseRegistration(player, registration, vehicleId)
+			if operationId then
+				self:_recoverRegistrationSwap(player, vehicle, false)
 			end
 			return nil, "PLAYER_UNAVAILABLE"
 		end
-		if currentVehicle.Registration ~= previousRegistration then
-			if currentVehicle.Registration == registration then
+		if string.upper(tostring(currentVehicle.Registration)) ~= previousRegistration then
+			if operationId then
+				self:_recoverRegistrationSwap(player, vehicle, false)
+			elseif currentVehicle.Registration == registration then
 				return {
 					VehicleId = currentVehicle.VehicleId,
 					Registration = currentVehicle.Registration,
 				},
 					nil
 			end
-			if registration ~= previousRegistration then
-				self:_releaseRegistration(player, registration, vehicleId)
-			end
+			return nil, "REGISTRATION_UPDATE_CONFLICT"
+		end
+		if
+			operationId
+			and (
+				currentVehicle.PendingRegistrationSwap ~= pending
+				or pending.State ~= "Prepared"
+				or pending.OperationId ~= operationId
+			)
+		then
+			self:_recoverRegistrationSwap(player, vehicle, false)
 			return nil, "REGISTRATION_UPDATE_CONFLICT"
 		end
 		vehicle = currentVehicle
-		character = currentCharacter
 
+		if operationId then
+			-- Registration and recovery phase are one profile snapshot. Until this
+			-- Save confirms durability the old reservation remains untouched.
+			pending.State = "Committed"
+			pending.CommittedAt = os.time()
+		end
 		vehicle.Registration = registration
 		vehicle.CustomRegistration = true
 		self.registrations[registration] = true
-		if previousRegistration ~= registration then
-			self:_releaseRegistration(player, previousRegistration, vehicle.VehicleId)
-		end
 		data:MarkDirty(player)
-		self.context.Services
-			:Get("VehiclePlateService")
-			:RefreshOwned(player.UserId, vehicle.VehicleId, registration)
-		self.context.Services
-			:Get("RecordIndexService")
-			:ScheduleVehicle(player, character, vehicle, previousRegistration)
-		self.context.Services:Get("AuditService"):Record({
-			ActorUserId = player.UserId,
-			Action = "Vehicle.CustomRegistrationSet",
-			Target = vehicle.VehicleId,
-			Metadata = { Registration = registration },
-		})
+
+		if operationId then
+			local committed, commitReason = data:Save(player)
+			if not committed then
+				-- Do not guess whether an errored UpdateAsync committed. Both
+				-- reservations and the durable Prepared marker remain valid. A
+				-- later successful Save or the next server load can resolve the
+				-- state without duplicating or losing either registration.
+				return nil, commitReason or "PROFILE_SAVE_FAILED"
+			end
+			local recovered, recoveryReason = self:_recoverRegistrationSwap(player, vehicle, true)
+			if not recovered then
+				self.context.Logger:Warning("Old custom registration release remains pending", {
+					UserId = player.UserId,
+					VehicleId = vehicle.VehicleId,
+					Registration = previousRegistration,
+					Reason = recoveryReason,
+				})
+			end
+		end
+
+		local liveVehicle, liveCharacter = self:_find(player, vehicleId)
+		if liveVehicle == vehicle and liveCharacter then
+			self.context.Services
+				:Get("VehiclePlateService")
+				:RefreshOwned(player.UserId, vehicle.VehicleId, registration)
+			self.context.Services
+				:Get("RecordIndexService")
+				:ScheduleVehicle(player, liveCharacter, vehicle, previousRegistration)
+			self.context.Services:Get("AuditService"):Record({
+				ActorUserId = player.UserId,
+				Action = "Vehicle.CustomRegistrationSet",
+				Target = vehicle.VehicleId,
+				Metadata = { Registration = registration },
+			})
+		end
 		return { VehicleId = vehicle.VehicleId, Registration = registration }, nil
 	end)
 	self.registrationUpdates[vehicleId] = nil
@@ -600,7 +904,6 @@ function VehicleOwnershipService:SetCustomRegistration(
 	end
 	return result, resultReason
 end
-
 function VehicleOwnershipService:Create(
 	player: Player,
 	characterId: string,
@@ -650,6 +953,10 @@ function VehicleOwnershipService:Create(
 end
 function VehicleOwnershipService:Destroy()
 	self.running = false
+	for _, connection in self.connections do
+		connection:Disconnect()
+	end
+	table.clear(self.connections)
 	table.clear(self.purchasing)
 	table.clear(self.registrationUpdates)
 	table.clear(self.registrations)
