@@ -704,11 +704,7 @@ function RecordIndexService:_waitForSession(player: Player)
 	local userId = player.UserId
 	self.waiting[userId] = player
 	task.spawn(function()
-		while
-			self.running
-			and self.waiting[userId] == player
-			and playerIsCurrent(player)
-		do
+		while self.running and self.waiting[userId] == player and playerIsCurrent(player) do
 			local session = self.context.Services:Get("DataService"):GetSession(player)
 			if session then
 				self.waiting[userId] = nil
