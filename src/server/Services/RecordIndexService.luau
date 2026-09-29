@@ -898,6 +898,13 @@ function RecordIndexService:_scheduleCharacter(
 				end
 			end
 		end)
+		local requeuePlayer = state.Player
+		local requeueCharacter = state.Character
+		local requeueFull = state.Full
+		local requeueAfterRaise = not safe
+			and state.Resync
+			and self.running
+			and playerIsCurrent(requeuePlayer)
 		if self.pendingSync[key] == state then
 			self.pendingSync[key] = nil
 		end
@@ -906,6 +913,17 @@ function RecordIndexService:_scheduleCharacter(
 				CharacterId = character.CharacterId,
 				Error = tostring(raised),
 			})
+			-- Do not retry the pass that raised as though it were a store outage.
+			-- A newer mutation may, however, have coalesced into this worker while it
+			-- yielded. Requeue only that newer work after releasing the failed claim.
+			if requeueAfterRaise then
+				self:_scheduleCharacter(
+					requeuePlayer,
+					requeueCharacter,
+					if requeueFull then nil else "Person",
+					false
+				)
+			end
 		end
 	end)
 end
@@ -1002,6 +1020,14 @@ function RecordIndexService:ScheduleVehicle(
 				end
 			end
 		end)
+		local requeuePlayer = state.Player
+		local requeueCharacter = state.Character
+		local requeueVehicle = state.Vehicle
+		local requeuePrevious = state.PreviousRegistration
+		local requeueAfterRaise = not safe
+			and state.Resync
+			and self.running
+			and playerIsCurrent(requeuePlayer)
 		if self.pendingSync[key] == state then
 			self.pendingSync[key] = nil
 		end
@@ -1010,6 +1036,14 @@ function RecordIndexService:ScheduleVehicle(
 				VehicleId = vehicle.VehicleId,
 				Error = tostring(raised),
 			})
+			if requeueAfterRaise then
+				self:ScheduleVehicle(
+					requeuePlayer,
+					requeueCharacter,
+					requeueVehicle,
+					requeuePrevious
+				)
+			end
 		end
 	end)
 end
