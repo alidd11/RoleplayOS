@@ -51,6 +51,8 @@ local WarrantService = {
 	cacheMeta = {},
 	cacheCount = 0,
 	cacheSweepCounter = 0,
+	refreshing = {},
+	refreshCount = 0,
 	running = false,
 	acceptingCache = false,
 }
@@ -62,6 +64,8 @@ function WarrantService:Init(context: any)
 	table.clear(self.cacheMeta)
 	self.cacheCount = 0
 	self.cacheSweepCounter = 0
+	table.clear(self.refreshing)
+	self.refreshCount = 0
 	self.running = false
 	-- RecordIndexService starts earlier and may hydrate person records before this
 	-- service's Start runs. Cache hydration is valid after Init, but never after
@@ -71,6 +75,106 @@ end
 
 function WarrantService:Start()
 	self.running = true
+end
+
+function WarrantService:_disposeRefreshState(state: any)
+	if state.Event and state.Waiters == 0 then
+		state.Event:Destroy()
+		state.Event = nil
+	end
+end
+
+function WarrantService:_finishRefresh(characterId: string, state: any, reason: string?)
+	if self.refreshing[characterId] ~= state then
+		return
+	end
+	self.refreshing[characterId] = nil
+	self.refreshCount = math.max(0, self.refreshCount - 1)
+	state.Reason = reason
+	state.Done = true
+	if state.Event then
+		state.Event:Fire()
+	end
+	self:_disposeRefreshState(state)
+end
+
+function WarrantService:_loadFreshPerson(characterId: string): (any?, string?)
+	local safe, record, reason = pcall(function()
+		return self.context.Services:Get("RecordIndexService"):GetPersonFresh(characterId)
+	end)
+	if not safe then
+		self.context.Logger:Error("Warrant cache refresh raised", {
+			CharacterId = characterId,
+			Error = tostring(record),
+		})
+		return nil, "WARRANT_CACHE_UNAVAILABLE"
+	end
+	return record, reason
+end
+
+function WarrantService:_refreshCharacter(characterId: string): (boolean, string?)
+	local existing = self.refreshing[characterId]
+	if existing then
+		existing.Waiters += 1
+		existing.Event.Event:Wait()
+		existing.Waiters -= 1
+		local reason = existing.Reason
+		self:_disposeRefreshState(existing)
+		if reason then
+			return false, reason
+		end
+		return true, nil
+	end
+
+	-- The in-flight table is working state, not a cache. Reuse the warrant cache
+	-- character cap as its hard memory bound. Reaching this bound is pathological
+	-- (ordinary request concurrency is far lower), so preserve the previous direct
+	-- read behaviour rather than refusing a legitimate lookup.
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumWarrantCacheCharacters) or 512)
+	)
+	if self.refreshCount >= maximum then
+		local record, reason = self:_loadFreshPerson(characterId)
+		if reason then
+			return false, reason
+		end
+		if not self.running or not self.acceptingCache then
+			return false, "WARRANT_CACHE_UNAVAILABLE"
+		end
+		if record then
+			self:CachePersonRecord(record)
+		end
+		return true, nil
+	end
+
+	local state = {
+		Event = Instance.new("BindableEvent"),
+		Waiters = 0,
+		Done = false,
+		Reason = nil,
+	}
+	self.refreshing[characterId] = state
+	self.refreshCount += 1
+
+	local record, reason = self:_loadFreshPerson(characterId)
+	if self.refreshing[characterId] ~= state then
+		-- Destroy may have released the state while the DataStore read yielded.
+		return false, "WARRANT_CACHE_UNAVAILABLE"
+	end
+	if reason then
+		self:_finishRefresh(characterId, state, reason)
+		return false, reason
+	end
+	if not self.running or not self.acceptingCache then
+		self:_finishRefresh(characterId, state, "WARRANT_CACHE_UNAVAILABLE")
+		return false, "WARRANT_CACHE_UNAVAILABLE"
+	end
+	if record then
+		self:CachePersonRecord(record)
+	end
+	self:_finishRefresh(characterId, state, nil)
+	return true, nil
 end
 
 function WarrantService:_dropCachedCharacter(characterId: string)
@@ -166,20 +270,17 @@ function WarrantService:HasActiveForCharacter(characterId: string): (boolean, { 
 		-- The warrant cache has its own freshness contract. Reading through the
 		-- general person-record cache here can extend a stale wanted/not-wanted
 		-- result when another server changes a warrant shortly before this entry
-		-- expires, so TTL/cap misses go back to the durable record.
-		local record, reason =
-			self.context.Services:Get("RecordIndexService"):GetPersonFresh(characterId)
-		if reason then
+		-- expires, so TTL/cap misses go back to the durable record. Coalesce callers
+		-- for the same character so person search, vehicle search and ANPR cannot all
+		-- spend a separate durable read while one refresh is already in flight.
+		local refreshed, reason = self:_refreshCharacter(characterId)
+		if not refreshed then
 			return false, {}, reason
 		end
-		if not record then
+		meta = self.cacheMeta[characterId]
+		if not meta then
 			return false, {}, nil
 		end
-		if not self.acceptingCache then
-			return false, {}, "WARRANT_CACHE_UNAVAILABLE"
-		end
-		self:CachePersonRecord(record)
-		meta = self.cacheMeta[characterId]
 	end
 	if meta then
 		meta.AccessedAt = os.clock()
@@ -389,6 +490,15 @@ end
 function WarrantService:Destroy()
 	self.running = false
 	self.acceptingCache = false
+	local refreshing = {}
+	for characterId, state in self.refreshing do
+		table.insert(refreshing, { CharacterId = characterId, State = state })
+	end
+	for _, pending in refreshing do
+		self:_finishRefresh(pending.CharacterId, pending.State, "WARRANT_CACHE_UNAVAILABLE")
+	end
+	table.clear(self.refreshing)
+	self.refreshCount = 0
 	table.clear(self.warrants)
 	table.clear(self.byCharacter)
 	table.clear(self.cacheMeta)
