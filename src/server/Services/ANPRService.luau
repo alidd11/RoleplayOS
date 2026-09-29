@@ -60,6 +60,14 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart)
 		self.cooldowns[sensor] = perSensor
 	end
 	local now = os.clock()
+	-- Expired registrations have no future purpose. Sweep them lazily on the
+	-- next camera touch so a long-running sensor retains only plates seen within
+	-- the current cooldown window instead of every registration it has ever seen.
+	for plate, expiresAt in perSensor do
+		if type(expiresAt) ~= "number" or expiresAt <= now then
+			perSensor[plate] = nil
+		end
+	end
 	if (perSensor[registration] or 0) > now then
 		return
 	end
