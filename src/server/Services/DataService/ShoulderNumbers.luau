@@ -36,9 +36,9 @@ return function(DataService)
 			return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 		end
 		holderKey = self:_scopedKey(departmentId .. ":" .. tostring(issued))
-		-- The holder record is what the staff export reads. Losing it costs the
-		-- reconciliation view, not the allocation, so a failure here is warned about
-		-- rather than surfaced as a refusal to go on duty.
+		-- Do not publish the number into the player's profile until its holder
+		-- record is durable. Duty does not depend on having a number, so burning a
+		-- counter value is safer than reporting an assignment staff cannot verify.
 		local recorded = self:_retry(function()
 			return self.shoulderStore:SetAsync(
 				holderKey,
@@ -46,11 +46,20 @@ return function(DataService)
 			)
 		end, nil, Enum.DataStoreRequestType.SetIncrementAsync)
 		if not recorded then
-			self.context.Logger:Warning("Shoulder number holder record failed", {
-				DepartmentId = departmentId,
-				Number = issued,
-				UserId = userId,
-			})
+			-- A DataStore request can commit and still return an ambiguous failure.
+			-- Verify the exact holder before deciding the write was lost; otherwise
+			-- a committed assignment would be needlessly abandoned.
+			local verified, holder = self:_retry(function()
+				return self.shoulderStore:GetAsync(holderKey)
+			end, nil, Enum.DataStoreRequestType.GetAsync)
+			if not verified or type(holder) ~= "table" or holder.UserId ~= userId then
+				self.context.Logger:Warning("Shoulder number holder record failed", {
+					DepartmentId = departmentId,
+					Number = issued,
+					UserId = userId,
+				})
+				return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+			end
 		end
 		return issued, nil
 	end
