@@ -2046,6 +2046,10 @@ local Config = {
 		-- never be answered. Declining or accepting one clears it either way, so
 		-- this only ever limits how many can be outstanding at once.
 		MaximumPendingInvites = 5,
+		-- A disband records its unique-name cleanup before deleting the gang.
+		-- Bounded so a prolonged DataStore outage cannot grow recovery state
+		-- indefinitely; once full, another disband is refused before deletion.
+		MaximumPendingNameCleanups = 64,
 		-- Territory zones: invisible parts placed in the map, discovered through
 		-- CollectionService the same way RoleplayOSZone already works for
 		-- LocationController, rather than a hand-maintained list. Each carries a

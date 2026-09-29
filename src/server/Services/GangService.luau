@@ -33,6 +33,8 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
+local NAME_CLEANUP_RECORD = "gang-name-cleanups"
+
 local function gangKey(gangId: string): string
 	return "gang:" .. gangId
 end
@@ -65,7 +67,7 @@ function GangService:_gang(gangId: string): (GangRules.Gang?, string?)
 	return record :: GangRules.Gang, nil
 end
 
-function GangService:_releaseNameReservation(nameKey: string, gangId: string)
+function GangService:_releaseNameReservation(nameKey: string, gangId: string): (boolean, string?)
 	local dataService = self.context.Services:Get("DataService")
 	local _, reason = dataService:UpdateSharedRecord("gang-names", function(index)
 		if type(index) == "table" and index[nameKey] == gangId then
@@ -79,7 +81,115 @@ function GangService:_releaseNameReservation(nameKey: string, gangId: string)
 			NameKey = nameKey,
 			Reason = reason,
 		})
+		return false, reason
 	end
+	return true, nil
+end
+
+function GangService:_queueNameCleanup(nameKey: string, gangId: string): (boolean, string?)
+	local dataService = self.context.Services:Get("DataService")
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.Gangs.MaximumPendingNameCleanups) or 64)
+	)
+	local queuedAt = os.time()
+	local pending, reason = dataService:UpdateSharedRecord(NAME_CLEANUP_RECORD, function(existing)
+		existing = if type(existing) == "table" then existing else {}
+		local current = existing[nameKey]
+		if type(current) == "table" and current.GangId == gangId then
+			return existing
+		end
+		if current ~= nil then
+			return existing
+		end
+		local count = 0
+		for _ in existing do
+			count += 1
+		end
+		if count >= maximum then
+			return existing
+		end
+		existing[nameKey] = {
+			GangId = gangId,
+			QueuedAt = queuedAt,
+		}
+		return existing
+	end)
+	if reason then
+		return false, reason
+	end
+	local marker = type(pending) == "table" and pending[nameKey]
+	if type(marker) ~= "table" or marker.GangId ~= gangId then
+		self.context.Logger:Error("Gang name cleanup backlog is full or conflicting", {
+			GangId = gangId,
+			NameKey = nameKey,
+			MaximumPendingNameCleanups = maximum,
+		})
+		return false, "GANG_NAME_CLEANUP_BACKLOG_FULL"
+	end
+	return true, nil
+end
+
+function GangService:_clearNameCleanup(nameKey: string, gangId: string): boolean
+	local _, reason = self.context.Services
+		:Get("DataService")
+		:UpdateSharedRecord(NAME_CLEANUP_RECORD, function(existing)
+			if
+				type(existing) == "table"
+				and type(existing[nameKey]) == "table"
+				and existing[nameKey].GangId == gangId
+			then
+				existing[nameKey] = nil
+			end
+			return existing
+		end)
+	if reason then
+		self.context.Logger:Warning("Gang name cleanup marker could not be cleared", {
+			GangId = gangId,
+			NameKey = nameKey,
+			Reason = reason,
+		})
+		return false
+	end
+	return true
+end
+
+function GangService:_repairNameCleanup(nameKey: string): (boolean, string?)
+	local dataService = self.context.Services:Get("DataService")
+	local pending, pendingReason = dataService:GetSharedRecord(NAME_CLEANUP_RECORD)
+	if pendingReason then
+		return false, pendingReason
+	end
+	local marker = type(pending) == "table" and pending[nameKey]
+	if marker == nil then
+		return true, nil
+	end
+	if type(marker) ~= "table" or type(marker.GangId) ~= "string" or marker.GangId == "" then
+		self.context.Logger:Error("Gang name cleanup marker is invalid", { NameKey = nameKey })
+		return false, "GANG_NAME_CLEANUP_INVALID"
+	end
+	local gangId = marker.GangId
+	local gang, gangReason = self:_gang(gangId)
+	if gangReason then
+		return false, gangReason
+	end
+	if gang then
+		-- The delete did not commit. The gang is still authoritative, so the name
+		-- reservation must stay and only the cancelled recovery marker is removed.
+		self:_clearNameCleanup(nameKey, gangId)
+		return true, nil
+	end
+	local released, releaseReason = self:_releaseNameReservation(nameKey, gangId)
+	if not released then
+		return false, releaseReason
+	end
+	if not self:_clearNameCleanup(nameKey, gangId) then
+		-- Do not allow a new gang to adopt the name while the old recovery marker
+		-- is still durable. The marker is exact-owner guarded, but retaining one
+		-- recovery identity per name keeps the backlog bounded and unambiguous.
+		return false, "GANG_NAME_CLEANUP_PENDING"
+	end
+	return true, nil
 end
 
 -- The gang a profile's pointer actually resolves to, or nil -- clearing the
@@ -234,6 +344,14 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 
 		local gangId = HttpService:GenerateGUID(false)
 		local nameKey = GangRules.nameKey(cleanName)
+		local repaired, repairReason = self:_repairNameCleanup(nameKey)
+		if not repaired then
+			self.context.Logger:Warning("Gang name recovery could not complete", {
+				NameKey = nameKey,
+				Reason = repairReason,
+			})
+			return nil, "GANG_CREATE_FAILED"
+		end
 		-- The reservation value identifies its owner. UpdateAsync may invoke its
 		-- transform more than once, so a sticky external success boolean is not a
 		-- reliable result: an early invocation can win and a retry can then discover
@@ -607,21 +725,32 @@ function GangService:Leave(player: Player): (boolean, string?)
 			-- gang outright rather than orphaning it with nobody able to invite, no
 			-- vehicle spawner to authorise and, once territory exists, nobody to
 			-- clear a contest or collect its income.
+			local nameKey = GangRules.nameKey(gang.Name)
+			local cleanupQueued, cleanupReason = self:_queueNameCleanup(nameKey, gang.Id)
+			if not cleanupQueued then
+				self.context.Logger:Warning("Gang disband refused without durable name recovery", {
+					GangId = gang.Id,
+					NameKey = nameKey,
+					Reason = cleanupReason,
+				})
+				return false, "GANG_LEAVE_FAILED"
+			end
 			local _, disbandReason = dataService:UpdateSharedRecord(gangKey(gang.Id), function()
 				return nil
 			end)
 			-- The transform legitimately returns nil on success -- that is what
 			-- disbanding means -- so only the reason string distinguishes a failed
-			-- write from a successful one, never the returned value.
+			-- write from a successful one, never the returned value. Keep the
+			-- recovery marker even on failure: an ambiguous DataStore response may
+			-- mean the deletion actually committed, and the repair path checks the
+			-- gang record before it ever releases the name.
 			if disbandReason then
 				return false, "GANG_LEAVE_FAILED"
 			end
-			dataService:UpdateSharedRecord("gang-names", function(index)
-				if type(index) == "table" then
-					index[GangRules.nameKey(gang.Name)] = nil
-				end
-				return index
-			end)
+			local nameReleased = self:_releaseNameReservation(nameKey, gang.Id)
+			if nameReleased then
+				self:_clearNameCleanup(nameKey, gang.Id)
+			end
 			-- A disbanded gang that held a territory would otherwise leave it
 			-- pointing at an id nothing can ever match again -- not a security
 			-- hole, since no profile keeps that id once the disband above runs,
