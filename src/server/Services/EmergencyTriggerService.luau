@@ -10,12 +10,18 @@ local EmergencyTriggerService = {
 	cooldowns = {},
 	playerCooldowns = {},
 	panicCooldowns = {},
+	running = false,
 }
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function EmergencyTriggerService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("EmergencyAlert")
 	self.triggerConnections = {}
+	self.running = false
 end
 
 function EmergencyTriggerService:_departments(instance: Instance, incident: any): { string }
@@ -36,12 +42,22 @@ end
 -- Control-created calls use the same path as 999 and panic alerts, so units do
 -- not need to be sitting inside an MDT before they hear about a new incident.
 function EmergencyTriggerService:Broadcast(call: any)
-	if type(call) ~= "table" or type(call.DepartmentIds) ~= "table" then
+	if not self.running or type(call) ~= "table" or type(call.DepartmentIds) ~= "table" then
 		return
 	end
 	for _, target in Players:GetPlayers() do
+		if not self.running then
+			return
+		end
 		local duty = self.context.Services:Get("DutyService"):Get(target)
-		if duty and table.find(call.DepartmentIds, duty.DepartmentId) then
+		-- Duty resolution may yield on Roblox group access. A shutdown or player
+		-- replacement during that wait invalidates this delivery.
+		if
+			self.running
+			and playerIsCurrent(target)
+			and duty
+			and table.find(call.DepartmentIds, duty.DepartmentId)
+		then
 			self.event:FireClient(target, { Call = call, ServerId = game.JobId })
 		end
 	end
@@ -57,6 +73,9 @@ function EmergencyTriggerService:_near(player: Player, instance: Instance, maxim
 end
 
 function EmergencyTriggerService:Trigger(instance: Instance, player: Player?): (any?, string?)
+	if not self.running or (player ~= nil and not playerIsCurrent(player)) then
+		return nil, "EMERGENCY_TRIGGER_UNAVAILABLE"
+	end
 	local config = self.context.Configuration.EmergencyTriggers
 	if
 		not CollectionService:HasTag(instance, config.Tag) or not instance:IsDescendantOf(workspace)
@@ -114,7 +133,15 @@ function EmergencyTriggerService:Trigger(instance: Instance, player: Player?): (
 end
 
 function EmergencyTriggerService:Panic(player: Player): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PANIC_UNAVAILABLE"
+	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	-- DutyService:Get may yield while Roblox resolves group access. Do not let a
+	-- request that outlived its Player or the service create a panic call later.
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "PANIC_UNAVAILABLE"
+	end
 	if not duty then
 		return nil, "NOT_ON_DUTY"
 	end
@@ -173,6 +200,7 @@ function EmergencyTriggerService:_watch(instance: Instance)
 end
 
 function EmergencyTriggerService:Start()
+	self.running = true
 	for _, instance in CollectionService:GetTagged(self.context.Configuration.EmergencyTriggers.Tag) do
 		self:_watch(instance)
 	end
@@ -200,6 +228,7 @@ function EmergencyTriggerService:Start()
 end
 
 function EmergencyTriggerService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
