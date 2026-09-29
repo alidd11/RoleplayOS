@@ -21,6 +21,7 @@ local AvatarCatalogService = {
 	running = false,
 	cache = {},
 	cacheOrder = {},
+	searching = {},
 }
 
 -- What the creator can browse, and the HumanoidDescription field each fills.
@@ -51,6 +52,7 @@ function AvatarCatalogService:Init(context: any)
 	self.running = false
 	self.cache = {}
 	self.cacheOrder = {}
+	self.searching = {}
 end
 
 function AvatarCatalogService:Start()
@@ -132,63 +134,99 @@ function AvatarCatalogService:Search(categoryId: any, keyword: any): (any?, stri
 		return cached, nil
 	end
 
-	local parameters = CatalogSearchParams.new()
-	parameters.AssetTypes = { category.AssetType }
-	if search ~= "" then
-		parameters.SearchKeyword = search
-	end
-
-	local ok, pages = pcall(function()
-		return AvatarEditorService:SearchCatalog(parameters)
-	end)
-	-- The catalogue call yields. Shutdown may clear the cache while it is in
-	-- flight, so a late result must not recreate service state after Destroy.
-	if not self.running then
-		return nil, "CATALOGUE_UNAVAILABLE"
-	end
-	if not ok or not pages then
-		-- Reported rather than raised. The catalogue being briefly unavailable is
-		-- an ordinary outcome that the creator should show as an empty shelf, not
-		-- an error that takes the menu down.
-		self.context.Logger:Warning("Avatar catalogue search failed", {
-			Category = categoryId,
-			Error = tostring(pages),
-		})
-		return nil, "CATALOGUE_UNAVAILABLE"
-	end
-
-	local pageOk, page = pcall(function()
-		return pages:GetCurrentPage()
-	end)
-	if not self.running then
-		return nil, "CATALOGUE_UNAVAILABLE"
-	end
-	if not pageOk or type(page) ~= "table" then
+	-- Cache entries only exist after Roblox has answered. Without a single-flight
+	-- claim, a room full of players opening the same uncached category together
+	-- all miss the cache and spend the shared catalogue quota independently.
+	-- Waiters stay below the RemoteFunction handler deadline, then either reuse
+	-- the completed cache entry or fail without issuing another Roblox request.
+	local existingSearch = self.searching[key]
+	if existingSearch then
+		local handlerTimeout = tonumber(self.context.Configuration.Network.HandlerTimeoutSeconds)
+			or 8
+		local deadline = os.clock() + math.max(0.1, handlerTimeout - 0.5)
+		while self.running and self.searching[key] == existingSearch and os.clock() < deadline do
+			task.wait(0.03)
+		end
+		if not self.running then
+			return nil, "CATALOGUE_UNAVAILABLE"
+		end
+		local shared = self:_cached(key)
+		if shared then
+			return shared, nil
+		end
 		return nil, "CATALOGUE_UNAVAILABLE"
 	end
 
-	local items = {}
-	for _, entry in page do
-		local id = tonumber(entry.Id)
-		if id and id > 0 then
-			table.insert(items, {
-				Id = id,
-				Name = if type(entry.Name) == "string" then entry.Name else "Item",
-				Field = category.Field,
+	local searchToken = {}
+	self.searching[key] = searchToken
+	local searchOk, result, resultReason = pcall(function(): (any?, string?)
+		local parameters = CatalogSearchParams.new()
+		parameters.AssetTypes = { category.AssetType }
+		if search ~= "" then
+			parameters.SearchKeyword = search
+		end
+
+		local ok, pages = pcall(function()
+			return AvatarEditorService:SearchCatalog(parameters)
+		end)
+		-- The catalogue call yields. Shutdown may clear the cache while it is in
+		-- flight, so a late result must not recreate service state after Destroy.
+		if not self.running then
+			return nil, "CATALOGUE_UNAVAILABLE"
+		end
+		if not ok or not pages then
+			-- Reported rather than raised. The catalogue being briefly unavailable is
+			-- an ordinary outcome that the creator should show as an empty shelf, not
+			-- an error that takes the menu down.
+			self.context.Logger:Warning("Avatar catalogue search failed", {
+				Category = categoryId,
+				Error = tostring(pages),
 			})
+			return nil, "CATALOGUE_UNAVAILABLE"
 		end
-		if #items >= MAXIMUM_RESULTS then
-			break
-		end
-	end
 
-	local payload = { CategoryId = categoryId, Field = category.Field, Items = items }
-	self:_remember(key, payload)
-	return payload, nil
+		local pageOk, page = pcall(function()
+			return pages:GetCurrentPage()
+		end)
+		if not self.running then
+			return nil, "CATALOGUE_UNAVAILABLE"
+		end
+		if not pageOk or type(page) ~= "table" then
+			return nil, "CATALOGUE_UNAVAILABLE"
+		end
+
+		local items = {}
+		for _, entry in page do
+			local id = tonumber(entry.Id)
+			if id and id > 0 then
+				table.insert(items, {
+					Id = id,
+					Name = if type(entry.Name) == "string" then entry.Name else "Item",
+					Field = category.Field,
+				})
+			end
+			if #items >= MAXIMUM_RESULTS then
+				break
+			end
+		end
+
+		local payload = { CategoryId = categoryId, Field = category.Field, Items = items }
+		self:_remember(key, payload)
+		return payload, nil
+	end)
+
+	if self.searching[key] == searchToken then
+		self.searching[key] = nil
+	end
+	if not searchOk then
+		error(result)
+	end
+	return result, resultReason
 end
 
 function AvatarCatalogService:Destroy()
 	self.running = false
+	table.clear(self.searching)
 	table.clear(self.cache)
 	table.clear(self.cacheOrder)
 end
