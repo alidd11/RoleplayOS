@@ -2513,6 +2513,11 @@ local Config = {
 		RecordCacheSeconds = 60,
 		MaximumRecordCacheEntries = 2048,
 		IndexWriteSpacingSeconds = 0.25,
+		-- A failed projection has already exhausted DataService's own bounded
+		-- retries. Recovery stays coalesced per entity and backs off so a store
+		-- outage cannot become a hot retry loop across the server.
+		IndexProjectionRetrySeconds = 30,
+		MaximumIndexProjectionRetrySeconds = 300,
 		MaximumWarrantReasonLength = 160,
 		MaximumWarrantDurationDays = 365,
 		MaximumActiveWarrantsPerPerson = 16,

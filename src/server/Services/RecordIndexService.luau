@@ -375,53 +375,134 @@ function RecordIndexService:ReindexVehicle(
 	return indexed, reason
 end
 
+function RecordIndexService:_projectionRetryBounds(): (number, number)
+	local config = self.context.Configuration.MDT
+	local initial = math.max(5, tonumber(config.IndexProjectionRetrySeconds) or 30)
+	local maximum =
+		math.max(initial, tonumber(config.MaximumIndexProjectionRetrySeconds) or 300)
+	return initial, maximum
+end
+
+function RecordIndexService:_scheduleProjectionRetry(state: any): number
+	local initial, maximum = self:_projectionRetryBounds()
+	local delay = math.min(
+		maximum,
+		math.max(initial, tonumber(state.RetrySeconds) or initial)
+	)
+	state.RetryAt = os.clock() + delay
+	state.RetrySeconds = math.min(maximum, delay * 2)
+	return delay
+end
+
+function RecordIndexService:_waitForProjectionRetry(key: string, state: any): boolean
+	while self.running and self.pendingSync[key] == state and not state.Resync do
+		local player = state.Player
+		if not playerIsCurrent(player) then
+			return false
+		end
+		local retryAt = tonumber(state.RetryAt)
+		if not retryAt then
+			break
+		end
+		local remaining = retryAt - os.clock()
+		if remaining <= 0 then
+			break
+		end
+		task.wait(math.min(0.25, remaining))
+	end
+	return self.running
+		and self.pendingSync[key] == state
+		and playerIsCurrent(state.Player)
+end
+
 -- `scope` says what changed. "Person" writes the person record and the name
 -- index; anything else also rewrites every vehicle they own. It defaults to the
 -- whole lot, so a caller that has not thought about it is no worse off than
 -- before, and the callers that only touch a record say so.
-function RecordIndexService:ScheduleCharacter(player: Player, character: any, scope: string?)
+function RecordIndexService:_scheduleCharacter(
+	player: Player,
+	character: any,
+	scope: string?,
+	delayFirst: boolean
+)
 	if not self.running or not playerIsCurrent(player) then
 		return
 	end
 	local key = "Person:" .. character.CharacterId
 	local existing = self.pendingSync[key]
 	if existing then
-		-- A fast rejoin may schedule the same character while the old Player
-		-- instance is still inside a yielding DataStore write. Keep one job, but
-		-- make its next pass use the newest live session references.
+		-- A newer mutation supersedes any recovery backoff. Keep one job, update it
+		-- to the latest live session references and let the worker wake promptly.
 		existing.Player = player
 		existing.Character = character
 		existing.Full = existing.Full or scope ~= "Person"
+		existing.RetryAt = nil
+		existing.RetrySeconds = nil
 		existing.Resync = true
 		return
 	end
+	local initialRetry = select(1, self:_projectionRetryBounds())
 	local state = {
 		Resync = false,
 		Player = player,
 		Character = character,
 		Full = scope ~= "Person",
+		RetryAt = if delayFirst then os.clock() + initialRetry else nil,
+		RetrySeconds = initialRetry,
 	}
 	self.pendingSync[key] = state
 	task.spawn(function()
-		-- Released whether indexing returns or raises. Held on a raise, every
-		-- later change to this character was silently refused for the life of the
-		-- server: bookings appeared to succeed and never reached the index.
+		-- One coalesced job owns recovery for this character. Failed DataStore/index
+		-- projections back off instead of disappearing or spinning, and a newer
+		-- mutation wakes the same job early.
 		local ok, reason
 		local safe, raised = pcall(function()
-			repeat
+			while self.running and self.pendingSync[key] == state do
+				if state.RetryAt and not state.Resync then
+					if not self:_waitForProjectionRetry(key, state) then
+						ok, reason = false, "INDEX_CANCELLED"
+						break
+					end
+				end
+				if not self.running or self.pendingSync[key] ~= state then
+					break
+				end
+				state.RetryAt = nil
 				state.Resync = false
 				local currentPlayer = state.Player
 				local currentCharacter = state.Character
 				local full = state.Full
 				state.Full = false
-				if not self.running or not playerIsCurrent(currentPlayer) then
+				if not playerIsCurrent(currentPlayer) then
 					ok, reason = false, "INDEX_CANCELLED"
 				elseif full then
 					ok, reason = self:IndexCharacter(currentPlayer, currentCharacter)
 				else
 					ok, reason = self:IndexPerson(currentPlayer, currentCharacter)
 				end
-			until not self.running or not state.Resync
+
+				if ok then
+					state.RetrySeconds = initialRetry
+					if not state.Resync then
+						break
+					end
+				elseif reason == "INDEX_CANCELLED" then
+					if not state.Resync then
+						break
+					end
+				else
+					-- A full projection may have failed after its person write or part-way
+					-- through the owned vehicles. Preserve the strongest requested scope
+					-- so the recovery pass repairs every stage that may be incomplete.
+					state.Full = state.Full or full
+					local retryDelay = self:_scheduleProjectionRetry(state)
+					self.context.Logger:Warning("Deferred MDT character indexing failed; retrying", {
+						CharacterId = currentCharacter.CharacterId,
+						Error = reason,
+						RetrySeconds = retryDelay,
+					})
+				end
+			end
 		end)
 		if self.pendingSync[key] == state then
 			self.pendingSync[key] = nil
@@ -431,15 +512,12 @@ function RecordIndexService:ScheduleCharacter(player: Player, character: any, sc
 				CharacterId = character.CharacterId,
 				Error = tostring(raised),
 			})
-			return
-		end
-		if not ok and reason ~= "INDEX_CANCELLED" then
-			self.context.Logger:Warning("Deferred MDT character indexing failed", {
-				CharacterId = character.CharacterId,
-				Error = reason,
-			})
 		end
 	end)
+end
+
+function RecordIndexService:ScheduleCharacter(player: Player, character: any, scope: string?)
+	self:_scheduleCharacter(player, character, scope, false)
 end
 
 function RecordIndexService:ScheduleVehicle(
@@ -457,34 +535,49 @@ function RecordIndexService:ScheduleVehicle(
 		existing.Player = player
 		existing.Character = character
 		existing.Vehicle = vehicle
+		existing.RetryAt = nil
+		existing.RetrySeconds = nil
 		existing.Resync = true
 		if previousRegistration then
 			existing.PreviousRegistration = existing.PreviousRegistration or previousRegistration
 		end
 		return
 	end
+	local initialRetry = select(1, self:_projectionRetryBounds())
 	local state = {
 		Resync = false,
 		Player = player,
 		Character = character,
 		Vehicle = vehicle,
 		PreviousRegistration = previousRegistration,
+		RetryAt = nil,
+		RetrySeconds = initialRetry,
 	}
 	self.pendingSync[key] = state
 	task.spawn(function()
-		-- Match the character worker: a raised DataStore/indexing error must not
-		-- strand the per-vehicle claim forever and silently suppress every later
-		-- resync for this vehicle.
+		-- Match character recovery: one per-vehicle claim survives ordinary
+		-- persistence failures with bounded backoff, but is still released on leave,
+		-- shutdown or an unexpected raised error.
 		local ok, reason
 		local safe, raised = pcall(function()
-			repeat
+			while self.running and self.pendingSync[key] == state do
+				if state.RetryAt and not state.Resync then
+					if not self:_waitForProjectionRetry(key, state) then
+						ok, reason = false, "INDEX_CANCELLED"
+						break
+					end
+				end
+				if not self.running or self.pendingSync[key] ~= state then
+					break
+				end
+				state.RetryAt = nil
 				state.Resync = false
 				local currentPlayer = state.Player
 				local currentCharacter = state.Character
 				local currentVehicle = state.Vehicle
 				local previous = state.PreviousRegistration
 				state.PreviousRegistration = nil
-				if not self.running or not playerIsCurrent(currentPlayer) then
+				if not playerIsCurrent(currentPlayer) then
 					ok, reason = false, "INDEX_CANCELLED"
 				else
 					ok, reason = self:ReindexVehicle(
@@ -494,7 +587,29 @@ function RecordIndexService:ScheduleVehicle(
 						previous
 					)
 				end
-			until not self.running or not state.Resync
+
+				if ok then
+					state.RetrySeconds = initialRetry
+					if not state.Resync then
+						break
+					end
+				elseif reason == "INDEX_CANCELLED" then
+					if not state.Resync then
+						break
+					end
+				else
+					-- If the new registration write succeeded but old-index cleanup failed,
+					-- retain the original registration so the recovery pass can finish the
+					-- destructive half safely instead of forgetting what must be removed.
+					state.PreviousRegistration = state.PreviousRegistration or previous
+					local retryDelay = self:_scheduleProjectionRetry(state)
+					self.context.Logger:Warning("Deferred MDT vehicle indexing failed; retrying", {
+						VehicleId = currentVehicle.VehicleId,
+						Error = reason,
+						RetrySeconds = retryDelay,
+					})
+				end
+			end
 		end)
 		if self.pendingSync[key] == state then
 			self.pendingSync[key] = nil
@@ -503,13 +618,6 @@ function RecordIndexService:ScheduleVehicle(
 			self.context.Logger:Error("Deferred MDT vehicle indexing raised", {
 				VehicleId = vehicle.VehicleId,
 				Error = tostring(raised),
-			})
-			return
-		end
-		if not ok and reason ~= "INDEX_CANCELLED" then
-			self.context.Logger:Warning("Deferred MDT vehicle indexing failed", {
-				VehicleId = vehicle.VehicleId,
-				Error = reason,
 			})
 		end
 	end)
@@ -735,10 +843,14 @@ function RecordIndexService:_indexPlayer(player: Player)
 		end
 		local ok, reason = self:IndexCharacter(player, character)
 		if not ok and reason ~= "INDEX_CANCELLED" then
-			self.context.Logger:Warning("MDT background indexing failed", {
+			self.context.Logger:Warning("MDT background indexing failed; recovery queued", {
 				CharacterId = character.CharacterId,
 				Error = reason,
 			})
+			-- The join sweep is deliberately serialised to protect DataStore budget.
+			-- Hand a failed character to the same coalesced recovery worker, but delay
+			-- its first retry so this queue can continue indexing other ready players.
+			self:_scheduleCharacter(player, character, nil, true)
 		end
 		task.wait(self.context.Configuration.MDT.IndexWriteSpacingSeconds)
 	end
