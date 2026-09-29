@@ -870,10 +870,14 @@ function RecordIndexService:Start()
 			if self.queued[userId] == player then
 				self.queued[userId] = nil
 			end
+			local repairs = {}
 			for characterId, repair in self.personIndexRepairs do
 				if repair.Player == player then
-					self:_dropPersonIndexRepair(characterId, repair)
+					table.insert(repairs, { CharacterId = characterId, State = repair })
 				end
+			end
+			for _, repair in repairs do
+				self:_dropPersonIndexRepair(repair.CharacterId, repair.State)
 			end
 		end)
 	)
