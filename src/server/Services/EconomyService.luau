@@ -290,7 +290,7 @@ function EconomyService:ReconcilePendingTransfers()
 		if type(index) ~= "table" then
 			return
 		end
-		local remaining = {}
+		local completed: { [any]: boolean } = {}
 		for _, id in index do
 			if not self.running then
 				return
@@ -303,6 +303,7 @@ function EconomyService:ReconcilePendingTransfers()
 				-- The profile save and durable receipt already succeeded. If the
 				-- index cleanup failed afterwards, drop the stale index entry without
 				-- touching the balance again.
+				completed[id] = true
 				continue
 			end
 			local player = type(record) == "table"
@@ -312,7 +313,6 @@ function EconomyService:ReconcilePendingTransfers()
 				and session.ActiveCharacterId == record.SenderCharacterId
 				and session.Profile.Characters[record.SenderCharacterId]
 			if not character then
-				table.insert(remaining, id)
 				continue
 			end
 			local refundTransactionId = "transfer-refund-reconcile:" .. tostring(id)
@@ -327,7 +327,6 @@ function EconomyService:ReconcilePendingTransfers()
 				Metadata = {},
 			})
 			if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
-				table.insert(remaining, id)
 				continue
 			end
 
@@ -346,7 +345,6 @@ function EconomyService:ReconcilePendingTransfers()
 					UserId = player.UserId,
 					Error = saveReason,
 				})
-				table.insert(remaining, id)
 				continue
 			end
 
@@ -366,14 +364,27 @@ function EconomyService:ReconcilePendingTransfers()
 					TransferId = record.TransferId,
 					Error = recordReason,
 				})
-				table.insert(remaining, id)
+			else
+				completed[id] = true
 			end
 		end
 		if not self.running then
 			return
 		end
-		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function()
-			return remaining
+		-- Another server can append a refund after the initial index read above.
+		-- Never replace the index with that stale snapshot: remove only entries
+		-- this pass has durably retired from the latest UpdateAsync value.
+		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
+			if type(existing) ~= "table" then
+				return existing
+			end
+			local current = {}
+			for _, id in existing do
+				if not completed[id] then
+					table.insert(current, id)
+				end
+			end
+			return current
 		end)
 		if indexReason then
 			self.context.Logger:Error("Pending transfer refund index persistence failed", {
