@@ -6,4 +6,6 @@ Unit registration carries callsign, department, division, station and status. Ra
 
 Emergency duty uses registered station spawn IDs rather than global part-name searches. See [Spawning](SPAWNING.md) for the validation and rollback contract.
 
+Parked map vehicles that RoleplayOS adopts for emergency lighting are treated as borrowed map state: their pre-existing emergency-light attributes/tag and any EasyLS scripts disabled by RoleplayOS are restored if the service tears down. VehicleSpawner-created clones are framework-owned instead and are destroyed later in teardown, so their third-party scripts are not restarted during shutdown.
+
 The Careers view supplies applicant-safe duty-profile summaries and valid spawn options for each role. Frontline Policing displays its available reporting points and requires the player to choose one before the server begins duty. Production access remains application-gated; the development profile exists only under the explicit Studio mock setting.
