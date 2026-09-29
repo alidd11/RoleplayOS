@@ -9,7 +9,10 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 
-local DealerRotationService = {}
+local DealerRotationService = {
+	generatedInstances = {},
+	rotationThread = nil,
+}
 
 local function sortByAttribute(instances: { Instance }, attributeName: string): { Instance }
 	table.sort(instances, function(left, right)
@@ -35,6 +38,8 @@ function DealerRotationService:Init(context: any)
 	self.settings = context.Configuration.DealerRotation
 	self.lastRotation = nil
 	self.connections = {}
+	self.generatedInstances = {}
+	self.rotationThread = nil
 	self.stopped = false
 end
 
@@ -47,6 +52,7 @@ function DealerRotationService:_generatedFolder(): Folder
 	local created = Instance.new("Folder")
 	created.Name = name
 	created.Parent = workspace
+	table.insert(self.generatedInstances, created)
 	return created
 end
 
@@ -77,6 +83,7 @@ function DealerRotationService:_createPoints()
 		point.CFrame = anchor + offset
 		point:SetAttribute("RoleplayOSDealerPointId", string.format("DealerPoint%d", index))
 		point.Parent = folder
+		table.insert(self.generatedInstances, point)
 		CollectionService:AddTag(point, self.settings.PointTag)
 	end
 end
@@ -119,6 +126,12 @@ function DealerRotationService:_createAvatars()
 		})
 		return
 	end
+	-- The description lookup yields. Shutdown or startup rollback may have
+	-- destroyed this optional service while Roblox was resolving the avatar.
+	if self.stopped then
+		description:Destroy()
+		return
+	end
 	local folder = self:_generatedFolder()
 	for index = 1, self.settings.ExpectedDealerCount do
 		local created, model = pcall(function()
@@ -134,9 +147,17 @@ function DealerRotationService:_createAvatars()
 			})
 			continue
 		end
+		-- Model creation also yields. Never parent a late result after teardown.
+		if self.stopped then
+			model:Destroy()
+			description:Destroy()
+			return
+		end
 		model.Parent = folder
+		table.insert(self.generatedInstances, model)
 		self:_prepareAvatar(model, index)
 	end
+	description:Destroy()
 end
 
 function DealerRotationService:_dealers(): { Instance }
@@ -198,16 +219,37 @@ function DealerRotationService:_rotate(rotationIndex: number)
 	})
 end
 
+function DealerRotationService:_clearGenerated()
+	for index = #self.generatedInstances, 1, -1 do
+		local instance = self.generatedInstances[index]
+		if instance.Parent then
+			instance:Destroy()
+		end
+	end
+	table.clear(self.generatedInstances)
+end
+
 function DealerRotationService:Start()
 	if not self.settings.Enabled then
 		return
 	end
+	self.stopped = false
 	if self.settings.AutoCreate then
-		self:_createPoints()
-		self:_createAvatars()
+		local ok, problem = pcall(function()
+			self:_createPoints()
+			self:_createAvatars()
+		end)
+		if not ok then
+			self:_clearGenerated()
+			error(problem, 0)
+		end
+	end
+	if self.stopped then
+		self:_clearGenerated()
+		return
 	end
 	local period = math.max(60, self.settings.RotationPeriodSeconds)
-	task.spawn(function()
+	self.rotationThread = task.spawn(function()
 		-- Tied to the service lifetime rather than the server's. Destroy only
 		-- disconnected the events, so this thread outlived the service it belongs
 		-- to and kept the whole thing reachable behind it.
@@ -219,6 +261,7 @@ function DealerRotationService:Start()
 			end
 			task.wait(60)
 		end
+		self.rotationThread = nil
 	end)
 	self.connections[#self.connections + 1] = CollectionService
 		:GetInstanceAddedSignal(self.settings.DealerTag)
@@ -234,10 +277,17 @@ end
 
 function DealerRotationService:Destroy()
 	self.stopped = true
+	local rotationThread = self.rotationThread
+	self.rotationThread = nil
+	if rotationThread and coroutine.status(rotationThread) ~= "dead" then
+		task.cancel(rotationThread)
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
-	self.connections = {}
+	table.clear(self.connections)
+	self:_clearGenerated()
+	self.lastRotation = nil
 end
 
 return DealerRotationService
