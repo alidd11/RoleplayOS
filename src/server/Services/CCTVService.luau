@@ -1,21 +1,64 @@
 --!strict
 
 local CollectionService = game:GetService("CollectionService")
-local CCTVService = { cameras = {} }
+local CCTVService = { cameras = {}, cameraCount = 0 }
 
 function CCTVService:Init(context: any)
 	self.context = context
+	self.cameras = {}
+	self.cameraCount = 0
 end
 
-function CCTVService:_register(instance: Instance)
-	if not instance:IsA("BasePart") then
-		return
+function CCTVService:_maximumCameras(): number
+	return math.max(0, math.floor(tonumber(self.context.Configuration.CCTV.MaximumCameras) or 64))
+end
+
+function CCTVService:_register(instance: Instance): boolean
+	if not instance:IsA("BasePart") or not instance:IsDescendantOf(workspace) then
+		return false
 	end
 	local id = instance:GetAttribute("CameraId")
 	if type(id) ~= "string" or id == "" then
 		id = instance.Name
 	end
+	local existing = self.cameras[id]
+	if existing == instance then
+		return true
+	end
+	if existing and existing:IsDescendantOf(workspace) then
+		return false
+	end
+	if existing == nil then
+		if self.cameraCount >= self:_maximumCameras() then
+			return false
+		end
+		self.cameraCount += 1
+	end
 	self.cameras[id] = instance
+	return true
+end
+
+function CCTVService:_unregister(instance: Instance): boolean
+	for id, stored in self.cameras do
+		if stored == instance then
+			self.cameras[id] = nil
+			self.cameraCount = math.max(0, self.cameraCount - 1)
+			return true
+		end
+	end
+	return false
+end
+
+function CCTVService:_fillCapacity()
+	if self.cameraCount >= self:_maximumCameras() then
+		return
+	end
+	for _, camera in CollectionService:GetTagged(self.context.Configuration.CCTV.CameraTag) do
+		if self.cameraCount >= self:_maximumCameras() then
+			break
+		end
+		self:_register(camera)
+	end
 end
 
 function CCTVService:CanView(player: Player): boolean
@@ -49,9 +92,7 @@ function CCTVService:Snapshot(player: Player): (any?, string?)
 end
 
 function CCTVService:Start()
-	for _, camera in CollectionService:GetTagged(self.context.Configuration.CCTV.CameraTag) do
-		self:_register(camera)
-	end
+	self:_fillCapacity()
 	self.added = CollectionService:GetInstanceAddedSignal(self.context.Configuration.CCTV.CameraTag)
 		:Connect(function(camera)
 			self:_register(camera)
@@ -59,10 +100,8 @@ function CCTVService:Start()
 	self.removed = CollectionService
 		:GetInstanceRemovedSignal(self.context.Configuration.CCTV.CameraTag)
 		:Connect(function(camera)
-			for id, stored in self.cameras do
-				if stored == camera then
-					self.cameras[id] = nil
-				end
+			if self:_unregister(camera) then
+				self:_fillCapacity()
 			end
 		end)
 end
@@ -75,6 +114,7 @@ function CCTVService:Destroy()
 		self.removed:Disconnect()
 	end
 	table.clear(self.cameras)
+	self.cameraCount = 0
 end
 
 return CCTVService
