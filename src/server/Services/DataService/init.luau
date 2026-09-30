@@ -63,23 +63,36 @@ end
 -- silently: every write from then on fails and the player's progress is lost
 -- from the last good save onward. That is the worst outcome this service has, so
 -- it is reported as a warning long before it becomes one.
-function DataService:_measure(player: Player, profile: any)
+function DataService:_measure(player: Player, profile: any): (boolean, string?)
 	local ok, encoded = pcall(HttpService.JSONEncode, HttpService, profile)
 	if not ok or type(encoded) ~= "string" then
-		return
+		self.context.Logger:Error("Profile could not be serialised for persistence", {
+			UserId = player.UserId,
+			Error = if ok then "ENCODED_VALUE_NOT_STRING" else tostring(encoded),
+		})
+		return false, "PROFILE_NOT_SERIALISABLE"
 	end
 	local bytes = #encoded
+	if bytes >= MAXIMUM_VALUE_BYTES then
+		self.context.Logger:Error("Profile exceeds the data store size limit", {
+			UserId = player.UserId,
+			Bytes = bytes,
+			LimitBytes = MAXIMUM_VALUE_BYTES,
+			PercentOfLimit = math.floor(bytes / MAXIMUM_VALUE_BYTES * 100),
+		})
+		return false, "PROFILE_TOO_LARGE"
+	end
 	local warnAt = self.context.Configuration.Framework.ProfileSizeWarningBytes
 		or math.floor(MAXIMUM_VALUE_BYTES * 0.35)
-	if bytes < warnAt then
-		return
+	if bytes >= warnAt then
+		self.context.Logger:Warning("Profile is approaching the data store size limit", {
+			UserId = player.UserId,
+			Bytes = bytes,
+			LimitBytes = MAXIMUM_VALUE_BYTES,
+			PercentOfLimit = math.floor(bytes / MAXIMUM_VALUE_BYTES * 100),
+		})
 	end
-	self.context.Logger:Warning("Profile is approaching the data store size limit", {
-		UserId = player.UserId,
-		Bytes = bytes,
-		LimitBytes = MAXIMUM_VALUE_BYTES,
-		PercentOfLimit = math.floor(bytes / MAXIMUM_VALUE_BYTES * 100),
-	})
+	return true, nil
 end
 
 function DataService:Init(context: any)
