@@ -83,43 +83,19 @@ return function(self: any)
 			and optionalString(payload.Notes, 300)
 			and validDepartmentIds(payload.DepartmentIds, self.context.Configuration.Departments)
 	end, function(player, payload, requestId)
-		if not self.context.Services:Get("DispatchService"):IsAtConsole(player) then
-			return {
-				Success = false,
-				Code = "DISPATCH_CONSOLE_REQUIRED",
-				Message = "Sit at an authorised dispatch console first.",
-				RequestId = requestId,
-			}
-		end
-		local prepared, prepareReason =
-			self.context.Services:Get("DispatchService"):PrepareCall(player, payload)
-		if not prepared then
-			return {
-				Success = false,
-				Code = prepareReason,
-				Message = "The call details could not be accepted.",
-				RequestId = requestId,
-			}
-		end
-		local call, reason = self.context.Services:Get("CallService"):Create(prepared)
-		if not call then
-			return {
-				Success = false,
-				Code = reason,
-				Message = "The call could not be created.",
-				RequestId = requestId,
-			}
-		end
-		self.context.Services:Get("AuditService"):Record({
-			ActorUserId = player.UserId,
-			Action = "Dispatch.CallCreated",
-			Target = call.CallId,
-			Metadata = { Priority = call.Priority, IncidentType = call.IncidentType },
-		})
+		local call, reason =
+			self.context.Services:Get("DispatchService"):CreateCall(player, payload)
+		local messages = {
+			DISPATCH_CONSOLE_REQUIRED = "Sit at an authorised dispatch console first.",
+			DISPATCH_CALL_IN_PROGRESS = "Your previous dispatch call is still being created.",
+			CALL_CAPACITY_REACHED = "The live dispatch queue is full. Resolve an active call first.",
+		}
 		return {
-			Success = true,
-			Code = "OK",
-			Message = "Call created.",
+			Success = call ~= nil,
+			Code = if call then "OK" else reason,
+			Message = if call
+				then "Call created."
+				else (reason and messages[reason]) or "The call could not be created.",
 			Data = call,
 			RequestId = requestId,
 		}

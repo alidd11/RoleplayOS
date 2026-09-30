@@ -8,7 +8,13 @@ local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolic
 local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local DispatchService = { Optional = true, connections = {}, occupied = {}, running = false }
+local DispatchService = {
+	Optional = true,
+	connections = {},
+	occupied = {},
+	creatingCalls = {},
+	running = false,
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -19,6 +25,7 @@ function DispatchService:Init(context: any)
 	self.changedEvent = context.Network:RegisterEvent("DispatchChanged")
 	self.accessEvent = context.Network:RegisterEvent("DispatchConsoleAccess")
 	self.seatWatchers = {}
+	self.creatingCalls = {}
 end
 
 function DispatchService:_duty(player: Player): any?
@@ -142,6 +149,50 @@ function DispatchService:PrepareCall(player: Player, payload: any): (any?, strin
 		CreatedByUserId = player.UserId,
 	},
 		nil
+end
+
+function DispatchService:CreateCall(player: Player, payload: any): (any?, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return nil, "DISPATCH_UNAVAILABLE"
+	end
+	if self.creatingCalls[player] then
+		return nil, "DISPATCH_CALL_IN_PROGRESS"
+	end
+
+	-- Call preparation crosses several Roblox text-filter calls and call
+	-- publication can itself yield while recipient duty is revalidated. Hold one
+	-- exact-Player claim across the whole boundary so a retry cannot create a
+	-- second live call while the first request is still completing.
+	local claim = {}
+	self.creatingCalls[player] = claim
+	local ok, result, resultReason = pcall(function(): (any?, string?)
+		if not self:IsAtConsole(player) then
+			return nil, "DISPATCH_CONSOLE_REQUIRED"
+		end
+		local prepared, prepareReason = self:PrepareCall(player, payload)
+		if not prepared then
+			return nil, prepareReason
+		end
+		local call, callReason = self.context.Services:Get("CallService"):Create(prepared)
+		if not call then
+			return nil, callReason
+		end
+		self.context.Services:Get("AuditService"):Record({
+			ActorUserId = player.UserId,
+			Action = "Dispatch.CallCreated",
+			Target = call.CallId,
+			Metadata = { Priority = call.Priority, IncidentType = call.IncidentType },
+		})
+		return call, nil
+	end)
+
+	if self.creatingCalls[player] == claim then
+		self.creatingCalls[player] = nil
+	end
+	if not ok then
+		error(result)
+	end
+	return result, resultReason
 end
 
 function DispatchService:_unwatchSeat(instance: Instance)
@@ -338,6 +389,7 @@ function DispatchService:Destroy()
 	end
 	table.clear(self.seatWatchers)
 	table.clear(self.occupied)
+	table.clear(self.creatingCalls)
 end
 
 return DispatchService
