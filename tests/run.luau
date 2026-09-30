@@ -126,35 +126,32 @@ H.test(
 		)
 	end
 )
-H.test(
-	"official directory reports cold read failures and reuses its last good snapshot",
-	function()
-		local cached = { Servers = {}, PublicServers = {} }
-		local service: any = setmetatable({
-			settings = { DirectoryCacheSeconds = 1 },
-			context = { Configuration = { Network = { HandlerTimeoutSeconds = 8 } } },
-			directoryCache = nil,
-			directoryCacheExpiresAt = 0,
-			directoryRefresh = nil,
-			ListPublicInstances = function()
-				return {}, nil
-			end,
-			List = function()
-				return nil, "OFFICIAL_SERVER_UNAVAILABLE"
-			end,
-		}, { __index = OfficialServerService })
+H.test("official directory reports cold read failures and reuses its last good snapshot", function()
+	local cached = { Servers = {}, PublicServers = {} }
+	local service: any = setmetatable({
+		settings = { DirectoryCacheSeconds = 1 },
+		context = { Configuration = { Network = { HandlerTimeoutSeconds = 8 } } },
+		directoryCache = nil,
+		directoryCacheExpiresAt = 0,
+		directoryRefresh = nil,
+		ListPublicInstances = function()
+			return {}, nil
+		end,
+		List = function()
+			return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+		end,
+	}, { __index = OfficialServerService })
 
-		local snapshot, reason = OfficialServerService.Directory(service)
-		H.expect(snapshot == nil, "cold directory refresh cached an incomplete snapshot")
-		H.expect(reason == "OFFICIAL_SERVER_UNAVAILABLE", "cold directory failure was hidden")
+	local snapshot, reason = OfficialServerService.Directory(service)
+	H.expect(snapshot == nil, "cold directory refresh cached an incomplete snapshot")
+	H.expect(reason == "OFFICIAL_SERVER_UNAVAILABLE", "cold directory failure was hidden")
 
-		service.directoryCache = cached
-		service.directoryCacheExpiresAt = 0
-		snapshot, reason = OfficialServerService.Directory(service)
-		H.expect(snapshot == cached, "failed refresh did not reuse the last good snapshot")
-		H.expect(reason == nil, "last good snapshot returned with an error")
-	end
-)
+	service.directoryCache = cached
+	service.directoryCacheExpiresAt = 0
+	snapshot, reason = OfficialServerService.Directory(service)
+	H.expect(snapshot == cached, "failed refresh did not reuse the last good snapshot")
+	H.expect(reason == nil, "last good snapshot returned with an error")
+end)
 H.test("server-tier access preserves the actionable public gamepass denial", function()
 	local result = Access.evaluate({
 		AccessType = "Combined",
