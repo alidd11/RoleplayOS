@@ -560,10 +560,7 @@ return function(RoadSafetyService)
 		end)
 	end
 
-	function RoadSafetyService:_connectTag(
-		tag: string,
-		callback: (BasePart, BasePart, any) -> ()
-	)
+	function RoadSafetyService:_connectTag(tag: string, callback: (BasePart, BasePart, any) -> ())
 		local function watch(instance: Instance)
 			if
 				not self.running
