@@ -607,10 +607,7 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 	local economy = self.context.Services:Get("EconomyService")
 	local transfersRecovered, transferRecoveryReason =
 		economy:ReconcilePendingTransfers(player, characterId)
-	if
-		not transfersRecovered
-		and transferRecoveryReason ~= "TRANSFER_RECOVERY_IN_PROGRESS"
-	then
+	if not transfersRecovered and transferRecoveryReason ~= "TRANSFER_RECOVERY_IN_PROGRESS" then
 		self.context.Logger:Warning(
 			"Transfer refund recovery is still pending after character selection",
 			{
