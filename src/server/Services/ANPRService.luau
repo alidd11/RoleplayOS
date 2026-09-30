@@ -145,14 +145,8 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart, token: any)
 		-- full duplicate-alert cooldown after a transient warrant-store failure.
 		-- Only shorten the reservation this scan created; an untagged/re-tagged
 		-- sensor or a newer reservation must remain untouched.
-		if
-			self.cooldowns[sensor] == perSensor
-			and perSensor[registration] == cooldownExpiresAt
-		then
-			local retryCooldown = math.min(
-				self.context.Configuration.ANPR.CooldownSeconds,
-				3
-			)
+		if self.cooldowns[sensor] == perSensor and perSensor[registration] == cooldownExpiresAt then
+			local retryCooldown = math.min(self.context.Configuration.ANPR.CooldownSeconds, 3)
 			perSensor[registration] = math.min(cooldownExpiresAt, os.clock() + retryCooldown)
 		end
 		self.context.Logger:Warning("ANPR warrant lookup failed", {

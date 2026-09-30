@@ -64,8 +64,34 @@ return function(self: any)
 		return type(payload) == "table" and boundedString(payload.CharacterId, 1, 64),
 			"INVALID_CHARACTER_ID"
 	end, function(player, payload, requestId)
-		local character, reason =
-			self.context.Services:Get("CharacterService"):Select(player, payload.CharacterId)
+		local dutyService = self.context.Services:Get("DutyService")
+		local transitionClaim, transitionReason = dutyService:ClaimRoleTransition(player)
+		if not transitionClaim then
+			local reason = if transitionReason == "ROLE_TRANSITION_IN_PROGRESS"
+				then "CHARACTER_SELECTION_IN_PROGRESS"
+				else transitionReason
+			return {
+				Success = false,
+				Code = reason,
+				Message = if reason == "CHARACTER_SELECTION_IN_PROGRESS"
+					then "Another role or character change is still being processed."
+					else "The character could not be selected.",
+				RequestId = requestId,
+			}
+		end
+
+		local ok, character, reason = pcall(function(): (any?, string?)
+			local selected, selectedReason =
+				self.context.Services:Get("CharacterService"):Select(player, payload.CharacterId)
+			if selected then
+				dutyService:End(player)
+			end
+			return selected, selectedReason
+		end)
+		dutyService:ReleaseRoleTransition(player, transitionClaim)
+		if not ok then
+			error(character)
+		end
 		if not character then
 			return {
 				Success = false,
@@ -76,7 +102,6 @@ return function(self: any)
 				RequestId = requestId,
 			}
 		end
-		self.context.Services:Get("DutyService"):End(player)
 		return {
 			Success = true,
 			Code = "OK",
