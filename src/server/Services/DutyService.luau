@@ -35,11 +35,29 @@ local function playerIsPresent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
-local DutyService = { active = {}, beginning = {}, running = false }
+local DutyService = { active = {}, roleTransitions = {}, running = false }
 
 function DutyService:Init(context: any)
 	self.context = context
-	table.clear(self.beginning)
+	table.clear(self.roleTransitions)
+end
+
+function DutyService:ClaimRoleTransition(player: Player): (any?, string?)
+	if not self.running or not playerIsPresent(player) then
+		return nil, "DUTY_UNAVAILABLE"
+	end
+	if self.roleTransitions[player] then
+		return nil, "ROLE_TRANSITION_IN_PROGRESS"
+	end
+	local claim = {}
+	self.roleTransitions[player] = claim
+	return claim, nil
+end
+
+function DutyService:ReleaseRoleTransition(player: Player, claim: any)
+	if self.roleTransitions[player] == claim then
+		self.roleTransitions[player] = nil
+	end
 end
 
 function DutyService:_publishUnitChanged(userId: number, departmentId: string?)
@@ -440,16 +458,19 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 end
 
 function DutyService:Begin(player: Player, request: any): (boolean, string?)
-	-- A duty start crosses group access, character spawn, loadout and shoulder
-	-- number work before the live duty record exists. Claim the exact Player
-	-- instance first so duplicate/retried remotes cannot run those side effects
-	-- concurrently and race to overwrite the final duty state.
-	if self.beginning[player] then
-		return false, "DUTY_START_IN_PROGRESS"
+	-- Team/character transitions must be mutually exclusive. A duty start can
+	-- yield through group access, character loading, loadout work and shoulder
+	-- number allocation; character selection or civilian entry must not overtake
+	-- those side effects while this request is still live.
+	local claim, claimReason = self:ClaimRoleTransition(player)
+	if not claim then
+		return false,
+			if claimReason == "ROLE_TRANSITION_IN_PROGRESS"
+				then "DUTY_START_IN_PROGRESS"
+				else claimReason
 	end
-	self.beginning[player] = true
 	local ok, started, reason = pcall(self._begin, self, player, request)
-	self.beginning[player] = nil
+	self:ReleaseRoleTransition(player, claim)
 	if not ok then
 		error(started)
 	end
@@ -528,7 +549,7 @@ function DutyService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.playerConnections or {})
-	table.clear(self.beginning)
+	table.clear(self.roleTransitions)
 	table.clear(self.active)
 end
 
