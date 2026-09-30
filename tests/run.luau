@@ -338,6 +338,33 @@ H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
 end)
+H.test("configuration rejects unsafe persistence timings", function()
+	local function withFrameworkPatch(patch: any): any
+		local candidate = table.clone(Config)
+		candidate.Framework = table.clone(Config.Framework)
+		for key, value in patch do
+			candidate.Framework[key] = value
+		end
+		return candidate
+	end
+
+	for _, case in {
+		{ { AutosaveSeconds = 0 }, "zero autosave interval" },
+		{ { ShutdownSaveSeconds = 0 }, "zero shutdown save window" },
+		{ { MaxSaveAttempts = 0 }, "zero save attempts" },
+		{ { JoinLoadAttempts = 0 }, "zero load attempts" },
+		{ { SessionLeaseSeconds = Config.Framework.AutosaveSeconds * 2 - 1 }, "short session lease" },
+		{
+			{ MaximumLeaseWaitSeconds = Config.Framework.SessionLeaseSeconds },
+			"lease wait as long as the lease",
+		},
+		{ { SessionHandoverSeconds = "invalid" }, "non-numeric handover wait" },
+		{ { ProfileSizeWarningBytes = 4 * 1024 * 1024 }, "late profile-size warning" },
+	} do
+		local valid = ConfigValidator.validate(withFrameworkPatch(case[1]))
+		H.expect(not valid, "accepted " .. case[2])
+	end
+end)
 H.test("bank robbery economy is bounded and mode agnostic", function()
 	local robbery = Config.BankRobbery
 	H.expect(type(robbery.Tag) == "string" and robbery.Tag ~= "", "bank robbery tag missing")
