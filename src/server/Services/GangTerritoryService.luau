@@ -58,6 +58,7 @@ local MapProjection = require(ReplicatedStorage.RoleplayOS.Shared.MapProjection)
 local GangTerritoryService = {
 	connections = {},
 	running = false,
+	sharedScope = nil,
 	-- TerritoryId -> { Id, Name, Part }. Ownership is not cached here: the
 	-- part's own attributes are the live mirror, so this table cannot go
 	-- stale by holding a second copy of it.
@@ -80,6 +81,7 @@ end
 
 function GangTerritoryService:Init(context: any)
 	self.context = context
+	self.sharedScope = nil
 end
 
 -- Reads a territory's id and display name off the part that defines it.
@@ -148,7 +150,7 @@ function GangTerritoryService:_seedMirror(territoryId: string)
 	if not territory then
 		return
 	end
-	local owners = self.context.Services:Get("DataService"):GetSharedRecord(TERRITORY_OWNERS_RECORD)
+	local owners = self.context.Services:Get("DataService"):GetScopedSharedRecord(self.sharedScope, TERRITORY_OWNERS_RECORD)
 	-- The shared-record read yields. The territory may have been untagged or
 	-- removed while it was in flight, so never write the mirror onto stale state.
 	if self.territories[territoryId] ~= territory then
@@ -191,7 +193,7 @@ function GangTerritoryService:_reconcilePendingOwnerPointers(
 			and (operationId == nil or entry.OperationId == operationId)
 		then
 			local gangId = entry.GangId
-			local _, reason = dataService:UpdateSharedRecord(gangKey(gangId), function(gang)
+			local _, reason = dataService:UpdateScopedSharedRecord(self.sharedScope, gangKey(gangId), function(gang)
 				if type(gang) == "table" then
 					if gangId == currentGangId then
 						gang.TerritoryId = territoryId
@@ -216,7 +218,7 @@ function GangTerritoryService:_reconcilePendingOwnerPointers(
 	if next(completed) == nil then
 		return allSucceeded
 	end
-	local _, cleanupReason = dataService:UpdateSharedRecord(
+	local _, cleanupReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
 		TERRITORY_OWNERS_RECORD,
 		function(owners)
 			if type(owners) ~= "table" then
@@ -251,6 +253,12 @@ function GangTerritoryService:_reconcilePendingOwnerPointers(
 end
 
 function GangTerritoryService:Start()
+	-- GangService and this service must read the same persistence domain. The
+	-- official-server identity is stable by this point in service startup.
+	local entry = self.context.Services:Get("OfficialServerService"):CurrentEntry()
+	self.sharedScope = if type(entry) == "table" and type(entry.Id) == "string"
+		then entry.Id
+		else nil
 	local tag = self.context.Configuration.Gangs.TerritoryTag
 	-- Subscribe before the initial walk so a tag removed while _adopt is yielding
 	-- on its shared-record seed cannot leave a stale territory behind.
@@ -501,7 +509,7 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 	local dataService = self.context.Services:Get("DataService")
 	local changedAt = os.time()
 	local operationId = HttpService:GenerateGUID(false)
-	local storedOwners, ownersReason = dataService:UpdateSharedRecord(
+	local storedOwners, ownersReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
 		TERRITORY_OWNERS_RECORD,
 		function(owners)
 			owners = if type(owners) == "table" then owners else {}
@@ -638,7 +646,7 @@ function GangTerritoryService:_payIncome()
 		end
 		local ownerGangId = territory.Part:GetAttribute("OwnerGangId")
 		if type(ownerGangId) == "string" and ownerGangId ~= "" then
-			local gang = dataService:GetSharedRecord(gangKey(ownerGangId))
+			local gang = dataService:GetScopedSharedRecord(self.sharedScope, gangKey(ownerGangId))
 			-- The shared-record read yields. Destroy may run while it is in flight,
 			-- so do not resume with a payout once teardown has begun.
 			if not self.running then
@@ -699,6 +707,7 @@ end
 
 function GangTerritoryService:Destroy()
 	self.running = false
+	self.sharedScope = nil
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
