@@ -35,7 +35,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Missing configuration section: " .. section)
 		end
 	end
-	local framework = config.Framework or {}
+	local framework = if type(config.Framework) == "table" then config.Framework else {}
 	for _, field in { "AutosaveSeconds", "ShutdownSaveSeconds", "SessionLeaseSeconds" } do
 		local value = framework[field]
 		if type(value) ~= "number" or value <= 0 then
@@ -48,11 +48,13 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Invalid persistence framework attempt count: " .. field)
 		end
 	end
-	for _, field in { "MaximumLeaseWaitSeconds", "SessionHandoverSeconds" } do
-		local value = framework[field]
-		if value ~= nil and (type(value) ~= "number" or value < 0) then
-			table.insert(errors, "Invalid persistence framework wait: " .. field)
-		end
+	local maximumLeaseWait = framework.MaximumLeaseWaitSeconds
+	if maximumLeaseWait ~= nil and (type(maximumLeaseWait) ~= "number" or maximumLeaseWait < 0) then
+		table.insert(errors, "Invalid persistence framework wait: MaximumLeaseWaitSeconds")
+	end
+	local handoverSeconds = framework.SessionHandoverSeconds
+	if handoverSeconds ~= nil and (type(handoverSeconds) ~= "number" or handoverSeconds <= 0) then
+		table.insert(errors, "Invalid persistence framework wait: SessionHandoverSeconds")
 	end
 	if
 		type(framework.AutosaveSeconds) == "number"
