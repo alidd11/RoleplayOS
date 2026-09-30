@@ -1,4 +1,6 @@
 --!strict
+local Utils = require(script.Parent.Utils)
+local deepCopy = Utils.deepCopy
 
 local DELETED_FIELD = "__RoleplayOSDeleted"
 
@@ -9,7 +11,11 @@ end
 return function(DataService)
 	function DataService:GetSharedRecord(recordId: string): (any?, string?)
 		if self.mock then
-			return self.mockSharedRecords[recordId], nil
+			-- Match DataStore semantics: callers receive a detached value. Returning
+			-- the stored table itself let a later local mutation silently change the
+			-- mock record without UpdateSharedRecord, hiding missing durable writes
+			-- during Studio testing.
+			return deepCopy(self.mockSharedRecords[recordId]), nil
 		end
 		local ok, result = self:_retry(function()
 			return self.sharedRecordStore:GetAsync(recordId)
@@ -29,9 +35,13 @@ return function(DataService)
 		transform: (any?) -> any
 	): (any?, string?)
 		if self.mock then
-			local updated = transform(self.mockSharedRecords[recordId])
-			self.mockSharedRecords[recordId] = updated
-			return updated, nil
+			-- UpdateAsync gives its transform an isolated deserialised value and the
+			-- returned result is persisted independently of the caller's table.
+			-- Preserve those boundaries in Studio so mock behaviour cannot make an
+			-- accidental reference mutation look like a successful durable update.
+			local updated = transform(deepCopy(self.mockSharedRecords[recordId]))
+			self.mockSharedRecords[recordId] = deepCopy(updated)
+			return deepCopy(updated), nil
 		end
 		local updated
 		local ok = self:_retry(function()
