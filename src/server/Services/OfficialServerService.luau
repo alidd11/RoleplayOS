@@ -79,6 +79,9 @@ function OfficialServerService:Init(context: any)
 	self.reserving = {}
 	self.transferring = {}
 	self.instances = {}
+	self.directoryCache = nil
+	self.directoryCacheExpiresAt = 0
+	self.directoryRefresh = nil
 	self.currentServerId = nil
 	self.currentInstanceIndex = nil
 	self.connection = nil
@@ -381,6 +384,68 @@ function OfficialServerService:List(): { any }
 		return (a.InstanceIndex or 0) < (b.InstanceIndex or 0)
 	end)
 	return rows
+end
+
+-- Network-facing directory snapshot.
+--
+-- The raw list functions intentionally stay fresh because JoinPublic uses the
+-- public directory to authorise a teleport. The UI directory is different: its
+-- occupancy source is republished only every few seconds, while every uncached
+-- request otherwise spends shared DataStore/MemoryStore reads. Cache only this
+-- presentation snapshot, and coalesce a cold refresh across all players.
+function OfficialServerService:Directory(): (any?, string?)
+	local now = os.clock()
+	local cacheSeconds = math.max(0.25, tonumber(self.settings.DirectoryCacheSeconds) or 3)
+	if self.directoryCache and now < self.directoryCacheExpiresAt then
+		return self.directoryCache, nil
+	end
+
+	local refreshing = self.directoryRefresh
+	if refreshing then
+		-- An expired snapshot is still safer and more useful than multiplying the
+		-- same shared-store reads while one leader refreshes it.
+		if self.directoryCache then
+			return self.directoryCache, nil
+		end
+		local handlerTimeout = tonumber(self.context.Configuration.Network.HandlerTimeoutSeconds)
+			or 8
+		local deadline = os.clock() + math.max(0.1, handlerTimeout - 0.5)
+		while self.directoryRefresh == refreshing and os.clock() < deadline do
+			task.wait(0.03)
+		end
+		if self.directoryCache then
+			return self.directoryCache, nil
+		end
+		return nil, "SERVER_DIRECTORY_BUSY"
+	end
+
+	local token = {}
+	self.directoryRefresh = token
+	local ok, snapshot = pcall(function()
+		local publicServers = select(1, self:ListPublicInstances())
+		return {
+			Servers = self:List(),
+			PublicServers = publicServers,
+		}
+	end)
+	local stillOwner = self.directoryRefresh == token
+	if stillOwner then
+		self.directoryRefresh = nil
+	end
+	if not ok then
+		if self.directoryCache then
+			return self.directoryCache, nil
+		end
+		error(snapshot)
+	end
+	-- Destroy() clears the token before releasing service state. A late shared
+	-- read must not resurrect cache state after teardown.
+	if not stillOwner then
+		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
+	self.directoryCache = snapshot
+	self.directoryCacheExpiresAt = os.clock() + cacheSeconds
+	return snapshot, nil
 end
 
 -- The official server entry this server is serving, or nil on the public place.
@@ -855,6 +920,9 @@ function OfficialServerService:Destroy()
 	self.occupancy = nil
 	self.publicDirectory = nil
 	self.startedAt = nil
+	self.directoryCache = nil
+	self.directoryCacheExpiresAt = 0
+	self.directoryRefresh = nil
 	table.clear(self.codes)
 	table.clear(self.reserving)
 	table.clear(self.transferring)
