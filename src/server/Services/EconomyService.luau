@@ -313,7 +313,11 @@ function EconomyService:ReconcilePendingTransfers(
 	if self.reconciling[scope] then
 		return false, "TRANSFER_RECOVERY_IN_PROGRESS"
 	end
-	self.reconciling[scope] = true
+	-- Use an identity token rather than a boolean. PlayerRemoving deliberately
+	-- releases the scope so an immediate rejoin is not blocked by stale work; an
+	-- older yielding continuation must therefore only clear the claim it owns.
+	local claim = {}
+	self.reconciling[scope] = claim
 
 	local unresolvedReason: string? = nil
 	local ok, problem = pcall(function()
@@ -516,7 +520,9 @@ function EconomyService:ReconcilePendingTransfers(
 		end
 	end)
 
-	self.reconciling[scope] = nil
+	if self.reconciling[scope] == claim then
+		self.reconciling[scope] = nil
+	end
 	if not ok then
 		self.context.Logger:Error("Pending transfer reconciliation failed", {
 			UserId = player.UserId,
