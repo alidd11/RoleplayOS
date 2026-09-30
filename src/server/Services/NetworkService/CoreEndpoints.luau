@@ -97,14 +97,22 @@ return function(self: any)
 		return payload == nil or type(payload) == "table"
 	end, function(_, _, requestId)
 		local officialService = self.context.Services:Get("OfficialServerService")
+		local directory, reason = officialService:Directory()
+		if not directory then
+			return {
+				Success = false,
+				Code = reason or "OFFICIAL_SERVER_UNAVAILABLE",
+				Message = if reason == "SERVER_DIRECTORY_BUSY"
+					then "The server list is still refreshing. Try again shortly."
+					else "The server list is unavailable right now.",
+				RequestId = requestId,
+			}
+		end
 		return {
 			Success = true,
 			Code = "OK",
 			Message = "",
-			Data = {
-				Servers = officialService:List(),
-				PublicServers = officialService:ListPublicInstances(),
-			},
+			Data = directory,
 			RequestId = requestId,
 		}
 	end)
