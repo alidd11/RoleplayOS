@@ -381,8 +381,8 @@ return function(DataService)
 			DataKey = profileKey,
 		}
 		finishLoading()
-		-- Measured once per join rather than on every save, which would encode the
-		-- whole profile every forty seconds for a number that barely moves.
+		-- Establish a baseline at join. Dirty saves are measured again below so
+		-- long sessions cannot grow past the warning threshold unseen.
 		task.spawn(function()
 			self:_measure(player, loaded)
 		end)
@@ -471,6 +471,13 @@ return function(DataService)
 		session.Saving = true
 		local revision = session.Revision or 0
 		local snapshot = deepCopy(session.Profile)
+		-- Measure changed state at the durable boundary, not only at join. A long
+		-- session can accumulate enough bounded histories and owned content to cross
+		-- the warning threshold before the next reconnect. Skip this extra encode
+		-- during BindToClose so observability cannot consume the final-save window.
+		if session.Dirty and not self.closing then
+			self:_measure(player, snapshot)
+		end
 		local profileKey = session.DataKey or self:_profileKey(player)
 		local ok, problem = self:_retry(function()
 			self.store:UpdateAsync(profileKey, function(stored)
