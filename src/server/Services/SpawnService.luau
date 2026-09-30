@@ -283,7 +283,14 @@ function SpawnService:_enterCivilianAtTerritory(
 		return false, "NOT_IN_A_GANG"
 	end
 	local dataService = self.context.Services:Get("DataService")
-	local gang = dataService:GetSharedRecord("gang:" .. gangId)
+	local officialEntry = self.context.Services:Get("OfficialServerService"):CurrentEntry()
+	local sharedScope = if type(officialEntry) == "table" and type(officialEntry.Id) == "string"
+		then officialEntry.Id
+		else nil
+	local gang, gangReason = dataService:GetScopedSharedRecord(sharedScope, "gang:" .. gangId)
+	if gangReason then
+		return false, gangReason
+	end
 	local territoryId = type(gang) == "table" and gang.TerritoryId
 	if type(territoryId) ~= "string" or territoryId == "" then
 		return false, "GANG_HAS_NO_TERRITORY"
