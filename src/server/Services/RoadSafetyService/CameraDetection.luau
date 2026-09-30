@@ -4,6 +4,12 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 return function(RoadSafetyService)
+	function RoadSafetyService:_sensorIsCurrent(sensor: BasePart, token: any): boolean
+		return self.running
+			and self.sensorTokens[sensor] == token
+			and sensor:IsDescendantOf(Workspace)
+	end
+
 	-- Takes over every speed camera in the world.
 	--
 	-- A camera model holds a sensor part and a Configuration with a SpeedLimit,
@@ -175,6 +181,7 @@ return function(RoadSafetyService)
 		local camera = self.sensorCameras[sensor]
 		self.sensorCameras[sensor] = nil
 		self.sensors[sensor] = nil
+		self.sensorTokens[sensor] = nil
 		self.cooldowns[sensor] = nil
 		self:_restoreSensor(sensor)
 		if camera then
@@ -198,8 +205,10 @@ return function(RoadSafetyService)
 		}
 		sensor.CanCollide = false
 		sensor.CanTouch = true
+		local token = {}
+		self.sensorTokens[sensor] = token
 		self.sensorConnections[sensor] = sensor.Touched:Connect(function(hit)
-			self:_reading(camera, sensor, hit)
+			self:_reading(camera, sensor, hit, token)
 		end)
 	end
 
@@ -353,7 +362,10 @@ return function(RoadSafetyService)
 			* self.context.Configuration.VehicleData.StudsPerSecondToMph
 	end
 
-	function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePart)
+	function RoadSafetyService:_reading(camera: Model, sensor: BasePart, hit: BasePart, token: any)
+		if not self:_sensorIsCurrent(sensor, token) then
+			return
+		end
 		local seat = self:_seatFromHit(hit)
 		if not seat then
 			return
@@ -400,7 +412,7 @@ return function(RoadSafetyService)
 		end
 		perSensor[seat] = now + settings.SensorCooldownSeconds
 
-		local issued = self:IssueFine({
+		local issued = self:_issueFine({
 			Registration = registration,
 			Mph = mph,
 			LimitMph = limit,
@@ -409,7 +421,9 @@ return function(RoadSafetyService)
 			CameraId = camera:GetAttribute("CameraId") or camera.Name,
 			Location = camera:GetAttribute("Location") or camera.Name,
 			Kind = "SpeedCamera",
-		})
+		}, function()
+			return self:_sensorIsCurrent(sensor, token)
+		end)
 		-- Flashed only when somebody was actually fined. Flashing a responding
 		-- ambulance and then not fining it tells the driver they were caught when
 		-- they were not.
@@ -428,7 +442,10 @@ return function(RoadSafetyService)
 		return vehicle, seat, player
 	end
 
-	function RoadSafetyService:_taggedFixed(sensor: BasePart, hit: BasePart)
+	function RoadSafetyService:_taggedFixed(sensor: BasePart, hit: BasePart, token: any)
+		if not self:_sensorIsCurrent(sensor, token) then
+			return
+		end
 		local vehicle, seat, player = self:_vehicleFromPart(hit)
 		if not vehicle or not seat or not player then
 			return
@@ -443,7 +460,7 @@ return function(RoadSafetyService)
 			return
 		end
 		local mph = self:_speedMph(seat)
-		local issued = self:IssueFine({
+		local issued = self:_issueFine({
 			Registration = vehicle:GetAttribute("RoleplayOSRegistration"),
 			Mph = mph,
 			LimitMph = sensor:GetAttribute("SpeedLimitMph") or 30,
@@ -452,7 +469,9 @@ return function(RoadSafetyService)
 			CameraId = sensor:GetAttribute("CameraId") or sensor.Name,
 			Location = sensor:GetAttribute("Location") or sensor.Name,
 			Kind = "Fixed",
-		})
+		}, function()
+			return self:_sensorIsCurrent(sensor, token)
+		end)
 		perSensor[vehicle] = now
 			+ (if issued then self.context.Configuration.RoadSafety.SensorCooldownSeconds else 1)
 	end
@@ -486,7 +505,15 @@ return function(RoadSafetyService)
 		self.journeys[key] = { Time = now, Position = position }
 	end
 
-	function RoadSafetyService:_taggedAverage(sensor: BasePart, hit: BasePart, isEntry: boolean)
+	function RoadSafetyService:_taggedAverage(
+		sensor: BasePart,
+		hit: BasePart,
+		isEntry: boolean,
+		token: any
+	)
+		if not self:_sensorIsCurrent(sensor, token) then
+			return
+		end
 		local vehicle, _, player = self:_vehicleFromPart(hit)
 		if not vehicle or not player then
 			return
@@ -516,7 +543,7 @@ return function(RoadSafetyService)
 		local mph = (sensor.Position - entry.Position).Magnitude
 			/ elapsed
 			* self.context.Configuration.VehicleData.StudsPerSecondToMph
-		self:IssueFine({
+		self:_issueFine({
 			Registration = registration,
 			Mph = mph,
 			LimitMph = sensor:GetAttribute("SpeedLimitMph") or 30,
@@ -525,20 +552,29 @@ return function(RoadSafetyService)
 			CameraId = sensor:GetAttribute("CameraId") or sensor.Name,
 			Location = sensor:GetAttribute("Location") or sensor.Name,
 			Kind = "Average",
-		})
+		}, function()
+			return self:_sensorIsCurrent(sensor, token)
+		end)
 	end
 
-	function RoadSafetyService:_connectTag(tag: string, callback: (BasePart, BasePart) -> ())
+	function RoadSafetyService:_connectTag(
+		tag: string,
+		callback: (BasePart, BasePart, any) -> ()
+	)
 		local function watch(instance: Instance)
 			if
-				not instance:IsA("BasePart")
+				not self.running
+				or not instance:IsA("BasePart")
+				or not instance:IsDescendantOf(Workspace)
 				or self.taggedSensors[instance]
 				or self.sensors[instance]
 			then
 				return
 			end
+			local token = {}
+			self.sensorTokens[instance] = token
 			self.taggedSensors[instance] = instance.Touched:Connect(function(hit)
-				callback(instance, hit)
+				callback(instance, hit, token)
 			end)
 		end
 		local function unwatch(instance: Instance)
@@ -547,6 +583,8 @@ return function(RoadSafetyService)
 				connection:Disconnect()
 				self.taggedSensors[instance] = nil
 			end
+			self.sensorTokens[instance] = nil
+			self.cooldowns[instance] = nil
 		end
 		for _, instance in CollectionService:GetTagged(tag) do
 			watch(instance)
@@ -560,14 +598,14 @@ return function(RoadSafetyService)
 
 	function RoadSafetyService:_startTaggedSensors()
 		local settings = self.context.Configuration.RoadSafety
-		self:_connectTag(settings.SpeedCameraTag, function(sensor, hit)
-			self:_taggedFixed(sensor, hit)
+		self:_connectTag(settings.SpeedCameraTag, function(sensor, hit, token)
+			self:_taggedFixed(sensor, hit, token)
 		end)
-		self:_connectTag(settings.AverageEntryTag, function(sensor, hit)
-			self:_taggedAverage(sensor, hit, true)
+		self:_connectTag(settings.AverageEntryTag, function(sensor, hit, token)
+			self:_taggedAverage(sensor, hit, true, token)
 		end)
-		self:_connectTag(settings.AverageExitTag, function(sensor, hit)
-			self:_taggedAverage(sensor, hit, false)
+		self:_connectTag(settings.AverageExitTag, function(sensor, hit, token)
+			self:_taggedAverage(sensor, hit, false, token)
 		end)
 		task.spawn(function()
 			while self.running do
