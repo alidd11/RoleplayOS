@@ -17,12 +17,21 @@ return function(DataService)
 	): (number?, string?)
 		local counterKey = self:_scopedKey("counter:" .. departmentId)
 		local holderKey = self:_scopedKey(departmentId .. ":" .. tostring(start))
+		if
+			not self:_checkKey(counterKey, "ShoulderNumbers")
+			or not self:_checkKey(holderKey, "ShoulderNumbers")
+		then
+			return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+		end
 		local issued: number? = nil
 		if self.mock then
 			local current = self.mockShoulder[counterKey]
 			issued = if type(current) == "number" then current + 1 else start
 			self.mockShoulder[counterKey] = issued
 			holderKey = self:_scopedKey(departmentId .. ":" .. tostring(issued))
+			if not self:_checkKey(holderKey, "ShoulderNumbers") then
+				return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+			end
 			self.mockShoulder[holderKey] = { UserId = userId, AssignedAt = os.time() }
 			return issued, nil
 		end
@@ -36,6 +45,9 @@ return function(DataService)
 			return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
 		end
 		holderKey = self:_scopedKey(departmentId .. ":" .. tostring(issued))
+		if not self:_checkKey(holderKey, "ShoulderNumbers") then
+			return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+		end
 		-- Do not publish the number into the player's profile until its holder
 		-- record is durable. Duty does not depend on having a number, so burning a
 		-- counter value is safer than reporting an assignment staff cannot verify.
@@ -69,6 +81,9 @@ return function(DataService)
 		number: number
 	): (any?, string?)
 		local holderKey = self:_scopedKey(departmentId .. ":" .. tostring(number))
+		if not self:_checkKey(holderKey, "ShoulderNumbers") then
+			return nil, "SHOULDER_NUMBER_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			return deepCopy(self.mockShoulder[holderKey]), nil
 		end
