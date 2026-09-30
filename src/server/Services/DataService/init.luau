@@ -63,9 +63,9 @@ end
 -- genuinely belong to the whole experience. Progression callers may opt into an
 -- official-server scope instead. The scope is separate from the key, preserving
 -- historical public keys and keeping gang:<GUID> below Roblox's key limit.
-function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
+function DataService:_validateSharedRecordScope(scopeId: string?): boolean
 	if scopeId == nil then
-		return self.sharedRecordStore
+		return true
 	end
 	local entries = self.context.Configuration.OfficialServers
 		and self.context.Configuration.OfficialServers.Entries
@@ -74,11 +74,7 @@ function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
 		self.context.Logger:Error("Refused unknown shared-record persistence scope", {
 			ScopeId = scopeId,
 		})
-		return nil
-	end
-	local cached = self.scopedSharedRecordStores[scopeId]
-	if cached then
-		return cached
+		return false
 	end
 	local scopeName = "wl:" .. scopeId
 	if #scopeName > MAXIMUM_SCOPE_LENGTH then
@@ -86,8 +82,23 @@ function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
 			ScopeId = scopeId,
 			Length = #scopeName,
 		})
+		return false
+	end
+	return true
+end
+
+function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
+	if scopeId == nil then
+		return self.sharedRecordStore
+	end
+	if not self:_validateSharedRecordScope(scopeId) then
 		return nil
 	end
+	local cached = self.scopedSharedRecordStores[scopeId]
+	if cached then
+		return cached
+	end
+	local scopeName = "wl:" .. scopeId
 	local ok, store = pcall(
 		DataStoreService.GetDataStore,
 		DataStoreService,
