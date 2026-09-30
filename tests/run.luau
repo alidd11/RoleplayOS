@@ -35,6 +35,8 @@ local IncidentService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.IncidentService)
 local RecordIndexService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.RecordIndexService)
+local WarrantService =
+	require(game:GetService("ServerScriptService").RoleplayOS.Services.WarrantService)
 
 H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
@@ -1290,6 +1292,60 @@ H.test(
 		H.expect(count == 2, "record index bucket exceeded its configured hard cap")
 	end
 )
+
+H.test("warrant cache ignores malformed persisted warrant entries and expiries", function()
+	local context = {
+		Configuration = {
+			MDT = {
+				RecordCacheSeconds = 60,
+				MaximumWarrantCacheCharacters = 2,
+			},
+		},
+	}
+	local service = setmetatable({
+		warrants = {},
+		byCharacter = {},
+		cacheMeta = {},
+		cacheCount = 0,
+		cacheSweepCounter = 0,
+		refreshing = {},
+		refreshCount = 0,
+	}, { __index = WarrantService })
+	service:Init(context)
+	service:Start()
+	service:CachePersonRecord({
+		CharacterId = "malformed-only",
+		Warrants = {
+			42,
+			{
+				WarrantId = "bad-expiry",
+				Active = true,
+				ExpiresAt = "indefinite",
+			},
+		},
+	})
+	local hasMalformed, malformedActive, malformedReason =
+		service:HasActiveForCharacter("malformed-only")
+	H.expect(not hasMalformed, "a malformed expiry was treated as an active warrant")
+	H.expect(
+		#malformedActive == 0 and malformedReason == nil,
+		"malformed entries corrupted the cache"
+	)
+	service:CachePersonRecord({
+		CharacterId = "with-active",
+		Warrants = {
+			false,
+			{ WarrantId = "active", Active = true },
+		},
+	})
+	local hasActive, active, activeReason = service:HasActiveForCharacter("with-active")
+	H.expect(
+		hasActive and #active == 1 and active[1].WarrantId == "active",
+		"valid active warrant was lost"
+	)
+	H.expect(activeReason == nil, "valid warrant lookup returned an error")
+	service:Destroy()
+end)
 
 H.finish()
 return true

@@ -3,10 +3,17 @@
 local HttpService = game:GetService("HttpService")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
+local function finiteNumber(value: any): boolean
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
 local function isCurrentWarrant(warrant: any, now: number): boolean
 	return type(warrant) == "table"
 		and warrant.Active == true
-		and (warrant.ExpiresAt == nil or warrant.ExpiresAt > now)
+		and (
+			warrant.ExpiresAt == nil
+			or (finiteNumber(warrant.ExpiresAt) and warrant.ExpiresAt > now)
+		)
 end
 
 local function trimWarrantHistory(warrants: { any }, now: number, maximum: number)
@@ -17,11 +24,17 @@ local function trimWarrantHistory(warrants: { any }, now: number, maximum: numbe
 	local removable = {}
 	for index, warrant in warrants do
 		if not isCurrentWarrant(warrant, now) then
+			local removedAt = if type(warrant) == "table"
+				then tonumber(warrant.RevokedAt) or tonumber(warrant.ExpiresAt) or tonumber(
+					warrant.IssuedAt
+				)
+				else nil
+			if not finiteNumber(removedAt) then
+				removedAt = 0
+			end
 			table.insert(removable, {
 				Index = index,
-				At = tonumber(warrant.RevokedAt) or tonumber(warrant.ExpiresAt) or tonumber(
-					warrant.IssuedAt
-				) or 0,
+				At = removedAt,
 			})
 		end
 	end
@@ -244,7 +257,7 @@ function WarrantService:CachePersonRecord(record: any)
 	end
 	local ids = {}
 	for _, warrant in if type(record.Warrants) == "table" then record.Warrants else {} do
-		if type(warrant.WarrantId) == "string" then
+		if type(warrant) == "table" and type(warrant.WarrantId) == "string" then
 			ids[warrant.WarrantId] = true
 			self.warrants[warrant.WarrantId] = warrant
 		end
@@ -378,11 +391,13 @@ function WarrantService:Create(
 			existing.Warrants = if type(existing.Warrants) == "table" then existing.Warrants else {}
 			local activeCount = 0
 			for _, storedWarrant in existing.Warrants do
-				if storedWarrant.WarrantId == warrant.WarrantId then
-					return existing
-				end
-				if isCurrentWarrant(storedWarrant, now) then
-					activeCount += 1
+				if type(storedWarrant) == "table" then
+					if storedWarrant.WarrantId == warrant.WarrantId then
+						return existing
+					end
+					if isCurrentWarrant(storedWarrant, now) then
+						activeCount += 1
+					end
 				end
 			end
 			if activeCount >= maximumActive then
@@ -448,7 +463,7 @@ function WarrantService:Revoke(
 				return existing
 			end
 			for _, warrant in existing.Warrants do
-				if warrant.WarrantId == warrantId then
+				if type(warrant) == "table" and warrant.WarrantId == warrantId then
 					if warrant.Active == true then
 						warrant.Active = false
 						warrant.RevokedAt = revokedAt
