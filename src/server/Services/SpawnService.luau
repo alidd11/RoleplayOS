@@ -284,7 +284,8 @@ function SpawnService:_enterCivilianAtTerritory(
 	end
 	local dataService = self.context.Services:Get("DataService")
 	local officialEntry = self.context.Services:Get("OfficialServerService"):CurrentEntry()
-	local sharedScope = if type(officialEntry) == "table" and type(officialEntry.Id) == "string"
+	local sharedScope = if type(officialEntry) == "table"
+			and type(officialEntry.Id) == "string"
 		then officialEntry.Id
 		else nil
 	local gang, gangReason = dataService:GetScopedSharedRecord(sharedScope, "gang:" .. gangId)
