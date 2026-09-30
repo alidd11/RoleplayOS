@@ -17,6 +17,10 @@ charging anybody. It is disabled rather than destroyed, so the model remains
 intact. RoleplayOS records the original script and sensor properties it changes
 and restores them when the camera is no longer watched or the service tears
 down; an in-progress flash likewise restores each light to its pre-flash state.
+Each watched sensor also has a generation token. If it is untagged, replaced or
+the service stops while a duty lookup is yielding, that in-flight reading is
+discarded before it can write a fine. The exact target Player, DataService
+session and active character are revalidated after those yielding checks.
 
 Speed limits are still read from each model's `Configuration.SpeedLimit`, so
 setting a limit works exactly as the kit intends.
@@ -78,7 +82,10 @@ one. `Config.EmergencyLights` is a list of places to look:
 - then as an attribute or a `ValueBase` inside each folder in `ValueFolderNames`
 
 The first that reads as on wins. A boolean `true`, any number above zero, or any
-non-empty string not listed in `OffValues` counts as on.
+non-empty string not listed in `OffValues` counts as on. Dynamic signal names
+logged for diagnosis are retained only up to
+`Config.RoadSafety.MaximumLightDiagnosticNames`; later unique names are simply
+not logged, so diagnostic discovery cannot become unbounded server state.
 
 > **If the exemption is not firing**, turn the lights on in Studio and watch
 > which attribute or value changes, then add that name to `AttributeNames`.
@@ -147,3 +154,4 @@ cannot delay, cancel or roll back the in-game penalty.
 | `EXEMPT_EMERGENCY_RESPONSE` | On a blue light run. Not an error. |
 | `WITHIN_TOLERANCE` | Under the limit plus the tolerance. |
 | `KEEPER_UNAVAILABLE` | Nobody in the server to fine. |
+| `ROAD_SAFETY_UNAVAILABLE` | The service, sensor generation or exact target session changed while the reading was in flight. |
