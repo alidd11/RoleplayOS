@@ -476,8 +476,8 @@ return function(DataService)
 		local problem: any = nil
 		-- Clean autosaves only renew the lease, so avoid encoding an unchanged
 		-- profile on every cadence. Dirty snapshots and final releases are the
-		-- points where an impossible value would otherwise spend every retry on a
-		-- permanent DataStore size/serialisation error.
+		-- points where an oversized value would otherwise spend every retry on a
+		-- permanent DataStore size error.
 		if session.Dirty or release then
 			ok, problem = self:_measure(player, snapshot)
 		end
