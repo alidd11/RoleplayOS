@@ -492,19 +492,22 @@ function EconomyService:ReconcilePendingTransfers(
 		if next(completed) == nil then
 			return
 		end
-		local _, cleanupReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
-			if type(existing) ~= "table" then
-				return existing
-			end
-			local current = {}
-			for _, entry in existing do
-				local id = pendingTransferEntryId(entry)
-				if not id or not completed[id] then
-					table.insert(current, entry)
+		local _, cleanupReason = data:UpdateSharedRecord(
+			"pending-transfer-index",
+			function(existing)
+				if type(existing) ~= "table" then
+					return existing
 				end
+				local current = {}
+				for _, entry in existing do
+					local id = pendingTransferEntryId(entry)
+					if not id or not completed[id] then
+						table.insert(current, entry)
+					end
+				end
+				return current
 			end
-			return current
-		end)
+		)
 		if cleanupReason then
 			unresolvedReason = unresolvedReason or cleanupReason
 			self.context.Logger:Error("Pending transfer refund index persistence failed", {
