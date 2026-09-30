@@ -88,4 +88,22 @@ return function(DataService)
 		end
 		return updated, nil
 	end
+
+	-- Progression services use these wrappers when the same logical record name
+	-- must remain separate between the public domain and an official server.
+	-- A nil scope deliberately preserves the historical public/global store.
+	function DataService:GetScopedSharedRecord(
+		scopeId: string?,
+		recordId: string
+	): (any?, string?)
+		return self:GetSharedRecord(recordId, scopeId)
+	end
+
+	function DataService:UpdateScopedSharedRecord(
+		scopeId: string?,
+		recordId: string,
+		transform: (any?) -> any
+	): (any?, string?)
+		return self:UpdateSharedRecord(recordId, transform, scopeId)
+	end
 end
