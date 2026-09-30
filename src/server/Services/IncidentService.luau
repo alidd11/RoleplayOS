@@ -13,15 +13,19 @@ local IncidentService = {
 	running = false,
 }
 
+local function finiteNumber(value: any): boolean
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
 local function validRecentIndexEntry(entry: any): boolean
 	return type(entry) == "table"
 		and type(entry.IncidentId) == "string"
 		and entry.IncidentId ~= ""
 		and type(entry.Title) == "string"
 		and type(entry.Status) == "string"
-		and type(entry.CreatedAt) == "number"
+		and finiteNumber(entry.CreatedAt)
 		and type(entry.DepartmentIds) == "table"
-		and type(entry.UpdatedAt) == "number"
+		and finiteNumber(entry.UpdatedAt)
 end
 
 function IncidentService:Init(context: any)
@@ -140,7 +144,10 @@ function IncidentService:_filterTitle(actor: Player, raw: string): (string?, str
 end
 
 function IncidentService:_indexIncident(incident: any): (boolean, string?)
-	local maximum = self.context.Configuration.MDT.MaximumIncidentIndexEntries
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumIncidentIndexEntries) or 2000)
+	)
 	local indexed, indexReason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex("Incident:Recent", function(existing)
@@ -155,18 +162,27 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 				DepartmentIds = table.clone(incident.DepartmentIds or {}),
 				UpdatedAt = os.time(),
 			}
-			local count = 0
-			local oldestId
-			local oldestAt = math.huge
+			local candidates = {}
 			for id, entry in index.Entries do
-				count += 1
-				if (entry.CreatedAt or 0) < oldestAt then
-					oldestAt = entry.CreatedAt or 0
-					oldestId = id
+				if validRecentIndexEntry(entry) then
+					table.insert(candidates, { Id = id, CreatedAt = entry.CreatedAt })
+				else
+					-- Readers cannot safely expose malformed rows. Remove them here as
+					-- well, so one corrupt timestamp cannot make every future projection
+					-- fail inside the UpdateAsync transform.
+					index.Entries[id] = nil
 				end
 			end
-			if count > maximum and oldestId then
-				index.Entries[oldestId] = nil
+			if #candidates > maximum then
+				table.sort(candidates, function(a, b)
+					if a.CreatedAt == b.CreatedAt then
+						return tostring(a.Id) < tostring(b.Id)
+					end
+					return a.CreatedAt < b.CreatedAt
+				end)
+				for position = 1, #candidates - maximum do
+					index.Entries[candidates[position].Id] = nil
+				end
 			end
 			index.UpdatedAt = os.time()
 			return index

@@ -31,6 +31,8 @@ local OfficialServerPolicy = require(Shared.OfficialServerPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 local OfficialServerService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.OfficialServerService)
+local IncidentService =
+	require(game:GetService("ServerScriptService").RoleplayOS.Services.IncidentService)
 
 H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
@@ -1132,6 +1134,89 @@ H.test("a kit is only adopted whole", function()
 	)
 	part:Destroy()
 end)
+
+H.test(
+	"incident index projection removes malformed rows and restores its configured cap",
+	function()
+		local index = {
+			Entries = {
+				corrupt = "invalid row",
+				badTimestamp = {
+					IncidentId = "badTimestamp",
+					Title = "Bad timestamp",
+					Status = "Closed",
+					CreatedAt = "yesterday",
+					DepartmentIds = { "Police" },
+					UpdatedAt = 1,
+				},
+				oldest = {
+					IncidentId = "oldest",
+					Title = "Oldest incident",
+					Status = "Closed",
+					CreatedAt = 1,
+					DepartmentIds = { "Police" },
+					UpdatedAt = 1,
+				},
+				middle = {
+					IncidentId = "middle",
+					Title = "Middle incident",
+					Status = "Closed",
+					CreatedAt = 2,
+					DepartmentIds = { "Police" },
+					UpdatedAt = 2,
+				},
+				newer = {
+					IncidentId = "newer",
+					Title = "Newer incident",
+					Status = "Closed",
+					CreatedAt = 3,
+					DepartmentIds = { "Police" },
+					UpdatedAt = 3,
+				},
+			},
+		}
+		local dataService = {
+			UpdateMdtIndex = function(_self, _key, transform)
+				index = transform(index)
+				return index, nil
+			end,
+		}
+		local context = {
+			Configuration = { MDT = { MaximumIncidentIndexEntries = 2 } },
+			Services = {
+				Get = function(_self, name)
+					H.expect(name == "DataService", "unexpected incident index dependency")
+					return dataService
+				end,
+			},
+		}
+		local service = setmetatable(
+			{ context = context, running = true },
+			{ __index = IncidentService }
+		)
+		local projected, reason = service:_indexIncident({
+			IncidentId = "latest",
+			Title = "Latest incident",
+			Status = "Closed",
+			CreatedAt = 4,
+			DepartmentIds = { "Police" },
+		})
+		H.expect(projected and reason == nil, "malformed existing rows blocked incident projection")
+		H.expect(index.Entries.corrupt == nil, "malformed scalar row remained indexed")
+		H.expect(index.Entries.badTimestamp == nil, "malformed timestamp row remained indexed")
+		H.expect(index.Entries.oldest == nil, "projection failed to trim multiple old rows")
+		H.expect(index.Entries.middle == nil, "projection did not enforce the lowered cap")
+		H.expect(
+			index.Entries.newer ~= nil and index.Entries.latest ~= nil,
+			"newest rows were not retained"
+		)
+		local count = 0
+		for _ in index.Entries do
+			count += 1
+		end
+		H.expect(count == 2, "incident index exceeded its configured hard cap")
+	end
+)
 
 H.finish()
 return true
