@@ -27,6 +27,7 @@ local Coalescer = require(Shared.Coalescer)
 local Fuel = require(Shared.FuelConsumption)
 local Gangs = require(Shared.GangRules)
 local EmergencyPatterns = require(Shared.EmergencyPatterns)
+local OfficialServerPolicy = require(Shared.OfficialServerPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
 
 H.test("cash drops require bounded whole pound amounts", function()
@@ -69,6 +70,28 @@ H.test("public-only access is restricted by server kind", function()
 		not private.Allowed and private.ReasonCode == "SERVER_KIND_REQUIRED",
 		"private server bypassed public-only access"
 	)
+end)
+H.test("official server registry enforces its cap in the shared-record transform", function()
+	local first = OfficialServerPolicy.appendInstance(nil, "code-one", 2, "Community", 100)
+	local second, secondIndex =
+		OfficialServerPolicy.appendInstance(first, "code-two", 2, "Community", 101)
+	H.expect(secondIndex == 2, "second reserved instance was not appended")
+	local capped, cappedIndex, cappedReason =
+		OfficialServerPolicy.appendInstance(second, "code-three", 2, "Community", 102)
+	H.expect(
+		cappedIndex == nil and cappedReason == "OFFICIAL_SERVER_FULL",
+		"instance cap was exceeded"
+	)
+	H.expect(#capped.Instances == 2, "capped transform changed the registry")
+end)
+H.test("official server registry append is idempotent and preserves legacy access codes", function()
+	local legacy = { AccessCode = "legacy-code" }
+	local migrated, legacyIndex =
+		OfficialServerPolicy.appendInstance(legacy, "new-code", 3, "Community", 100)
+	H.expect(legacyIndex == 2 and migrated.Instances[1] == "legacy-code", "legacy code was lost")
+	local retried, retryIndex =
+		OfficialServerPolicy.appendInstance(migrated, "new-code", 3, "Community", 101)
+	H.expect(retryIndex == 2 and #retried.Instances == 2, "retry duplicated a reserved instance")
 end)
 H.test("server-tier access preserves the actionable public gamepass denial", function()
 	local result = Access.evaluate({
