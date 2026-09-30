@@ -13,6 +13,7 @@ local DataService = {
 	loading = {},
 	budgetWarnings = {},
 	finalReleases = {},
+	shutdownDeadline = nil,
 }
 local STORE_NAME = "RoleplayOS_PlayerProfiles_v1"
 local COMMUNITY_STORE_NAME = "RoleplayOS_Communities_v1"
@@ -85,6 +86,7 @@ function DataService:Init(context: any)
 	self.context = context
 	self.budgetWarnings = {}
 	self.finalReleases = {}
+	self.shutdownDeadline = nil
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockSharedRecords = {}
 	self.mockRegistrations = {}
@@ -130,6 +132,9 @@ function DataService:_awaitBudget(requestType: Enum.DataStoreRequestType)
 	-- twelve second wait guaranteed that any request reaching it was reported to
 	-- the player as a timeout while the work carried on behind them.
 	local deadline = os.clock() + (if self.closing then 2 else 6)
+	if self.shutdownDeadline then
+		deadline = math.min(deadline, self.shutdownDeadline)
+	end
 	local waited = false
 	while DataStoreService:GetRequestBudgetForRequestType(requestType) < 1 do
 		if os.clock() >= deadline then
@@ -175,7 +180,13 @@ function DataService:_retry(
 	local lastError
 	local budgetType = requestType or Enum.DataStoreRequestType.UpdateAsync
 	for attempt = 1, self.context.Configuration.Framework.MaxSaveAttempts do
+		if self.shutdownDeadline and os.clock() >= self.shutdownDeadline then
+			return false, lastError or "SHUTDOWN_SAVE_DEADLINE"
+		end
 		self:_awaitBudget(budgetType)
+		if self.shutdownDeadline and os.clock() >= self.shutdownDeadline then
+			return false, lastError or "SHUTDOWN_SAVE_DEADLINE"
+		end
 		local ok, result = pcall(operation)
 		if ok then
 			return true, result
@@ -189,7 +200,13 @@ function DataService:_retry(
 		-- needlessly consumes the bounded final-save window before the caller can
 		-- account for the failure.
 		if attempt < self.context.Configuration.Framework.MaxSaveAttempts then
-			task.wait(math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25)
+			local backoff = math.min(2 ^ (attempt - 1), 8) + math.random() * 0.25
+			if self.shutdownDeadline then
+				backoff = math.min(backoff, math.max(0, self.shutdownDeadline - os.clock()))
+			end
+			if backoff > 0 then
+				task.wait(backoff)
+			end
 		end
 	end
 	return false, lastError
@@ -346,6 +363,9 @@ function DataService:Destroy()
 	-- release that finishes during teardown keeps its result for this method to
 	-- account for.
 	self.closing = true
+	-- One absolute deadline governs every shutdown wait. Final releases must not
+	-- start a second full shutdown window after waiting behind an in-flight save.
+	self.shutdownDeadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
 	-- Loads have no published session yet, so the final-release set cannot see
 	-- them. Cancel every exact load token and keep BindToClose open until each
 	-- owner has stopped touching profile storage (or the shared deadline expires).
@@ -371,7 +391,7 @@ function DataService:Destroy()
 		end
 	end
 
-	local deadline = os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds
+	local deadline = self.shutdownDeadline
 	local function unfinishedReleases(): number
 		local pending = 0
 		for _, state in self.finalReleases do
