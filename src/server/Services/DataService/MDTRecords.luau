@@ -13,7 +13,7 @@ return function(DataService)
 		end
 		local ok, result = self:_retry(function()
 			return self.mdtRecordStore:GetAsync(key)
-		end)
+		end, nil, Enum.DataStoreRequestType.GetAsync)
 		return if ok then result else nil, if ok then nil else "MDT_RECORD_STORE_UNAVAILABLE"
 	end
 
@@ -47,7 +47,7 @@ return function(DataService)
 		end
 		local ok, result = self:_retry(function()
 			return self.mdtIndexStore:GetAsync(key)
-		end)
+		end, nil, Enum.DataStoreRequestType.GetAsync)
 		return if ok then result else nil, if ok then nil else "MDT_INDEX_STORE_UNAVAILABLE"
 	end
 
