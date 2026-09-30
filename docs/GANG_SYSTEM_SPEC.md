@@ -34,8 +34,12 @@ Roughly in dependency order.
 
 1. **Gang membership and persistence.** One shared gang record stores the name,
    members and territory, while each member profile stores only its GangId pointer
-   and pending invites. Unique names are reserved in a shared index by the owning
-   gang ID, so retries can distinguish their own reservation from another server's.
+   and pending invites. Public gangs retain the historical global shared-record
+   keys; official-server gangs use a DataStore scope matching the profile's
+   `wl:<OfficialServerId>` domain, so names, rosters, territories and payouts
+   cannot cross between public and whitelisted progression. Unique names are
+   reserved in the same domain-local shared index by the owning gang ID, so retries
+   can distinguish their own reservation from another server's.
    A transient shared-record read is treated as unavailable data, never as proof
    that a valid membership disappeared. Membership writes are serialised per
    player. Accepting an invite persists the profile's intended GangId before the
