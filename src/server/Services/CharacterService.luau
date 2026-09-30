@@ -600,24 +600,10 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 		character.Identity.FirstName .. " " .. character.Identity.LastName
 	)
 	data:MarkDirty(player)
-	if character.StarterVehiclePending == true then
-		local starter, starterReason =
-			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
-		if not self:_characterIsCurrent(player, session, characterId, character, true) then
-			return nil, "PLAYER_UNAVAILABLE"
-		end
-		-- Cleared when the grant lands, and equally when there is nothing to
-		-- grant. Characters created before that became a no-op still carry a
-		-- pending flag, and retrying it on every selection can never satisfy it.
-		if starter or starterReason == "NO_STARTER_CONFIGURED" then
-			character.StarterVehiclePending = nil
-			data:MarkDirty(player)
-		end
-	end
 	-- Transfer refunds are stored outside the profile so they survive a failed
 	-- sender save. They cannot be applied at profile-load time because there is
-	-- no active character yet; selection is the first authoritative point where
-	-- the owning character can be identified and credited.
+	-- no active character yet; run this before the first yielding selection task
+	-- so recovery owns the earliest authoritative character boundary.
 	local economy = self.context.Services:Get("EconomyService")
 	local transfersRecovered, transferRecoveryReason =
 		economy:ReconcilePendingTransfers(player, characterId)
@@ -633,6 +619,21 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 				Reason = transferRecoveryReason,
 			}
 		)
+	end
+
+	if character.StarterVehiclePending == true then
+		local starter, starterReason =
+			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
+		if not self:_characterIsCurrent(player, session, characterId, character, true) then
+			return nil, "PLAYER_UNAVAILABLE"
+		end
+		-- Cleared when the grant lands, and equally when there is nothing to
+		-- grant. Characters created before that became a no-op still carry a
+		-- pending flag, and retrying it on every selection can never satisfy it.
+		if starter or starterReason == "NO_STARTER_CONFIGURED" then
+			character.StarterVehiclePending = nil
+			data:MarkDirty(player)
+		end
 	end
 
 	-- Reconcile any bounded cash-drop recovery carried by this character before
