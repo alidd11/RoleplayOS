@@ -27,6 +27,7 @@ local SHOULDER_STORE_NAME = "RoleplayOS_ShoulderNumbers_v1"
 -- retries, so without an explicit check they look like a transient outage and are
 -- retried forever instead of being recognised as a fault that will never clear.
 local MAXIMUM_KEY_LENGTH = 48
+local MAXIMUM_SCOPE_LENGTH = 50
 local MAXIMUM_VALUE_BYTES = 4 * 1024 * 1024
 
 local ProfileLifecycle = require(script.ProfileLifecycle)
@@ -55,6 +56,53 @@ function DataService:_checkKey(key: string, store: string): boolean
 		Key = string.sub(key, 1, 64),
 	})
 	return false
+end
+
+
+-- Shared records are global by default because routing/configuration records
+-- genuinely belong to the whole experience. Progression callers may opt into an
+-- official-server scope instead. The scope is separate from the key, preserving
+-- historical public keys and keeping gang:<GUID> below Roblox's key limit.
+function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
+	if scopeId == nil then
+		return self.sharedRecordStore
+	end
+	local entries = self.context.Configuration.OfficialServers
+		and self.context.Configuration.OfficialServers.Entries
+	local entry = type(entries) == "table" and entries[scopeId] or nil
+	if type(entry) ~= "table" or entry.Id ~= scopeId then
+		self.context.Logger:Error("Refused unknown shared-record persistence scope", {
+			ScopeId = scopeId,
+		})
+		return nil
+	end
+	local cached = self.scopedSharedRecordStores[scopeId]
+	if cached then
+		return cached
+	end
+	local scopeName = "wl:" .. scopeId
+	if #scopeName > MAXIMUM_SCOPE_LENGTH then
+		self.context.Logger:Error("Data store scope exceeds the fifty character limit", {
+			ScopeId = scopeId,
+			Length = #scopeName,
+		})
+		return nil
+	end
+	local ok, store = pcall(
+		DataStoreService.GetDataStore,
+		DataStoreService,
+		COMMUNITY_STORE_NAME,
+		scopeName
+	)
+	if not ok then
+		self.context.Logger:Error("Could not open scoped shared-record store", {
+			ScopeId = scopeId,
+			Error = tostring(store),
+		})
+		return nil
+	end
+	self.scopedSharedRecordStores[scopeId] = store
+	return store
 end
 
 -- Measures a profile and warns while there is still room to act.
@@ -89,6 +137,7 @@ function DataService:Init(context: any)
 	self.shutdownDeadline = nil
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockSharedRecords = {}
+	self.scopedSharedRecordStores = {}
 	self.mockRegistrations = {}
 	self.mockMdtRecords = {}
 	self.mockMdtIndexes = {}
@@ -471,6 +520,7 @@ function DataService:Destroy()
 		})
 	end
 	table.clear(self.finalReleases)
+	table.clear(self.scopedSharedRecordStores)
 end
 
 return DataService
