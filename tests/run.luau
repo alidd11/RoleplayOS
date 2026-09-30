@@ -474,6 +474,87 @@ H.test("profile migration fails closed on unreadable authoritative state", funct
 		"corrupt gang invites were replaced"
 	)
 end)
+H.test("profile migration preserves unreadable authoritative scalar state", function()
+	local cases = {
+		{
+			{
+				SchemaVersion = 8,
+				CustodySentence = { ReleaseAt = "corrupt" },
+			},
+			"PROFILE_CUSTODY_RELEASE_AT_INVALID",
+		},
+		{
+			{
+				SchemaVersion = 8,
+				CustodySentence = { ReleaseAt = 0, RemainingSeconds = "corrupt" },
+			},
+			"PROFILE_CUSTODY_REMAINING_SECONDS_INVALID",
+		},
+		{
+			{
+				SchemaVersion = 9,
+				Characters = { character = { Economy = { Balance = "corrupt", Cash = 0 } } },
+			},
+			"PROFILE_ECONOMY_BALANCE_INVALID",
+		},
+		{
+			{
+				SchemaVersion = 9,
+				Characters = { character = { Economy = { Balance = 0, Cash = "corrupt" } } },
+			},
+			"PROFILE_ECONOMY_CASH_INVALID",
+		},
+		{
+			{
+				SchemaVersion = 10,
+				Consumables = { EarlyReleaseCredits = "corrupt" },
+			},
+			"PROFILE_EARLY_RELEASE_CREDITS_INVALID",
+		},
+		{
+			{
+				SchemaVersion = 11,
+				Consumables = { AppearanceEdits = "corrupt" },
+			},
+			"PROFILE_APPEARANCE_EDITS_INVALID",
+		},
+	}
+
+	for _, case in cases do
+		local migrated, reason = ProfileSchema.migrate(case[1], 42)
+		H.expect(migrated == nil and reason == case[2], case[2] .. " was silently normalised")
+	end
+end)
+H.test("profile migration still backfills missing authoritative scalar state", function()
+	local custody = ProfileSchema.migrate({
+		SchemaVersion = 8,
+		CustodySentence = {},
+	}, 42)
+	H.expect(
+		custody.CustodySentence.RemainingSeconds == 0,
+		"missing legacy custody state was not backfilled"
+	)
+
+	local economy = ProfileSchema.migrate({
+		SchemaVersion = 9,
+		Characters = { character = { Economy = {} } },
+	}, 42)
+	H.expect(
+		economy.Characters.character.Economy.Balance == 0
+			and economy.Characters.character.Economy.Cash == 0,
+		"missing legacy economy state was not backfilled"
+	)
+
+	local consumables = ProfileSchema.migrate({
+		SchemaVersion = 10,
+		Consumables = {},
+	}, 42)
+	H.expect(
+		consumables.Consumables.EarlyReleaseCredits == 0
+			and consumables.Consumables.AppearanceEdits == 0,
+		"missing legacy consumable state was not backfilled"
+	)
+end)
 H.test("profile migration preserves developer receipt replay protection", function()
 	local consumables, consumablesReason = ProfileSchema.migrate({
 		SchemaVersion = 10,
