@@ -10,6 +10,7 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
 local CustodyService = {
 	booking = {},
+	completing = {},
 	cuffed = {},
 	connections = {},
 	commands = {},
@@ -43,6 +44,7 @@ function CustodyService:Init(context: any)
 	self.event = context.Network:RegisterEvent("CustodyChanged")
 	self.chairEvent = context.Network:RegisterEvent("CustodyChairProcessed")
 	self.booking = {}
+	self.completing = {}
 	self.cuffed = {}
 	self.connections = {}
 	self.commands = {}
@@ -376,6 +378,7 @@ function CustodyService:Destroy()
 	table.clear(self.playerConnections)
 	table.clear(self.commands)
 	table.clear(self.booking)
+	table.clear(self.completing)
 	table.clear(self.cuffed)
 	local chairModels = {}
 	for model in self.chairPrompts do
