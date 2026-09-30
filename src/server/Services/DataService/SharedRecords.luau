@@ -14,6 +14,9 @@ end
 
 return function(DataService)
 	function DataService:GetSharedRecord(recordId: string, scopeId: string?): (any?, string?)
+		if not self:_checkKey(recordId, "SharedRecords") then
+			return nil, "SHARED_RECORD_LOAD_FAILED"
+		end
 		if not self:_validateSharedRecordScope(scopeId) then
 			return nil, "SHARED_RECORD_LOAD_FAILED"
 		end
@@ -50,6 +53,9 @@ return function(DataService)
 		transform: (any?) -> any,
 		scopeId: string?
 	): (any?, string?)
+		if not self:_checkKey(recordId, "SharedRecords") then
+			return nil, "SHARED_RECORD_UPDATE_FAILED"
+		end
 		if not self:_validateSharedRecordScope(scopeId) then
 			return nil, "SHARED_RECORD_UPDATE_FAILED"
 		end

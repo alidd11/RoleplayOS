@@ -135,6 +135,9 @@ return function(DataService)
 			end
 		end
 		local profileKey = self:_profileKey(player)
+		if not self:_checkKey(profileKey, "Profiles") then
+			return nil, "PROFILE_KEY_INVALID"
+		end
 		self:_bindDataScope(profileKey)
 		if self.mock then
 			local profile = ProfileSchema.default(player.UserId)
