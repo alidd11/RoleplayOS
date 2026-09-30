@@ -330,6 +330,7 @@ function DataService:Start()
 					or string.find(tostring(reason), "PROFILE_SESSION_LOCKED", 1, true) ~= nil
 					or reason == "PLAYER_LEFT"
 					or reason == "SERVICE_SHUTTING_DOWN"
+					or reason == "PROFILE_KEY_INVALID"
 				if settled or attempt == attempts then
 					break
 				end
