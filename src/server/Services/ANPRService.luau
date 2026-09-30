@@ -125,7 +125,8 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart, token: any)
 	if count >= maximumCooldownRegistrations and oldestPlate then
 		perSensor[oldestPlate] = nil
 	end
-	perSensor[registration] = now + self.context.Configuration.ANPR.CooldownSeconds
+	local cooldownExpiresAt = now + self.context.Configuration.ANPR.CooldownSeconds
+	perSensor[registration] = cooldownExpiresAt
 	local vehicle =
 		self.context.Services:Get("VehicleOwnershipService"):GetByRegistration(registration)
 	if not vehicle then
@@ -139,6 +140,15 @@ function ANPRService:_scan(sensor: BasePart, hit: BasePart, token: any)
 		return
 	end
 	if warrantReason then
+		-- This was not a completed scan. Keep a short retry backoff to avoid a
+		-- DataStore retry storm, but do not suppress another camera touch for the
+		-- full duplicate-alert cooldown after a transient warrant-store failure.
+		-- Only shorten the reservation this scan created; an untagged/re-tagged
+		-- sensor or a newer reservation must remain untouched.
+		if self.cooldowns[sensor] == perSensor and perSensor[registration] == cooldownExpiresAt then
+			local retryCooldown = math.min(self.context.Configuration.ANPR.CooldownSeconds, 3)
+			perSensor[registration] = math.min(cooldownExpiresAt, os.clock() + retryCooldown)
+		end
 		self.context.Logger:Warning("ANPR warrant lookup failed", {
 			Registration = registration,
 			Error = warrantReason,
