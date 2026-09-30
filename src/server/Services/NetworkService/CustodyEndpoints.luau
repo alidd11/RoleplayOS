@@ -191,6 +191,9 @@ return function(self: any)
 				Code = if used then "OK" else reason,
 				Message = if used
 					then "Early release approved."
+					elseif
+						reason == "CUSTODY_RELEASE_IN_PROGRESS"
+					then "Your custody release is already being processed."
 					else "The release credit could not be used.",
 				Data = self.context.Services:Get("CustodyService"):GetPolicy(player),
 				RequestId = requestId,
