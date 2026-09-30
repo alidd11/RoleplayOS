@@ -22,6 +22,13 @@ load precedes character selection, so attempting recovery at load time has no
 authoritative character to credit. A short player-join watcher provides a second
 bounded attempt after selection without creating an unbounded retry task.
 
+New pending transfer refunds are stored in a player-scoped shared recovery record
+rather than appended to the legacy global index. Once a character has unresolved
+recovery, further outgoing transfers from that character are refused until the
+record reconciles, preventing a persistence outage from growing an unbounded debt
+queue. The old global index is read only for compatibility and drains as historical
+entries reconcile; new failures never append to it.
+
 Cash drops use the same recovery rule. Normal expiry still removes uncollected
 cash, but drops do not outlive the profile session that paid for them: leaving
 the server or an orderly shutdown removes the world drop and refunds it. If the
