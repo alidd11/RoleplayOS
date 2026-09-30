@@ -129,7 +129,10 @@ return function(RoadSafetyService)
 		-- DutyService:Get can yield while group access resolves. Do not resume a
 		-- camera reading into a replaced profile session or a sensor generation that
 		-- was untagged/replaced during that lookup.
-		if not targetIsCurrent() then
+		if
+			not targetIsCurrent()
+			or (hasDriver and not playerIsCurrent(driver :: Player))
+		then
 			return false, "ROAD_SAFETY_UNAVAILABLE"
 		end
 		if exempt then
