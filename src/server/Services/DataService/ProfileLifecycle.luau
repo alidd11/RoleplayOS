@@ -472,40 +472,53 @@ return function(DataService)
 		local revision = session.Revision or 0
 		local snapshot = deepCopy(session.Profile)
 		local profileKey = session.DataKey or self:_profileKey(player)
-		local ok, problem = self:_retry(function()
-			self.store:UpdateAsync(profileKey, function(stored)
-				-- Retry/budget waits happen before this transform. Stamp the lease from
-				-- the attempt that can actually commit, not from the start of Save.
-				local writeNow = os.time()
-				local lock = stored and stored.AuditMetadata and stored.AuditMetadata.SessionLock
-				if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > writeNow then
-					error("SESSION_OWNERSHIP_LOST")
-				end
-				-- Written as a statement, not as `release and nil or {...}`.
-				--
-				-- That idiom cannot express "nil when true": `release and nil` is nil,
-				-- and `nil or {...}` is the table, so the release branch was
-				-- unreachable and every release stamped a fresh lease instead of
-				-- clearing it. A player leaving therefore locked their own profile for
-				-- the full lease on the way out, and was refused by every other server
-				-- until it expired.
-				if release then
-					snapshot.AuditMetadata.SessionLock = nil
-				else
-					snapshot.AuditMetadata.SessionLock = {
-						ServerId = self.serverId,
-						ExpiresAt = writeNow
-							+ self.context.Configuration.Framework.SessionLeaseSeconds,
-					}
-				end
-				return snapshot
+		local ok = true
+		local problem: any = nil
+		-- Clean autosaves only renew the lease, so avoid encoding an unchanged
+		-- profile on every cadence. Dirty snapshots and final releases are the
+		-- points where an impossible value would otherwise spend every retry on a
+		-- permanent DataStore size/serialisation error.
+		if session.Dirty or release then
+			ok, problem = self:_measure(player, snapshot)
+		end
+		if ok then
+			ok, problem = self:_retry(function()
+				self.store:UpdateAsync(profileKey, function(stored)
+					-- Retry/budget waits happen before this transform. Stamp the lease from
+					-- the attempt that can actually commit, not from the start of Save.
+					local writeNow = os.time()
+					local lock =
+						stored and stored.AuditMetadata and stored.AuditMetadata.SessionLock
+					if lock and lock.ServerId ~= self.serverId and lock.ExpiresAt > writeNow then
+						error("SESSION_OWNERSHIP_LOST")
+					end
+					-- Written as a statement, not as `release and nil or {...}`.
+					--
+					-- That idiom cannot express "nil when true": `release and nil` is nil,
+					-- and `nil or {...}` is the table, so the release branch was
+					-- unreachable and every release stamped a fresh lease instead of
+					-- clearing it. A player leaving therefore locked their own profile for
+					-- the full lease on the way out, and was refused by every other server
+					-- until it expired.
+					if release then
+						snapshot.AuditMetadata.SessionLock = nil
+					else
+						snapshot.AuditMetadata.SessionLock = {
+							ServerId = self.serverId,
+							ExpiresAt = writeNow
+								+ self.context.Configuration.Framework.SessionLeaseSeconds,
+						}
+					end
+					return snapshot
+				end)
+			end, function(failure)
+				-- A lost lease is a settled ownership result, not a transient DataStore
+				-- failure. Retrying cannot recover it while another live server remains
+				-- authoritative, and can consume most of the shutdown save budget.
+				return string.find(tostring(failure), "SESSION_OWNERSHIP_LOST", 1, true)
+					~= nil
 			end)
-		end, function(failure)
-			-- A lost lease is a settled ownership result, not a transient DataStore
-			-- failure. Retrying cannot recover it while another live server remains
-			-- authoritative, and can consume most of the shutdown save budget.
-			return string.find(tostring(failure), "SESSION_OWNERSHIP_LOST", 1, true) ~= nil
-		end)
+		end
 		session.Saving = false
 		if ok then
 			if (session.Revision or 0) == revision then
