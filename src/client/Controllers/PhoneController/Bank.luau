@@ -2,6 +2,8 @@
 
 local Utils = require(script.Parent.Utils)
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local NetworkRetryPolicy = require(ReplicatedStorage.RoleplayOS.Shared.NetworkRetryPolicy)
 
 local C = Utils.C
 local corner = Utils.corner
@@ -102,15 +104,7 @@ return function(PhoneController)
 				self:Refresh()
 				return
 			end
-			if
-				response.Code ~= "REQUEST_TIMEOUT"
-				and response.Code ~= "NETWORK_ERROR"
-				and response.Code ~= "TRANSFER_IN_PROGRESS"
-				and response.Code ~= "TRANSFER_SETTLEMENT_PENDING"
-				and response.Code ~= "TRANSFER_RECOVERY_PENDING"
-				and response.Code ~= "TRANSFER_RECOVERY_FAILED"
-				and response.Code ~= "TRANSFER_SETTLEMENT_UNAVAILABLE"
-			then
+			if not NetworkRetryPolicy.shouldRetainBankTransferId(response.Success, response.Code) then
 				self.pendingBankTransferId = nil
 				self.pendingBankTransferFingerprint = nil
 			end
