@@ -29,9 +29,8 @@ local Gangs = require(Shared.GangRules)
 local EmergencyPatterns = require(Shared.EmergencyPatterns)
 local OfficialServerPolicy = require(Shared.OfficialServerPolicy)
 local Config = require(game:GetService("ReplicatedStorage").RoleplayOS.Config.Config)
-local OfficialServerService = require(
-	game:GetService("ServerScriptService").RoleplayOS.Services.OfficialServerService
-)
+local OfficialServerService =
+	require(game:GetService("ServerScriptService").RoleplayOS.Services.OfficialServerService)
 
 H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
@@ -96,56 +95,66 @@ H.test("official server registry append is idempotent and preserves legacy acces
 		OfficialServerPolicy.appendInstance(migrated, "new-code", 3, "Community", 101)
 	H.expect(retryIndex == 2 and #retried.Instances == 2, "retry duplicated a reserved instance")
 end)
-H.test("official server list reports a shared-record read failure instead of a new-server row", function()
-	local service: any = setmetatable({
-		settings = {
-			Enabled = true,
-			Entries = {
-				Harbour = {
-					Id = "Harbour",
-					Name = "Harbour",
-					Reserved = true,
+
+H.test(
+	"official server list reports a shared-record read failure instead of a new-server row",
+	function()
+		local service: any = setmetatable({
+			settings = {
+				Enabled = true,
+				Entries = {
+					Harbour = {
+						Id = "Harbour",
+						Name = "Harbour",
+						Reserved = true,
+					},
 				},
 			},
-		},
-		_storedInstanceCodes = function()
-			return {}, "OFFICIAL_SERVER_UNAVAILABLE"
-		end,
-		_isHere = function()
-			return false
-		end,
-	}, { __index = OfficialServerService })
+			_storedInstanceCodes = function()
+				return {}, "OFFICIAL_SERVER_UNAVAILABLE"
+			end,
+			_isHere = function()
+				return false
+			end,
+		}, { __index = OfficialServerService })
 
-	local rows, reason = OfficialServerService.List(service)
-	H.expect(rows == nil, "failed shared-record read returned an empty-server placeholder")
-	H.expect(reason == "OFFICIAL_SERVER_UNAVAILABLE", "shared-record failure was not propagated")
-end)
-H.test("official directory reports cold read failures and reuses its last good snapshot", function()
-	local cached = { Servers = {}, PublicServers = {} }
-	local service: any = setmetatable({
-		settings = { DirectoryCacheSeconds = 1 },
-		context = { Configuration = { Network = { HandlerTimeoutSeconds = 8 } } },
-		directoryCache = nil,
-		directoryCacheExpiresAt = 0,
-		directoryRefresh = nil,
-		ListPublicInstances = function()
-			return {}, nil
-		end,
-		List = function()
-			return nil, "OFFICIAL_SERVER_UNAVAILABLE"
-		end,
-	}, { __index = OfficialServerService })
+		local rows, reason = OfficialServerService.List(service)
+		H.expect(rows == nil, "failed shared-record read returned an empty-server placeholder")
+		H.expect(
+			reason == "OFFICIAL_SERVER_UNAVAILABLE",
+			"shared-record failure was not propagated"
+		)
+	end
+)
+H.test(
+	"official directory reports cold read failures and reuses its last good snapshot",
+	function()
+		local cached = { Servers = {}, PublicServers = {} }
+		local service: any = setmetatable({
+			settings = { DirectoryCacheSeconds = 1 },
+			context = { Configuration = { Network = { HandlerTimeoutSeconds = 8 } } },
+			directoryCache = nil,
+			directoryCacheExpiresAt = 0,
+			directoryRefresh = nil,
+			ListPublicInstances = function()
+				return {}, nil
+			end,
+			List = function()
+				return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+			end,
+		}, { __index = OfficialServerService })
 
-	local snapshot, reason = OfficialServerService.Directory(service)
-	H.expect(snapshot == nil, "cold directory refresh cached an incomplete snapshot")
-	H.expect(reason == "OFFICIAL_SERVER_UNAVAILABLE", "cold directory failure was hidden")
+		local snapshot, reason = OfficialServerService.Directory(service)
+		H.expect(snapshot == nil, "cold directory refresh cached an incomplete snapshot")
+		H.expect(reason == "OFFICIAL_SERVER_UNAVAILABLE", "cold directory failure was hidden")
 
-	service.directoryCache = cached
-	service.directoryCacheExpiresAt = 0
-	snapshot, reason = OfficialServerService.Directory(service)
-	H.expect(snapshot == cached, "failed refresh did not reuse the last good snapshot")
-	H.expect(reason == nil, "last good snapshot returned with an error")
-end)
+		service.directoryCache = cached
+		service.directoryCacheExpiresAt = 0
+		snapshot, reason = OfficialServerService.Directory(service)
+		H.expect(snapshot == cached, "failed refresh did not reuse the last good snapshot")
+		H.expect(reason == nil, "last good snapshot returned with an error")
+	end
+)
 H.test("server-tier access preserves the actionable public gamepass denial", function()
 	local result = Access.evaluate({
 		AccessType = "Combined",
