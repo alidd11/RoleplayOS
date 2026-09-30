@@ -199,7 +199,7 @@ return function(CustodyService)
 		return true, nil
 	end
 
-	function CustodyService:_completeSentence(
+	function CustodyService:_completeSentenceUnclaimed(
 		player: Player,
 		source: string,
 		receiptId: string?
@@ -278,5 +278,34 @@ return function(CustodyService)
 			Metadata = { Source = source, ReceiptId = receiptId },
 		})
 		return true, nil
+	end
+
+	function CustodyService:_completeSentence(
+		player: Player,
+		source: string,
+		receiptId: string?
+	): (boolean, string?)
+		if not self.running or not playerIsCurrent(player) then
+			return false, "CUSTODY_UNAVAILABLE"
+		end
+		if self.completing[player] then
+			return false, "CUSTODY_RELEASE_IN_PROGRESS"
+		end
+
+		-- Sentence completion crosses role assignment and character spawning.
+		-- Hold one exact-Player claim across those yielding operations so a
+		-- retry, timer expiry and early-release redemption cannot run competing
+		-- releases or spend more than one consumable for the same sentence.
+		local claim = {}
+		self.completing[player] = claim
+		local ok, released, reason =
+			pcall(self._completeSentenceUnclaimed, self, player, source, receiptId)
+		if self.completing[player] == claim then
+			self.completing[player] = nil
+		end
+		if not ok then
+			error(released)
+		end
+		return released, reason
 	end
 end
