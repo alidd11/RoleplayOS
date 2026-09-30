@@ -28,7 +28,7 @@ IDs and removes them in the same profile mutation. The container is bounded by
 the per-player active-drop limit for each character, so recovery cannot grow
 into a global persistent queue.
 
-Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Taxi fares use `EconomyService:PayTaxiFare()`, so journey validation stays in TaxiService while the two-player balance mutation, transfer lock, refund recovery and immediate persistence stay in EconomyService. Never accept a reward or price from a client.
+Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Taxi fares use `EconomyService:PayTaxiFare()`, so journey validation stays in TaxiService while the two-player balance mutation, transfer lock, refund recovery and immediate persistence stay in EconomyService. TaxiService claims an accepted request while that yielding settlement is in flight, so completion retries and cancellation cannot race the same fare; a participant disconnecting during a failed settlement releases the booking after the settlement returns. Cancellation is terminal: retained `Cancelled` requests cannot be replayed to refresh their retention timestamp or resend status notifications. Never accept a reward or price from a client.
 
 ## Wages
 
