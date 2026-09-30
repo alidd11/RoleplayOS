@@ -67,7 +67,9 @@ function GangService:_sessionIsCurrent(player: Player, session: any): boolean
 end
 
 function GangService:_gang(gangId: string): (GangRules.Gang?, string?)
-	local record, reason = self.context.Services:Get("DataService"):GetScopedSharedRecord(self.sharedScope, gangKey(gangId))
+	local record, reason = self.context.Services
+		:Get("DataService")
+		:GetScopedSharedRecord(self.sharedScope, gangKey(gangId))
 	if reason then
 		return nil, reason
 	end
@@ -79,12 +81,16 @@ end
 
 function GangService:_releaseNameReservation(nameKey: string, gangId: string): (boolean, string?)
 	local dataService = self.context.Services:Get("DataService")
-	local _, reason = dataService:UpdateScopedSharedRecord(self.sharedScope, "gang-names", function(index)
-		if type(index) == "table" and index[nameKey] == gangId then
-			index[nameKey] = nil
+	local _, reason = dataService:UpdateScopedSharedRecord(
+		self.sharedScope,
+		"gang-names",
+		function(index)
+			if type(index) == "table" and index[nameKey] == gangId then
+				index[nameKey] = nil
+			end
+			return index
 		end
-		return index
-	end)
+	)
 	if reason then
 		self.context.Logger:Error("Gang name reservation cleanup failed", {
 			GangId = gangId,
@@ -103,28 +109,32 @@ function GangService:_queueNameCleanup(nameKey: string, gangId: string): (boolea
 		math.floor(tonumber(self.context.Configuration.Gangs.MaximumPendingNameCleanups) or 64)
 	)
 	local queuedAt = os.time()
-	local pending, reason = dataService:UpdateScopedSharedRecord(self.sharedScope, NAME_CLEANUP_RECORD, function(existing)
-		existing = if type(existing) == "table" then existing else {}
-		local current = existing[nameKey]
-		if type(current) == "table" and current.GangId == gangId then
+	local pending, reason = dataService:UpdateScopedSharedRecord(
+		self.sharedScope,
+		NAME_CLEANUP_RECORD,
+		function(existing)
+			existing = if type(existing) == "table" then existing else {}
+			local current = existing[nameKey]
+			if type(current) == "table" and current.GangId == gangId then
+				return existing
+			end
+			if current ~= nil then
+				return existing
+			end
+			local count = 0
+			for _ in existing do
+				count += 1
+			end
+			if count >= maximum then
+				return existing
+			end
+			existing[nameKey] = {
+				GangId = gangId,
+				QueuedAt = queuedAt,
+			}
 			return existing
 		end
-		if current ~= nil then
-			return existing
-		end
-		local count = 0
-		for _ in existing do
-			count += 1
-		end
-		if count >= maximum then
-			return existing
-		end
-		existing[nameKey] = {
-			GangId = gangId,
-			QueuedAt = queuedAt,
-		}
-		return existing
-	end)
+	)
 	if reason then
 		return false, reason
 	end
@@ -141,9 +151,10 @@ function GangService:_queueNameCleanup(nameKey: string, gangId: string): (boolea
 end
 
 function GangService:_clearNameCleanup(nameKey: string, gangId: string): boolean
-	local _, reason = self.context.Services
-		:Get("DataService")
-		:UpdateScopedSharedRecord(self.sharedScope, NAME_CLEANUP_RECORD, function(existing)
+	local _, reason = self.context.Services:Get("DataService"):UpdateScopedSharedRecord(
+		self.sharedScope,
+		NAME_CLEANUP_RECORD,
+		function(existing)
 			if
 				type(existing) == "table"
 				and type(existing[nameKey]) == "table"
@@ -152,7 +163,8 @@ function GangService:_clearNameCleanup(nameKey: string, gangId: string): boolean
 				existing[nameKey] = nil
 			end
 			return existing
-		end)
+		end
+	)
 	if reason then
 		self.context.Logger:Warning("Gang name cleanup marker could not be cleared", {
 			GangId = gangId,
@@ -166,7 +178,8 @@ end
 
 function GangService:_repairNameCleanup(nameKey: string): (boolean, string?)
 	local dataService = self.context.Services:Get("DataService")
-	local pending, pendingReason = dataService:GetScopedSharedRecord(self.sharedScope, NAME_CLEANUP_RECORD)
+	local pending, pendingReason =
+		dataService:GetScopedSharedRecord(self.sharedScope, NAME_CLEANUP_RECORD)
 	if pendingReason then
 		return false, pendingReason
 	end
@@ -366,13 +379,17 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 		-- transform more than once, so a sticky external success boolean is not a
 		-- reliable result: an early invocation can win and a retry can then discover
 		-- that another server actually committed the name.
-		local nameIndex, indexReason = dataService:UpdateScopedSharedRecord(self.sharedScope, "gang-names", function(index)
-			index = if type(index) == "table" then index else {}
-			if index[nameKey] == nil then
-				index[nameKey] = gangId
+		local nameIndex, indexReason = dataService:UpdateScopedSharedRecord(
+			self.sharedScope,
+			"gang-names",
+			function(index)
+				index = if type(index) == "table" then index else {}
+				if index[nameKey] == nil then
+					index[nameKey] = gangId
+				end
+				return index
 			end
-			return index
-		end)
+		)
 		if indexReason then
 			return nil, "GANG_CREATE_FAILED"
 		end
@@ -404,7 +421,8 @@ function GangService:Create(player: Player, name: any): (GangRules.Gang?, string
 		session.Profile.GangId = gangId
 		dataService:MarkDirty(player)
 
-		local storedGang, gangReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
+		local storedGang, gangReason = dataService:UpdateScopedSharedRecord(
+			self.sharedScope,
 			gangKey(gangId),
 			function(existing)
 				if existing == nil then
@@ -621,7 +639,8 @@ function GangService:RespondToInvite(player: Player, gangId: any, accept: any): 
 		-- The transform is idempotent and carries no external success flag:
 		-- UpdateAsync may invoke it more than once. A retry that observes this user
 		-- already present simply returns the committed record.
-		local storedGang, updateReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
+		local storedGang, updateReason = dataService:UpdateScopedSharedRecord(
+			self.sharedScope,
 			gangKey(gangId),
 			function(stored)
 				if type(stored) ~= "table" then
@@ -749,9 +768,13 @@ function GangService:Leave(player: Player): (boolean, string?)
 				})
 				return false, "GANG_LEAVE_FAILED"
 			end
-			local _, disbandReason = dataService:UpdateScopedSharedRecord(self.sharedScope, gangKey(gang.Id), function()
-				return nil
-			end)
+			local _, disbandReason = dataService:UpdateScopedSharedRecord(
+				self.sharedScope,
+				gangKey(gang.Id),
+				function()
+					return nil
+				end
+			)
 			-- The transform legitimately returns nil on success -- that is what
 			-- disbanding means -- so only the reason string distinguishes a failed
 			-- write from a successful one, never the returned value. Keep the
@@ -787,16 +810,20 @@ function GangService:Leave(player: Player): (boolean, string?)
 			})
 			return true, nil
 		end
-		local _, leaveReason = dataService:UpdateScopedSharedRecord(self.sharedScope, gangKey(gang.Id), function(stored)
-			if type(stored) ~= "table" then
+		local _, leaveReason = dataService:UpdateScopedSharedRecord(
+			self.sharedScope,
+			gangKey(gang.Id),
+			function(stored)
+				if type(stored) ~= "table" then
+					return stored
+				end
+				local memberIndex = table.find(stored.MemberUserIds, player.UserId)
+				if memberIndex then
+					table.remove(stored.MemberUserIds, memberIndex)
+				end
 				return stored
 			end
-			local memberIndex = table.find(stored.MemberUserIds, player.UserId)
-			if memberIndex then
-				table.remove(stored.MemberUserIds, memberIndex)
-			end
-			return stored
-		end)
+		)
 		if leaveReason then
 			return false, "GANG_LEAVE_FAILED"
 		end
