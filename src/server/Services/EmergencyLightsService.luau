@@ -164,7 +164,7 @@ function EmergencyLightsService:Adopt(
 	restoreOnDestroy: boolean?
 )
 	local settings = self:_settings()
-	if not settings.Enabled then
+	if not self.running or not settings.Enabled then
 		return
 	end
 	local lights = self:FindLights(model)
@@ -213,8 +213,12 @@ function EmergencyLightsService:Adopt(
 end
 
 function EmergencyLightsService:_authorised(player: Player): boolean
+	if not self.running then
+		return false
+	end
 	local duty = self.context.Services:Get("DutyService"):Get(player)
-	return duty ~= nil
+	return self.running
+		and duty ~= nil
 		and type(duty.DepartmentId) == "string"
 		and self:_settings().Departments[duty.DepartmentId] ~= nil
 		and RolePermissions.has(self.context.Configuration, duty, "EmergencyLights")
@@ -236,7 +240,7 @@ end
 -- Applies a request, or says why not.
 function EmergencyLightsService:Set(player: Player, request: any): (boolean, string?)
 	local settings = self:_settings()
-	if not settings.Enabled then
+	if not self.running or not settings.Enabled then
 		return false, "LIGHTS_DISABLED"
 	end
 	local model = self:_drivenVehicle(player)
@@ -251,6 +255,9 @@ function EmergencyLightsService:Set(player: Player, request: any): (boolean, str
 	-- hold of a marked car would have a blue light run available to them, and
 	-- with it an exemption from every speed camera in the city.
 	local duty = self.context.Services:Get("DutyService"):Get(player)
+	if not self.running then
+		return false, "LIGHTS_DISABLED"
+	end
 	if not duty or type(duty.DepartmentId) ~= "string" then
 		return false, "NOT_ON_DUTY"
 	end
