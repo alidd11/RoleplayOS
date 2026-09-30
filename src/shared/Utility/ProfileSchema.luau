@@ -67,7 +67,11 @@ local function reconcile(target: any, defaults: any)
 	end
 end
 
-local function storedNumber(value: any, defaultValue: number, invalidReason: string): (number?, string?)
+local function storedNumber(
+	value: any,
+	defaultValue: number,
+	invalidReason: string
+): (number?, string?)
 	if value == nil then
 		return defaultValue, nil
 	end
@@ -208,11 +212,8 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		-- Missing legacy values mean no active sentence. Present values that cannot
 		-- be read must not be converted to zero: migration runs inside UpdateAsync,
 		-- so that would permanently erase the only authoritative sentence state.
-		local releaseAt, releaseAtProblem = storedNumber(
-			sentence.ReleaseAt,
-			0,
-			"PROFILE_CUSTODY_RELEASE_AT_INVALID"
-		)
+		local releaseAt, releaseAtProblem =
+			storedNumber(sentence.ReleaseAt, 0, "PROFILE_CUSTODY_RELEASE_AT_INVALID")
 		if releaseAtProblem then
 			return nil, releaseAtProblem
 		end
@@ -245,11 +246,8 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 				elseif type(economy) ~= "table" then
 					return nil, "PROFILE_ECONOMY_NOT_TABLE"
 				end
-				local balance, balanceProblem = storedNonNegativeInteger(
-					economy.Balance,
-					0,
-					"PROFILE_ECONOMY_BALANCE_INVALID"
-				)
+				local balance, balanceProblem =
+					storedNonNegativeInteger(economy.Balance, 0, "PROFILE_ECONOMY_BALANCE_INVALID")
 				if balanceProblem then
 					return nil, balanceProblem
 				end
