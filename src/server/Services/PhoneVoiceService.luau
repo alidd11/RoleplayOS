@@ -3,10 +3,26 @@
 local Players = game:GetService("Players")
 local SoundService = game:GetService("SoundService")
 
-local PhoneVoiceService = { Optional = true, routes = {}, connections = {} }
+local PhoneVoiceService = {
+	Optional = true,
+	routes = {},
+	connections = {},
+	running = false,
+}
+
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
 
 function PhoneVoiceService:Init(context: any)
 	self.context = context
+	table.clear(self.routes)
+	table.clear(self.connections)
+	self.running = false
+	if self.container then
+		self.container:Destroy()
+		self.container = nil
+	end
 	self.container = Instance.new("Folder")
 	self.container.Name = "RoleplayOSPhoneVoice"
 	self.container.Parent = SoundService
@@ -53,6 +69,15 @@ function PhoneVoiceService:ConnectCall(
 	caller: Player,
 	recipient: Player
 ): (boolean, string?)
+	if
+		not self.running
+		or not playerIsCurrent(caller)
+		or not playerIsCurrent(recipient)
+		or not self.container
+		or not self.container.Parent
+	then
+		return false, "VOICE_NOT_AVAILABLE"
+	end
 	self:DisconnectCall(callId)
 	local callerInput = inputFor(caller)
 	local recipientInput = inputFor(recipient)
@@ -104,6 +129,7 @@ function PhoneVoiceService:_disconnectPlayer(player: Player)
 end
 
 function PhoneVoiceService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -113,6 +139,7 @@ function PhoneVoiceService:Start()
 end
 
 function PhoneVoiceService:Destroy()
+	self.running = false
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
@@ -126,7 +153,9 @@ function PhoneVoiceService:Destroy()
 	end
 	if self.container then
 		self.container:Destroy()
+		self.container = nil
 	end
+	table.clear(self.routes)
 end
 
 return PhoneVoiceService
