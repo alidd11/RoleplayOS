@@ -12,6 +12,8 @@ local EconomyService = {
 	transferring = {},
 	connections = {},
 	reconciling = {},
+	recoveryPending = {},
+	recoveryPersistenceFailed = {},
 	running = false,
 }
 
@@ -21,6 +23,14 @@ end
 
 local function transactionScope(userId: number, characterId: string): string
 	return tostring(userId) .. ":" .. characterId
+end
+
+local function pendingTransferRecordKey(userId: number): string
+	return "ptr:" .. tostring(userId)
+end
+
+local function pendingTransferRecoveryId(transferId: string): string
+	return "pt:" .. transferId
 end
 
 local function pendingTransferEntryId(entry: any): string?
@@ -42,6 +52,8 @@ end
 function EconomyService:Init(context: any)
 	self.context = context
 	table.clear(self.reconciling)
+	table.clear(self.recoveryPending)
+	table.clear(self.recoveryPersistenceFailed)
 end
 function EconomyService:Start()
 	self.running = true
@@ -63,6 +75,12 @@ function EconomyService:Start()
 			for key in self.reconciling do
 				if string.sub(key, 1, #prefix) == prefix then
 					self.reconciling[key] = nil
+				end
+			end
+			for key in self.recoveryPending do
+				if string.sub(key, 1, #prefix) == prefix then
+					self.recoveryPending[key] = nil
+					self.recoveryPersistenceFailed[key] = nil
 				end
 			end
 		end)
@@ -98,34 +116,37 @@ function EconomyService:Start()
 	end
 end
 
-function EconomyService:_queuePendingRefund(record: any)
+function EconomyService:_queuePendingRefund(record: any): (boolean, string?)
 	local data = self.context.Services:Get("DataService")
-	local id = "pt:" .. record.TransferId
-	-- Store the recovery payload in the discoverable index itself. The previous
-	-- two-write shape persisted pt:<id> first and indexed it second; if the first
-	-- UpdateAsync succeeded and the index write failed, the refund became a
-	-- durable orphan that no server could discover again.
-	local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
-		local index = if type(existing) == "table" then existing else {}
-		for _, entry in index do
-			if pendingTransferEntryId(entry) == id then
-				return index
-			end
-		end
-		table.insert(index, {
-			Id = id,
-			Record = record,
-		})
-		return index
+	local scope = transactionScope(record.SenderUserId, record.SenderCharacterId)
+	self.recoveryPending[scope] = true
+
+	-- New recovery debt is stored under the sender rather than appended to one
+	-- global index. Character selection therefore reads only this player's small
+	-- record, and a failed recipient cannot make recovery cost grow with every
+	-- other player who has ever had a pending transfer.
+	local key = pendingTransferRecordKey(record.SenderUserId)
+	local _, reason = data:UpdateSharedRecord(key, function(existing)
+		local pending = if type(existing) == "table" then existing else {}
+		pending[record.TransferId] = record
+		return pending
 	end)
-	if indexReason then
+	if reason then
+		-- Keep this character transfer-blocked for the rest of the current
+		-- session. The debt could not be made durable, so allowing another debit
+		-- would compound an already unrecoverable persistence fault.
+		self.recoveryPersistenceFailed[scope] = true
 		self.context.Logger:Error("Pending transfer recovery persistence failed", {
 			TransferId = record.TransferId,
-			Error = indexReason,
+			UserId = record.SenderUserId,
+			CharacterId = record.SenderCharacterId,
+			Error = reason,
 		})
+		return false, reason
 	end
+	self.recoveryPersistenceFailed[scope] = nil
+	return true, nil
 end
-
 function EconomyService:QueueMoneyDropRefund(player: Player, record: any): (boolean, string?)
 	if not self.running then
 		return false, "ECONOMY_UNAVAILABLE"
@@ -321,6 +342,159 @@ function EconomyService:ReconcilePendingTransfers(
 
 	local unresolvedReason: string? = nil
 	local ok, problem = pcall(function()
+		local scopedKey = pendingTransferRecordKey(player.UserId)
+		local scopedPending, scopedReason = data:GetSharedRecord(scopedKey)
+		if scopedReason then
+			unresolvedReason = scopedReason
+		else
+			local completedScoped: { [string]: boolean } = {}
+			local durableScoped: { [string]: string } = {}
+			if type(scopedPending) == "table" then
+				for transferId, record in scopedPending do
+					if
+						not self.running
+						or not playerIsCurrent(player)
+						or data:GetSession(player) ~= session
+						or session.ActiveCharacterId ~= characterId
+					then
+						unresolvedReason = "CHARACTER_NOT_ACTIVE"
+						return
+					end
+					if type(transferId) ~= "string" or type(record) ~= "table" then
+						self.context.Logger:Error("Player transfer recovery record is invalid", {
+							UserId = player.UserId,
+							CharacterId = characterId,
+						})
+						unresolvedReason = unresolvedReason or "TRANSFER_RECOVERY_INVALID"
+						continue
+					end
+					if record.SenderCharacterId ~= characterId then
+						continue
+					end
+					if record.SenderUserId ~= player.UserId or record.TransferId ~= transferId then
+						self.context.Logger:Error("Player transfer recovery ownership is invalid", {
+							TransferId = transferId,
+							UserId = player.UserId,
+							CharacterId = characterId,
+						})
+						unresolvedReason = unresolvedReason or "TRANSFER_RECOVERY_INVALID"
+						continue
+					end
+					if record.Status == "Reconciled" then
+						completedScoped[transferId] = true
+						continue
+					end
+					if
+						type(record.Amount) ~= "number"
+						or record.Amount <= 0
+						or record.Amount ~= math.floor(record.Amount)
+					then
+						self.context.Logger:Error("Player transfer refund is malformed", {
+							TransferId = transferId,
+							UserId = player.UserId,
+							CharacterId = characterId,
+						})
+						unresolvedReason = unresolvedReason or "TRANSFER_RECOVERY_INVALID"
+						continue
+					end
+
+					local recoveryId = pendingTransferRecoveryId(transferId)
+					local refundTransactionId = "transfer-refund-reconcile:" .. recoveryId
+					local applied, applyReason = self:Apply(player, {
+						TransactionId = refundTransactionId,
+						CharacterId = characterId,
+						Amount = record.Amount,
+						Direction = "Credit",
+						ReasonCode = "PLAYER_TRANSFER_REFUND_RECONCILE",
+						Description = "Recovered transfer refund",
+						RelatedEntityId = transferId,
+						Metadata = {},
+					})
+					if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
+						unresolvedReason =
+							unresolvedReason or applyReason or "TRANSFER_REFUND_FAILED"
+						continue
+					end
+
+					local saved, saveReason = data:Save(player)
+					if
+						not self.running
+						or not playerIsCurrent(player)
+						or data:GetSession(player) ~= session
+						or session.ActiveCharacterId ~= characterId
+					then
+						unresolvedReason = "CHARACTER_NOT_ACTIVE"
+						return
+					end
+					if not saved then
+						unresolvedReason = unresolvedReason or saveReason or "PROFILE_SAVE_FAILED"
+						self.context.Logger:Warning("Player transfer refund save failed", {
+							TransferId = transferId,
+							UserId = player.UserId,
+							Error = saveReason,
+						})
+						continue
+					end
+					durableScoped[transferId] = refundTransactionId
+				end
+			end
+
+			if next(durableScoped) ~= nil then
+				local _, receiptReason = data:UpdateSharedRecord(scopedKey, function(existing)
+					if type(existing) ~= "table" then
+						return existing
+					end
+					for transferId, refundTransactionId in durableScoped do
+						local record = existing[transferId]
+						if type(record) == "table" then
+							record.Status = "Reconciled"
+							record.ReconciledAt = os.time()
+							record.RefundTransactionId = refundTransactionId
+						end
+					end
+					return existing
+				end)
+				if receiptReason then
+					unresolvedReason = unresolvedReason or receiptReason
+					self.context.Logger:Error("Player transfer refund receipt persistence failed", {
+						UserId = player.UserId,
+						CharacterId = characterId,
+						Error = receiptReason,
+					})
+				else
+					for transferId in durableScoped do
+						completedScoped[transferId] = true
+					end
+				end
+			end
+
+			if next(completedScoped) ~= nil then
+				local _, cleanupReason = data:UpdateSharedRecord(scopedKey, function(existing)
+					if type(existing) ~= "table" then
+						return existing
+					end
+					for transferId in completedScoped do
+						existing[transferId] = nil
+					end
+					if next(existing) == nil then
+						return nil
+					end
+					return existing
+				end)
+				if cleanupReason then
+					unresolvedReason = unresolvedReason or cleanupReason
+					self.context.Logger:Error("Player transfer recovery cleanup failed", {
+						UserId = player.UserId,
+						CharacterId = characterId,
+						Error = cleanupReason,
+					})
+				end
+			end
+		end
+
+		-- Compatibility only. Older servers stored every debt in one global
+		-- index. New writes never append here; this path drains those historical
+		-- entries until the index is empty.
 		local index, indexReason = data:GetSharedRecord("pending-transfer-index")
 		if indexReason then
 			unresolvedReason = indexReason
@@ -524,6 +698,7 @@ function EconomyService:ReconcilePendingTransfers(
 		self.reconciling[scope] = nil
 	end
 	if not ok then
+		self.recoveryPending[scope] = true
 		self.context.Logger:Error("Pending transfer reconciliation failed", {
 			UserId = player.UserId,
 			CharacterId = characterId,
@@ -532,7 +707,11 @@ function EconomyService:ReconcilePendingTransfers(
 		return false, "TRANSFER_RECOVERY_FAILED"
 	end
 	if unresolvedReason then
+		self.recoveryPending[scope] = true
 		return false, unresolvedReason
+	end
+	if not self.recoveryPersistenceFailed[scope] then
+		self.recoveryPending[scope] = nil
 	end
 	return true, nil
 end
@@ -663,6 +842,11 @@ function EconomyService:_transfer(
 		releaseTransferLocks()
 		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
 	end
+	local senderScope = transactionScope(sender.UserId, senderId)
+	if self.recoveryPending[senderScope] then
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_PENDING"
+	end
 	if amount > senderCharacter.Economy.Balance then
 		releaseTransferLocks()
 		return nil, "INSUFFICIENT_FUNDS"
@@ -716,7 +900,7 @@ function EconomyService:_transfer(
 		end
 		releaseTransferLocks()
 		if not refunded then
-			self:_queuePendingRefund({
+			local queued, queueReason = self:_queuePendingRefund({
 				TransferId = transferId,
 				SenderUserId = sender.UserId,
 				SenderCharacterId = senderId,
@@ -731,6 +915,8 @@ function EconomyService:_transfer(
 				TransferId = transferId,
 				CreditError = creditReason,
 				RefundError = refundReason,
+				RecoveryQueued = queued,
+				RecoveryQueueError = queueReason,
 			})
 		end
 		return nil, creditReason
@@ -838,5 +1024,7 @@ function EconomyService:Destroy()
 	table.clear(self.order)
 	table.clear(self.transferring)
 	table.clear(self.reconciling)
+	table.clear(self.recoveryPending)
+	table.clear(self.recoveryPersistenceFailed)
 end
 return EconomyService
