@@ -63,11 +63,20 @@ return function(RoadSafetyService)
 	-- says what it actually matched. That turns "the exemption is not firing" from
 	-- guesswork into a line in the log naming the thing to put in AttributeNames.
 	function RoadSafetyService:_noteMatch(where: string, name: string)
-		self.noted = self.noted or {}
 		if self.noted[name] then
 			return
 		end
+		local maximum = math.max(
+			1,
+			math.floor(
+				tonumber(self.context.Configuration.RoadSafety.MaximumLightDiagnosticNames) or 64
+			)
+		)
+		if self.notedCount >= maximum then
+			return
+		end
 		self.noted[name] = true
+		self.notedCount += 1
 		self.context.Logger:Info("Emergency lights read from", { Source = where, Name = name })
 	end
 
