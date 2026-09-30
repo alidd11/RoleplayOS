@@ -12,7 +12,11 @@ history when a server takes ownership of the profile. Recovery operations that
 may be retried must therefore use a deterministic transaction ID. Pending player
 transfer refunds derive that ID from the transfer, save the profile before
 retiring the pending item, and persist a reconciled receipt so a stale shared
-index entry cannot credit the same refund again.
+index entry cannot credit the same refund again. New refund recovery entries keep
+the recovery payload in the discoverable shared index itself, so creating a
+recoverable debt is one atomic shared-record update rather than a record write
+followed by an index write that could orphan the debt. Legacy string index entries
+remain readable until they reconcile and drain naturally.
 
 Cash drops use the same recovery rule. Normal expiry still removes uncollected
 cash, but drops do not outlive the profile session that paid for them: leaving
