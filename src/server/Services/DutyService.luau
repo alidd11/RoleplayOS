@@ -334,11 +334,14 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 	end
 	-- The rank abbreviation and shoulder number is always safe to display because
 	-- it is server-authored. A stored custom callsign is user-authored text and
-	-- therefore cannot be shown until Roblox has filtered it.
+	-- therefore cannot be shown until Roblox has filtered it. Issuing a first
+	-- shoulder number can yield through DataStore retries. The player can end
+	-- duty or enter the city during that wait, so this duty record must still be
+	-- the current one before its unit is registered.
 	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
-	if not self.running or not playerIsPresent(player) then
-		self.active[player.UserId] = nil
-		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
+	local playerIsCurrent = playerIsPresent(player)
+	if not self.running or not playerIsCurrent or self.active[player.UserId] ~= dutyRecord then
+		return false, if playerIsCurrent then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local callsign = if type(shoulder) == "string" and #shoulder >= 2
 		then shoulder
