@@ -845,8 +845,37 @@ function EconomyService:_transfer(
 	end
 	local senderScope = transactionScope(sender.UserId, senderId)
 	if self.recoveryPending[senderScope] then
-		releaseTransferLocks()
-		return nil, "TRANSFER_RECOVERY_PENDING"
+		local recovered = self:ReconcilePendingTransfers(sender, senderId)
+		if not recovered or self.recoveryPending[senderScope] then
+			releaseTransferLocks()
+			return nil, "TRANSFER_RECOVERY_PENDING"
+		end
+
+		-- Recovery reads shared state and saves the sender profile. Revalidate both
+		-- participants after that yielding boundary before using the sessions or
+		-- balances captured above.
+		senderSession = data:GetSession(sender)
+		recipientSession = data:GetSession(recipient)
+		if
+			not self.running
+			or not playerIsCurrent(sender)
+			or not playerIsCurrent(recipient)
+			or not senderSession
+			or senderSession.ActiveCharacterId ~= senderId
+		then
+			releaseTransferLocks()
+			return nil, "ECONOMY_UNAVAILABLE"
+		end
+		if not recipientSession or recipientSession.ActiveCharacterId ~= recipientId then
+			releaseTransferLocks()
+			return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+		end
+		senderCharacter = senderSession.Profile.Characters[senderId]
+		recipientCharacter = recipientSession.Profile.Characters[recipientId]
+		if not senderCharacter or not recipientCharacter then
+			releaseTransferLocks()
+			return nil, "ECONOMY_UNAVAILABLE"
+		end
 	end
 	if amount > senderCharacter.Economy.Balance then
 		releaseTransferLocks()
