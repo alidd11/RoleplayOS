@@ -8,20 +8,32 @@ local function isDeleted(value: any): boolean
 	return type(value) == "table" and value[DELETED_FIELD] == true
 end
 
+local function mockRecordKey(recordId: string, scopeId: string?): string
+	return if scopeId == nil then recordId else scopeId .. "\0" .. recordId
+end
+
 return function(DataService)
-	function DataService:GetSharedRecord(recordId: string): (any?, string?)
+	function DataService:GetSharedRecord(recordId: string, scopeId: string?): (any?, string?)
+		local storageKey = mockRecordKey(recordId, scopeId)
 		if self.mock then
 			-- Match DataStore semantics: callers receive a detached value. Returning
 			-- the stored table itself let a later local mutation silently change the
 			-- mock record without UpdateSharedRecord, hiding missing durable writes
 			-- during Studio testing.
-			return deepCopy(self.mockSharedRecords[recordId]), nil
+			return deepCopy(self.mockSharedRecords[storageKey]), nil
+		end
+		local store = self:_sharedRecordStoreForScope(scopeId)
+		if not store then
+			return nil, "SHARED_RECORD_LOAD_FAILED"
 		end
 		local ok, result = self:_retry(function()
-			return self.sharedRecordStore:GetAsync(recordId)
+			return store:GetAsync(recordId)
 		end, nil, Enum.DataStoreRequestType.GetAsync)
 		if not ok then
-			self.context.Logger:Error("Shared record load failed", { RecordId = recordId })
+			self.context.Logger:Error("Shared record load failed", {
+				RecordId = recordId,
+				ScopeId = scopeId,
+			})
 			return nil, "SHARED_RECORD_LOAD_FAILED"
 		end
 		if isDeleted(result) then
@@ -32,20 +44,26 @@ return function(DataService)
 
 	function DataService:UpdateSharedRecord(
 		recordId: string,
-		transform: (any?) -> any
+		transform: (any?) -> any,
+		scopeId: string?
 	): (any?, string?)
+		local storageKey = mockRecordKey(recordId, scopeId)
 		if self.mock then
 			-- UpdateAsync gives its transform an isolated deserialised value and the
 			-- returned result is persisted independently of the caller's table.
 			-- Preserve those boundaries in Studio so mock behaviour cannot make an
 			-- accidental reference mutation look like a successful durable update.
-			local updated = transform(deepCopy(self.mockSharedRecords[recordId]))
-			self.mockSharedRecords[recordId] = deepCopy(updated)
+			local updated = transform(deepCopy(self.mockSharedRecords[storageKey]))
+			self.mockSharedRecords[storageKey] = deepCopy(updated)
 			return deepCopy(updated), nil
+		end
+		local store = self:_sharedRecordStoreForScope(scopeId)
+		if not store then
+			return nil, "SHARED_RECORD_UPDATE_FAILED"
 		end
 		local updated
 		local ok = self:_retry(function()
-			return self.sharedRecordStore:UpdateAsync(recordId, function(stored)
+			return store:UpdateAsync(recordId, function(stored)
 				-- UpdateAsync treats nil as "cancel this write", while the in-memory
 				-- implementation naturally treats nil as deletion. Preserve one
 				-- persistence contract by representing a deleted shared record with an
@@ -62,7 +80,10 @@ return function(DataService)
 			end)
 		end)
 		if not ok then
-			self.context.Logger:Error("Shared record update failed", { RecordId = recordId })
+			self.context.Logger:Error("Shared record update failed", {
+				RecordId = recordId,
+				ScopeId = scopeId,
+			})
 			return nil, "SHARED_RECORD_UPDATE_FAILED"
 		end
 		return updated, nil
