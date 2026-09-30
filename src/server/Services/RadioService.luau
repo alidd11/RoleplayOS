@@ -3,7 +3,13 @@
 local Players = game:GetService("Players")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local RadioService = { channels = {}, current = {}, messages = {}, bursts = {} }
+local RadioService = {
+	channels = {},
+	current = {},
+	messages = {},
+	bursts = {},
+	running = false,
+}
 
 local CHANNELS = {
 	{ Id = "Operations", Name = "Operations", DepartmentId = nil },
@@ -29,6 +35,7 @@ function RadioService:Init(context: any)
 	self.messages = {}
 	self.bursts = {}
 	self.connections = {}
+	self.running = false
 end
 
 function RadioService:_duty(player: Player): any?
@@ -40,7 +47,13 @@ function RadioService:_allowed(duty: any, channel: any): boolean
 end
 
 function RadioService:Snapshot(player: Player): (any?, string?)
+	if not self.running then
+		return nil, "RADIO_UNAVAILABLE"
+	end
 	local duty = self:_duty(player)
+	if not self.running then
+		return nil, "RADIO_UNAVAILABLE"
+	end
 	if not duty then
 		return nil, "NOT_ON_DUTY"
 	end
@@ -72,7 +85,13 @@ function RadioService:Snapshot(player: Player): (any?, string?)
 end
 
 function RadioService:SetChannel(player: Player, channelId: string): (any?, string?)
+	if not self.running then
+		return nil, "RADIO_UNAVAILABLE"
+	end
 	local duty = self:_duty(player)
+	if not self.running then
+		return nil, "RADIO_UNAVAILABLE"
+	end
 	local channel = findChannel(channelId)
 	if not duty then
 		return nil, "NOT_ON_DUTY"
@@ -81,13 +100,25 @@ function RadioService:SetChannel(player: Player, channelId: string): (any?, stri
 		return nil, "RADIO_CHANNEL_FORBIDDEN"
 	end
 	self.current[player.UserId] = channelId
-	local snapshot = self:Snapshot(player)
+	local snapshot, snapshotReason = self:Snapshot(player)
+	if not snapshot then
+		return nil, snapshotReason
+	end
+	if not self.running then
+		return nil, "RADIO_UNAVAILABLE"
+	end
 	self.event:FireClient(player, { Kind = "Snapshot", Data = snapshot })
 	return snapshot, nil
 end
 
 function RadioService:Transmit(player: Player, message: string): (boolean, string?)
+	if not self.running then
+		return false, "RADIO_UNAVAILABLE"
+	end
 	local duty = self:_duty(player)
+	if not self.running then
+		return false, "RADIO_UNAVAILABLE"
+	end
 	if not duty then
 		return false, "NOT_ON_DUTY"
 	end
@@ -125,12 +156,18 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 	if not filtered then
 		return false, filterReason or "TEXT_FILTER_UNAVAILABLE"
 	end
+	if not self.running then
+		return false, "RADIO_UNAVAILABLE"
+	end
 
 	-- Filtering can yield. Duty and channel authority captured before moderation
 	-- therefore cannot be treated as a lease: the sender may leave, end duty or
 	-- change channel while Roblox is filtering the message. Revalidate the exact
 	-- duty record and effective channel immediately before committing the entry.
 	local currentDuty = self:_duty(player)
+	if not self.running then
+		return false, "RADIO_UNAVAILABLE"
+	end
 	if not currentDuty then
 		return false, "NOT_ON_DUTY"
 	end
@@ -159,7 +196,13 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 		table.remove(self.messages[channelId], 1)
 	end
 	for _, recipient in Players:GetPlayers() do
+		if not self.running then
+			return false, "RADIO_UNAVAILABLE"
+		end
 		local recipientDuty = self:_duty(recipient)
+		if not self.running then
+			return false, "RADIO_UNAVAILABLE"
+		end
 		if
 			recipientDuty
 			and self:_allowed(recipientDuty, channel)
@@ -172,6 +215,7 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 end
 
 function RadioService:Start()
+	self.running = true
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
@@ -182,6 +226,7 @@ function RadioService:Start()
 end
 
 function RadioService:Destroy()
+	self.running = false
 	for _, connection in self.connections or {} do
 		connection:Disconnect()
 	end
