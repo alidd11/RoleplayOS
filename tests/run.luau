@@ -1344,6 +1344,34 @@ H.test("warrant cache ignores malformed persisted warrant entries and expiries",
 		"valid active warrant was lost"
 	)
 	H.expect(activeReason == nil, "valid warrant lookup returned an error")
+	local person = { CharacterId = "target", Warrants = { 42 } }
+	local dependencies = {
+		MDTService = {
+			CanUsePermission = function()
+				return true
+			end,
+		},
+		RecordIndexService = {
+			UpdatePerson = function(_self, _characterId, transform)
+				person = transform(person)
+				return person, nil
+			end,
+		},
+		AuditService = { Record = function() end },
+	}
+	context.Configuration.MDT.MaximumActiveWarrantsPerPerson = 4
+	context.Configuration.MDT.MaximumWarrantHistoryEntries = 10
+	context.Configuration.MDT.MaximumWarrantDurationDays = 365
+	context.Services = {
+		Get = function(_self, name)
+			return dependencies[name]
+		end,
+	}
+	service._filter = function()
+		return "valid reason", nil
+	end
+	local issued, issueReason = service:Create({ UserId = 10 }, "target", "reason", nil)
+	H.expect(issued ~= nil and issueReason == nil, "warrant creation failed on a malformed old row")
 	service:Destroy()
 end)
 
