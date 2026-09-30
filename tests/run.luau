@@ -338,6 +338,22 @@ H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
 end)
+H.test("configuration rejects unsafe profile lease timing", function()
+	local invalid = table.clone(Config)
+	invalid.Framework = table.clone(Config.Framework)
+	invalid.Framework.AutosaveSeconds = 60
+	invalid.Framework.SessionLeaseSeconds = 59
+
+	local valid, errors = ConfigValidator.validate(invalid)
+	H.expect(not valid, "unsafe profile lease timing was accepted")
+	H.expect(
+		table.find(
+			errors,
+			"Framework.SessionLeaseSeconds must be at least twice Framework.AutosaveSeconds"
+		) ~= nil,
+		"unsafe profile lease timing did not report the persistence invariant"
+	)
+end)
 H.test("bank robbery economy is bounded and mode agnostic", function()
 	local robbery = Config.BankRobbery
 	H.expect(type(robbery.Tag) == "string" and robbery.Tag ~= "", "bank robbery tag missing")
