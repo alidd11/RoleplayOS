@@ -441,8 +441,8 @@ return function(DataService)
 				return false, "SAVE_IN_PROGRESS"
 			end
 			if self.closing then
-				local deadline = os.clock()
-					+ self.context.Configuration.Framework.ShutdownSaveSeconds
+				local deadline = self.shutdownDeadline
+					or (os.clock() + self.context.Configuration.Framework.ShutdownSaveSeconds)
 				while session.Saving and os.clock() < deadline do
 					task.wait(0.05)
 				end
