@@ -67,6 +67,33 @@ local function reconcile(target: any, defaults: any)
 	end
 end
 
+local function storedNumber(
+	value: any,
+	defaultValue: number,
+	invalidReason: string
+): (number?, string?)
+	if value == nil then
+		return defaultValue, nil
+	end
+	local parsed = tonumber(value)
+	if parsed == nil then
+		return nil, invalidReason
+	end
+	return parsed, nil
+end
+
+local function storedNonNegativeInteger(
+	value: any,
+	defaultValue: number,
+	invalidReason: string
+): (number?, string?)
+	local parsed, problem = storedNumber(value, defaultValue, invalidReason)
+	if problem then
+		return nil, problem
+	end
+	return math.max(0, math.floor(parsed :: number)), nil
+end
+
 function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if data == nil then
 		return ProfileSchema.default(userId), nil
@@ -181,13 +208,28 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		-- Version 8 used an absolute wall-clock deadline, which kept counting
 		-- down while a player was offline. Preserve only the unserved portion at
 		-- migration time; version 9 thereafter stores playtime remaining.
-		sentence.RemainingSeconds = math.max(
-			0,
-			math.floor(
-				tonumber(sentence.RemainingSeconds)
-					or ((tonumber(sentence.ReleaseAt) or 0) - os.time())
+		--
+		-- Missing legacy values mean no active sentence. Present values that cannot
+		-- be read must not be converted to zero: migration runs inside UpdateAsync,
+		-- so that would permanently erase the only authoritative sentence state.
+		local releaseAt, releaseAtProblem =
+			storedNumber(sentence.ReleaseAt, 0, "PROFILE_CUSTODY_RELEASE_AT_INVALID")
+		if releaseAtProblem then
+			return nil, releaseAtProblem
+		end
+		local remainingSeconds = releaseAt :: number - os.time()
+		if sentence.RemainingSeconds ~= nil then
+			local remainingProblem
+			remainingSeconds, remainingProblem = storedNumber(
+				sentence.RemainingSeconds,
+				0,
+				"PROFILE_CUSTODY_REMAINING_SECONDS_INVALID"
 			)
-		)
+			if remainingProblem then
+				return nil, remainingProblem
+			end
+		end
+		sentence.RemainingSeconds = math.max(0, math.floor(remainingSeconds :: number))
 		sentence.ReleaseAt = 0
 		data.SchemaVersion = 9
 	end
@@ -204,8 +246,18 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 				elseif type(economy) ~= "table" then
 					return nil, "PROFILE_ECONOMY_NOT_TABLE"
 				end
-				economy.Balance = math.max(0, math.floor(tonumber(economy.Balance) or 0))
-				economy.Cash = math.max(0, math.floor(tonumber(economy.Cash) or 0))
+				local balance, balanceProblem =
+					storedNonNegativeInteger(economy.Balance, 0, "PROFILE_ECONOMY_BALANCE_INVALID")
+				if balanceProblem then
+					return nil, balanceProblem
+				end
+				local cash, cashProblem =
+					storedNonNegativeInteger(economy.Cash, 0, "PROFILE_ECONOMY_CASH_INVALID")
+				if cashProblem then
+					return nil, cashProblem
+				end
+				economy.Balance = balance
+				economy.Cash = cash
 				if economy.Transactions == nil then
 					economy.Transactions = {}
 				elseif type(economy.Transactions) ~= "table" then
@@ -223,8 +275,15 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		elseif type(consumables) ~= "table" then
 			return nil, "PROFILE_CONSUMABLES_NOT_TABLE"
 		end
-		consumables.EarlyReleaseCredits =
-			math.max(0, math.floor(tonumber(consumables.EarlyReleaseCredits) or 0))
+		local earlyReleaseCredits, creditsProblem = storedNonNegativeInteger(
+			consumables.EarlyReleaseCredits,
+			0,
+			"PROFILE_EARLY_RELEASE_CREDITS_INVALID"
+		)
+		if creditsProblem then
+			return nil, creditsProblem
+		end
+		consumables.EarlyReleaseCredits = earlyReleaseCredits
 		if consumables.ProcessedDeveloperReceipts == nil then
 			consumables.ProcessedDeveloperReceipts = {}
 		elseif type(consumables.ProcessedDeveloperReceipts) ~= "table" then
@@ -243,8 +302,15 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 		elseif type(consumables) ~= "table" then
 			return nil, "PROFILE_CONSUMABLES_NOT_TABLE"
 		end
-		consumables.AppearanceEdits =
-			math.max(0, math.floor(tonumber(consumables.AppearanceEdits) or 0))
+		local appearanceEdits, appearanceEditsProblem = storedNonNegativeInteger(
+			consumables.AppearanceEdits,
+			0,
+			"PROFILE_APPEARANCE_EDITS_INVALID"
+		)
+		if appearanceEditsProblem then
+			return nil, appearanceEditsProblem
+		end
+		consumables.AppearanceEdits = appearanceEdits
 		-- Characters that already existed were built before the editor did, so
 		-- their look was captured from the player's Roblox avatar rather than
 		-- authored. Leaving them unlocked lets each set an appearance once
