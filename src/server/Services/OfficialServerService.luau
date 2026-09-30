@@ -341,10 +341,10 @@ end
 -- _usesReservedServers) has no per-instance headcount to show, and an entry
 -- nobody has opened yet gets a single placeholder row rather than nothing, so
 -- it stays visible and joinable.
-function OfficialServerService:List(): { any }
+function OfficialServerService:List(): ({ any }?, string?)
 	local rows = {}
 	if self.settings.Enabled ~= true then
-		return rows
+		return rows, nil
 	end
 	for _, entry in self.settings.Entries do
 		if not self:_usesReservedServers(entry) then
@@ -361,7 +361,10 @@ function OfficialServerService:List(): { any }
 			})
 			continue
 		end
-		local codes = self:_storedInstanceCodes(entry.Id)
+		local codes, codesError = self:_storedInstanceCodes(entry.Id)
+		if codesError then
+			return nil, codesError
+		end
 		local openInstances = 0
 		for index, code in codes do
 			if type(code) == "string" and code ~= "" then
@@ -404,7 +407,7 @@ function OfficialServerService:List(): { any }
 		end
 		return (a.InstanceIndex or 0) < (b.InstanceIndex or 0)
 	end)
-	return rows
+	return rows, nil
 end
 
 -- Network-facing directory snapshot.
@@ -447,8 +450,12 @@ function OfficialServerService:Directory(): (any?, string?)
 		if publicReason then
 			return nil, publicReason
 		end
+		local officialServers, officialReason = self:List()
+		if officialReason then
+			return nil, officialReason
+		end
 		return {
-			Servers = self:List(),
+			Servers = officialServers,
 			PublicServers = publicServers,
 		}, nil
 	end)
@@ -468,10 +475,10 @@ function OfficialServerService:Directory(): (any?, string?)
 		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
 	end
 	if not snapshot then
-		-- ListPublicInstances reports ordinary MemoryStore unavailability as a
-		-- returned reason rather than an exception. Never turn that into a
-		-- successful cached empty list: reuse the last snapshot when possible,
-		-- otherwise let the network endpoint return its sanitised failure.
+		-- The public directory and official shared records can both be temporarily
+		-- unavailable. Never turn either failure into a successful empty snapshot:
+		-- reuse the last good snapshot when possible, otherwise let the network
+		-- endpoint return its sanitised failure.
 		if self.directoryCache then
 			return self.directoryCache, nil
 		end
