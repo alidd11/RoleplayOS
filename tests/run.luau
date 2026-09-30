@@ -348,6 +348,11 @@ H.test("configuration rejects unsafe persistence timings", function()
 		return candidate
 	end
 
+	local malformed = table.clone(Config)
+	malformed.Framework = "invalid"
+	local malformedValid = ConfigValidator.validate(malformed)
+	H.expect(not malformedValid, "malformed Framework section raised or passed validation")
+
 	for _, case in {
 		{ { AutosaveSeconds = 0 }, "zero autosave interval" },
 		{ { ShutdownSaveSeconds = 0 }, "zero shutdown save window" },
@@ -358,6 +363,7 @@ H.test("configuration rejects unsafe persistence timings", function()
 			{ MaximumLeaseWaitSeconds = Config.Framework.SessionLeaseSeconds },
 			"lease wait as long as the lease",
 		},
+		{ { SessionHandoverSeconds = 0 }, "zero handover wait" },
 		{ { SessionHandoverSeconds = "invalid" }, "non-numeric handover wait" },
 		{ { ProfileSizeWarningBytes = 4 * 1024 * 1024 }, "late profile-size warning" },
 	} do
