@@ -44,11 +44,16 @@ local function indexKey(kind: string, value: string): string?
 	return kind .. ":" .. string.sub(token, 1, 2)
 end
 
+local function finiteNumber(value: any): boolean
+	return type(value) == "number" and value == value and value > -math.huge and value < math.huge
+end
+
 local function validPersonIndexEntry(entry: any): boolean
 	return type(entry) == "table"
 		and type(entry.CharacterId) == "string"
 		and type(entry.FullName) == "string"
 		and type(entry.SearchText) == "string"
+		and finiteNumber(entry.UpdatedAt)
 end
 
 local function validVehicleIndexEntry(entry: any): boolean
@@ -56,6 +61,7 @@ local function validVehicleIndexEntry(entry: any): boolean
 		and type(entry.VehicleId) == "string"
 		and type(entry.Registration) == "string"
 		and type(entry.SearchText) == "string"
+		and finiteNumber(entry.UpdatedAt)
 end
 
 local function personView(record: any, accessProfile: string, warrants: { any }?): any
@@ -277,28 +283,41 @@ function RecordIndexService:_updateRecord(key: string, transform: (any?) -> any)
 end
 
 function RecordIndexService:_upsertIndex(key: string, id: string, entry: any): (boolean, string?)
-	local maximum = self.context.Configuration.MDT.MaximumIndexBucketEntries
+	local maximum = math.max(
+		1,
+		math.floor(tonumber(self.context.Configuration.MDT.MaximumIndexBucketEntries) or 5000)
+	)
 	local updated, reason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex(key, function(stored)
 			local bucket = if type(stored) == "table" then stored else { Entries = {} }
 			bucket.Entries = if type(bucket.Entries) == "table" then bucket.Entries else {}
-			if bucket.Entries[id] == nil then
-				local count = 0
-				local oldestId
-				local oldestAt = math.huge
-				for existingId, existing in bucket.Entries do
-					count += 1
-					local updatedAt = if type(existing) == "table"
-						then existing.UpdatedAt or 0
-						else 0
-					if updatedAt < oldestAt then
-						oldestAt = updatedAt
-						oldestId = existingId
-					end
+			local candidates = {}
+			for existingId, existing in bucket.Entries do
+				local valid = if string.sub(key, 1, 7) == "Person:"
+					then validPersonIndexEntry(existing)
+					elseif string.sub(key, 1, 8) == "Vehicle:" then validVehicleIndexEntry(
+						existing
+					)
+					else false
+				if valid and existingId ~= id then
+					table.insert(candidates, { Id = existingId, UpdatedAt = existing.UpdatedAt })
+				else
+					-- Search readers reject malformed rows. Remove them here too so a
+					-- bad timestamp cannot throw from this UpdateAsync transform.
+					bucket.Entries[existingId] = nil
 				end
-				if count >= maximum and oldestId then
-					bucket.Entries[oldestId] = nil
+			end
+			if #candidates >= maximum then
+				table.sort(candidates, function(a, b)
+					if a.UpdatedAt == b.UpdatedAt then
+						return tostring(a.Id) < tostring(b.Id)
+					end
+					return a.UpdatedAt < b.UpdatedAt
+				end)
+				local removeCount = #candidates - maximum + 1
+				for position = 1, removeCount do
+					bucket.Entries[candidates[position].Id] = nil
 				end
 			end
 			bucket.Entries[id] = entry
