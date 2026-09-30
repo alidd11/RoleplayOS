@@ -349,6 +349,7 @@ function RecordIndexService:_schedulePersonIndexRepair(
 		if existing then
 			existing.Player = player
 			existing.Entry = entry
+			existing.Generation += 1
 			for _, key in keys do
 				if not table.find(existing.Keys, key) then
 					table.insert(existing.Keys, key)
@@ -362,6 +363,7 @@ function RecordIndexService:_schedulePersonIndexRepair(
 				Player = player,
 				Entry = entry,
 				Keys = table.clone(keys),
+				Generation = 1,
 			}
 			self.personIndexRepairs[characterId] = state
 			self.personIndexRepairCount += 1
@@ -388,10 +390,15 @@ function RecordIndexService:_schedulePersonIndexRepair(
 						break
 					end
 					local key = state.Keys[1]
-					local indexed, reason = self:_upsertIndex(key, characterId, state.Entry)
-					if indexed then
+					local generation = state.Generation
+					local attemptedEntry = state.Entry
+					local indexed, reason = self:_upsertIndex(key, characterId, attemptedEntry)
+					if self.personIndexRepairs[characterId] ~= state then
+						break
+					end
+					if indexed and state.Generation == generation then
 						table.remove(state.Keys, 1)
-					else
+					elseif not indexed and state.Generation == generation then
 						self.context.Logger:Warning("Person search index repair will retry", {
 							CharacterId = characterId,
 							Bucket = key,
