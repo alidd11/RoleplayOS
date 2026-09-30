@@ -33,6 +33,8 @@ local OfficialServerService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.OfficialServerService)
 local IncidentService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.IncidentService)
+local RecordIndexService =
+	require(game:GetService("ServerScriptService").RoleplayOS.Services.RecordIndexService)
 
 H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
@@ -1215,6 +1217,77 @@ H.test(
 			count += 1
 		end
 		H.expect(count == 2, "incident index exceeded its configured hard cap")
+	end
+)
+
+H.test(
+	"record index upsert removes malformed rows and restores its configured bucket cap",
+	function()
+		local bucket = {
+			Entries = {
+				corrupt = "invalid row",
+				badTimestamp = {
+					VehicleId = "badTimestamp",
+					Registration = "BAD123",
+					SearchText = "bad123",
+					UpdatedAt = "yesterday",
+				},
+				oldest = {
+					VehicleId = "oldest",
+					Registration = "OLD123",
+					SearchText = "old123",
+					UpdatedAt = 1,
+				},
+				middle = {
+					VehicleId = "middle",
+					Registration = "MID123",
+					SearchText = "mid123",
+					UpdatedAt = 2,
+				},
+				newer = {
+					VehicleId = "newer",
+					Registration = "NEW123",
+					SearchText = "new123",
+					UpdatedAt = 3,
+				},
+			},
+		}
+		local dataService = {
+			UpdateMdtIndex = function(_self, _key, transform)
+				bucket = transform(bucket)
+				return bucket, nil
+			end,
+		}
+		local context = {
+			Configuration = { MDT = { MaximumIndexBucketEntries = 2 } },
+			Services = {
+				Get = function(_self, name)
+					H.expect(name == "DataService", "unexpected record index dependency")
+					return dataService
+				end,
+			},
+		}
+		local service = setmetatable({ context = context }, { __index = RecordIndexService })
+		local indexed, reason = service:_upsertIndex("Vehicle:AB", "latest", {
+			VehicleId = "latest",
+			Registration = "LAT123",
+			SearchText = "lat123",
+			UpdatedAt = 4,
+		})
+		H.expect(indexed and reason == nil, "malformed existing rows blocked record indexing")
+		H.expect(bucket.Entries.corrupt == nil, "malformed scalar row remained indexed")
+		H.expect(bucket.Entries.badTimestamp == nil, "malformed timestamp row remained indexed")
+		H.expect(bucket.Entries.oldest == nil, "upsert failed to trim multiple old rows")
+		H.expect(bucket.Entries.middle == nil, "upsert did not enforce the lowered cap")
+		H.expect(
+			bucket.Entries.newer ~= nil and bucket.Entries.latest ~= nil,
+			"newest rows were not retained"
+		)
+		local count = 0
+		for _ in bucket.Entries do
+			count += 1
+		end
+		H.expect(count == 2, "record index bucket exceeded its configured hard cap")
 	end
 )
 
