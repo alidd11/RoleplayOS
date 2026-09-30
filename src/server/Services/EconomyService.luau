@@ -39,6 +39,10 @@ local function pendingTransferEntryRecord(entry: any): any?
 	end
 	return nil
 end
+
+local function transferRefundTransactionId(transferId: string): string
+	return "transfer-refund-reconcile:pt:" .. transferId
+end
 function EconomyService:Init(context: any)
 	self.context = context
 	table.clear(self.reconciling)
@@ -411,7 +415,7 @@ function EconomyService:ReconcilePendingTransfers(
 				continue
 			end
 
-			local refundTransactionId = "transfer-refund-reconcile:" .. id
+			local refundTransactionId = transferRefundTransactionId(record.TransferId)
 			local applied, applyReason = self:Apply(player, {
 				TransactionId = refundTransactionId,
 				CharacterId = characterId,
@@ -700,8 +704,9 @@ function EconomyService:_transfer(
 		Metadata = definition.CreditMetadata or {},
 	})
 	if not credited then
+		local refundTransactionId = transferRefundTransactionId(transferId)
 		local refunded, refundReason = self:Apply(sender, {
-			TransactionId = HttpService:GenerateGUID(false),
+			TransactionId = refundTransactionId,
 			CharacterId = senderId,
 			Amount = amount,
 			Direction = "Credit",
@@ -710,12 +715,17 @@ function EconomyService:_transfer(
 			RelatedEntityId = transferId,
 			Metadata = definition.RefundMetadata or {},
 		})
-		-- Persist the restored balance before another transfer may use it.
+		-- A failed UpdateAsync is ambiguous: the restored balance may already be
+		-- durable even when Save reports failure. Use the same deterministic
+		-- transaction id as reconciliation, and retain the recovery obligation
+		-- unless the refund is known to have saved successfully.
+		local refundSaved = false
+		local refundSaveReason: string? = nil
 		if refunded then
-			data:Save(sender)
+			refundSaved, refundSaveReason = data:Save(sender)
 		end
 		releaseTransferLocks()
-		if not refunded then
+		if not refunded or not refundSaved then
 			self:_queuePendingRefund({
 				TransferId = transferId,
 				SenderUserId = sender.UserId,
@@ -724,13 +734,14 @@ function EconomyService:_transfer(
 				CreatedAt = os.time(),
 				Status = "Pending",
 			})
-			self.context.Logger:Error("Economy transfer refund failed", {
+			self.context.Logger:Error("Economy transfer refund requires recovery", {
 				SenderUserId = sender.UserId,
 				RecipientUserId = recipient.UserId,
 				Amount = amount,
 				TransferId = transferId,
 				CreditError = creditReason,
 				RefundError = refundReason,
+				RefundSaveError = refundSaveReason,
 			})
 		end
 		return nil, creditReason
