@@ -617,6 +617,9 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 			}
 		)
 	end
+	if not self:_characterIsCurrent(player, session, characterId, character, true) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
 
 	if character.StarterVehiclePending == true then
 		local starter, starterReason =
