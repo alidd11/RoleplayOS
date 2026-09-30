@@ -60,20 +60,26 @@ return function(self: any)
 	self.context.Network:RegisterFunction("PhoneTransferFunds", function(payload)
 		return type(payload) == "table"
 			and validRecipientName(payload.Recipient)
+			and type(payload.OperationId) == "string"
+			and #payload.OperationId > 0
+			and #payload.OperationId <= 36
+			and string.find(payload.OperationId, "[^%w%-]", 1) == nil
 			and type(payload.Amount) == "number"
 			and payload.Amount > 0
 			and payload.Amount % 1 == 0
 			and payload.Amount <= transferMaximum
 	end, function(player, payload, requestId)
-		local transfer, reason = self.context.Services
-			:Get("PhoneService")
-			:TransferFunds(player, payload.Recipient, payload.Amount)
+		local transfer, reason =
+			self.context.Services
+				:Get("PhoneService")
+				:TransferFunds(player, payload.Recipient, payload.Amount, payload.OperationId)
 		local messages = {
 			INSUFFICIENT_FUNDS = "You do not have enough money in your bank account.",
 			SELF_TRANSFER = "You cannot send money to yourself.",
 			TRANSFER_LIMIT = "That transfer exceeds the per-transfer limit.",
 			TRANSFER_IN_PROGRESS = "Your previous transfer is still being processed.",
-			TRANSFER_RECOVERY_PENDING = "A previous transfer refund is still being recovered. Try again shortly.",
+			TRANSFER_RECOVERY_PENDING = "A previous transfer is still being recovered. Try again shortly.",
+			TRANSFER_SETTLEMENT_PENDING = "Your transfer is being recovered. Try again shortly.",
 			INVALID_RECIPIENT_NAME = "Enter the username of the person you are paying.",
 			RECIPIENT_NAME_AMBIGUOUS = "More than one player is using that display name. Use their username.",
 			PHONE_RECIPIENT_UNAVAILABLE = "That player is not in this server.",

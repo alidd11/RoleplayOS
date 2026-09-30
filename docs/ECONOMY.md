@@ -22,6 +22,25 @@ load precedes character selection, so attempting recovery at load time has no
 authoritative character to credit. A short player-join watcher provides a second
 bounded attempt after selection without creating an unbounded retry task.
 
+Two-profile transfers use a separate write-ahead settlement protocol. A transfer
+first reserves one pending pointer in each participant's shared record, then writes
+the full `Committed` settlement record before either balance is mutated. A crash
+before that record exists leaves pointers that recovery can safely clear because no
+balance has changed. A selected participant replays only their own deterministic
+debit or credit transaction, saves their profile, and acknowledges that leg. The
+other leg can be recovered when that participant next selects the character. Both
+characters remain blocked from economy mutations while their pending pointers
+exist, so a failed save cannot be followed by spending against a half-settled
+balance. Once both profile saves are acknowledged, the sender receives a bounded
+receipt and both pending pointers are removed. The pending state is structurally
+limited to one settlement per player; completed sender receipts are bounded by
+`Economy.MaximumTransferReceipts`.
+
+Committed records are never rolled back; each profile's deterministic transaction ID makes replay safe
+when a save or acknowledgement result was ambiguous. Phone transfer attempts carry
+a stable operation ID across timeouts, and taxi fares derive their settlement ID
+from the taxi request ID.
+
 New pending transfer refunds are stored in a player-scoped shared recovery record
 rather than appended to the legacy global index. Once a character has unresolved
 recovery, further outgoing transfers from that character are refused until the

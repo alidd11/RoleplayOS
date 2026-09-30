@@ -6,6 +6,7 @@ local Shared = game:GetService("ReplicatedStorage").RoleplayOS.Shared
 local Access = require(Shared.AccessEvaluator)
 local RateLimiter = require(Shared.RateLimiter)
 local Economy = require(Shared.EconomyValidator)
+local SettlementPolicy = require(Shared.TransferSettlementPolicy)
 local Characters = require(Shared.CharacterValidator)
 local ConfigValidator = require(Shared.ConfigValidator)
 local Registration = require(Shared.RegistrationGenerator)
@@ -50,6 +51,73 @@ H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(not excessive and excessiveReason == "DROP_TOO_LARGE", "oversized drop accepted")
 	local nonFinite = MoneyDropPolicy.validateAmount(0 / 0, 1, 1000)
 	H.expect(not nonFinite, "non-finite drop accepted")
+end)
+H.test("transfer settlement replay IDs and acknowledgement transitions are stable", function()
+	H.expect(
+		SettlementPolicy.transactionId("transfer-1", "debit")
+			== SettlementPolicy.transactionId("transfer-1", "debit"),
+		"retry changed the sender settlement transaction ID"
+	)
+	local status, senderSaved, recipientSaved =
+		SettlementPolicy.acknowledge("Committed", false, false, "Sender")
+	H.expect(
+		status == "Committed" and senderSaved == true and recipientSaved ~= true,
+		"first leg settled early"
+	)
+	status, senderSaved, recipientSaved = SettlementPolicy.acknowledge(
+		status :: string,
+		senderSaved :: boolean,
+		recipientSaved :: boolean,
+		"Sender"
+	)
+	H.expect(
+		status == "Committed" and senderSaved == true,
+		"replayed sender ack changed settlement"
+	)
+	status, senderSaved, recipientSaved = SettlementPolicy.acknowledge(
+		status :: string,
+		senderSaved :: boolean,
+		recipientSaved :: boolean,
+		"Recipient"
+	)
+	H.expect(
+		status == "Settled" and senderSaved == true and recipientSaved == true,
+		"second durable leg did not settle"
+	)
+	local invalidStatus = SettlementPolicy.acknowledge("Preparing", false, false, "Sender")
+	H.expect(invalidStatus == nil, "preparing settlement accepted a profile acknowledgement")
+	local receipt = {
+		TransferId = "transfer-1",
+		SenderCharacterId = "sender-char",
+		RecipientUserId = 20,
+		RecipientCharacterId = "recipient-char",
+		Amount = 50,
+		Kind = "PlayerTransfer",
+	}
+	H.expect(
+		SettlementPolicy.receiptMatches(
+			receipt,
+			"transfer-1",
+			"sender-char",
+			20,
+			"recipient-char",
+			50,
+			"PlayerTransfer"
+		),
+		"matching operation receipt was not recognised"
+	)
+	H.expect(
+		not SettlementPolicy.receiptMatches(
+			receipt,
+			"transfer-1",
+			"sender-char",
+			20,
+			"recipient-char",
+			51,
+			"PlayerTransfer"
+		),
+		"operation ID was accepted with a conflicting amount"
+	)
 end)
 
 H.test("cash drops have per-player and server population limits", function()
@@ -425,6 +493,16 @@ end)
 H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
+end)
+H.test("economy transaction and transfer receipt histories are bounded", function()
+	local candidate = table.clone(Config)
+	candidate.Economy = table.clone(Config.Economy)
+	candidate.Economy.MaximumTransferReceipts = 0
+	local valid = ConfigValidator.validate(candidate)
+	H.expect(not valid, "accepted an unbounded transfer receipt configuration")
+	candidate.Economy.MaximumTransferReceipts = 10.5
+	valid = ConfigValidator.validate(candidate)
+	H.expect(not valid, "accepted a fractional transfer receipt bound")
 end)
 H.test("configuration rejects unsafe persistence timings", function()
 	local function withFrameworkPatch(patch: any): any

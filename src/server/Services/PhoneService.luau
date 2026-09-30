@@ -359,7 +359,12 @@ function PhoneService:_findByName(query: string): (Player?, string?)
 	return byDisplay, if byDisplay then nil else "PHONE_RECIPIENT_UNAVAILABLE"
 end
 
-function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any): (any?, string?)
+function PhoneService:TransferFunds(
+	player: Player,
+	rawName: any,
+	rawAmount: any,
+	operationId: any
+): (any?, string?)
 	-- By username rather than by phone number. A number is something a player has
 	-- to be told before they can be paid, and there is nowhere in the game that
 	-- tells them: a name is on the nameplate above the person standing there.
@@ -368,6 +373,14 @@ function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any
 	end
 	if type(rawName) ~= "string" or #rawName > 64 then
 		return nil, "INVALID_RECIPIENT_NAME"
+	end
+	if
+		type(operationId) ~= "string"
+		or #operationId < 1
+		or #operationId > 36
+		or string.find(operationId, "[^%w%-]", 1) ~= nil
+	then
+		return nil, "INVALID_TRANSFER_ID"
 	end
 	local senderCharacter = self:_character(player)
 	if not senderCharacter then
@@ -380,8 +393,9 @@ function PhoneService:TransferFunds(player: Player, rawName: any, rawAmount: any
 	if not recipient then
 		return nil, findReason
 	end
-	local transfer, reason =
-		self.context.Services:Get("EconomyService"):Transfer(player, recipient, rawAmount)
+	local transfer, reason = self.context.Services
+		:Get("EconomyService")
+		:Transfer(player, recipient, rawAmount, operationId)
 	if not transfer then
 		return nil, reason
 	end

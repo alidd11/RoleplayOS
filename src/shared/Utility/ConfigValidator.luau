@@ -80,6 +80,13 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	then
 		table.insert(errors, "ProfileSizeWarningBytes must be below the DataStore value limit")
 	end
+	local economy = if type(config.Economy) == "table" then config.Economy else {}
+	for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
+		local value = economy[field]
+		if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then
+			table.insert(errors, "Invalid economy bound: " .. field)
+		end
+	end
 
 	local quality = config.ContentQuality or {}
 	if

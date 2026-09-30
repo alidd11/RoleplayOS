@@ -13,6 +13,17 @@ local function mockRecordKey(recordId: string, scopeId: string?): string
 end
 
 return function(DataService)
+	-- Player-owned shared state that follows a profile must use the same public or
+	-- official-server boundary as that profile. A nil scope preserves the public
+	-- shared store and its historical keys.
+	function DataService:GetCurrentProfileSharedRecordScope(): string?
+		local scope = self.dataScope
+		if type(scope) ~= "string" then
+			return nil
+		end
+		return string.match(scope, "^wl:([^:]+):")
+	end
+
 	function DataService:GetSharedRecord(recordId: string, scopeId: string?): (any?, string?)
 		if not self:_checkKey(recordId, "SharedRecords") then
 			return nil, "SHARED_RECORD_LOAD_FAILED"
