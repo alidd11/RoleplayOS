@@ -35,6 +35,50 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Missing configuration section: " .. section)
 		end
 	end
+	local framework = config.Framework or {}
+	for _, field in { "AutosaveSeconds", "ShutdownSaveSeconds", "SessionLeaseSeconds" } do
+		local value = framework[field]
+		if type(value) ~= "number" or value <= 0 then
+			table.insert(errors, "Invalid persistence framework field: " .. field)
+		end
+	end
+	for _, field in { "MaxSaveAttempts", "JoinLoadAttempts" } do
+		local value = framework[field]
+		if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then
+			table.insert(errors, "Invalid persistence framework attempt count: " .. field)
+		end
+	end
+	for _, field in { "MaximumLeaseWaitSeconds", "SessionHandoverSeconds" } do
+		local value = framework[field]
+		if value ~= nil and (type(value) ~= "number" or value < 0) then
+			table.insert(errors, "Invalid persistence framework wait: " .. field)
+		end
+	end
+	if
+		type(framework.AutosaveSeconds) == "number"
+		and type(framework.SessionLeaseSeconds) == "number"
+		and framework.SessionLeaseSeconds < framework.AutosaveSeconds * 2
+	then
+		table.insert(errors, "SessionLeaseSeconds must be at least twice AutosaveSeconds")
+	end
+	if
+		type(framework.MaximumLeaseWaitSeconds) == "number"
+		and type(framework.SessionLeaseSeconds) == "number"
+		and framework.MaximumLeaseWaitSeconds >= framework.SessionLeaseSeconds
+	then
+		table.insert(errors, "MaximumLeaseWaitSeconds must be shorter than SessionLeaseSeconds")
+	end
+	if
+		framework.ProfileSizeWarningBytes ~= nil
+		and (
+			type(framework.ProfileSizeWarningBytes) ~= "number"
+			or framework.ProfileSizeWarningBytes <= 0
+			or framework.ProfileSizeWarningBytes >= 4 * 1024 * 1024
+		)
+	then
+		table.insert(errors, "ProfileSizeWarningBytes must be below the DataStore value limit")
+	end
+
 	local quality = config.ContentQuality or {}
 	if
 		type(quality.RequireCertification) ~= "boolean"
