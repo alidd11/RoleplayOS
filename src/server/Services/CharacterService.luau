@@ -600,6 +600,27 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 		character.Identity.FirstName .. " " .. character.Identity.LastName
 	)
 	data:MarkDirty(player)
+	-- Transfer refunds are stored outside the profile so they survive a failed
+	-- sender save. They cannot be applied at profile-load time because there is
+	-- no active character yet; run this before the first yielding selection task
+	-- so recovery owns the earliest authoritative character boundary.
+	local economy = self.context.Services:Get("EconomyService")
+	local transfersRecovered, transferRecoveryReason =
+		economy:ReconcilePendingTransfers(player, characterId)
+	if not transfersRecovered and transferRecoveryReason ~= "TRANSFER_RECOVERY_IN_PROGRESS" then
+		self.context.Logger:Warning(
+			"Transfer refund recovery is still pending after character selection",
+			{
+				UserId = player.UserId,
+				CharacterId = characterId,
+				Reason = transferRecoveryReason,
+			}
+		)
+	end
+	if not self:_characterIsCurrent(player, session, characterId, character, true) then
+		return nil, "PLAYER_UNAVAILABLE"
+	end
+
 	if character.StarterVehiclePending == true then
 		local starter, starterReason =
 			self.context.Services:Get("VehicleOwnershipService"):GrantStarter(player, characterId)
@@ -614,10 +635,10 @@ function CharacterService:_select(player: Player, characterId: string): (any?, s
 			data:MarkDirty(player)
 		end
 	end
+
 	-- Reconcile any bounded cash-drop recovery carried by this character before
 	-- normal play resumes. EconomyService remains the only balance writer.
-	local recovered, recoveryReason =
-		self.context.Services:Get("EconomyService"):ReconcileMoneyDropRefunds(player, characterId)
+	local recovered, recoveryReason = economy:ReconcileMoneyDropRefunds(player, characterId)
 	if not recovered then
 		self.context.Logger:Warning(
 			"Cash-drop recovery is still pending after character selection",
