@@ -88,7 +88,10 @@ function CommunityPanel.create(deps: any): () -> ()
 		-- Live headcount and uptime, or a note that nobody has opened this
 		-- server yet - the two states an instance can be in from a player's
 		-- side, both worth saying plainly rather than showing blank space.
-		local statsColour = if type(entry.PlayerCount) == "number"
+		local statsColour = if entry.OccupancyAvailable == false
+			then COLOURS.Warning
+			elseif
+				type(entry.PlayerCount) == "number"
 				and type(entry.MaximumPlayers) == "number"
 				and entry.PlayerCount >= entry.MaximumPlayers
 			then COLOURS.Warning
@@ -100,6 +103,7 @@ function CommunityPanel.create(deps: any): () -> ()
 				) == "number"
 				then "  ·  " .. formatUptime(entry.StartedAt)
 				else "")
+			elseif hasInstance then "Player count temporarily unavailable"
 			else "Not yet open — the first to join starts it"
 		local stats = text(row, statsText, 12, statsColour, true)
 		stats.Position = UDim2.fromOffset(22, 92)

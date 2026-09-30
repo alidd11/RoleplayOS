@@ -17,6 +17,8 @@
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local OfficialServerPolicy = require(ReplicatedStorage.RoleplayOS.Shared.OfficialServerPolicy)
 
 -- Occupancy lives in a memory store rather than a data store: it is worth
 -- nothing a minute from now, it is written every few seconds by every instance,
@@ -118,13 +120,22 @@ end
 -- Silence is treated as empty rather than full: an instance that has not
 -- reported is far more likely to be one that has never started than one that is
 -- full and has stopped talking.
-function OfficialServerService:_occupantsOf(serverId: string, index: number): number
+function OfficialServerService:_occupantsOf(serverId: string, index: number): number?
 	if not self.occupancy then
-		return 0
+		return nil
 	end
 	local ok, value =
 		pcall(self.occupancy.GetAsync, self.occupancy, self:_occupancyKey(serverId, index))
-	return if ok and type(value) == "number" then value else 0
+	if not ok then
+		return nil
+	end
+	-- A missing heartbeat means an instance has not started publishing or its
+	-- short-lived occupancy record expired. It is safe to treat that as empty;
+	-- an API failure is different and must remain unknown.
+	if value == nil then
+		return 0
+	end
+	return if type(value) == "number" then value else nil
 end
 
 function OfficialServerService:_startedAtKey(serverId: string, index: number): string
@@ -221,6 +232,9 @@ function OfficialServerService:_pickInstance(
 	if not self.running then
 		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
 	end
+	if not self.occupancy then
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
 	local entry = self.settings.Entries[serverId]
 	local placeId = self:_placeIdFor(entry)
 	local data = self.context.Services:Get("DataService")
@@ -238,7 +252,11 @@ function OfficialServerService:_pickInstance(
 		if type(code) ~= "string" or code == "" then
 			return nil, nil, "OFFICIAL_SERVER_INSTANCE_NOT_FOUND"
 		end
-		if self:_occupantsOf(serverId, preferredIndex) >= capacity then
+		local occupants = self:_occupantsOf(serverId, preferredIndex)
+		if occupants == nil then
+			return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+		end
+		if occupants >= capacity then
 			return nil, nil, "OFFICIAL_SERVER_FULL"
 		end
 		self.codes[serverId] = code
@@ -246,14 +264,19 @@ function OfficialServerService:_pickInstance(
 	end
 	for index, code in codes do
 		if type(code) == "string" and code ~= "" then
-			if self:_occupantsOf(serverId, index) < capacity then
+			local occupants = self:_occupantsOf(serverId, index)
+			if occupants == nil then
+				return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+			end
+			if occupants < capacity then
 				self.codes[serverId] = code
 				return code, index, nil
 			end
 		end
 	end
 
-	if #codes >= (self.settings.MaximumInstances or 6) then
+	local maximumInstances = math.max(1, math.floor(tonumber(self.settings.MaximumInstances) or 6))
+	if #codes >= maximumInstances then
 		-- Refused rather than opening yet another. Past this the playerbase is
 		-- split too thin for the roleplay any of them came for.
 		return nil, nil, "OFFICIAL_SERVER_FULL"
@@ -274,31 +297,26 @@ function OfficialServerService:_pickInstance(
 	-- Appended under UpdateAsync, so two servers opening an overflow at the same
 	-- moment both keep their instance instead of one silently replacing the
 	-- other and stranding whoever was sent there.
-	local saved = data:UpdateSharedRecord(self:_storageKey(serverId), function(existing)
-		local record = if type(existing) == "table" then existing else {}
-		local list = if type(record.Instances) == "table"
-			then record.Instances
-			elseif type(record.AccessCode) == "string" then { record.AccessCode }
-			else {}
-		-- UpdateAsync may invoke this transform more than once, and DataService
-		-- retries an ambiguous request outcome. The reserved access code is the
-		-- operation identity, so replaying this write must converge on one row
-		-- rather than consuming another MaximumInstances slot each time.
-		if not table.find(list, fresh) then
-			table.insert(list, fresh)
-		end
-		record.ServerId = serverId
-		record.Instances = list
-		record.AccessCode = list[1]
-		record.UpdatedAt = os.time()
-		return record
+	local saved, saveError = data:UpdateSharedRecord(self:_storageKey(serverId), function(existing)
+		return OfficialServerPolicy.appendInstance(
+			existing,
+			fresh,
+			maximumInstances,
+			serverId,
+			os.time()
+		)
 	end)
 	if not self.running then
 		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
 	end
-	local list = if type(saved) == "table" and type(saved.Instances) == "table"
-		then saved.Instances
-		else { fresh }
+	if saveError or type(saved) ~= "table" or type(saved.Instances) ~= "table" then
+		self.context.Logger:Warning("Could not persist a reserved official instance", {
+			ServerId = serverId,
+			Error = tostring(saveError or "INVALID_SHARED_RECORD"),
+		})
+		return nil, nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
+	local list = saved.Instances
 	-- The index this code ended up at, which may not be the end if another
 	-- server appended at the same time.
 	for index, code in list do
@@ -307,8 +325,9 @@ function OfficialServerService:_pickInstance(
 			return fresh, index, nil
 		end
 	end
-	self.codes[serverId] = fresh
-	return fresh, #list, nil
+	-- Another simultaneous reservation may have reached the cap first. Its
+	-- atomic update wins and this code must not be used for a teleport.
+	return nil, nil, "OFFICIAL_SERVER_FULL"
 end
 
 -- The player is not consulted: every official server is open to anyone the
@@ -347,6 +366,7 @@ function OfficialServerService:List(): { any }
 		for index, code in codes do
 			if type(code) == "string" and code ~= "" then
 				openInstances += 1
+				local occupants = self:_occupantsOf(entry.Id, index)
 				table.insert(rows, {
 					Id = entry.Id,
 					InstanceIndex = index,
@@ -354,7 +374,8 @@ function OfficialServerService:List(): { any }
 					Description = entry.Description,
 					Order = entry.Order or 100,
 					Current = self:_isHere(entry.Id) and self.currentInstanceIndex == index,
-					PlayerCount = self:_occupantsOf(entry.Id, index),
+					PlayerCount = occupants,
+					OccupancyAvailable = occupants ~= nil,
 					MaximumPlayers = self.settings.MaximumPlayersPerInstance or 50,
 					StartedAt = self:_startedAtOf(entry.Id, index),
 				})
