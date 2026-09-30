@@ -354,13 +354,29 @@ function SpawnService:_withCivilianEntryClaim(
 		return false, "CIVILIAN_ENTRY_IN_PROGRESS"
 	end
 
-	-- Character loading yields. Hold one claim across both ordinary and gang
-	-- territory entry so duplicate/retried remotes cannot run two overlapping
-	-- LoadCharacterAsync calls or apply appearance/team state to competing
-	-- character instances.
+	-- Character loading yields. Hold one local claim across both ordinary and
+	-- gang-territory entry, then join the shared role-transition claim before
+	-- ending duty. This prevents BeginDuty or character selection from overtaking
+	-- the team/character load while the civilian entry is still in flight.
 	local claim = {}
 	self.civilianEntering[player] = claim
-	local ok, entered, reason = pcall(callback)
+	local dutyService = self.context.Services:Get("DutyService")
+	local transitionClaim, transitionReason = dutyService:ClaimRoleTransition(player)
+	if not transitionClaim then
+		if self.civilianEntering[player] == claim then
+			self.civilianEntering[player] = nil
+		end
+		return false,
+			if transitionReason == "ROLE_TRANSITION_IN_PROGRESS"
+				then "CIVILIAN_ENTRY_IN_PROGRESS"
+				else transitionReason
+	end
+
+	local ok, entered, reason = pcall(function(): (boolean, string?)
+		dutyService:End(player)
+		return callback()
+	end)
+	dutyService:ReleaseRoleTransition(player, transitionClaim)
 	if self.civilianEntering[player] == claim then
 		self.civilianEntering[player] = nil
 	end
