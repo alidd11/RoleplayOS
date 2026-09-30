@@ -427,7 +427,7 @@ return function(RoadSafetyService)
 		-- Flashed only when somebody was actually fined. Flashing a responding
 		-- ambulance and then not fining it tells the driver they were caught when
 		-- they were not.
-		if issued then
+		if issued and self:_sensorIsCurrent(sensor, token) then
 			self:_flash(camera)
 		end
 	end
@@ -472,6 +472,9 @@ return function(RoadSafetyService)
 		}, function()
 			return self:_sensorIsCurrent(sensor, token)
 		end)
+		if not self:_sensorIsCurrent(sensor, token) then
+			return
+		end
 		perSensor[vehicle] = now
 			+ (if issued then self.context.Configuration.RoadSafety.SensorCooldownSeconds else 1)
 	end
