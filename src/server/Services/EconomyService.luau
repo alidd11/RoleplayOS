@@ -11,7 +11,7 @@ local EconomyService = {
 	order = {},
 	transferring = {},
 	connections = {},
-	reconciling = false,
+	reconciling = {},
 	running = false,
 }
 
@@ -41,6 +41,7 @@ local function pendingTransferEntryRecord(entry: any): any?
 end
 function EconomyService:Init(context: any)
 	self.context = context
+	table.clear(self.reconciling)
 end
 function EconomyService:Start()
 	self.running = true
@@ -59,21 +60,35 @@ function EconomyService:Start()
 					self.order[key] = nil
 				end
 			end
+			for key in self.reconciling do
+				if string.sub(key, 1, #prefix) == prefix then
+					self.reconciling[key] = nil
+				end
+			end
 		end)
 	)
+
+	-- Profile load happens before character selection, so a recovery pass that
+	-- runs as soon as GetSession succeeds cannot see the character that owns the
+	-- refund. Wait briefly for selection here as a fallback; CharacterService
+	-- also invokes the same targeted pass at the selection boundary.
 	local function reconcileWhenReady(player: Player)
 		task.spawn(function()
 			local deadline = os.clock() + 15
+			local data = self.context.Services:Get("DataService")
+			local session = data:GetSession(player)
 			while
 				self.running
 				and playerIsCurrent(player)
-				and not self.context.Services:Get("DataService"):GetSession(player)
+				and (not session or not session.ActiveCharacterId)
 				and os.clock() < deadline
 			do
 				task.wait(0.25)
+				session = data:GetSession(player)
 			end
-			if self.running and playerIsCurrent(player) then
-				self:ReconcilePendingTransfers()
+			local characterId = session and session.ActiveCharacterId
+			if self.running and playerIsCurrent(player) and characterId then
+				self:ReconcilePendingTransfers(player, characterId)
 			end
 		end)
 	end
@@ -81,11 +96,6 @@ function EconomyService:Start()
 	for _, player in Players:GetPlayers() do
 		reconcileWhenReady(player)
 	end
-	task.delay(15, function()
-		if self.running then
-			self:ReconcilePendingTransfers()
-		end
-	end)
 end
 
 function EconomyService:_queuePendingRefund(record: any)
@@ -287,69 +297,120 @@ function EconomyService:_transactionState(
 	return seen, order
 end
 
-function EconomyService:ReconcilePendingTransfers()
-	if not self.running or self.reconciling then
-		return
+function EconomyService:ReconcilePendingTransfers(
+	player: Player,
+	characterId: string
+): (boolean, string?)
+	if not self.running or not playerIsCurrent(player) then
+		return false, "ECONOMY_UNAVAILABLE"
 	end
-	self.reconciling = true
-	-- Wrapped so an error partway through -- a transient DataStore failure is
-	-- the obvious one -- cannot leave the guard stuck true. Without this, one
-	-- bad call here silently disabled reconciliation for the rest of the
-	-- server's life: every later call from PlayerAdded, the initial-players
-	-- loop, and the fallback timer would return at the guard above and never
-	-- try again.
+	local data = self.context.Services:Get("DataService")
+	local session = data:GetSession(player)
+	if not session or session.ActiveCharacterId ~= characterId then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local scope = transactionScope(player.UserId, characterId)
+	if self.reconciling[scope] then
+		return false, "TRANSFER_RECOVERY_IN_PROGRESS"
+	end
+	self.reconciling[scope] = true
+
+	local unresolvedReason: string? = nil
 	local ok, problem = pcall(function()
-		local data = self.context.Services:Get("DataService")
-		local index = data:GetSharedRecord("pending-transfer-index")
-		if not self.running then
+		local index, indexReason = data:GetSharedRecord("pending-transfer-index")
+		if indexReason then
+			unresolvedReason = indexReason
+			return
+		end
+		if
+			not self.running
+			or not playerIsCurrent(player)
+			or data:GetSession(player) ~= session
+			or session.ActiveCharacterId ~= characterId
+		then
+			unresolvedReason = "CHARACTER_NOT_ACTIVE"
 			return
 		end
 		if type(index) ~= "table" then
 			return
 		end
+
 		local completed: { [string]: boolean } = {}
 		for _, entry in index do
-			if not self.running then
+			if
+				not self.running
+				or not playerIsCurrent(player)
+				or data:GetSession(player) ~= session
+				or session.ActiveCharacterId ~= characterId
+			then
+				unresolvedReason = "CHARACTER_NOT_ACTIVE"
 				return
 			end
+
 			local id = pendingTransferEntryId(entry)
 			if not id then
 				self.context.Logger:Error("Pending transfer index contains an invalid entry", {})
 				continue
 			end
 
-			-- New entries carry their recovery payload in the same durable record
-			-- that makes them discoverable. String entries are the legacy format;
-			-- continue reading their separate pt:<id> record until all old pending
-			-- refunds have naturally reconciled.
 			local embeddedRecord = pendingTransferEntryRecord(entry)
 			local record = embeddedRecord
 			if not record then
-				record = data:GetSharedRecord(id)
-				if not self.running then
+				local recordReason
+				record, recordReason = data:GetSharedRecord(id)
+				if recordReason then
+					unresolvedReason = unresolvedReason or recordReason
+					continue
+				end
+				if
+					not self.running
+					or not playerIsCurrent(player)
+					or data:GetSession(player) ~= session
+					or session.ActiveCharacterId ~= characterId
+				then
+					unresolvedReason = "CHARACTER_NOT_ACTIVE"
 					return
 				end
+				-- Legacy entries wrote the record before the index. A string whose
+				-- record is now absent is therefore stale cleanup, not a recoverable
+				-- debt that should remain in the index forever.
+				if record == nil and type(entry) == "string" then
+					completed[id] = true
+					continue
+				end
 			end
-			if type(record) == "table" and record.Status == "Reconciled" then
-				-- The profile save and durable receipt already succeeded. If the
-				-- index cleanup failed afterwards, drop the stale index entry without
-				-- touching the balance again.
+			if type(record) ~= "table" then
+				self.context.Logger:Error("Pending transfer recovery record is invalid", {
+					RecoveryId = id,
+				})
+				continue
+			end
+			if record.SenderUserId ~= player.UserId or record.SenderCharacterId ~= characterId then
+				continue
+			end
+			if record.Status == "Reconciled" then
 				completed[id] = true
 				continue
 			end
-			local player = type(record) == "table"
-				and Players:GetPlayerByUserId(record.SenderUserId)
-			local session = player and data:GetSession(player)
-			local character = session
-				and session.ActiveCharacterId == record.SenderCharacterId
-				and session.Profile.Characters[record.SenderCharacterId]
-			if not character then
+			if
+				type(record.TransferId) ~= "string"
+				or record.TransferId == ""
+				or type(record.Amount) ~= "number"
+				or record.Amount <= 0
+				or record.Amount ~= math.floor(record.Amount)
+			then
+				self.context.Logger:Error("Pending transfer refund is malformed", {
+					RecoveryId = id,
+					UserId = player.UserId,
+					CharacterId = characterId,
+				})
 				continue
 			end
-			local refundTransactionId = "transfer-refund-reconcile:" .. tostring(id)
+
+			local refundTransactionId = "transfer-refund-reconcile:" .. id
 			local applied, applyReason = self:Apply(player, {
 				TransactionId = refundTransactionId,
-				CharacterId = record.SenderCharacterId,
+				CharacterId = characterId,
 				Amount = record.Amount,
 				Direction = "Credit",
 				ReasonCode = "PLAYER_TRANSFER_REFUND_RECONCILE",
@@ -358,19 +419,25 @@ function EconomyService:ReconcilePendingTransfers()
 				Metadata = {},
 			})
 			if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
+				unresolvedReason = unresolvedReason or applyReason or "TRANSFER_REFUND_FAILED"
 				continue
 			end
 
-			-- A duplicate here means this exact deterministic refund is already in
-			-- the character's transaction state, possibly from an earlier attempt
-			-- whose profile save or shared-record cleanup failed. Save again before
-			-- retiring the pending item so an in-memory application is never treated
-			-- as durable merely because its replay guard exists.
+			-- A duplicate means this deterministic refund is already in the loaded
+			-- transaction history. Save again before retiring the recovery record:
+			-- a prior UpdateAsync failure is ambiguous and may have committed.
 			local saved, saveReason = data:Save(player)
-			if not self.running then
+			if
+				not self.running
+				or not playerIsCurrent(player)
+				or data:GetSession(player) ~= session
+				or session.ActiveCharacterId ~= characterId
+			then
+				unresolvedReason = "CHARACTER_NOT_ACTIVE"
 				return
 			end
 			if not saved then
+				unresolvedReason = unresolvedReason or saveReason or "PROFILE_SAVE_FAILED"
 				self.context.Logger:Warning("Pending transfer refund save failed", {
 					TransferId = record.TransferId,
 					UserId = player.UserId,
@@ -411,10 +478,8 @@ function EconomyService:ReconcilePendingTransfers()
 					return existing
 				end)
 			end
-			if not self.running then
-				return
-			end
 			if recordReason then
+				unresolvedReason = unresolvedReason or recordReason
 				self.context.Logger:Error("Pending transfer refund receipt persistence failed", {
 					TransferId = record.TransferId,
 					Error = recordReason,
@@ -423,12 +488,10 @@ function EconomyService:ReconcilePendingTransfers()
 				completed[id] = true
 			end
 		end
-		if not self.running then
+
+		if next(completed) == nil then
 			return
 		end
-		-- Another server can append a refund after the initial index read above.
-		-- Never replace the index with that stale snapshot: remove only entries
-		-- this pass has durably retired from the latest UpdateAsync value.
 		local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
 			if type(existing) ~= "table" then
 				return existing
@@ -443,17 +506,26 @@ function EconomyService:ReconcilePendingTransfers()
 			return current
 		end)
 		if indexReason then
+			unresolvedReason = unresolvedReason or indexReason
 			self.context.Logger:Error("Pending transfer refund index persistence failed", {
 				Error = indexReason,
 			})
 		end
 	end)
-	self.reconciling = false
+
+	self.reconciling[scope] = nil
 	if not ok then
 		self.context.Logger:Error("Pending transfer reconciliation failed", {
+			UserId = player.UserId,
+			CharacterId = characterId,
 			Error = tostring(problem),
 		})
+		return false, "TRANSFER_RECOVERY_FAILED"
 	end
+	if unresolvedReason then
+		return false, unresolvedReason
+	end
+	return true, nil
 end
 function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
 	if not self.running or not playerIsCurrent(player) then
@@ -756,5 +828,6 @@ function EconomyService:Destroy()
 	table.clear(self.seen)
 	table.clear(self.order)
 	table.clear(self.transferring)
+	table.clear(self.reconciling)
 end
 return EconomyService
