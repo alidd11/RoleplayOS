@@ -414,7 +414,7 @@ function WarrantService:Create(
 	self:CachePersonRecord(record)
 	local storedWarrant
 	for _, candidate in if type(record.Warrants) == "table" then record.Warrants else {} do
-		if candidate.WarrantId == warrant.WarrantId then
+		if type(candidate) == "table" and candidate.WarrantId == warrant.WarrantId then
 			storedWarrant = candidate
 			break
 		end
