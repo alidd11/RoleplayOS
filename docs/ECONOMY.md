@@ -20,7 +20,11 @@ remain readable until they reconcile and drain naturally. Refund reconciliation
 runs against the selected character rather than merely the loaded profile: profile
 load precedes character selection, so attempting recovery at load time has no
 authoritative character to credit. A short player-join watcher provides a second
-bounded attempt after selection without creating an unbounded retry task.
+bounded attempt after selection without creating an unbounded retry task. Immediate
+transfer rollback uses that same deterministic refund transaction identity and
+queues the recovery record unless the restored sender profile is known to have
+saved successfully, so an ambiguous or failed refund save cannot silently lose
+the repayment.
 
 Cash drops use the same recovery rule. Normal expiry still removes uncollected
 cash, but drops do not outlive the profile session that paid for them: leaving
