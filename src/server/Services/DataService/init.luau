@@ -332,20 +332,43 @@ function DataService:Start()
 		end)
 	end
 	task.spawn(function()
-		while self.running do
-			local autosaveSeconds = math.min(
+		local function cadenceSeconds(): number
+			return math.min(
 				self.context.Configuration.Framework.AutosaveSeconds,
 				math.max(
 					30,
 					math.floor(self.context.Configuration.Framework.SessionLeaseSeconds / 3)
 				)
 			)
-			task.wait(autosaveSeconds)
+		end
+
+		local nextAutosaveAt = os.clock() + cadenceSeconds()
+		while self.running do
+			local delay = nextAutosaveAt - os.clock()
+			if delay > 0 then
+				task.wait(delay)
+			end
+			if not self.running then
+				return
+			end
+
+			local autosaveSeconds = cadenceSeconds()
+			-- Anchor the next cycle before spreading this one. Waiting a full cadence
+			-- after the spread doubled the effective per-profile renewal interval:
+			-- with a 60-second cadence and a full-width spread, the same player could
+			-- go almost 120 seconds between lease renewals, equal to the configured
+			-- 120-second lease and therefore leaving no latency/retry margin.
+			nextAutosaveAt = os.clock() + autosaveSeconds
 			local players = Players:GetPlayers()
-			-- Spread requests across the cadence. The previous loop launched every
-			-- save in one frame, creating a DataStore burst with a full server.
-			local spacing = math.max(0.25, autosaveSeconds / math.max(#players, 1))
+			-- Keep the anti-burst behaviour, but consume only half of the cadence.
+			-- Even if player ordering shifts between cycles, a renewal remains well
+			-- inside the minimum two-cadence lease rather than landing at its expiry.
+			local spreadSeconds = autosaveSeconds / 2
+			local spacing = math.max(0.25, spreadSeconds / math.max(#players, 1))
 			for index, player in players do
+				if not self.running then
+					return
+				end
 				task.spawn(function()
 					self:Save(player, false)
 				end)
