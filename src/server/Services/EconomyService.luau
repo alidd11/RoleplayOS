@@ -411,8 +411,9 @@ function EconomyService:ReconcilePendingTransfers(
 						Metadata = {},
 					})
 					if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
-						unresolvedReason =
-							unresolvedReason or applyReason or "TRANSFER_REFUND_FAILED"
+						unresolvedReason = unresolvedReason
+							or applyReason
+							or "TRANSFER_REFUND_FAILED"
 						continue
 					end
 
