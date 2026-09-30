@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validator = require(ReplicatedStorage.RoleplayOS.Shared.EconomyValidator)
+local SettlementPolicy = require(ReplicatedStorage.RoleplayOS.Shared.TransferSettlementPolicy)
 local HttpService = game:GetService("HttpService")
 
 local EconomyService = {
@@ -27,6 +28,18 @@ end
 
 local function pendingTransferRecordKey(userId: number): string
 	return "ptr:" .. tostring(userId)
+end
+
+local function settlementIndexKey(userId: number): string
+	return "pts:" .. tostring(userId)
+end
+
+local function settlementRecordKey(transferId: string): string
+	return "ts:" .. transferId
+end
+
+local function settlementLegTransactionId(transferId: string, side: string): string
+	return SettlementPolicy.transactionId(transferId, side)
 end
 
 local function pendingTransferRecoveryId(transferId: string): string
@@ -54,6 +67,406 @@ function EconomyService:Init(context: any)
 	table.clear(self.reconciling)
 	table.clear(self.recoveryPending)
 	table.clear(self.recoveryPersistenceFailed)
+end
+
+function EconomyService:_sessionIsCurrent(
+	player: Player,
+	session: any,
+	characterId: string
+): boolean
+	return self.running
+		and playerIsCurrent(player)
+		and self.context.Services:Get("DataService"):GetSession(player) == session
+		and session.ActiveCharacterId == characterId
+end
+
+function EconomyService:_readSettlementIndex(userId: number): (any?, string?)
+	local data = self.context.Services:Get("DataService")
+	return data:GetSharedRecord(
+		settlementIndexKey(userId),
+		data:GetCurrentProfileSharedRecordScope()
+	)
+end
+
+function EconomyService:_reserveSettlementIndex(
+	userId: number,
+	characterId: string,
+	transferId: string,
+	otherUserId: number,
+	otherCharacterId: string
+): (boolean, string?)
+	local data = self.context.Services:Get("DataService")
+	local conflict = false
+	local _, reason = data:UpdateSharedRecord(settlementIndexKey(userId), function(existing)
+		local index = if type(existing) == "table" then existing else { Recent = {} }
+		if index.Pending ~= nil then
+			if type(index.Pending) == "table" and index.Pending.TransferId == transferId then
+				return index
+			end
+			conflict = true
+			return index
+		end
+		index.Pending = {
+			TransferId = transferId,
+			CharacterId = characterId,
+			OtherUserId = otherUserId,
+			OtherCharacterId = otherCharacterId,
+		}
+		if type(index.Recent) ~= "table" then
+			index.Recent = {}
+		end
+		return index
+	end, data:GetCurrentProfileSharedRecordScope())
+	if reason then
+		return false, reason
+	end
+	if conflict then
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
+	return true, nil
+end
+
+function EconomyService:_clearSettlementIndex(
+	userId: number,
+	transferId: string
+): (boolean, string?)
+	local data = self.context.Services:Get("DataService")
+	local _, reason = data:UpdateSharedRecord(settlementIndexKey(userId), function(existing)
+		if type(existing) ~= "table" then
+			return nil
+		end
+		if type(existing.Pending) == "table" and existing.Pending.TransferId == transferId then
+			existing.Pending = nil
+		end
+		if
+			existing.Pending == nil
+			and (type(existing.Recent) ~= "table" or next(existing.Recent) == nil)
+		then
+			return nil
+		end
+		return existing
+	end, data:GetCurrentProfileSharedRecordScope())
+	return reason == nil, reason
+end
+
+function EconomyService:_storeSettlementReceipt(record: any): (boolean, string?)
+	local data = self.context.Services:Get("DataService")
+	local conflict = false
+	local _, reason = data:UpdateSharedRecord(
+		settlementIndexKey(record.SenderUserId),
+		function(existing)
+			local index = if type(existing) == "table" then existing else { Recent = {} }
+			if type(index.Recent) ~= "table" then
+				index.Recent = {}
+			end
+			if type(index.Pending) == "table" and index.Pending.TransferId ~= record.TransferId then
+				conflict = true
+				return index
+			end
+			index.Recent[record.TransferId] = {
+				TransferId = record.TransferId,
+				SenderCharacterId = record.SenderCharacterId,
+				RecipientUserId = record.RecipientUserId,
+				RecipientCharacterId = record.RecipientCharacterId,
+				Amount = record.Amount,
+				Kind = record.Kind,
+				RecipientName = record.RecipientName,
+				CompletedAt = os.time(),
+			}
+			local maximum = self.context.Configuration.Economy.MaximumTransferReceipts or 200
+			local ids = {}
+			for id, receipt in index.Recent do
+				if type(id) == "string" and type(receipt) == "table" then
+					table.insert(ids, { Id = id, At = receipt.CompletedAt or 0 })
+				else
+					index.Recent[id] = nil
+				end
+			end
+			table.sort(ids, function(a, b)
+				if a.Id == record.TransferId then
+					return false
+				end
+				if b.Id == record.TransferId then
+					return true
+				end
+				if a.At == b.At then
+					return a.Id < b.Id
+				end
+				return a.At < b.At
+			end)
+			while #ids > maximum do
+				local oldest = table.remove(ids, 1)
+				if oldest then
+					index.Recent[oldest.Id] = nil
+				end
+			end
+			return index
+		end,
+		data:GetCurrentProfileSharedRecordScope()
+	)
+	if reason then
+		return false, reason
+	end
+	if conflict then
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
+	return true, nil
+end
+
+function EconomyService:_finaliseSettlement(record: any): (boolean, string?)
+	local data = self.context.Services:Get("DataService")
+	local saved, reason = self:_storeSettlementReceipt(record)
+	if not saved then
+		return false, reason
+	end
+	local recipientCleared, recipientReason =
+		self:_clearSettlementIndex(record.RecipientUserId, record.TransferId)
+	if not recipientCleared then
+		return false, recipientReason
+	end
+	local senderCleared, senderReason =
+		self:_clearSettlementIndex(record.SenderUserId, record.TransferId)
+	if not senderCleared then
+		return false, senderReason
+	end
+	local _, deleteReason = data:UpdateSharedRecord(
+		settlementRecordKey(record.TransferId),
+		function(existing)
+			if type(existing) == "table" and existing.Status == "Settled" then
+				return nil
+			end
+			return existing
+		end,
+		data:GetCurrentProfileSharedRecordScope()
+	)
+	if deleteReason then
+		return false, deleteReason
+	end
+	return true, nil
+end
+
+function EconomyService:_reconcileSettlementForCharacter(
+	player: Player,
+	characterId: string,
+	session: any
+): (boolean, string?)
+	local data = self.context.Services:Get("DataService")
+	local scope = transactionScope(player.UserId, characterId)
+	local index, indexReason = self:_readSettlementIndex(player.UserId)
+	if not self:_sessionIsCurrent(player, session, characterId) then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if indexReason then
+		self.recoveryPending[scope] = true
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	if type(index) ~= "table" or index.Pending == nil then
+		self.recoveryPending[scope] = nil
+		return true, nil
+	end
+	if type(index.Pending) ~= "table" then
+		self.recoveryPending[scope] = true
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
+	local pending = index.Pending
+	if
+		type(pending) ~= "table"
+		or type(pending.TransferId) ~= "string"
+		or pending.TransferId == ""
+		or #pending.TransferId > 45
+		or string.find(pending.TransferId, "[^%w%-]", 1) ~= nil
+		or type(pending.OtherUserId) ~= "number"
+		or pending.OtherUserId <= 0
+		or pending.OtherUserId % 1 ~= 0
+		or type(pending.OtherCharacterId) ~= "string"
+		or pending.OtherCharacterId == ""
+	then
+		self.recoveryPending[scope] = true
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
+	if pending.CharacterId ~= characterId then
+		return true, nil
+	end
+	self.recoveryPending[scope] = true
+	local transferId = pending.TransferId
+	local record, recordReason = data:GetSharedRecord(
+		settlementRecordKey(transferId),
+		data:GetCurrentProfileSharedRecordScope()
+	)
+	if not self:_sessionIsCurrent(player, session, characterId) then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if recordReason then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	if record == nil then
+		-- Both participant pointers are written before the central record. If a
+		-- crash or failed create left only the pointers, no money has been touched.
+		local ownCleared, ownReason = self:_clearSettlementIndex(player.UserId, transferId)
+		if not self:_sessionIsCurrent(player, session, characterId) then
+			return false, "CHARACTER_NOT_ACTIVE"
+		end
+		local otherCleared, otherReason =
+			self:_clearSettlementIndex(pending.OtherUserId, transferId)
+		if not ownCleared or not otherCleared then
+			return false, ownReason or otherReason or "TRANSFER_RECOVERY_FAILED"
+		end
+		self.recoveryPending[scope] = nil
+		self.recoveryPending[transactionScope(pending.OtherUserId, pending.OtherCharacterId)] = nil
+		return true, nil
+	end
+	if type(record) ~= "table" or record.TransferId ~= transferId then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	local isParticipant = record.SenderUserId == player.UserId
+		or record.RecipientUserId == player.UserId
+	local recordValid = isParticipant
+		and type(record.SenderUserId) == "number"
+		and record.SenderUserId > 0
+		and record.SenderUserId % 1 == 0
+		and type(record.SenderCharacterId) == "string"
+		and record.SenderCharacterId ~= ""
+		and type(record.RecipientUserId) == "number"
+		and record.RecipientUserId > 0
+		and record.RecipientUserId % 1 == 0
+		and type(record.RecipientCharacterId) == "string"
+		and record.RecipientCharacterId ~= ""
+		and record.SenderUserId ~= record.RecipientUserId
+		and type(record.Amount) == "number"
+		and record.Amount > 0
+		and record.Amount < math.huge
+		and record.Amount == math.floor(record.Amount)
+		and type(record.Kind) == "string"
+		and type(record.DebitReasonCode) == "string"
+		and type(record.DebitDescription) == "string"
+		and type(record.DebitMetadata) == "table"
+		and type(record.CreditReasonCode) == "string"
+		and type(record.CreditDescription) == "string"
+		and type(record.CreditMetadata) == "table"
+	if not recordValid then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	local expectedOtherUserId = if record.SenderUserId == player.UserId
+		then record.RecipientUserId
+		else record.SenderUserId
+	local expectedOtherCharacterId = if record.SenderUserId == player.UserId
+		then record.RecipientCharacterId
+		else record.SenderCharacterId
+	local expectedCharacterId = if record.SenderUserId == player.UserId
+		then record.SenderCharacterId
+		else record.RecipientCharacterId
+	if
+		pending.OtherUserId ~= expectedOtherUserId
+		or pending.OtherCharacterId ~= expectedOtherCharacterId
+		or expectedCharacterId ~= characterId
+	then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	if record.Status == "Settled" then
+		local completed, finishReason = self:_finaliseSettlement(record)
+		if not completed then
+			return false, finishReason or "TRANSFER_RECOVERY_FAILED"
+		end
+		self.recoveryPending[scope] = nil
+		local otherCharacterId = if record.SenderUserId == player.UserId
+			then record.RecipientCharacterId
+			else record.SenderCharacterId
+		self.recoveryPending[transactionScope(
+			if record.SenderUserId == player.UserId
+				then record.RecipientUserId
+				else record.SenderUserId,
+			otherCharacterId
+		)] =
+			nil
+		return true, nil
+	end
+	if record.Status ~= "Committed" then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	local isSender = record.SenderUserId == player.UserId
+	local participantCharacterId = if isSender
+		then record.SenderCharacterId
+		else record.RecipientCharacterId
+	if participantCharacterId ~= characterId then
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
+	local character = session.Profile.Characters[characterId]
+	if not character then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local side = if isSender then "debit" else "credit"
+	local transaction = {
+		TransactionId = settlementLegTransactionId(transferId, side),
+		CharacterId = characterId,
+		Account = "Bank",
+		Amount = record.Amount,
+		Direction = if isSender then "Debit" else "Credit",
+		ReasonCode = if isSender then record.DebitReasonCode else record.CreditReasonCode,
+		Description = if isSender then record.DebitDescription else record.CreditDescription,
+		RelatedEntityId = transferId,
+		Metadata = if isSender then record.DebitMetadata else record.CreditMetadata,
+	}
+	local applied, applyReason = self:Apply(player, transaction, true)
+	if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
+		return false, applyReason or "TRANSFER_RECOVERY_FAILED"
+	end
+	local saved, saveReason = data:Save(player)
+	if not saved then
+		return false, saveReason or "PROFILE_SAVE_FAILED"
+	end
+	if not self:_sessionIsCurrent(player, session, characterId) then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local _, ackReason = data:UpdateSharedRecord(settlementRecordKey(transferId), function(existing)
+		if type(existing) == "table" and existing.Status == "Committed" then
+			local status, senderSaved, recipientSaved = SettlementPolicy.acknowledge(
+				existing.Status,
+				existing.SenderSaved == true,
+				existing.RecipientSaved == true,
+				if isSender then "Sender" else "Recipient"
+			)
+			if not status then
+				return existing
+			end
+			existing.SenderSaved = senderSaved
+			existing.RecipientSaved = recipientSaved
+			existing.Status = status
+			existing.UpdatedAt = os.time()
+		end
+		return existing
+	end, data:GetCurrentProfileSharedRecordScope())
+	if ackReason then
+		return false, ackReason
+	end
+	if not self:_sessionIsCurrent(player, session, characterId) then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	local latest, latestReason = data:GetSharedRecord(
+		settlementRecordKey(transferId),
+		data:GetCurrentProfileSharedRecordScope()
+	)
+	if not self:_sessionIsCurrent(player, session, characterId) then
+		return false, "CHARACTER_NOT_ACTIVE"
+	end
+	if latestReason or type(latest) ~= "table" then
+		return false, "TRANSFER_RECOVERY_FAILED"
+	end
+	if latest.Status == "Settled" then
+		local completed, finishReason = self:_finaliseSettlement(latest)
+		if not completed then
+			return false, finishReason or "TRANSFER_RECOVERY_FAILED"
+		end
+		if not self:_sessionIsCurrent(player, session, characterId) then
+			return false, "CHARACTER_NOT_ACTIVE"
+		end
+		self.recoveryPending[scope] = nil
+		local otherCharacterId = if isSender
+			then record.RecipientCharacterId
+			else record.SenderCharacterId
+		local otherUserId = if isSender then record.RecipientUserId else record.SenderUserId
+		self.recoveryPending[transactionScope(otherUserId, otherCharacterId)] = nil
+	end
+	return true, if latest.Status == "Settled" then nil else "TRANSFER_SETTLEMENT_PENDING"
 end
 function EconomyService:Start()
 	self.running = true
@@ -342,6 +755,16 @@ function EconomyService:ReconcilePendingTransfers(
 
 	local unresolvedReason: string? = nil
 	local ok, problem = pcall(function()
+		local settlementOk, settlementReason =
+			self:_reconcileSettlementForCharacter(player, characterId, session)
+		if not settlementOk then
+			unresolvedReason = settlementReason or "TRANSFER_RECOVERY_PENDING"
+			return
+		end
+		if settlementReason then
+			unresolvedReason = settlementReason
+			return
+		end
 		local scopedKey = pendingTransferRecordKey(player.UserId)
 		local scopedPending, scopedReason = data:GetSharedRecord(scopedKey)
 		if scopedReason then
@@ -409,7 +832,7 @@ function EconomyService:ReconcilePendingTransfers(
 						Description = "Recovered transfer refund",
 						RelatedEntityId = transferId,
 						Metadata = {},
-					})
+					}, true)
 					if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
 						unresolvedReason = unresolvedReason
 							or applyReason
@@ -596,7 +1019,7 @@ function EconomyService:ReconcilePendingTransfers(
 				Description = "Recovered transfer refund",
 				RelatedEntityId = record.TransferId,
 				Metadata = {},
-			})
+			}, true)
 			if not applied and applyReason ~= "DUPLICATE_TRANSACTION" then
 				unresolvedReason = unresolvedReason or applyReason or "TRANSFER_REFUND_FAILED"
 				continue
@@ -716,7 +1139,11 @@ function EconomyService:ReconcilePendingTransfers(
 	end
 	return true, nil
 end
-function EconomyService:Apply(player: Player, transaction: any): (boolean, string?)
+function EconomyService:Apply(
+	player: Player,
+	transaction: any,
+	settlementRecovery: boolean?
+): (boolean, string?)
 	if not self.running or not playerIsCurrent(player) then
 		return false, "ECONOMY_UNAVAILABLE"
 	end
@@ -726,6 +1153,12 @@ function EconomyService:Apply(player: Player, transaction: any): (boolean, strin
 		return false, "CHARACTER_NOT_ACTIVE"
 	end
 	local scope = transactionScope(player.UserId, transaction.CharacterId)
+	if self.transferring[player.UserId] and settlementRecovery ~= true then
+		return false, "TRANSFER_IN_PROGRESS"
+	end
+	if self.recoveryPending[scope] and settlementRecovery ~= true then
+		return false, "TRANSFER_RECOVERY_PENDING"
+	end
 	local seen, order = self:_transactionState(character, scope)
 	local account, accountReason = Validator.account(transaction.Account)
 	if not account then
@@ -797,7 +1230,8 @@ function EconomyService:_transfer(
 	recipient: Player,
 	amount: any,
 	maximumAmount: number?,
-	buildDefinition: (any, any) -> any
+	buildDefinition: (any, any) -> any,
+	requestedTransferId: string?
 ): (any?, string?)
 	if not self.running or not playerIsCurrent(sender) or not playerIsCurrent(recipient) then
 		return nil, "ECONOMY_UNAVAILABLE"
@@ -812,6 +1246,15 @@ function EconomyService:_transfer(
 	if maximumAmount and amount > maximumAmount then
 		return nil, "TRANSFER_LIMIT"
 	end
+	local transferId = requestedTransferId or HttpService:GenerateGUID(false)
+	if
+		type(transferId) ~= "string"
+		or transferId == ""
+		or #transferId > 45
+		or string.find(transferId, "[^%w%-]", 1) ~= nil
+	then
+		return nil, "INVALID_TRANSFER_ID"
+	end
 
 	-- Acquire both locks in ascending UserId order, and check/set them without a
 	-- yield. Luau code is single-threaded between yields, so opposing A→B and
@@ -821,11 +1264,16 @@ function EconomyService:_transfer(
 	if self.transferring[firstUserId] or self.transferring[secondUserId] then
 		return nil, "TRANSFER_IN_PROGRESS"
 	end
-	self.transferring[firstUserId] = true
-	self.transferring[secondUserId] = true
+	local transferClaim = {}
+	self.transferring[firstUserId] = transferClaim
+	self.transferring[secondUserId] = transferClaim
 	local function releaseTransferLocks()
-		self.transferring[sender.UserId] = nil
-		self.transferring[recipient.UserId] = nil
+		if self.transferring[sender.UserId] == transferClaim then
+			self.transferring[sender.UserId] = nil
+		end
+		if self.transferring[recipient.UserId] == transferClaim then
+			self.transferring[recipient.UserId] = nil
+		end
 	end
 
 	local data = self.context.Services:Get("DataService")
@@ -842,6 +1290,15 @@ function EconomyService:_transfer(
 	if not recipientCharacter then
 		releaseTransferLocks()
 		return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+	end
+	local function participantsCurrent(): boolean
+		return self.running
+			and playerIsCurrent(sender)
+			and playerIsCurrent(recipient)
+			and data:GetSession(sender) == senderSession
+			and data:GetSession(recipient) == recipientSession
+			and senderSession.ActiveCharacterId == senderId
+			and recipientSession.ActiveCharacterId == recipientId
 	end
 	local senderScope = transactionScope(sender.UserId, senderId)
 	if self.recoveryPending[senderScope] then
@@ -877,99 +1334,222 @@ function EconomyService:_transfer(
 			return nil, "ECONOMY_UNAVAILABLE"
 		end
 	end
+	local recipientScope = transactionScope(recipient.UserId, recipientId)
+	if self.recoveryPending[recipientScope] then
+		local recovered = self:ReconcilePendingTransfers(recipient, recipientId)
+		if not recovered or self.recoveryPending[recipientScope] then
+			releaseTransferLocks()
+			return nil, "TRANSFER_RECOVERY_PENDING"
+		end
+		senderSession = data:GetSession(sender)
+		recipientSession = data:GetSession(recipient)
+		if
+			not self.running
+			or not playerIsCurrent(sender)
+			or not playerIsCurrent(recipient)
+			or not senderSession
+			or senderSession.ActiveCharacterId ~= senderId
+		then
+			releaseTransferLocks()
+			return nil, "ECONOMY_UNAVAILABLE"
+		end
+		if not recipientSession or recipientSession.ActiveCharacterId ~= recipientId then
+			releaseTransferLocks()
+			return nil, "PHONE_RECIPIENT_UNAVAILABLE"
+		end
+		senderCharacter = senderSession.Profile.Characters[senderId]
+		recipientCharacter = recipientSession.Profile.Characters[recipientId]
+		if not senderCharacter or not recipientCharacter then
+			releaseTransferLocks()
+			return nil, "ECONOMY_UNAVAILABLE"
+		end
+	end
+	local definition = buildDefinition(senderCharacter, recipientCharacter)
+	local senderIndex, senderIndexReason = self:_readSettlementIndex(sender.UserId)
+	local recipientIndex, recipientIndexReason = self:_readSettlementIndex(recipient.UserId)
+	if not participantsCurrent() then
+		releaseTransferLocks()
+		return nil, "ECONOMY_UNAVAILABLE"
+	end
+	if senderIndexReason or recipientIndexReason then
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_FAILED"
+	end
+	if type(senderIndex) == "table" and type(senderIndex.Recent) == "table" then
+		local receipt = senderIndex.Recent[transferId]
+		if receipt ~= nil then
+			local matches = SettlementPolicy.receiptMatches(
+				receipt,
+				transferId,
+				senderId,
+				recipient.UserId,
+				recipientId,
+				amount,
+				definition.Kind
+			)
+			if not matches then
+				releaseTransferLocks()
+				return nil, "TRANSFER_ID_CONFLICT"
+			end
+			releaseTransferLocks()
+			return {
+				TransferId = transferId,
+				Amount = amount,
+				Recipient = receipt.RecipientName,
+				Balance = senderCharacter.Economy.Balance,
+			},
+				nil
+		end
+	end
+	if
+		(type(senderIndex) == "table" and senderIndex.Pending ~= nil)
+		or (type(recipientIndex) == "table" and recipientIndex.Pending ~= nil)
+	then
+		if type(senderIndex) == "table" and type(senderIndex.Pending) == "table" then
+			if senderIndex.Pending.CharacterId == senderId then
+				self.recoveryPending[senderScope] = true
+			end
+			self:ReconcilePendingTransfers(sender, senderId)
+		end
+		if type(recipientIndex) == "table" and type(recipientIndex.Pending) == "table" then
+			if recipientIndex.Pending.CharacterId == recipientId then
+				self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+			end
+			self:ReconcilePendingTransfers(recipient, recipientId)
+		end
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_PENDING"
+	end
 	if amount > senderCharacter.Economy.Balance then
 		releaseTransferLocks()
 		return nil, "INSUFFICIENT_FUNDS"
 	end
-
-	local transferId = HttpService:GenerateGUID(false)
-	local definition = buildDefinition(senderCharacter, recipientCharacter)
 	local recipientName = recipientCharacter.Identity.FirstName
 		.. " "
 		.. recipientCharacter.Identity.LastName
-
-	local debited, debitReason = self:Apply(sender, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = senderId,
+	local record = {
+		TransferId = transferId,
+		Status = "Committed",
+		Kind = definition.Kind,
 		Amount = amount,
-		Direction = "Debit",
-		ReasonCode = definition.DebitReasonCode,
-		Description = definition.DebitDescription,
-		RelatedEntityId = transferId,
-		Metadata = definition.DebitMetadata or {},
-	})
-	if not debited then
-		releaseTransferLocks()
-		return nil, debitReason
+		SenderUserId = sender.UserId,
+		SenderCharacterId = senderId,
+		RecipientUserId = recipient.UserId,
+		RecipientCharacterId = recipientId,
+		RecipientName = recipientName,
+		DebitReasonCode = definition.DebitReasonCode,
+		DebitDescription = definition.DebitDescription,
+		DebitMetadata = definition.DebitMetadata or {},
+		CreditReasonCode = definition.CreditReasonCode,
+		CreditDescription = definition.CreditDescription,
+		CreditMetadata = definition.CreditMetadata or {},
+		SenderSaved = false,
+		RecipientSaved = false,
+		CreatedAt = os.time(),
+	}
+	local senderReserved, senderReserveReason = self:_reserveSettlementIndex(
+		sender.UserId,
+		senderId,
+		transferId,
+		recipient.UserId,
+		recipientId
+	)
+	local recipientReserved, recipientReserveReason = false, nil
+	if senderReserved then
+		recipientReserved, recipientReserveReason = self:_reserveSettlementIndex(
+			recipient.UserId,
+			recipientId,
+			transferId,
+			sender.UserId,
+			senderId
+		)
 	end
-
-	local credited, creditReason = self:Apply(recipient, {
-		TransactionId = HttpService:GenerateGUID(false),
-		CharacterId = recipientId,
-		Amount = amount,
-		Direction = "Credit",
-		ReasonCode = definition.CreditReasonCode,
-		Description = definition.CreditDescription,
-		RelatedEntityId = transferId,
-		Metadata = definition.CreditMetadata or {},
-	})
-	if not credited then
-		local refunded, refundReason = self:Apply(sender, {
-			TransactionId = HttpService:GenerateGUID(false),
-			CharacterId = senderId,
-			Amount = amount,
-			Direction = "Credit",
-			ReasonCode = definition.RefundReasonCode,
-			Description = definition.RefundDescription,
-			RelatedEntityId = transferId,
-			Metadata = definition.RefundMetadata or {},
-		})
-		-- Persist the restored balance before another transfer may use it.
-		if refunded then
-			data:Save(sender)
+	if not senderReserved or not recipientReserved then
+		local senderCleared, senderClearReason =
+			self:_clearSettlementIndex(sender.UserId, transferId)
+		local recipientCleared, recipientClearReason =
+			self:_clearSettlementIndex(recipient.UserId, transferId)
+		if not senderCleared or not recipientCleared then
+			self.recoveryPending[senderScope] = true
+			self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+			releaseTransferLocks()
+			return nil, senderClearReason or recipientClearReason or "TRANSFER_RECOVERY_PENDING"
 		end
 		releaseTransferLocks()
-		if not refunded then
-			local queued, queueReason = self:_queuePendingRefund({
-				TransferId = transferId,
-				SenderUserId = sender.UserId,
-				SenderCharacterId = senderId,
-				Amount = amount,
-				CreatedAt = os.time(),
-				Status = "Pending",
-			})
-			self.context.Logger:Error("Economy transfer refund failed", {
-				SenderUserId = sender.UserId,
-				RecipientUserId = recipient.UserId,
-				Amount = amount,
-				TransferId = transferId,
-				CreditError = creditReason,
-				RefundError = refundReason,
-				RecoveryQueued = queued,
-				RecoveryQueueError = queueReason,
-			})
-		end
-		return nil, creditReason
+		return nil, senderReserveReason or recipientReserveReason or "TRANSFER_RECOVERY_PENDING"
 	end
-
-	-- Both halves are written now, and the recipient's first. The two people
-	-- live under separate DataStore keys, so this narrows the split-write window
-	-- from an autosave interval to two immediate saves. A durable cross-profile
-	-- ledger is still the long-term route to true atomicity.
-	local recipientSaved = data:Save(recipient)
-	local senderSaved = data:Save(sender)
-	if not recipientSaved or not senderSaved then
-		self.context.Logger:Error("Economy transfer may not have persisted on both sides", {
+	if not participantsCurrent() then
+		self.recoveryPending[senderScope] = true
+		self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_PENDING"
+	end
+	local createConflict = false
+	local createdRecord, createReason = data:UpdateSharedRecord(
+		settlementRecordKey(transferId),
+		function(existing)
+			if existing == nil then
+				return record
+			end
+			createConflict = true
+			return existing
+		end,
+		data:GetCurrentProfileSharedRecordScope()
+	)
+	if
+		createReason
+		or createConflict
+		or type(createdRecord) ~= "table"
+		or createdRecord.Status ~= "Committed"
+	then
+		-- The create result may be ambiguous, so retain both discoverable pointers.
+		-- Recovery completes a committed record or clears pointers if it is missing.
+		self.recoveryPending[senderScope] = true
+		self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_PENDING"
+	end
+	if not participantsCurrent() then
+		self.recoveryPending[senderScope] = true
+		self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+		releaseTransferLocks()
+		return nil, "TRANSFER_RECOVERY_PENDING"
+	end
+	self.recoveryPending[senderScope] = true
+	self.recoveryPending[transactionScope(recipient.UserId, recipientId)] = true
+	local senderRecovered, senderRecoveryReason =
+		self:_reconcileSettlementForCharacter(sender, senderId, senderSession)
+	local recipientRecovered, recipientRecoveryReason = false, nil
+	if senderRecovered then
+		recipientSession = data:GetSession(recipient)
+		if recipientSession and recipientSession.ActiveCharacterId == recipientId then
+			recipientRecovered, recipientRecoveryReason =
+				self:_reconcileSettlementForCharacter(recipient, recipientId, recipientSession)
+		else
+			recipientRecoveryReason = "PHONE_RECIPIENT_UNAVAILABLE"
+		end
+	end
+	if not senderRecovered or not recipientRecovered then
+		self.context.Logger:Warning("Economy settlement remains pending", {
 			TransferId = transferId,
-			Amount = amount,
 			SenderUserId = sender.UserId,
 			SenderCharacterId = senderId,
-			SenderSaved = senderSaved,
 			RecipientUserId = recipient.UserId,
 			RecipientCharacterId = recipientId,
-			RecipientSaved = recipientSaved,
-			Kind = definition.Kind,
+			SenderError = senderRecoveryReason,
+			RecipientError = recipientRecoveryReason,
 		})
+		releaseTransferLocks()
+		return nil, "TRANSFER_SETTLEMENT_PENDING"
+	end
+	local currentSenderSession = data:GetSession(sender)
+	if
+		not currentSenderSession
+		or currentSenderSession.ActiveCharacterId ~= senderId
+		or not playerIsCurrent(sender)
+	then
+		releaseTransferLocks()
+		return nil, "TRANSFER_SETTLEMENT_PENDING"
 	end
 	releaseTransferLocks()
 
@@ -977,14 +1557,19 @@ function EconomyService:_transfer(
 		TransferId = transferId,
 		Amount = amount,
 		Recipient = recipientName,
-		Balance = senderCharacter.Economy.Balance,
+		Balance = currentSenderSession.Profile.Characters[senderId].Economy.Balance,
 	},
 		nil
 end
 
 -- Player-initiated bank transfer. The client supplies only the recipient and
 -- amount; all transaction semantics remain server-owned here.
-function EconomyService:Transfer(sender: Player, recipient: Player, amount: any): (any?, string?)
+function EconomyService:Transfer(
+	sender: Player,
+	recipient: Player,
+	amount: any,
+	operationId: string?
+): (any?, string?)
 	return self:_transfer(
 		sender,
 		recipient,
@@ -1005,11 +1590,9 @@ function EconomyService:Transfer(sender: Player, recipient: Player, amount: any)
 				CreditReasonCode = "PLAYER_TRANSFER_RECEIVED",
 				CreditDescription = "Transfer from " .. senderName,
 				CreditMetadata = { SenderUserId = sender.UserId },
-				RefundReasonCode = "PLAYER_TRANSFER_REFUND",
-				RefundDescription = "Automatic transfer refund",
-				RefundMetadata = {},
 			}
-		end
+		end,
+		if operationId then "phone-" .. operationId else nil
 	)
 end
 
@@ -1022,7 +1605,7 @@ function EconomyService:PayTaxiFare(
 	taxiId: string,
 	dropoff: string
 ): (any?, string?)
-	if taxiId == "" or #taxiId > 128 or #dropoff > 80 then
+	if taxiId == "" or #taxiId > 40 or #dropoff > 80 then
 		return nil, "INVALID_TAXI_FARE"
 	end
 	return self:_transfer(passenger, driver, amount, nil, function(senderCharacter)
@@ -1037,11 +1620,8 @@ function EconomyService:PayTaxiFare(
 			CreditReasonCode = "TAXI_FARE_RECEIVED",
 			CreditDescription = "Taxi fare from " .. passengerName,
 			CreditMetadata = { TaxiId = taxiId, PassengerUserId = passenger.UserId },
-			RefundReasonCode = "TAXI_FARE_REFUND",
-			RefundDescription = "Taxi fare refund",
-			RefundMetadata = { TaxiId = taxiId },
 		}
-	end)
+	end, "taxi-" .. taxiId)
 end
 
 function EconomyService:Destroy()

@@ -434,6 +434,9 @@ local Config = {
 		StartingBankBalance = 2500,
 		StartingCashBalance = 100,
 		MaximumTransactionHistory = 200,
+		-- Sender-side idempotency receipts remain available for retries without
+		-- allowing shared settlement state to grow for the life of the experience.
+		MaximumTransferReceipts = 200,
 		TransferMaximum = 100000,
 	},
 	MoneyDrops = {
