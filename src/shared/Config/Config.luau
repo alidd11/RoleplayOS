@@ -2125,6 +2125,9 @@ local Config = {
 		-- Outstanding average-speed entries are server-local working state. A
 		-- long expiry alone does not bound churn, so cap the retained set as well.
 		MaximumAverageJourneys = 256,
+		-- Diagnostic discovery remembers only a bounded set of dynamic third-party
+		-- light signal names so long-session vehicle churn cannot grow it forever.
+		MaximumLightDiagnosticNames = 64,
 		StateCleanupSeconds = 60,
 		-- Cameras are found by shape rather than by tag, so a camera model
 		-- dropped into the world works with nothing else done to it. A model

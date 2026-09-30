@@ -27,11 +27,14 @@ local RoadSafetyService = {
 	sensorConnections = {},
 	sensorCameras = {},
 	sensorRestores = {},
+	sensorTokens = {},
 	cameraScriptRestores = {},
 	flashStates = {},
 	taggedSensors = {},
 	cooldowns = {},
 	journeys = {},
+	noted = {},
+	notedCount = 0,
 	seatByAssembly = setmetatable({}, { __mode = "k" }),
 	running = false,
 }
@@ -56,11 +59,14 @@ function RoadSafetyService:Init(context: any)
 	self.sensorConnections = {}
 	self.sensorCameras = {}
 	self.sensorRestores = {}
+	self.sensorTokens = {}
 	self.cameraScriptRestores = {}
 	self.flashStates = {}
 	self.taggedSensors = {}
 	self.cooldowns = {}
 	self.journeys = {}
+	self.noted = {}
+	self.notedCount = 0
 	self.seatByAssembly = setmetatable({}, { __mode = "k" })
 	self.running = false
 	self.fineEvent = context.Network:RegisterEvent("RoadSafetyFine")
@@ -126,12 +132,15 @@ function RoadSafetyService:Destroy()
 	table.clear(self.sensorConnections)
 	table.clear(self.sensorCameras)
 	table.clear(self.sensorRestores)
+	table.clear(self.sensorTokens)
 	table.clear(self.cameraScriptRestores)
 	table.clear(self.flashStates)
 	table.clear(self.sensors)
 	table.clear(self.taggedSensors)
 	table.clear(self.cooldowns)
 	table.clear(self.journeys)
+	table.clear(self.noted)
+	self.notedCount = 0
 	table.clear(self.seatByAssembly)
 	if self.bridge then
 		self.bridge:Destroy()

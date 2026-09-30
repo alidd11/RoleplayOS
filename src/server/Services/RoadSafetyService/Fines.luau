@@ -2,6 +2,17 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
+local function playerIsCurrent(player: Player): boolean
+	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
+end
+
+local function runtimeGuardAllows(service: any, guard: any): boolean
+	if not service.running then
+		return false
+	end
+	return guard == nil or guard() == true
+end
+
 return function(RoadSafetyService)
 	-- The penalty for how far over the limit somebody was.
 	--
@@ -46,7 +57,10 @@ return function(RoadSafetyService)
 	-- exemption can be judged. Returns false with a reason rather than raising: an
 	-- exempt run and an unregistered car are both ordinary outcomes, not errors
 	-- worth interrupting a camera for.
-	function RoadSafetyService:IssueFine(request: any): (boolean, string?)
+	function RoadSafetyService:_issueFine(request: any, runtimeGuard: any): (boolean, string?)
+		if not runtimeGuardAllows(self, runtimeGuard) then
+			return false, "ROAD_SAFETY_UNAVAILABLE"
+		end
 		if type(request) ~= "table" then
 			return false, "INVALID_REQUEST"
 		end
@@ -85,11 +99,40 @@ return function(RoadSafetyService)
 		if not player or not character then
 			return false, "KEEPER_UNAVAILABLE"
 		end
+		local dataService = self.context.Services:Get("DataService")
+		local targetSession = dataService:GetSession(player)
+		local targetCharacterId = targetSession and targetSession.ActiveCharacterId
+		if
+			not targetSession
+			or not targetCharacterId
+			or not playerIsCurrent(player)
+			or targetSession.Profile.Characters[targetCharacterId] ~= character
+		then
+			return false, "KEEPER_UNAVAILABLE"
+		end
+		local function targetIsCurrent(): boolean
+			if not runtimeGuardAllows(self, runtimeGuard) or not playerIsCurrent(player) then
+				return false
+			end
+			if dataService:GetSession(player) ~= targetSession then
+				return false
+			end
+			local activeCharacterId = targetSession.ActiveCharacterId
+			return activeCharacterId ~= nil
+				and targetSession.Profile.Characters[activeCharacterId] == character
+		end
 
 		-- Judged against whoever is driving, which is not necessarily the keeper: an
 		-- officer on a response in a car registered to somebody else is still on a
 		-- response, and the keeper should not be fined for it.
-		if self:IsExempt(if hasDriver then driver else player, request.Vehicle) then
+		local exempt = self:IsExempt(if hasDriver then driver else player, request.Vehicle)
+		-- DutyService:Get can yield while group access resolves. Do not resume a
+		-- camera reading into a replaced profile session or a sensor generation that
+		-- was untagged/replaced during that lookup.
+		if not targetIsCurrent() or (hasDriver and not playerIsCurrent(driver :: Player)) then
+			return false, "ROAD_SAFETY_UNAVAILABLE"
+		end
+		if exempt then
 			return false, "EXEMPT_EMERGENCY_RESPONSE"
 		end
 
@@ -101,9 +144,12 @@ return function(RoadSafetyService)
 		if
 			typeof(issuingOfficer) == "Instance"
 			and issuingOfficer:IsA("Player")
-			and issuingOfficer.Parent == Players
+			and playerIsCurrent(issuingOfficer)
 		then
 			local duty = self.context.Services:Get("DutyService"):Get(issuingOfficer)
+			if not targetIsCurrent() then
+				return false, "ROAD_SAFETY_UNAVAILABLE"
+			end
 			if duty and duty.DepartmentId == "Police" then
 				local officerSession =
 					self.context.Services:Get("DataService"):GetSession(issuingOfficer)
@@ -115,6 +161,9 @@ return function(RoadSafetyService)
 					if profile then tonumber(profile.Rank) or 1 else 1
 				)
 			end
+		end
+		if not targetIsCurrent() then
+			return false, "ROAD_SAFETY_UNAVAILABLE"
 		end
 		local record = {
 			FineId = HttpService:GenerateGUID(false),
@@ -201,5 +250,9 @@ return function(RoadSafetyService)
 			Metadata = record,
 		})
 		return true, nil
+	end
+
+	function RoadSafetyService:IssueFine(request: any): (boolean, string?)
+		return self:_issueFine(request, nil)
 	end
 end
