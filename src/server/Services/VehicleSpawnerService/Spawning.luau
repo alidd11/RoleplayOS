@@ -163,7 +163,11 @@ return function(VehicleSpawnerService)
 		if os.clock() - (self.cooldowns[player.UserId] or 0) < self.settings.CooldownSeconds then
 			return nil, "SPAWN_COOLDOWN"
 		end
-		if self.spawning[player.UserId] then
+		-- Key this claim by the exact Player instance rather than UserId. An old
+		-- handler may resume after PlayerRemoving while a replacement Player with
+		-- the same UserId is already spawning; the old continuation must never be
+		-- able to clear the replacement session's claim.
+		if self.spawning[player] then
 			return nil, "SPAWN_IN_PROGRESS"
 		end
 		local bay, bayReason = self:_bay(spawner)
@@ -179,7 +183,7 @@ return function(VehicleSpawnerService)
 		RigMechanics.sanitiseImportedVehicle(vehicle)
 		local ownership = self.context.Services:Get("VehicleOwnershipService")
 		local registration: string? = nil
-		self.spawning[player.UserId] = true
+		self.spawning[player] = true
 		if definition.Category == "Service" or definition.Fleet == true then
 			-- A gang facility has no DepartmentId, so its own fleet plates would
 			-- otherwise file under the literal fallback "Service" alongside every
@@ -191,17 +195,17 @@ return function(VehicleSpawnerService)
 			local issuedRegistration, registrationReason =
 				ownership:GetOrCreateTeamRegistration(player, tostring(teamName), definitionId)
 			if not self.running or not playerIsCurrent(player) then
-				self.spawning[player.UserId] = nil
+				self.spawning[player] = nil
 				vehicle:Destroy()
 				return nil, "PLAYER_UNAVAILABLE"
 			end
 			if not spawner:IsDescendantOf(Workspace) then
-				self.spawning[player.UserId] = nil
+				self.spawning[player] = nil
 				vehicle:Destroy()
 				return nil, "SPAWNER_NOT_FOUND"
 			end
 			if not issuedRegistration then
-				self.spawning[player.UserId] = nil
+				self.spawning[player] = nil
 				vehicle:Destroy()
 				return nil, registrationReason or "REGISTRATION_UNAVAILABLE"
 			end
@@ -214,7 +218,7 @@ return function(VehicleSpawnerService)
 				end
 			end
 			if not registration then
-				self.spawning[player.UserId] = nil
+				self.spawning[player] = nil
 				vehicle:Destroy()
 				return nil, "VEHICLE_NOT_OWNED"
 			end
@@ -302,7 +306,7 @@ return function(VehicleSpawnerService)
 		self.active[player.UserId] = vehicle
 		self:_beginTelemetry(player, vehicle, vehicleId, mileage)
 		self.cooldowns[player.UserId] = os.clock()
-		self.spawning[player.UserId] = nil
+		self.spawning[player] = nil
 		vehicle.Destroying:Once(function()
 			if self.active[player.UserId] == vehicle then
 				self.active[player.UserId] = nil

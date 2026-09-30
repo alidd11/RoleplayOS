@@ -49,7 +49,10 @@ function VehicleSpawnerService:Start()
 		Players.PlayerRemoving:Connect(function(player)
 			self:Remove(player.UserId)
 			self.cooldowns[player.UserId] = nil
-			self.spawning[player.UserId] = nil
+			-- Spawn claims are keyed by the exact Player instance. A rejoin may
+			-- reuse the same UserId while an old yielding handler is still unwinding;
+			-- clearing only this Player cannot release the new session's claim.
+			self.spawning[player] = nil
 			for _, held in { self.deathConnections, self.spawnConnections, self.seatConnections } do
 				local connection = held[player.UserId]
 				if connection then

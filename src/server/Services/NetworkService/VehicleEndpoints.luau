@@ -127,6 +127,7 @@ return function(self: any)
 			ALL_BAYS_OCCUPIED = "Every vehicle bay is currently blocked.",
 			NO_SPAWN_POINTS = "This facility has no configured spawn points.",
 			SPAWN_COOLDOWN = "Please wait before spawning another vehicle.",
+			SPAWN_IN_PROGRESS = "Your previous vehicle spawn is still being processed.",
 			VEHICLE_TEMPLATE_MISSING = "That vehicle model has not been installed.",
 			VEHICLE_NOT_ALLOWED = "Your current role cannot use that vehicle.",
 		}
