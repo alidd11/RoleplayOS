@@ -73,6 +73,7 @@ return function(self: any)
 			SELF_TRANSFER = "You cannot send money to yourself.",
 			TRANSFER_LIMIT = "That transfer exceeds the per-transfer limit.",
 			TRANSFER_IN_PROGRESS = "Your previous transfer is still being processed.",
+			TRANSFER_RECOVERY_PENDING = "A previous transfer refund is still being recovered. Try again shortly.",
 			INVALID_RECIPIENT_NAME = "Enter the username of the person you are paying.",
 			RECIPIENT_NAME_AMBIGUOUS = "More than one player is using that display name. Use their username.",
 			PHONE_RECIPIENT_UNAVAILABLE = "That player is not in this server.",
