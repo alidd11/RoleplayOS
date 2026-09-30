@@ -66,14 +66,17 @@ end
 function DataService:_measure(player: Player, profile: any): (boolean, string?)
 	local ok, encoded = pcall(HttpService.JSONEncode, HttpService, profile)
 	if not ok or type(encoded) ~= "string" then
-		self.context.Logger:Error("Profile could not be serialised for persistence", {
+		-- DataStoreService's Engine API can persist a few values JSON cannot
+		-- represent (notably non-finite numbers). Failure to JSONEncode therefore
+		-- means the size is unknown, not that the DataStore write is impossible.
+		self.context.Logger:Warning("Profile size could not be preflighted", {
 			UserId = player.UserId,
 			Error = if ok then "ENCODED_VALUE_NOT_STRING" else tostring(encoded),
 		})
-		return false, "PROFILE_NOT_SERIALISABLE"
+		return true, nil
 	end
 	local bytes = #encoded
-	if bytes >= MAXIMUM_VALUE_BYTES then
+	if bytes > MAXIMUM_VALUE_BYTES then
 		self.context.Logger:Error("Profile exceeds the data store size limit", {
 			UserId = player.UserId,
 			Bytes = bytes,
