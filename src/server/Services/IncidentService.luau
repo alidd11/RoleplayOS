@@ -518,7 +518,9 @@ function IncidentService:Recent(
 	local first = (page - 1) * size + 1
 	local items = {}
 	local total = #entries
-	for indexPosition = first, math.min(#entries, first + size - 1) do
+	local last = math.min(#entries, first + size - 1)
+	local indexPosition = first
+	while indexPosition <= last and #items < size do
 		local summary = entries[indexPosition]
 		local record = if summary.LiveDispatchCall
 			then summary
@@ -545,8 +547,13 @@ function IncidentService:Recent(
 				})
 			elseif deleted then
 				total = math.max(0, total - 1)
+				-- A confirmed deletion shifts the next recent row into this page's
+				-- vacant slot. Extend the candidate range so this page still returns
+				-- the full page of durable records when a stale row is repaired.
+				last = math.min(#entries, last + 1)
 			end
 		end
+		indexPosition += 1
 	end
 	-- Index and record reads can yield on DataStore budget, retries and network
 	-- latency. Revalidate the exact duty snapshot before returning any records so
