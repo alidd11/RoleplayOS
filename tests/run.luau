@@ -534,6 +534,28 @@ H.test("profile migration fails closed on unreadable authoritative state", funct
 		invites == nil and invitesReason == "PROFILE_GANG_INVITES_NOT_TABLE",
 		"corrupt gang invites were replaced"
 	)
+
+	local audit, auditReason = ProfileSchema.migrate({
+		SchemaVersion = ProfileSchema.CURRENT_VERSION,
+		AuditMetadata = "corrupt",
+	}, 42)
+	H.expect(
+		audit == nil and auditReason == "PROFILE_AUDIT_METADATA_NOT_TABLE",
+		"corrupt audit metadata reached profile load"
+	)
+
+	for _, case in {
+		{ "corrupt", "PROFILE_SESSION_LOCK_NOT_TABLE" },
+		{ { ServerId = "", ExpiresAt = 100 }, "PROFILE_SESSION_LOCK_SERVER_INVALID" },
+		{ { ServerId = "server", ExpiresAt = "corrupt" }, "PROFILE_SESSION_LOCK_EXPIRY_INVALID" },
+		{ { ServerId = "server", ExpiresAt = math.huge }, "PROFILE_SESSION_LOCK_EXPIRY_INVALID" },
+	} do
+		local migrated, reason = ProfileSchema.migrate({
+			SchemaVersion = ProfileSchema.CURRENT_VERSION,
+			AuditMetadata = { SessionLock = case[1] },
+		}, 42)
+		H.expect(migrated == nil and reason == case[2], case[2] .. " was accepted")
+	end
 end)
 H.test("profile migration preserves unreadable authoritative scalar state", function()
 	local cases = {
