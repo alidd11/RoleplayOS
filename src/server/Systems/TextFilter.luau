@@ -25,6 +25,15 @@ local POLL_SECONDS = 0.05
 local MAX_CONCURRENT_FILTERS = 16
 local activeFilters = 0
 
+local function releaseFilterSlot(slot: any): boolean
+	if slot.Counted ~= true then
+		return false
+	end
+	slot.Counted = false
+	activeFilters = math.max(0, activeFilters - 1)
+	return true
+end
+
 local function run(
 	text: string,
 	userId: number,
@@ -40,10 +49,11 @@ local function run(
 	if activeFilters >= MAX_CONCURRENT_FILTERS then
 		return nil, "TEXT_FILTER_BUSY"
 	end
+	local slot = { Counted = true }
 	activeFilters += 1
 	local finished = false
 	local filtered: string? = nil
-	task.spawn(function()
+	local worker = task.spawn(function()
 		local ok, result = pcall(function()
 			if context then
 				return TextService:FilterStringAsync(text, userId, context)
@@ -56,12 +66,22 @@ local function run(
 				filtered = extracted
 			end
 		end
+		releaseFilterSlot(slot)
 		finished = true
-		activeFilters = math.max(0, activeFilters - 1)
 	end)
 	local deadline = os.clock() + TIMEOUT_SECONDS
 	while not finished and os.clock() < deadline do
 		task.wait(POLL_SECONDS)
+	end
+	if not finished then
+		-- The caller has stopped waiting, so this filter must stop consuming the
+		-- shared admission budget too. Cancel the abandoned worker where Roblox
+		-- permits it; if completion races the timeout, the idempotent slot release
+		-- still prevents a double decrement.
+		if coroutine.status(worker) ~= "dead" then
+			pcall(task.cancel, worker)
+		end
+		releaseFilterSlot(slot)
 	end
 	if filtered then
 		return filtered, nil
