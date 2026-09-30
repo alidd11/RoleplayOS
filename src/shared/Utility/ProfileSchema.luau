@@ -125,6 +125,29 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	if data.Applications ~= nil and type(data.Applications) ~= "table" then
 		return nil, "PROFILE_APPLICATIONS_NOT_TABLE"
 	end
+	if data.AuditMetadata ~= nil then
+		if type(data.AuditMetadata) ~= "table" then
+			return nil, "PROFILE_AUDIT_METADATA_NOT_TABLE"
+		end
+		local sessionLock = data.AuditMetadata.SessionLock
+		if sessionLock ~= nil then
+			if type(sessionLock) ~= "table" then
+				return nil, "PROFILE_SESSION_LOCK_NOT_TABLE"
+			end
+			if type(sessionLock.ServerId) ~= "string" or sessionLock.ServerId == "" then
+				return nil, "PROFILE_SESSION_LOCK_SERVER_INVALID"
+			end
+			local expiresAt = sessionLock.ExpiresAt
+			if
+				type(expiresAt) ~= "number"
+				or expiresAt ~= expiresAt
+				or expiresAt == math.huge
+				or expiresAt == -math.huge
+			then
+				return nil, "PROFILE_SESSION_LOCK_EXPIRY_INVALID"
+			end
+		end
+	end
 	if version == 0 then
 		data.SchemaVersion = 1
 		data.DutyProfiles = data.DutyProfiles or {}
