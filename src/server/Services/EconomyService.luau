@@ -22,6 +22,23 @@ end
 local function transactionScope(userId: number, characterId: string): string
 	return tostring(userId) .. ":" .. characterId
 end
+
+local function pendingTransferEntryId(entry: any): string?
+	if type(entry) == "string" then
+		return entry
+	end
+	if type(entry) == "table" and type(entry.Id) == "string" and entry.Id ~= "" then
+		return entry.Id
+	end
+	return nil
+end
+
+local function pendingTransferEntryRecord(entry: any): any?
+	if type(entry) == "table" and type(entry.Record) == "table" then
+		return entry.Record
+	end
+	return nil
+end
 function EconomyService:Init(context: any)
 	self.context = context
 end
@@ -74,25 +91,25 @@ end
 function EconomyService:_queuePendingRefund(record: any)
 	local data = self.context.Services:Get("DataService")
 	local id = "pt:" .. record.TransferId
-	local _, recordReason = data:UpdateSharedRecord(id, function()
-		return record
-	end)
-	if recordReason then
-		self.context.Logger:Error("Pending transfer record persistence failed", {
-			TransferId = record.TransferId,
-			Error = recordReason,
-		})
-		return
-	end
+	-- Store the recovery payload in the discoverable index itself. The previous
+	-- two-write shape persisted pt:<id> first and indexed it second; if the first
+	-- UpdateAsync succeeded and the index write failed, the refund became a
+	-- durable orphan that no server could discover again.
 	local _, indexReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
 		local index = if type(existing) == "table" then existing else {}
-		if not table.find(index, id) then
-			table.insert(index, id)
+		for _, entry in index do
+			if pendingTransferEntryId(entry) == id then
+				return index
+			end
 		end
+		table.insert(index, {
+			Id = id,
+			Record = record,
+		})
 		return index
 	end)
 	if indexReason then
-		self.context.Logger:Error("Pending transfer index persistence failed", {
+		self.context.Logger:Error("Pending transfer recovery persistence failed", {
 			TransferId = record.TransferId,
 			Error = indexReason,
 		})
@@ -290,14 +307,28 @@ function EconomyService:ReconcilePendingTransfers()
 		if type(index) ~= "table" then
 			return
 		end
-		local completed: { [any]: boolean } = {}
-		for _, id in index do
+		local completed: { [string]: boolean } = {}
+		for _, entry in index do
 			if not self.running then
 				return
 			end
-			local record = data:GetSharedRecord(id)
-			if not self.running then
-				return
+			local id = pendingTransferEntryId(entry)
+			if not id then
+				self.context.Logger:Error("Pending transfer index contains an invalid entry", {})
+				continue
+			end
+
+			-- New entries carry their recovery payload in the same durable record
+			-- that makes them discoverable. String entries are the legacy format;
+			-- continue reading their separate pt:<id> record until all old pending
+			-- refunds have naturally reconciled.
+			local embeddedRecord = pendingTransferEntryRecord(entry)
+			local record = embeddedRecord
+			if not record then
+				record = data:GetSharedRecord(id)
+				if not self.running then
+					return
+				end
 			end
 			if type(record) == "table" and record.Status == "Reconciled" then
 				-- The profile save and durable receipt already succeeded. If the
@@ -348,14 +379,35 @@ function EconomyService:ReconcilePendingTransfers()
 				continue
 			end
 
-			local _, recordReason = data:UpdateSharedRecord(id, function(existing)
-				if type(existing) == "table" then
-					existing.Status = "Reconciled"
-					existing.ReconciledAt = os.time()
-					existing.RefundTransactionId = refundTransactionId
-				end
-				return existing
-			end)
+			local _, recordReason
+			if embeddedRecord then
+				_, recordReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
+					if type(existing) ~= "table" then
+						return existing
+					end
+					for _, currentEntry in existing do
+						if pendingTransferEntryId(currentEntry) == id then
+							local currentRecord = pendingTransferEntryRecord(currentEntry)
+							if currentRecord then
+								currentRecord.Status = "Reconciled"
+								currentRecord.ReconciledAt = os.time()
+								currentRecord.RefundTransactionId = refundTransactionId
+							end
+							break
+						end
+					end
+					return existing
+				end)
+			else
+				_, recordReason = data:UpdateSharedRecord(id, function(existing)
+					if type(existing) == "table" then
+						existing.Status = "Reconciled"
+						existing.ReconciledAt = os.time()
+						existing.RefundTransactionId = refundTransactionId
+					end
+					return existing
+				end)
+			end
 			if not self.running then
 				return
 			end
@@ -379,9 +431,10 @@ function EconomyService:ReconcilePendingTransfers()
 				return existing
 			end
 			local current = {}
-			for _, id in existing do
-				if not completed[id] then
-					table.insert(current, id)
+			for _, entry in existing do
+				local id = pendingTransferEntryId(entry)
+				if not id or not completed[id] then
+					table.insert(current, entry)
 				end
 			end
 			return current
