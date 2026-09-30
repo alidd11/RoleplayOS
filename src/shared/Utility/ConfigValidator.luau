@@ -35,6 +35,80 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			table.insert(errors, "Missing configuration section: " .. section)
 		end
 	end
+
+	-- DataService's session lease is the cross-server ownership boundary for a
+	-- writable profile. These values used to be documented only in Config, so a
+	-- typo or deployment override could boot successfully with a lease that
+	-- expired before a live server had a safe opportunity to renew it.
+	local framework = config.Framework or {}
+	local autosaveSeconds = framework.AutosaveSeconds
+	local sessionLeaseSeconds = framework.SessionLeaseSeconds
+	if type(autosaveSeconds) ~= "number" or autosaveSeconds <= 0 then
+		table.insert(errors, "Framework.AutosaveSeconds must be greater than zero")
+	end
+	if type(sessionLeaseSeconds) ~= "number" or sessionLeaseSeconds <= 0 then
+		table.insert(errors, "Framework.SessionLeaseSeconds must be greater than zero")
+	elseif type(autosaveSeconds) == "number" and autosaveSeconds > 0 then
+		if sessionLeaseSeconds < autosaveSeconds * 2 then
+			table.insert(
+				errors,
+				"Framework.SessionLeaseSeconds must be at least twice Framework.AutosaveSeconds"
+			)
+		end
+	end
+
+	if
+		type(framework.ShutdownSaveSeconds) ~= "number"
+		or framework.ShutdownSaveSeconds <= 0
+	then
+		table.insert(errors, "Framework.ShutdownSaveSeconds must be greater than zero")
+	end
+	if
+		type(framework.MaxSaveAttempts) ~= "number"
+		or framework.MaxSaveAttempts < 1
+		or framework.MaxSaveAttempts % 1 ~= 0
+	then
+		table.insert(errors, "Framework.MaxSaveAttempts must be a positive integer")
+	end
+	if
+		type(framework.JoinLoadAttempts) ~= "number"
+		or framework.JoinLoadAttempts < 1
+		or framework.JoinLoadAttempts % 1 ~= 0
+	then
+		table.insert(errors, "Framework.JoinLoadAttempts must be a positive integer")
+	end
+
+	local maximumLeaseWaitSeconds = framework.MaximumLeaseWaitSeconds
+	if
+		type(maximumLeaseWaitSeconds) ~= "number"
+		or maximumLeaseWaitSeconds < 0
+	then
+		table.insert(errors, "Framework.MaximumLeaseWaitSeconds must be zero or greater")
+	elseif
+		type(sessionLeaseSeconds) == "number"
+		and sessionLeaseSeconds > 0
+		and maximumLeaseWaitSeconds >= sessionLeaseSeconds
+	then
+		table.insert(
+			errors,
+			"Framework.MaximumLeaseWaitSeconds must be shorter than Framework.SessionLeaseSeconds"
+		)
+	end
+
+	local sessionHandoverSeconds = framework.SessionHandoverSeconds
+	if type(sessionHandoverSeconds) ~= "number" or sessionHandoverSeconds < 0 then
+		table.insert(errors, "Framework.SessionHandoverSeconds must be zero or greater")
+	elseif
+		type(sessionLeaseSeconds) == "number"
+		and sessionLeaseSeconds > 0
+		and sessionHandoverSeconds >= sessionLeaseSeconds
+	then
+		table.insert(
+			errors,
+			"Framework.SessionHandoverSeconds must be shorter than Framework.SessionLeaseSeconds"
+		)
+	end
+
 	local quality = config.ContentQuality or {}
 	if
 		type(quality.RequireCertification) ~= "boolean"
