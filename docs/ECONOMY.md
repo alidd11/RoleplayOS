@@ -16,7 +16,11 @@ index entry cannot credit the same refund again. New refund recovery entries kee
 the recovery payload in the discoverable shared index itself, so creating a
 recoverable debt is one atomic shared-record update rather than a record write
 followed by an index write that could orphan the debt. Legacy string index entries
-remain readable until they reconcile and drain naturally.
+remain readable until they reconcile and drain naturally. Refund reconciliation
+runs against the selected character rather than merely the loaded profile: profile
+load precedes character selection, so attempting recovery at load time has no
+authoritative character to credit. A short player-join watcher provides a second
+bounded attempt after selection without creating an unbounded retry task.
 
 Cash drops use the same recovery rule. Normal expiry still removes uncollected
 cash, but drops do not outlive the profile session that paid for them: leaving
