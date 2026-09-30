@@ -4,7 +4,13 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 
-local TaxiService = { requests = {}, byPassenger = {}, byDriver = {}, running = false }
+local TaxiService = {
+	requests = {},
+	byPassenger = {},
+	byDriver = {},
+	completing = {},
+	running = false,
+}
 
 local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
@@ -15,6 +21,7 @@ function TaxiService:Init(context: any)
 	self.phone = context.Services:Get("PhoneService")
 	self.settings = context.Configuration.Taxi
 	self.connections = {}
+	self.completing = {}
 	-- Offers a driver has passed on, as [driverUserId] = { [requestId] = true }.
 	-- Declining is per driver and never cancels the booking: the passenger keeps
 	-- waiting and the job stays available to everybody else.
@@ -218,6 +225,23 @@ function TaxiService:_forgetDeclines(requestId: string)
 	for _, passed in self.declined do
 		passed[requestId] = nil
 	end
+end
+
+-- Cancels one request without yielding. Callers decide whether cancellation is
+-- currently allowed before entering here; completion uses the same helper only
+-- when a participant left while a failed fare settlement was in flight.
+function TaxiService:_cancelRequest(request: any)
+	local requestId = request.RequestId
+	request.State = "Cancelled"
+	request.CancelledAt = os.time()
+	self:_forgetDeclines(requestId)
+	if self.byPassenger[request.PassengerUserId] == requestId then
+		self.byPassenger[request.PassengerUserId] = nil
+	end
+	if request.DriverUserId and self.byDriver[request.DriverUserId] == requestId then
+		self.byDriver[request.DriverUserId] = nil
+	end
+	self:_trimTerminalRequests()
 end
 
 function TaxiService:_trimTerminalRequests()
@@ -493,11 +517,36 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	if passengerCharacter.Economy.Balance < request.Fare then
 		return nil, "INSUFFICIENT_FUNDS"
 	end
-	local settled, settlementReason =
-		self.context.Services
+	-- Fare settlement persists both profiles and yields. Claim the request before
+	-- crossing that boundary so a retry cannot start another completion and
+	-- neither participant can successfully cancel a ride whose money movement is
+	-- already in progress.
+	if self.completing[requestId] then
+		return nil, "TAXI_COMPLETION_IN_PROGRESS"
+	end
+	local completion = {
+		Request = request,
+		CancelOnFailure = false,
+	}
+	self.completing[requestId] = completion
+	local settlementOk, settled, settlementReason = pcall(function()
+		return self.context.Services
 			:Get("EconomyService")
 			:PayTaxiFare(passenger, player, request.Fare, requestId, request.Dropoff)
+	end)
+	if self.completing[requestId] == completion then
+		self.completing[requestId] = nil
+	end
+	if not settlementOk then
+		if completion.CancelOnFailure and request.State == "Accepted" then
+			self:_cancelRequest(request)
+		end
+		error(settled)
+	end
 	if not settled then
+		if completion.CancelOnFailure and request.State == "Accepted" then
+			self:_cancelRequest(request)
+		end
 		return nil, settlementReason
 	end
 	request.State = "Completed"
@@ -536,22 +585,13 @@ function TaxiService:Cancel(player: Player, requestId: any): (boolean, string?)
 	then
 		return false, "TAXI_REQUEST_UNAVAILABLE"
 	end
-	if request.State == "Completed" then
+	if self.completing[requestId] then
+		return false, "TAXI_COMPLETION_IN_PROGRESS"
+	end
+	if request.State ~= "Waiting" and request.State ~= "Accepted" then
 		return false, "TAXI_REQUEST_UNAVAILABLE"
 	end
-	request.State = "Cancelled"
-	request.CancelledAt = os.time()
-	self:_forgetDeclines(requestId)
-	self.byPassenger[request.PassengerUserId] = nil
-	if request.DriverUserId then
-		self.byDriver[request.DriverUserId] = nil
-	end
-	self:_trimTerminalRequests()
-	-- A booking nobody has accepted yet has no driver to tell, and passing that
-	-- nil to GetPlayerByUserId throws. The cancellation itself is already
-	-- recorded above, so this threw after the work was done: the ride really was
-	-- cancelled and the passenger was told it could not be. That is the ordinary
-	-- case of changing your mind before a driver picks you up.
+	self:_cancelRequest(request)
 	local otherUserId = if request.PassengerUserId == player.UserId
 		then request.DriverUserId
 		else request.PassengerUserId
@@ -596,7 +636,15 @@ function TaxiService:Start()
 		Players.PlayerRemoving:Connect(function(player)
 			local requestId = self.byPassenger[player.UserId] or self.byDriver[player.UserId]
 			if requestId then
-				self:Cancel(player, requestId)
+				local completion = self.completing[requestId]
+				if completion then
+					-- Do not race cancellation against a fare already being persisted.
+					-- If the settlement fails, its owner will cancel the request after
+					-- the yield; if it succeeds, normal completion releases both maps.
+					completion.CancelOnFailure = true
+				else
+					self:Cancel(player, requestId)
+				end
 			end
 			self.declined[player.UserId] = nil
 		end)
@@ -609,6 +657,7 @@ function TaxiService:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	table.clear(self.completing)
 	table.clear(self.requests)
 	table.clear(self.byPassenger)
 	table.clear(self.byDriver)

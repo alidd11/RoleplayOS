@@ -16,7 +16,11 @@ index entry cannot credit the same refund again. New refund recovery entries kee
 the recovery payload in the discoverable shared index itself, so creating a
 recoverable debt is one atomic shared-record update rather than a record write
 followed by an index write that could orphan the debt. Legacy string index entries
-remain readable until they reconcile and drain naturally.
+remain readable until they reconcile and drain naturally. Refund reconciliation
+runs against the selected character rather than merely the loaded profile: profile
+load precedes character selection, so attempting recovery at load time has no
+authoritative character to credit. A short player-join watcher provides a second
+bounded attempt after selection without creating an unbounded retry task.
 
 Cash drops use the same recovery rule. Normal expiry still removes uncollected
 cash, but drops do not outlive the profile session that paid for them: leaving
@@ -28,7 +32,7 @@ IDs and removes them in the same profile mutation. The container is bounded by
 the per-player active-drop limit for each character, so recovery cannot grow
 into a global persistent queue.
 
-Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Taxi fares use `EconomyService:PayTaxiFare()`, so journey validation stays in TaxiService while the two-player balance mutation, transfer lock, refund recovery and immediate persistence stay in EconomyService. Never accept a reward or price from a client.
+Vehicle, property and furniture services read prices only from configuration. Refund, wage, fine and transfer flows should be added as named EconomyService methods that preserve the same idempotency contract. Taxi fares use `EconomyService:PayTaxiFare()`, so journey validation stays in TaxiService while the two-player balance mutation, transfer lock, refund recovery and immediate persistence stay in EconomyService. TaxiService claims an accepted request while that yielding settlement is in flight, so completion retries and cancellation cannot race the same fare; a participant disconnecting during a failed settlement releases the booking after the settlement returns. Cancellation is terminal: retained `Cancelled` requests cannot be replayed to refresh their retention timestamp or resend status notifications. Never accept a reward or price from a client.
 
 ## Wages
 
