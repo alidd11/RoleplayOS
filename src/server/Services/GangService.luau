@@ -482,10 +482,14 @@ function GangService:Invite(leader: Player, targetUserId: any): (boolean, string
 	if targetGang then
 		return false, "ALREADY_IN_A_GANG"
 	end
-	-- Target reconciliation yields on its shared record. The inviter must still
-	-- be the same live profile before their authority is used to mutate the
-	-- target's inbox.
-	if not self:_sessionIsCurrent(leader, leaderSession) then
+	-- Target reconciliation yields on its shared record. Both sides of the
+	-- invitation must still be the exact live profile sessions before the target
+	-- inbox is mutated: PlayerRemoving may have completed the target's release
+	-- while this worker was waiting on shared storage.
+	if
+		not self:_sessionIsCurrent(leader, leaderSession)
+		or not self:_sessionIsCurrent(target, targetSession)
+	then
 		return false, "PROFILE_UNAVAILABLE"
 	end
 	for _, invite in targetSession.Profile.GangInvites do
