@@ -23,6 +23,7 @@ local DispatchPolicy = require(Shared.DispatchPolicy)
 local PhoneValidator = require(Shared.PhoneValidator)
 local PayloadInspector = require(Shared.PayloadInspector)
 local ResponseInspector = require(Shared.ResponseInspector)
+local NetworkRetryPolicy = require(Shared.NetworkRetryPolicy)
 local MoneyDropPolicy = require(Shared.MoneyDropPolicy)
 local Coalescer = require(Shared.Coalescer)
 local Fuel = require(Shared.FuelConsumption)
@@ -383,6 +384,34 @@ H.test("remote response inspector bounds data while preserving waypoints", funct
 	local instance = Instance.new("Folder")
 	H.expect(not ResponseInspector.validate({ Value = instance }), "Instance response accepted")
 	instance:Destroy()
+end)
+H.test("bank transfer retries retain their key after ambiguous network failures", function()
+	for _, code in
+		{
+			"SERVER_TIMEOUT",
+			"SERVER_ERROR",
+			"SERVER_BUSY",
+			"REQUEST_TIMEOUT",
+			"NETWORK_ERROR",
+			"TRANSFER_IN_PROGRESS",
+			"TRANSFER_SETTLEMENT_PENDING",
+			"TRANSFER_RECOVERY_PENDING",
+			"UNRECOGNISED_FAILURE",
+		}
+	do
+		H.expect(
+			NetworkRetryPolicy.shouldRetainBankTransferId(false, code),
+			"ambiguous failure discarded its bank transfer id: " .. code
+		)
+	end
+	H.expect(
+		not NetworkRetryPolicy.shouldRetainBankTransferId(false, "INSUFFICIENT_FUNDS"),
+		"definitive bank transfer failure retained its key"
+	)
+	H.expect(
+		not NetworkRetryPolicy.shouldRetainBankTransferId(true, "OK"),
+		"successful bank transfer retained its key"
+	)
 end)
 H.test("economy rejects unsafe amounts", function()
 	H.expect(
