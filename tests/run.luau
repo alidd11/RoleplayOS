@@ -522,10 +522,7 @@ H.test("profile migration preserves unreadable authoritative scalar state", func
 
 	for _, case in cases do
 		local migrated, reason = ProfileSchema.migrate(case[1], 42)
-		H.expect(
-			migrated == nil and reason == case[2],
-			case[2] .. " was silently normalised"
-		)
+		H.expect(migrated == nil and reason == case[2], case[2] .. " was silently normalised")
 	end
 end)
 H.test("profile migration still backfills missing authoritative scalar state", function()
