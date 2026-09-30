@@ -14,6 +14,9 @@ end
 
 return function(DataService)
 	function DataService:GetSharedRecord(recordId: string, scopeId: string?): (any?, string?)
+		if not self:_validateSharedRecordScope(scopeId) then
+			return nil, "SHARED_RECORD_LOAD_FAILED"
+		end
 		local storageKey = mockRecordKey(recordId, scopeId)
 		if self.mock then
 			-- Match DataStore semantics: callers receive a detached value. Returning
@@ -47,6 +50,9 @@ return function(DataService)
 		transform: (any?) -> any,
 		scopeId: string?
 	): (any?, string?)
+		if not self:_validateSharedRecordScope(scopeId) then
+			return nil, "SHARED_RECORD_UPDATE_FAILED"
+		end
 		local storageKey = mockRecordKey(recordId, scopeId)
 		if self.mock then
 			-- UpdateAsync gives its transform an isolated deserialised value and the
