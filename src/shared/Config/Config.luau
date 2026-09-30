@@ -377,6 +377,11 @@ local Config = {
 		-- interval so one missed beat does not read as an empty server.
 		OccupancyHeartbeatSeconds = 12,
 		OccupancyLifetimeSeconds = 45,
+		-- The network server picker is presentation data sourced from shared
+		-- stores. Cache it briefly per server so a room full of players opening
+		-- the menu together shares one refresh instead of multiplying quota.
+		-- Join validation remains uncached.
+		DirectoryCacheSeconds = 3,
 		Entries = {
 			-- The whitelisted community. Emergency roles here are held by group
 			-- membership and application, not bought, which is the whole reason
