@@ -386,17 +386,19 @@ H.test("remote response inspector bounds data while preserving waypoints", funct
 	instance:Destroy()
 end)
 H.test("bank transfer retries retain their key after ambiguous network failures", function()
-	for _, code in {
-		"SERVER_TIMEOUT",
-		"SERVER_ERROR",
-		"SERVER_BUSY",
-		"REQUEST_TIMEOUT",
-		"NETWORK_ERROR",
-		"TRANSFER_IN_PROGRESS",
-		"TRANSFER_SETTLEMENT_PENDING",
-		"TRANSFER_RECOVERY_PENDING",
-		"UNRECOGNISED_FAILURE",
-	} do
+	for _, code in
+		{
+			"SERVER_TIMEOUT",
+			"SERVER_ERROR",
+			"SERVER_BUSY",
+			"REQUEST_TIMEOUT",
+			"NETWORK_ERROR",
+			"TRANSFER_IN_PROGRESS",
+			"TRANSFER_SETTLEMENT_PENDING",
+			"TRANSFER_RECOVERY_PENDING",
+			"UNRECOGNISED_FAILURE",
+		}
+	do
 		H.expect(
 			NetworkRetryPolicy.shouldRetainBankTransferId(false, code),
 			"ambiguous failure discarded its bank transfer id: " .. code

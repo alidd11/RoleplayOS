@@ -104,7 +104,9 @@ return function(PhoneController)
 				self:Refresh()
 				return
 			end
-			if not NetworkRetryPolicy.shouldRetainBankTransferId(response.Success, response.Code) then
+			if
+				not NetworkRetryPolicy.shouldRetainBankTransferId(response.Success, response.Code)
+			then
 				self.pendingBankTransferId = nil
 				self.pendingBankTransferFingerprint = nil
 			end
