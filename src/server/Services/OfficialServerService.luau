@@ -421,12 +421,15 @@ function OfficialServerService:Directory(): (any?, string?)
 
 	local token = {}
 	self.directoryRefresh = token
-	local ok, snapshot = pcall(function()
-		local publicServers = select(1, self:ListPublicInstances())
+	local ok, snapshot, snapshotReason = pcall(function(): (any?, string?)
+		local publicServers, publicReason = self:ListPublicInstances()
+		if publicReason then
+			return nil, publicReason
+		end
 		return {
 			Servers = self:List(),
 			PublicServers = publicServers,
-		}
+		}, nil
 	end)
 	local stillOwner = self.directoryRefresh == token
 	if stillOwner then
@@ -442,6 +445,16 @@ function OfficialServerService:Directory(): (any?, string?)
 	-- read must not resurrect cache state after teardown.
 	if not stillOwner then
 		return nil, "OFFICIAL_SERVER_UNAVAILABLE"
+	end
+	if not snapshot then
+		-- ListPublicInstances reports ordinary MemoryStore unavailability as a
+		-- returned reason rather than an exception. Never turn that into a
+		-- successful cached empty list: reuse the last snapshot when possible,
+		-- otherwise let the network endpoint return its sanitised failure.
+		if self.directoryCache then
+			return self.directoryCache, nil
+		end
+		return nil, snapshotReason or "OFFICIAL_SERVER_UNAVAILABLE"
 	end
 	self.directoryCache = snapshot
 	self.directoryCacheExpiresAt = os.clock() + cacheSeconds
