@@ -18,6 +18,9 @@ return function(DataService)
 		-- reservations for the same plate using different casing.
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
+		if not self:_checkKey(registrationKey, "CustomRegistrations") then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
 			if
@@ -68,6 +71,9 @@ return function(DataService)
 	): (boolean, string?)
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
+		if not self:_checkKey(registrationKey, "CustomRegistrations") then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
 			if
@@ -137,6 +143,9 @@ return function(DataService)
 	): (boolean, string?)
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
+		if not self:_checkKey(registrationKey, "CustomRegistrations") then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
 			if existing and existing.UserId == userId and existing.VehicleId == vehicleId then
@@ -174,6 +183,9 @@ return function(DataService)
 	): (boolean, string?)
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
+		if not self:_checkKey(registrationKey, "CustomRegistrations") then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
 			if
@@ -215,6 +227,9 @@ return function(DataService)
 	): (boolean, string?)
 		registration = string.upper(registration)
 		local registrationKey = self:_scopedKey(registration)
+		if not self:_checkKey(registrationKey, "CustomRegistrations") then
+			return false, "REGISTRATION_STORE_UNAVAILABLE"
+		end
 		if self.mock then
 			local existing = self.mockRegistrations[registrationKey]
 			if
