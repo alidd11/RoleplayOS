@@ -58,7 +58,6 @@ function DataService:_checkKey(key: string, store: string): boolean
 	return false
 end
 
-
 -- Shared records are global by default because routing/configuration records
 -- genuinely belong to the whole experience. Progression callers may opt into an
 -- official-server scope instead. The scope is separate from the key, preserving
@@ -99,12 +98,8 @@ function DataService:_sharedRecordStoreForScope(scopeId: string?): any?
 		return cached
 	end
 	local scopeName = "wl:" .. scopeId
-	local ok, store = pcall(
-		DataStoreService.GetDataStore,
-		DataStoreService,
-		COMMUNITY_STORE_NAME,
-		scopeName
-	)
+	local ok, store =
+		pcall(DataStoreService.GetDataStore, DataStoreService, COMMUNITY_STORE_NAME, scopeName)
 	if not ok then
 		self.context.Logger:Error("Could not open scoped shared-record store", {
 			ScopeId = scopeId,
