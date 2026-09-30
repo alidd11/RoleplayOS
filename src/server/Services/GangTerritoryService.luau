@@ -150,7 +150,9 @@ function GangTerritoryService:_seedMirror(territoryId: string)
 	if not territory then
 		return
 	end
-	local owners = self.context.Services:Get("DataService"):GetScopedSharedRecord(self.sharedScope, TERRITORY_OWNERS_RECORD)
+	local owners = self.context.Services
+		:Get("DataService")
+		:GetScopedSharedRecord(self.sharedScope, TERRITORY_OWNERS_RECORD)
 	-- The shared-record read yields. The territory may have been untagged or
 	-- removed while it was in flight, so never write the mirror onto stale state.
 	if self.territories[territoryId] ~= territory then
@@ -193,16 +195,20 @@ function GangTerritoryService:_reconcilePendingOwnerPointers(
 			and (operationId == nil or entry.OperationId == operationId)
 		then
 			local gangId = entry.GangId
-			local _, reason = dataService:UpdateScopedSharedRecord(self.sharedScope, gangKey(gangId), function(gang)
-				if type(gang) == "table" then
-					if gangId == currentGangId then
-						gang.TerritoryId = territoryId
-					elseif gang.TerritoryId == territoryId then
-						gang.TerritoryId = nil
+			local _, reason = dataService:UpdateScopedSharedRecord(
+				self.sharedScope,
+				gangKey(gangId),
+				function(gang)
+					if type(gang) == "table" then
+						if gangId == currentGangId then
+							gang.TerritoryId = territoryId
+						elseif gang.TerritoryId == territoryId then
+							gang.TerritoryId = nil
+						end
 					end
+					return gang
 				end
-				return gang
-			end)
+			)
 			if reason then
 				allSucceeded = false
 				self.context.Logger:Warning("Gang territory pointer reconciliation failed", {
@@ -218,7 +224,8 @@ function GangTerritoryService:_reconcilePendingOwnerPointers(
 	if next(completed) == nil then
 		return allSucceeded
 	end
-	local _, cleanupReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
+	local _, cleanupReason = dataService:UpdateScopedSharedRecord(
+		self.sharedScope,
 		TERRITORY_OWNERS_RECORD,
 		function(owners)
 			if type(owners) ~= "table" then
@@ -509,7 +516,8 @@ function GangTerritoryService:SetOwner(territoryId: string, newGangId: string?):
 	local dataService = self.context.Services:Get("DataService")
 	local changedAt = os.time()
 	local operationId = HttpService:GenerateGUID(false)
-	local storedOwners, ownersReason = dataService:UpdateScopedSharedRecord(self.sharedScope, 
+	local storedOwners, ownersReason = dataService:UpdateScopedSharedRecord(
+		self.sharedScope,
 		TERRITORY_OWNERS_RECORD,
 		function(owners)
 			owners = if type(owners) == "table" then owners else {}
