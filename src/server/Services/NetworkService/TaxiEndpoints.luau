@@ -90,8 +90,10 @@ return function(self: any)
 		function(player, payload, requestId)
 			local taxi, reason =
 				self.context.Services:Get("TaxiService"):Complete(player, payload.RequestId)
-			local messages =
-				{ INSUFFICIENT_FUNDS = "The passenger no longer has enough money for this fare." }
+			local messages = {
+				INSUFFICIENT_FUNDS = "The passenger no longer has enough money for this fare.",
+				TAXI_COMPLETION_IN_PROGRESS = "This taxi fare is already being processed.",
+			}
 			return {
 				Success = taxi ~= nil,
 				Code = if taxi then "OK" else reason,
@@ -114,6 +116,9 @@ return function(self: any)
 				Code = if cancelled then "OK" else reason,
 				Message = if cancelled
 					then "Taxi booking cancelled."
+					elseif
+						reason == "TAXI_COMPLETION_IN_PROGRESS"
+					then "The fare is already being processed. Wait for it to finish."
 					else "The taxi booking could not be cancelled.",
 				RequestId = requestId,
 			}
