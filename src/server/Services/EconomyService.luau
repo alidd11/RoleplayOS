@@ -381,23 +381,26 @@ function EconomyService:ReconcilePendingTransfers()
 
 			local _, recordReason
 			if embeddedRecord then
-				_, recordReason = data:UpdateSharedRecord("pending-transfer-index", function(existing)
-					if type(existing) ~= "table" then
+				_, recordReason = data:UpdateSharedRecord(
+					"pending-transfer-index",
+					function(existing)
+						if type(existing) ~= "table" then
+							return existing
+						end
+						for _, currentEntry in existing do
+							if pendingTransferEntryId(currentEntry) == id then
+								local currentRecord = pendingTransferEntryRecord(currentEntry)
+								if currentRecord then
+									currentRecord.Status = "Reconciled"
+									currentRecord.ReconciledAt = os.time()
+									currentRecord.RefundTransactionId = refundTransactionId
+								end
+								break
+							end
+						end
 						return existing
 					end
-					for _, currentEntry in existing do
-						if pendingTransferEntryId(currentEntry) == id then
-							local currentRecord = pendingTransferEntryRecord(currentEntry)
-							if currentRecord then
-								currentRecord.Status = "Reconciled"
-								currentRecord.ReconciledAt = os.time()
-								currentRecord.RefundTransactionId = refundTransactionId
-							end
-							break
-						end
-					end
-					return existing
-				end)
+				)
 			else
 				_, recordReason = data:UpdateSharedRecord(id, function(existing)
 					if type(existing) == "table" then
