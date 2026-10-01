@@ -16,7 +16,7 @@ Closed dispatch calls are projected in two durable steps: the incident record fi
 
 Incident creation requires `IncidentWrite` both before and after title filtering. The department recorded on the incident comes from the post-filter authorised duty snapshot, so a request that lost duty, role permission or its live player session while moderation yielded is rejected before persistence.
 
-Recent-incident index rows carry the durable record revision. Index transforms reject older revisions, and a closed row (including a legacy row without a revision) cannot be overwritten by a delayed open projection after another worker or server has indexed closure.
+Recent-incident index rows carry the durable record revision. Index transforms reject older revisions, and a closed row (including a legacy row without a revision) cannot be overwritten by a delayed open projection after another worker or server has indexed closure. Ignored projections still remove malformed rows and enforce the configured recent-index cap, retaining the newest creation timestamps with the existing ID tie-break; a protected row receives no exemption from retention.
 
 Manual incident closure performs one authoritative record update and then projects that committed record to the recent-incidents index. Closing an already-closed incident is idempotent: retries preserve the original closure actor, timestamp and revision, allowing a failed index projection to be repaired without rewriting closure history.
 

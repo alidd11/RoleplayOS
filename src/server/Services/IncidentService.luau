@@ -154,6 +154,7 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 			local index = if type(existing) == "table" then existing else { Entries = {} }
 			index.Entries = if type(index.Entries) == "table" then index.Entries else {}
 			local current = index.Entries[incident.IncidentId]
+			local preserveCurrent = false
 			-- Record and index writes yield independently. A delayed open projection
 			-- must not undo a closure another worker/server has already indexed.
 			-- Older rows have no revision, but Closed is terminal for them too.
@@ -168,19 +169,23 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 					currentRevision > incomingRevision
 					or (current.Status == "Closed" and incident.Status ~= "Closed")
 				then
-					return index
+					preserveCurrent = true
 				end
 			end
-			index.Entries[incident.IncidentId] = {
-				IncidentId = incident.IncidentId,
-				Title = incident.Title,
-				Status = incident.Status,
-				Revision = incident.Revision,
-				CreatedAt = incident.CreatedAt,
-				ClosedAt = incident.ClosedAt,
-				DepartmentIds = table.clone(incident.DepartmentIds or {}),
-				UpdatedAt = os.time(),
-			}
+			if not preserveCurrent then
+				index.Entries[incident.IncidentId] = {
+					IncidentId = incident.IncidentId,
+					Title = incident.Title,
+					Status = incident.Status,
+					Revision = incident.Revision,
+					CreatedAt = incident.CreatedAt,
+					ClosedAt = incident.ClosedAt,
+					DepartmentIds = table.clone(incident.DepartmentIds or {}),
+					UpdatedAt = os.time(),
+				}
+			end
+			-- Ignoring a stale projection protects the current row, but must not
+			-- bypass malformed-row cleanup or the index's configured retention cap.
 			local candidates = {}
 			for id, entry in index.Entries do
 				if validRecentIndexEntry(entry) then
