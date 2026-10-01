@@ -667,8 +667,9 @@ function TaxiService:Start()
 			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
 			for requestId, request in self.requests do
 				local settlementPending = request.SettlementPending == true
-				local terminal =
-					request.State == "Completed" or request.State == "Cancelled" or settlementPending
+				local terminal = request.State == "Completed"
+					or request.State == "Cancelled"
+					or settlementPending
 				local timestamp = tonumber(
 					request.SettlementPendingAt
 						or request.CompletedAt
@@ -680,7 +681,10 @@ function TaxiService:Start()
 						if self.byPassenger[request.PassengerUserId] == requestId then
 							self.byPassenger[request.PassengerUserId] = nil
 						end
-						if request.DriverUserId and self.byDriver[request.DriverUserId] == requestId then
+						if
+							request.DriverUserId
+							and self.byDriver[request.DriverUserId] == requestId
+						then
 							self.byDriver[request.DriverUserId] = nil
 						end
 					end

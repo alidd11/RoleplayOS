@@ -118,8 +118,9 @@ return function(self: any)
 				Code = if cancelled then "OK" else reason,
 				Message = if cancelled
 					then "Taxi booking cancelled."
-					elseif reason == "TAXI_SETTLEMENT_PENDING" then
-						"Fare recovery is pending. Retry completion before cancelling."
+					elseif
+						reason == "TAXI_SETTLEMENT_PENDING"
+					then "Fare recovery is pending. Retry completion before cancelling."
 					elseif
 						reason == "TAXI_COMPLETION_IN_PROGRESS"
 					then "The fare is already being processed. Wait for it to finish."
