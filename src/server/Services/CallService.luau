@@ -1,6 +1,8 @@
 --!strict
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
+local DispatchPolicy = require(ReplicatedStorage.RoleplayOS.Shared.DispatchPolicy)
 local CallService = { calls = {}, revision = 0 }
 function CallService:Init(context: any)
 	self.context = context
@@ -147,7 +149,9 @@ function CallService:AddOperationalNote(
 		DepartmentId = duty.DepartmentId,
 		CreatedAt = os.time(),
 	})
-	local maximumNotes = self.context.Configuration.Dispatch.MaximumOperationalNotes or 50
+	local maximumNotes = DispatchPolicy.operationalNoteLimit(
+		self.context.Configuration.Dispatch.MaximumOperationalNotes
+	)
 	while #call.OperationalNotes > maximumNotes do
 		table.remove(call.OperationalNotes, 1)
 	end
