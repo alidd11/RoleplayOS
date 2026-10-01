@@ -153,10 +153,29 @@ function IncidentService:_indexIncident(incident: any): (boolean, string?)
 		:UpdateMdtIndex("Incident:Recent", function(existing)
 			local index = if type(existing) == "table" then existing else { Entries = {} }
 			index.Entries = if type(index.Entries) == "table" then index.Entries else {}
+			local current = index.Entries[incident.IncidentId]
+			-- Record and index writes yield independently. A delayed open projection
+			-- must not undo a closure another worker/server has already indexed.
+			-- Older rows have no revision, but Closed is terminal for them too.
+			if validRecentIndexEntry(current) then
+				local currentRevision = if finiteNumber(current.Revision)
+					then current.Revision
+					else 0
+				local incomingRevision = if finiteNumber(incident.Revision)
+					then incident.Revision
+					else 0
+				if
+					currentRevision > incomingRevision
+					or (current.Status == "Closed" and incident.Status ~= "Closed")
+				then
+					return index
+				end
+			end
 			index.Entries[incident.IncidentId] = {
 				IncidentId = incident.IncidentId,
 				Title = incident.Title,
 				Status = incident.Status,
+				Revision = incident.Revision,
 				CreatedAt = incident.CreatedAt,
 				ClosedAt = incident.ClosedAt,
 				DepartmentIds = table.clone(incident.DepartmentIds or {}),
