@@ -522,10 +522,8 @@ function RecordIndexService:_scheduleVehicleIndexRepair(
 							if staleBucket == state.Bucket then
 								table.remove(state.StaleBuckets, position)
 							else
-								local removed, removeReason = self:_removeVehicleIndexBucket(
-									staleBucket,
-									vehicleId
-								)
+								local removed, removeReason =
+									self:_removeVehicleIndexBucket(staleBucket, vehicleId)
 								if removed then
 									table.remove(state.StaleBuckets, position)
 								else
@@ -748,7 +746,10 @@ function RecordIndexService:_removeVehicleIndex(
 	return self:_removeVehicleIndexBucket(bucket, vehicleId)
 end
 
-function RecordIndexService:_removeVehicleIndexBucket(bucket: string, vehicleId: string): (boolean, string?)
+function RecordIndexService:_removeVehicleIndexBucket(
+	bucket: string,
+	vehicleId: string
+): (boolean, string?)
 	local _, reason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex(bucket, function(stored)
