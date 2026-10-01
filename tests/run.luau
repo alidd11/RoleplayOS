@@ -1491,6 +1491,71 @@ H.test("incident index rejects delayed projections after closure", function()
 	H.expect(index.Entries.race.Revision == 3, "older closed projection rolled revision backwards")
 end)
 
+H.test("ignored incident projections still clean and cap the recent index", function()
+	for _, case in
+		{
+			{ Status = "Open", Revision = 2, IncomingStatus = "Open", IncomingRevision = 1 },
+			{ Status = "Closed", Revision = 2, IncomingStatus = "Closed", IncomingRevision = 1 },
+			{ Status = "Closed", Revision = 2, IncomingStatus = "Open", IncomingRevision = 3 },
+			{ Status = "Closed", IncomingStatus = "Open", IncomingRevision = 3 },
+		}
+	do
+		local protected = {
+			IncidentId = "race",
+			Title = "Committed incident",
+			Status = case.Status,
+			Revision = case.Revision,
+			ClosedAt = if case.Status == "Closed" then 2 else nil,
+			CreatedAt = 1,
+			DepartmentIds = { "Police" },
+			UpdatedAt = 7,
+		}
+		local older = table.clone(protected)
+		older.IncidentId = "other"
+		-- Equal timestamps exercise the existing deterministic ID tie-break.
+		local index = { Entries = { race = protected, other = older, corrupt = "invalid" } }
+		local service = setmetatable({
+			context = {
+				Configuration = { MDT = { MaximumIncidentIndexEntries = 1 } },
+				Services = {
+					Get = function()
+						return {
+							UpdateMdtIndex = function(_self, _key, transform)
+								index = transform(index)
+								return index, nil
+							end,
+						}
+					end,
+				},
+			},
+		}, { __index = IncidentService })
+		local incoming = table.clone(protected)
+		incoming.Title = "Delayed projection"
+		incoming.Status = case.IncomingStatus
+		incoming.Revision = case.IncomingRevision
+		local indexed, reason = service:_indexIncident(incoming)
+		H.expect(indexed and reason == nil, "ignored projection failed maintenance")
+		H.expect(index.Entries.corrupt == nil, "ignored projection retained a malformed row")
+		H.expect(index.Entries.other == nil, "ignored projection bypassed the cap or ID tie-break")
+		H.expect(index.Entries.race == protected, "ignored projection replaced the committed row")
+		H.expect(protected.Title == "Committed incident", "ignored projection changed title")
+		H.expect(protected.Status == case.Status, "ignored projection changed status")
+		H.expect(protected.Revision == case.Revision, "ignored projection changed revision")
+		H.expect(protected.UpdatedAt == 7, "ignored projection refreshed the row's timestamp")
+		H.expect(
+			protected.ClosedAt == (if case.Status == "Closed" then 2 else nil),
+			"ignored projection lost closure metadata"
+		)
+		-- Protection does not grant special retention: a genuinely newer incident
+		-- still displaces this row, even when the attempted write is ignored.
+		older.CreatedAt = 2
+		index.Entries.other = older
+		service:_indexIncident(incoming)
+		H.expect(index.Entries.race == nil, "protected row bypassed chronological retention")
+		H.expect(index.Entries.other == older, "maintenance evicted the newer incident")
+	end
+end)
+
 H.test("MDT searches refill pages after suppressing stale rows", function()
 	for _, kind in { "Person", "Vehicle" } do
 		local bucket = { Entries = {} }
