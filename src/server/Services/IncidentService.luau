@@ -558,6 +558,9 @@ function IncidentService:Recent(
 	local first = (page - 1) * size + 1
 	local items = {}
 	local total = #entries
+	-- Match person/vehicle search: one stale page must not trigger record reads
+	-- and two cleanup writes for every row in the recent-history index.
+	local maximumCandidate = math.min(#entries, first + size * 2 - 1)
 	local last = math.min(#entries, first + size - 1)
 	local indexPosition = first
 	while indexPosition <= last and #items < size do
@@ -590,7 +593,7 @@ function IncidentService:Recent(
 				-- A confirmed deletion shifts the next recent row into this page's
 				-- vacant slot. Extend the candidate range so this page still returns
 				-- the full page of durable records when a stale row is repaired.
-				last = math.min(#entries, last + 1)
+				last = math.min(maximumCandidate, last + 1)
 			end
 		end
 		indexPosition += 1
