@@ -1706,6 +1706,52 @@ H.test(
 	end
 )
 
+H.test("vehicle registration cleanup preserves the current search bucket", function()
+	local buckets = {}
+	local writes = 0
+	local service = setmetatable({
+		context = {
+			Configuration = { MDT = { MaximumIndexBucketEntries = 10 } },
+			Services = {
+				Get = function()
+					return {
+						UpdateMdtIndex = function(_self, key, transform)
+							writes += 1
+							buckets[key] = transform(buckets[key])
+							return buckets[key], nil
+						end,
+					}
+				end,
+			},
+		},
+	}, { __index = RecordIndexService })
+	local function entry(registration)
+		return {
+			VehicleId = "vehicle",
+			Registration = registration,
+			SearchText = string.lower(registration),
+			UpdatedAt = 1,
+		}
+	end
+	service:_upsertIndex("Vehicle:ab", "vehicle", entry("AB123"))
+	local current = entry("AB999")
+	service:_upsertIndex("Vehicle:ab", "vehicle", current)
+	local beforeCleanup = writes
+	local removed, reason = service:_removeVehicleIndex("AB123", "vehicle", "AB999")
+	H.expect(removed and reason == nil, "same-bucket cleanup failed")
+	H.expect(buckets["Vehicle:ab"].Entries.vehicle == current, "cleanup deleted the new plate")
+	H.expect(writes == beforeCleanup, "same-bucket cleanup spent an unnecessary store write")
+	service:_removeVehicleIndex("ab 123", "vehicle", "AB-999")
+	H.expect(writes == beforeCleanup, "normalised same-bucket cleanup wrote to the store")
+	local nextEntry = entry("CD999")
+	service:_upsertIndex("Vehicle:cd", "vehicle", nextEntry)
+	service:_removeVehicleIndex("AB999", "vehicle", "CD999")
+	H.expect(buckets["Vehicle:ab"].Entries.vehicle == nil, "old bucket was not cleaned")
+	H.expect(buckets["Vehicle:cd"].Entries.vehicle == nextEntry, "new bucket was altered")
+	service:_removeVehicleIndex("AB999", "vehicle", "CD999")
+	H.expect(buckets["Vehicle:cd"].Entries.vehicle == nextEntry, "cleanup retry lost the new row")
+end)
+
 H.test("warrant cache ignores malformed persisted warrant entries and expiries", function()
 	local context = {
 		Configuration = {

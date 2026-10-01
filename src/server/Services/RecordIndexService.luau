@@ -737,10 +737,14 @@ end
 
 function RecordIndexService:_removeVehicleIndex(
 	registration: string,
-	vehicleId: string
+	vehicleId: string,
+	currentRegistration: string
 ): (boolean, string?)
 	local bucket = indexKey("Vehicle", compact(registration))
-	if not bucket then
+	-- Buckets are keyed by a two-character prefix and rows by vehicle ID.
+	-- A same-bucket plate change already replaced the old row with the new one;
+	-- removing it here would delete the current searchable projection.
+	if not bucket or bucket == indexKey("Vehicle", compact(currentRegistration)) then
 		return true, nil
 	end
 	return self:_removeVehicleIndexBucket(bucket, vehicleId)
@@ -955,8 +959,11 @@ function RecordIndexService:ReindexVehicle(
 				rememberStaleVehicleBucket(repair, oldBucket)
 			end
 		else
-			local removed, removalReason =
-				self:_removeVehicleIndex(previousRegistration, vehicle.VehicleId)
+			local removed, removalReason = self:_removeVehicleIndex(
+				previousRegistration,
+				vehicle.VehicleId,
+				vehicle.Registration
+			)
 			if not removed then
 				return false, removalReason
 			end
