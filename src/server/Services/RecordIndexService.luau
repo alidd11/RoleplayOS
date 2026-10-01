@@ -1285,7 +1285,11 @@ function RecordIndexService:SearchPeople(
 	local first = (page - 1) * size + 1
 	local items = {}
 	local total = #matches
-	for index = first, math.min(#matches, first + size - 1) do
+	-- Bound refill pressure to one extra page of candidates per request.
+	local maximumCandidate = math.min(#matches, first + size * 2 - 1)
+	local index = first
+	local last = math.min(#matches, first + size - 1)
+	while index <= last and #items < size do
 		local characterId = matches[index].CharacterId
 		local warrants
 		if includeWarrants == true then
@@ -1320,8 +1324,10 @@ function RecordIndexService:SearchPeople(
 				})
 			elseif deleted then
 				total = math.max(0, total - 1)
+				last = math.min(maximumCandidate, last + 1)
 			end
 		end
+		index += 1
 	end
 	return { Items = items, Page = page, Total = total }, nil
 end
@@ -1354,7 +1360,11 @@ function RecordIndexService:SearchVehicles(
 	local first = (page - 1) * size + 1
 	local items = {}
 	local total = #matches
-	for index = first, math.min(#matches, first + size - 1) do
+	-- Bound refill pressure to one extra page of candidates per request.
+	local maximumCandidate = math.min(#matches, first + size * 2 - 1)
+	local index = first
+	local last = math.min(#matches, first + size - 1)
+	while index <= last and #items < size do
 		local match = matches[index]
 		local keyForRecord = recordKey("Vehicle", match.VehicleId)
 		local record, recordReason = self:_getRecord(keyForRecord)
@@ -1389,6 +1399,7 @@ function RecordIndexService:SearchVehicles(
 			-- claims the row and fresh-reads the durable record again before changing
 			-- shared index state, closing the confirmation-to-delete race.
 			total = math.max(0, total - 1)
+			last = math.min(maximumCandidate, last + 1)
 			local repaired, removalReason = self:_repairStaleVehicleIndex(key, match)
 			if not repaired then
 				self.context.Logger:Warning("Vehicle search could not repair stale index", {
@@ -1426,6 +1437,7 @@ function RecordIndexService:SearchVehicles(
 				UpdatedAt = record.UpdatedAt,
 			})
 		end
+		index += 1
 	end
 	return { Items = items, Page = page, Total = total }, nil
 end

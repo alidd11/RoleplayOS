@@ -1412,6 +1412,82 @@ H.test("incident index rejects delayed projections after closure", function()
 	H.expect(index.Entries.race.Revision == 3, "older closed projection rolled revision backwards")
 end)
 
+H.test("MDT searches refill pages after suppressing stale rows", function()
+	for _, kind in { "Person", "Vehicle" } do
+		local bucket = { Entries = {} }
+		local records = {}
+		for index = 1, 4 do
+			local id = tostring(index)
+			local text = "ab" .. id
+			bucket.Entries[id] = if kind == "Person"
+				then { CharacterId = id, FullName = text, SearchText = text, UpdatedAt = 1 }
+				else { VehicleId = id, Registration = text, SearchText = text, UpdatedAt = 1 }
+			if index > 2 then
+				records[id] = if kind == "Person"
+					then { CharacterId = id, FullName = text }
+					else { VehicleId = id, Registration = text }
+			end
+		end
+		local reads = 0
+		local service = setmetatable({
+			context = {
+				Configuration = { MDT = { PageSize = 2 } },
+				Services = {
+					Get = function()
+						return {
+							GetMdtIndex = function()
+								return bucket, nil
+							end,
+						}
+					end,
+				},
+				Logger = { Warning = function() end },
+			},
+			GetPerson = function(_self, id)
+				reads += 1
+				return records[id], nil
+			end,
+			_getRecord = function(_self, key)
+				reads += 1
+				return records[string.match(key, ":(.+)$")], nil
+			end,
+			_removeStalePersonIndex = function()
+				return true, nil, true
+			end,
+			_repairStaleVehicleIndex = function()
+				return true, nil, true
+			end,
+		}, { __index = RecordIndexService })
+		local result, reason = if kind == "Person"
+			then service:SearchPeople("ab", 1, "Emergency", false)
+			else service:SearchVehicles("ab", 1, false)
+		H.expect(result ~= nil and reason == nil, "search failed during stale-row refill")
+		H.expect(
+			#result.Items == 2,
+			kind .. " search left a page empty despite later valid matches"
+		)
+		H.expect(result.Total == 2, "stale rows still inflated the search total")
+		H.expect(
+			result.Items[1][if kind == "Person" then "CharacterId" else "VehicleId"] == "3"
+				and result.Items[2][if kind == "Person" then "CharacterId" else "VehicleId"]
+					== "4",
+			"refill skipped or reordered valid matches"
+		)
+		H.expect(reads == 4, "refill read candidates more than once")
+		-- A long stale prefix must not turn one search into an entire bucket scan.
+		table.clear(records)
+		bucket.Entries["5"] = if kind == "Person"
+			then { CharacterId = "5", FullName = "ab5", SearchText = "ab5", UpdatedAt = 1 }
+			else { VehicleId = "5", Registration = "ab5", SearchText = "ab5", UpdatedAt = 1 }
+		reads = 0
+		local bounded = if kind == "Person"
+			then service:SearchPeople("ab", 1, "Emergency", false)
+			else service:SearchVehicles("ab", 1, false)
+		H.expect(bounded ~= nil and #bounded.Items == 0, "stale-only search returned a record")
+		H.expect(reads == 4, "refill exceeded one extra page of candidate reads")
+	end
+end)
+
 H.test(
 	"record index upsert removes malformed rows and restores its configured bucket cap",
 	function()
