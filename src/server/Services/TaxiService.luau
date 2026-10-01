@@ -2,7 +2,9 @@
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
+local TaxiSettlementPolicy = require(ReplicatedStorage.RoleplayOS.Shared.TaxiSettlementPolicy)
 
 local TaxiService = {
 	requests = {},
@@ -89,6 +91,7 @@ function TaxiService:_statusFor(player: Player): any?
 		PassengerName = request.PassengerName,
 		DriverName = request.DriverName,
 		IsDriver = request.DriverUserId == player.UserId,
+		SettlementPending = request.SettlementPending == true,
 		CreatedAt = request.CreatedAt,
 	}
 end
@@ -244,16 +247,31 @@ function TaxiService:_cancelRequest(request: any)
 	self:_trimTerminalRequests()
 end
 
+function TaxiService:_markSettlementPending(request: any)
+	if request.SettlementPending ~= true then
+		request.SettlementPendingAt = os.time()
+	end
+	request.SettlementPending = true
+	self:_trimTerminalRequests()
+end
+
 function TaxiService:_trimTerminalRequests()
 	local maximum =
 		math.max(0, math.floor(tonumber(self.settings.MaximumRetainedTerminalRequests) or 200))
 	local terminal: { any } = {}
 	for requestId, request in self.requests do
-		if request.State == "Completed" or request.State == "Cancelled" then
+		if
+			request.State == "Completed"
+			or request.State == "Cancelled"
+			or request.SettlementPending == true
+		then
 			table.insert(terminal, {
 				RequestId = requestId,
 				Timestamp = tonumber(
-					request.CompletedAt or request.CancelledAt or request.CreatedAt
+					request.SettlementPendingAt
+						or request.CompletedAt
+						or request.CancelledAt
+						or request.CreatedAt
 				) or 0,
 			})
 		end
@@ -268,7 +286,17 @@ function TaxiService:_trimTerminalRequests()
 		return a.Timestamp < b.Timestamp
 	end)
 	for index = 1, #terminal - maximum do
-		local requestId = terminal[index].RequestId
+		local entry = terminal[index]
+		local requestId = entry.RequestId
+		local request = self.requests[requestId]
+		if request and request.SettlementPending == true then
+			if self.byPassenger[request.PassengerUserId] == requestId then
+				self.byPassenger[request.PassengerUserId] = nil
+			end
+			if request.DriverUserId and self.byDriver[request.DriverUserId] == requestId then
+				self.byDriver[request.DriverUserId] = nil
+			end
+		end
 		self.requests[requestId] = nil
 		self:_forgetDeclines(requestId)
 	end
@@ -501,21 +529,24 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 	then
 		return nil, "CHARACTER_CHANGED"
 	end
-	local vehicle = self:_activeTaxi(player)
-	if
-		not vehicle
-		or not self:_isSeatedInTaxi(player, vehicle)
-		or not self:_isSeatedInTaxi(passenger, vehicle)
-	then
-		return nil, "TAXI_OCCUPANTS_REQUIRED"
-	end
-	local journeyDistance = (vehicle:GetPivot().Position - request.PickupPosition).Magnitude
-	local minimumDistance = tonumber(self.settings.MinimumJourneyStuds) or 60
-	if journeyDistance < minimumDistance then
-		return nil, "TAXI_JOURNEY_NOT_COMPLETED"
-	end
-	if passengerCharacter.Economy.Balance < request.Fare then
-		return nil, "INSUFFICIENT_FUNDS"
+	local retryingSettlement = request.SettlementPending == true
+	if not retryingSettlement then
+		local vehicle = self:_activeTaxi(player)
+		if
+			not vehicle
+			or not self:_isSeatedInTaxi(player, vehicle)
+			or not self:_isSeatedInTaxi(passenger, vehicle)
+		then
+			return nil, "TAXI_OCCUPANTS_REQUIRED"
+		end
+		local journeyDistance = (vehicle:GetPivot().Position - request.PickupPosition).Magnitude
+		local minimumDistance = tonumber(self.settings.MinimumJourneyStuds) or 60
+		if journeyDistance < minimumDistance then
+			return nil, "TAXI_JOURNEY_NOT_COMPLETED"
+		end
+		if passengerCharacter.Economy.Balance < request.Fare then
+			return nil, "INSUFFICIENT_FUNDS"
+		end
 	end
 	-- Fare settlement persists both profiles and yields. Claim the request before
 	-- crossing that boundary so a retry cannot start another completion and
@@ -538,17 +569,30 @@ function TaxiService:Complete(player: Player, requestId: any): (any?, string?)
 		self.completing[requestId] = nil
 	end
 	if not settlementOk then
-		if completion.CancelOnFailure and request.State == "Accepted" then
-			self:_cancelRequest(request)
-		end
+		-- An exception may have happened after the journal became durable. Keep the
+		-- completed journey retryable rather than cancelling a fare recovery can settle.
+		self:_markSettlementPending(request)
 		error(settled)
 	end
 	if not settled then
-		if completion.CancelOnFailure and request.State == "Accepted" then
+		local keepPending = TaxiSettlementPolicy.shouldKeepFarePending(false, settlementReason)
+		if keepPending then
+			self:_markSettlementPending(request)
+		else
+			request.SettlementPending = nil
+			request.SettlementPendingAt = nil
+		end
+		if
+			completion.CancelOnFailure
+			and request.State == "Accepted"
+			and not request.SettlementPending
+		then
 			self:_cancelRequest(request)
 		end
 		return nil, settlementReason
 	end
+	request.SettlementPending = nil
+	request.SettlementPendingAt = nil
 	request.State = "Completed"
 	request.CompletedAt = os.time()
 	-- PayTaxiFare persists both profiles and therefore yields. Clear only the
@@ -585,6 +629,9 @@ function TaxiService:Cancel(player: Player, requestId: any): (boolean, string?)
 	then
 		return false, "TAXI_REQUEST_UNAVAILABLE"
 	end
+	if request.SettlementPending then
+		return false, "TAXI_SETTLEMENT_PENDING"
+	end
 	if self.completing[requestId] then
 		return false, "TAXI_COMPLETION_IN_PROGRESS"
 	end
@@ -619,11 +666,28 @@ function TaxiService:Start()
 			end
 			local cutoff = os.time() - (tonumber(self.settings.RequestRetentionSeconds) or 900)
 			for requestId, request in self.requests do
-				local terminal = request.State == "Completed" or request.State == "Cancelled"
+				local settlementPending = request.SettlementPending == true
+				local terminal = request.State == "Completed"
+					or request.State == "Cancelled"
+					or settlementPending
 				local timestamp = tonumber(
-					request.CompletedAt or request.CancelledAt or request.CreatedAt
+					request.SettlementPendingAt
+						or request.CompletedAt
+						or request.CancelledAt
+						or request.CreatedAt
 				) or os.time()
 				if terminal and timestamp < cutoff then
+					if settlementPending then
+						if self.byPassenger[request.PassengerUserId] == requestId then
+							self.byPassenger[request.PassengerUserId] = nil
+						end
+						if
+							request.DriverUserId
+							and self.byDriver[request.DriverUserId] == requestId
+						then
+							self.byDriver[request.DriverUserId] = nil
+						end
+					end
 					self.requests[requestId] = nil
 					self:_forgetDeclines(requestId)
 				end
