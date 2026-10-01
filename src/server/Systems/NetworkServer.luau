@@ -67,6 +67,12 @@ local function releaseActiveSlot(self: any, requestId: string, slot: any): boole
 		self.activeSlots[requestId] = nil
 	end
 	self.activeTotal = math.max(0, self.activeTotal - 1)
+	if type(inFlight) == "table" and next(inFlight) == nil then
+		local userId = slot.UserId
+		if self.active[userId] == inFlight then
+			self.active[userId] = nil
+		end
+	end
 	return true
 end
 
@@ -102,14 +108,10 @@ function NetworkServer.new(config: any, logger: any)
 			config.GlobalRefillPerSecond or 10
 		),
 	}, NetworkServer)
-	self.playerRemoving = Players.PlayerRemoving:Connect(function(player)
-		local key = tostring(player.UserId)
-		self.globalLimiter:Remove(key)
-		for _, limiter in self.limiters do
-			limiter:Remove(key)
-		end
-		self.active[player.UserId] = nil
-	end)
+	-- Token buckets intentionally survive PlayerRemoving so a quick reconnect
+	-- cannot reset the user's global or endpoint cooldowns. RateLimiter prunes
+	-- these idle entries after its bounded TTL. Active request maps are instead
+	-- removed by releaseActiveSlot when their final handler completes or expires.
 	return self
 end
 
@@ -400,9 +402,6 @@ end
 
 function NetworkServer:Destroy()
 	self:BeginShutdown()
-	if self.playerRemoving then
-		self.playerRemoving:Disconnect()
-	end
 	for _, limiter in self.limiters do
 		for _, player in Players:GetPlayers() do
 			limiter:Remove(tostring(player.UserId))
