@@ -137,7 +137,7 @@ if RunService:IsStudio() then
 				},
 			}
 		end)
-		local search = select(1, recordIndex:SearchPeople("zzacceptance", 1))
+		local search = select(1, recordIndex:SearchPeople("zzacceptance", 1, "Emergency", false))
 		check(
 			search ~= nil and search.Total == 1 and search.Items[1].CharacterId == characterId,
 			"mdt.offline-index",
@@ -148,7 +148,7 @@ if RunService:IsStudio() then
 			"mdt.warrant-redaction",
 			"person search hides warrant data without WarrantRead"
 		)
-		local warrantSearch = select(1, recordIndex:SearchPeople("zzacceptance", 1, true))
+		local warrantSearch = select(1, recordIndex:SearchPeople("zzacceptance", 1, "Police", true))
 		check(
 			warrantSearch ~= nil
 				and #warrantSearch.Items[1].Warrants == 1
