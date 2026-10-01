@@ -413,6 +413,24 @@ H.test("bank transfer retries retain their key after ambiguous network failures"
 		"successful bank transfer retained its key"
 	)
 end)
+H.test("ambiguous bank transfer retries cannot change transaction details", function()
+	H.expect(
+		NetworkRetryPolicy.canReusePendingBankTransfer(nil, "alice:50"),
+		"a new bank transfer was blocked"
+	)
+	H.expect(
+		NetworkRetryPolicy.canReusePendingBankTransfer("alice:50", "alice:50"),
+		"retrying the original bank transfer was blocked"
+	)
+	H.expect(
+		not NetworkRetryPolicy.canReusePendingBankTransfer("alice:50", "bob:50"),
+		"ambiguous transfer allowed a changed recipient"
+	)
+	H.expect(
+		not NetworkRetryPolicy.canReusePendingBankTransfer("alice:50", "alice:75"),
+		"ambiguous transfer allowed a changed amount"
+	)
+end)
 H.test("economy rejects unsafe amounts", function()
 	H.expect(
 		not Economy.amount(0) and not Economy.amount(0 / 0) and not Economy.amount(math.huge),
