@@ -1338,6 +1338,62 @@ H.test(
 	end
 )
 
+H.test("incident index rejects delayed projections after closure", function()
+	local index = { Entries = {} }
+	local retryTransform
+	local dataService = {
+		UpdateMdtIndex = function(_self, _key, transform)
+			retryTransform = transform
+			index = transform(index)
+			return index, nil
+		end,
+	}
+	local service = setmetatable({
+		context = {
+			Configuration = { MDT = { MaximumIncidentIndexEntries = 10 } },
+			Services = {
+				Get = function()
+					return dataService
+				end,
+			},
+		},
+	}, { __index = IncidentService })
+	local open = {
+		IncidentId = "race",
+		Title = "Original incident",
+		Status = "Open",
+		CreatedAt = 1,
+		DepartmentIds = { "Police" },
+		Revision = 1,
+	}
+	service:_indexIncident(open)
+	local delayedTransform = retryTransform
+	local closed = table.clone(open)
+	closed.Status = "Closed"
+	closed.ClosedAt = 2
+	closed.Revision = 2
+	service:_indexIncident(closed)
+	-- Replay the old transform against the newer committed row, as UpdateAsync
+	-- does after a conflict or an ambiguous-write retry.
+	index = delayedTransform(index)
+	H.expect(index.Entries.race.Status == "Closed", "delayed projection reopened closed history")
+	H.expect(index.Entries.race.Revision == 2, "delayed projection lost the newer revision")
+	H.expect(index.Entries.race.ClosedAt == 2, "delayed projection lost the closure timestamp")
+	index.Entries.race.Revision = nil
+	service:_indexIncident(open)
+	H.expect(index.Entries.race.Status == "Closed", "legacy closed row was reopened")
+	local newer = table.clone(closed)
+	newer.Revision = 3
+	newer.Title = "Newer durable revision"
+	service:_indexIncident(newer)
+	service:_indexIncident(closed)
+	H.expect(
+		index.Entries.race.Title == newer.Title,
+		"older closed projection replaced newer revision"
+	)
+	H.expect(index.Entries.race.Revision == 3, "older closed projection rolled revision backwards")
+end)
+
 H.test(
 	"record index upsert removes malformed rows and restores its configured bucket cap",
 	function()
