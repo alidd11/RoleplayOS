@@ -7,6 +7,7 @@ local Access = require(Shared.AccessEvaluator)
 local RateLimiter = require(Shared.RateLimiter)
 local Economy = require(Shared.EconomyValidator)
 local SettlementPolicy = require(Shared.TransferSettlementPolicy)
+local TaxiSettlementPolicy = require(Shared.TaxiSettlementPolicy)
 local Characters = require(Shared.CharacterValidator)
 local ConfigValidator = require(Shared.ConfigValidator)
 local Registration = require(Shared.RegistrationGenerator)
@@ -39,6 +40,7 @@ local RecordIndexService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.RecordIndexService)
 local WarrantService =
 	require(game:GetService("ServerScriptService").RoleplayOS.Services.WarrantService)
+local TaxiService = require(game:GetService("ServerScriptService").RoleplayOS.Services.TaxiService)
 
 H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(MoneyDropPolicy.validateAmount(1, 1, 1000), "minimum cash drop refused")
@@ -52,6 +54,65 @@ H.test("cash drops require bounded whole pound amounts", function()
 	H.expect(not excessive and excessiveReason == "DROP_TOO_LARGE", "oversized drop accepted")
 	local nonFinite = MoneyDropPolicy.validateAmount(0 / 0, 1, 1000)
 	H.expect(not nonFinite, "non-finite drop accepted")
+end)
+H.test("ambiguous taxi fare failures remain pending but definitive no-funds may cancel", function()
+	H.expect(
+		TaxiSettlementPolicy.shouldKeepFarePending(false, "TRANSFER_SETTLEMENT_PENDING"),
+		"committed pending fare was treated as cancelled"
+	)
+	H.expect(
+		TaxiSettlementPolicy.shouldKeepFarePending(false, "SHARED_RECORD_UPDATE_FAILED"),
+		"ambiguous persistence failure was treated as cancelled"
+	)
+	H.expect(
+		not TaxiSettlementPolicy.shouldKeepFarePending(false, "INSUFFICIENT_FUNDS"),
+		"definitively unaffordable fare remained pending"
+	)
+	H.expect(
+		not TaxiSettlementPolicy.shouldKeepFarePending(true, nil),
+		"successful fare remained pending"
+	)
+end)
+H.test("unresolved taxi fare cannot be cancelled", function()
+	local request: any = {
+		RequestId = "taxi-test",
+		PassengerUserId = 10,
+		DriverUserId = 20,
+		State = "Accepted",
+		SettlementPending = true,
+	}
+	local service: any = setmetatable({
+		requests = { [request.RequestId] = request },
+		completing = {},
+		byPassenger = {},
+		byDriver = {},
+	}, { __index = TaxiService })
+	local testPlayer: any = { UserId = 10 }
+	local cancelled, reason = TaxiService.Cancel(service, testPlayer, request.RequestId)
+	H.expect(not cancelled, "unresolved taxi fare was cancelled")
+	H.expect(reason == "TAXI_SETTLEMENT_PENDING", "wrong unresolved fare refusal")
+	H.expect(request.State == "Accepted", "unresolved journey became cancelled")
+end)
+H.test("old taxi settlement-pending bookings release bounded runtime claims", function()
+	local request: any = {
+		RequestId = "taxi-expired",
+		PassengerUserId = 10,
+		DriverUserId = 20,
+		State = "Accepted",
+		SettlementPending = true,
+		SettlementPendingAt = 1,
+	}
+	local service: any = setmetatable({
+		requests = { [request.RequestId] = request },
+		byPassenger = { [10] = request.RequestId },
+		byDriver = { [20] = request.RequestId },
+		declined = {},
+		settings = { MaximumRetainedTerminalRequests = 0 },
+	}, { __index = TaxiService })
+	TaxiService._trimTerminalRequests(service)
+	H.expect(service.requests[request.RequestId] == nil, "pending taxi booking exceeded its bound")
+	H.expect(service.byPassenger[10] == nil, "expired pending booking retained passenger claim")
+	H.expect(service.byDriver[20] == nil, "expired pending booking retained driver claim")
 end)
 H.test("transfer settlement replay IDs and acknowledgement transitions are stable", function()
 	H.expect(

@@ -93,6 +93,8 @@ return function(self: any)
 			local messages = {
 				INSUFFICIENT_FUNDS = "The passenger no longer has enough money for this fare.",
 				TAXI_COMPLETION_IN_PROGRESS = "This taxi fare is already being processed.",
+				TRANSFER_SETTLEMENT_PENDING = "Fare recovery is pending. Retry completion before cancelling.",
+				TRANSFER_RECOVERY_PENDING = "An economy recovery is pending. Retry fare completion shortly.",
 			}
 			return {
 				Success = taxi ~= nil,
@@ -116,6 +118,8 @@ return function(self: any)
 				Code = if cancelled then "OK" else reason,
 				Message = if cancelled
 					then "Taxi booking cancelled."
+					elseif reason == "TAXI_SETTLEMENT_PENDING" then
+						"Fare recovery is pending. Retry completion before cancelling."
 					elseif
 						reason == "TAXI_COMPLETION_IN_PROGRESS"
 					then "The fare is already being processed. Wait for it to finish."
