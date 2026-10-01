@@ -624,7 +624,10 @@ H.test("dispatch operational-note limits are finite and bounded", function()
 		DispatchPolicy.operationalNoteLimit(math.huge) == 200,
 		"infinite note limit was unbounded"
 	)
-	H.expect(DispatchPolicy.operationalNoteLimit("invalid") == 50, "invalid note limit lost fallback")
+	H.expect(
+		DispatchPolicy.operationalNoteLimit("invalid") == 50,
+		"invalid note limit lost fallback"
+	)
 end)
 H.test("economy transaction and transfer receipt histories are bounded", function()
 	local candidate = table.clone(Config)
