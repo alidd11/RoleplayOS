@@ -763,7 +763,7 @@ function RecordIndexService:_removeVehicleIndexBucket(
 	if reason then
 		self.context.Logger:Warning("Stale vehicle index removal failed", {
 			VehicleId = vehicleId,
-			Registration = registration,
+			Bucket = bucket,
 			Error = reason,
 		})
 		return false, reason
