@@ -1458,9 +1458,12 @@ H.test("MDT searches refill pages after suppressing stale rows", function()
 				return true, nil, true
 			end,
 		}, { __index = RecordIndexService })
-		local result, reason = if kind == "Person"
-			then service:SearchPeople("ab", 1, "Emergency", false)
-			else service:SearchVehicles("ab", 1, false)
+		local result, reason
+		if kind == "Person" then
+			result, reason = service:SearchPeople("ab", 1, "Emergency", false)
+		else
+			result, reason = service:SearchVehicles("ab", 1, false)
+		end
 		H.expect(result ~= nil and reason == nil, "search failed during stale-row refill")
 		H.expect(
 			#result.Items == 2,
