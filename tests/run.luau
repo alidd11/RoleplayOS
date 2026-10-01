@@ -1556,6 +1556,82 @@ H.test("ignored incident projections still clean and cap the recent index", func
 	end
 end)
 
+H.test("incident history refills stale rows within one extra candidate page", function()
+	for _, staleCount in { 2, 5 } do
+		local index = { Entries = {} }
+		local records = {}
+		for position = 1, 6 do
+			local id = tostring(position)
+			local row = {
+				IncidentId = id,
+				Title = "Incident " .. id,
+				Status = "Closed",
+				CreatedAt = 7 - position,
+				UpdatedAt = 1,
+				DepartmentIds = { "Police" },
+			}
+			index.Entries[id] = row
+			if position > staleCount then
+				records["Incident:" .. id] = row
+			end
+		end
+		local reads, writes = 0, 0
+		local duty = { DepartmentId = "Police" }
+		local dataService = {
+			GetMdtIndex = function()
+				return index, nil
+			end,
+			GetMdtRecord = function(_self, key)
+				reads += 1
+				return records[key], nil
+			end,
+			UpdateMdtIndex = function(_self, _key, transform)
+				writes += 1
+				index = transform(index)
+				return index, nil
+			end,
+		}
+		local service = setmetatable({
+			running = true,
+			_getReadDuty = function()
+				return duty
+			end,
+			_cacheGet = function()
+				return nil
+			end,
+			_cacheSet = function() end,
+			context = {
+				Configuration = { MDT = { PageSize = 2 } },
+				Services = {
+					Get = function()
+						return dataService
+					end,
+				},
+				Logger = { Warning = function() end },
+			},
+		}, { __index = IncidentService })
+		local result, reason = service:Recent({}, 1, true)
+		H.expect(result ~= nil and reason == nil, "incident refill failed")
+		if staleCount == 2 then
+			H.expect(#result.Items == 2, "incident refill did not fill the available page")
+			H.expect(
+				result.Items[1].IncidentId == "3" and result.Items[2].IncidentId == "4",
+				"incident refill skipped or reordered valid records"
+			)
+			H.expect(result.Total == 4 and reads == 6 and writes == 4, "unexpected refill work")
+		else
+			H.expect(#result.Items == 0, "history scanned beyond the bounded stale prefix")
+			H.expect(result.Total == 2, "unvisited rows were removed from the total")
+			H.expect(reads == 8 and writes == 8, "history exceeded one extra candidate page")
+			H.expect(index.Entries["5"] ~= nil, "history cleaned an unvisited candidate")
+		end
+		local beforeReads, beforeWrites = reads, writes
+		local empty = service:Recent({}, 99, true)
+		H.expect(empty ~= nil and #empty.Items == 0, "out-of-range page was not empty")
+		H.expect(reads == beforeReads and writes == beforeWrites, "empty page spent store work")
+	end
+end)
+
 H.test("MDT searches refill pages after suppressing stale rows", function()
 	for _, kind in { "Person", "Vehicle" } do
 		local bucket = { Entries = {} }
