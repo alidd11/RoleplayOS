@@ -353,6 +353,15 @@ H.test("token bucket limits and refills", function()
 	H.expect(limiter:Allow("a") and limiter:Allow("a") and not limiter:Allow("a"), "capacity wrong")
 	now = 1
 	H.expect(limiter:Allow("a"), "did not refill")
+
+	local reconnectNow = 0
+	local reconnectLimiter = RateLimiter.new(1, 0, function()
+		return reconnectNow
+	end, 10)
+	H.expect(reconnectLimiter:Allow("user"), "initial request was rate limited")
+	H.expect(not reconnectLimiter:Allow("user"), "same user unexpectedly received a new bucket")
+	reconnectNow = 31
+	H.expect(reconnectLimiter:Allow("user"), "expired reconnect bucket was not pruned")
 end)
 H.test("remote payload inspector rejects abusive structures", function()
 	H.expect(PayloadInspector.validate({ Message = "safe", Count = 2 }), "safe payload rejected")
