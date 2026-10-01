@@ -427,6 +427,28 @@ function RecordIndexService:_dropVehicleIndexRepair(vehicleId: string, state: an
 	end
 end
 
+local function setVehicleRepairProjection(state: any, bucket: string, entry: any)
+	if state.Bucket ~= bucket then
+		if not table.find(state.StaleBuckets, state.Bucket) then
+			table.insert(state.StaleBuckets, state.Bucket)
+		end
+		state.Bucket = bucket
+	end
+	for position = #state.StaleBuckets, 1, -1 do
+		if state.StaleBuckets[position] == bucket then
+			table.remove(state.StaleBuckets, position)
+		end
+	end
+	state.Entry = entry
+	state.Generation += 1
+end
+
+local function rememberStaleVehicleBucket(state: any, bucket: string)
+	if bucket ~= state.Bucket and not table.find(state.StaleBuckets, bucket) then
+		table.insert(state.StaleBuckets, bucket)
+	end
+end
+
 function RecordIndexService:_scheduleVehicleIndexRepair(
 	player: Player,
 	vehicleId: string,
@@ -443,9 +465,7 @@ function RecordIndexService:_scheduleVehicleIndexRepair(
 		local existing = self.vehicleIndexRepairs[vehicleId]
 		if existing then
 			existing.Player = player
-			existing.Bucket = bucket
-			existing.Entry = entry
-			existing.Generation += 1
+			setVehicleRepairProjection(existing, bucket, entry)
 			return true
 		end
 
@@ -454,6 +474,7 @@ function RecordIndexService:_scheduleVehicleIndexRepair(
 				Player = player,
 				Bucket = bucket,
 				Entry = entry,
+				StaleBuckets = {},
 				Generation = 1,
 			}
 			self.vehicleIndexRepairs[vehicleId] = state
@@ -486,16 +507,44 @@ function RecordIndexService:_scheduleVehicleIndexRepair(
 					if self.vehicleIndexRepairs[vehicleId] ~= state then
 						break
 					end
-					if indexed and state.Generation == generation then
-						self:_dropVehicleIndexRepair(vehicleId, state)
-						return
-					end
-					if not indexed and state.Generation == generation then
+					if state.Generation ~= generation then
+						rememberStaleVehicleBucket(state, attemptedBucket)
+					elseif not indexed then
 						self.context.Logger:Warning("Vehicle search index repair will retry", {
 							VehicleId = vehicleId,
 							Bucket = attemptedBucket,
 							Error = reason,
 						})
+					else
+						local cleanupFailed = false
+						for position = #state.StaleBuckets, 1, -1 do
+							local staleBucket = state.StaleBuckets[position]
+							if staleBucket == state.Bucket then
+								table.remove(state.StaleBuckets, position)
+							else
+								local removed, removeReason = self:_removeVehicleIndexBucket(
+									staleBucket,
+									vehicleId
+								)
+								if removed then
+									table.remove(state.StaleBuckets, position)
+								else
+									cleanupFailed = true
+									self.context.Logger:Warning(
+										"Stale vehicle repair bucket removal will retry",
+										{
+											VehicleId = vehicleId,
+											Bucket = staleBucket,
+											Error = removeReason,
+										}
+									)
+								end
+							end
+						end
+						if not cleanupFailed and state.Generation == generation then
+							self:_dropVehicleIndexRepair(vehicleId, state)
+							return
+						end
 					end
 				end
 				self:_dropVehicleIndexRepair(vehicleId, state)
@@ -683,7 +732,7 @@ function RecordIndexService:IndexVehicle(
 
 	local pending = self.vehicleIndexRepairs[vehicle.VehicleId]
 	if pending then
-		self:_dropVehicleIndexRepair(vehicle.VehicleId, pending)
+		setVehicleRepairProjection(pending, bucket, entry)
 	end
 	return true, nil, false
 end
@@ -696,6 +745,10 @@ function RecordIndexService:_removeVehicleIndex(
 	if not bucket then
 		return true, nil
 	end
+	return self:_removeVehicleIndexBucket(bucket, vehicleId)
+end
+
+function RecordIndexService:_removeVehicleIndexBucket(bucket: string, vehicleId: string): (boolean, string?)
 	local _, reason = self.context.Services
 		:Get("DataService")
 		:UpdateMdtIndex(bucket, function(stored)
@@ -889,16 +942,23 @@ function RecordIndexService:ReindexVehicle(
 	local indexed, reason, indexDeferred = self:IndexVehicle(player, character, vehicle)
 	if
 		indexed
-		and not indexDeferred
 		and self.running
 		and playerIsCurrent(player)
 		and previousRegistration
 		and compact(previousRegistration) ~= compact(vehicle.Registration)
 	then
-		local removed, removalReason =
-			self:_removeVehicleIndex(previousRegistration, vehicle.VehicleId)
-		if not removed then
-			return false, removalReason
+		if indexDeferred then
+			local oldBucket = indexKey("Vehicle", compact(previousRegistration))
+			local repair = self.vehicleIndexRepairs[vehicle.VehicleId]
+			if oldBucket and repair then
+				rememberStaleVehicleBucket(repair, oldBucket)
+			end
+		else
+			local removed, removalReason =
+				self:_removeVehicleIndex(previousRegistration, vehicle.VehicleId)
+			if not removed then
+				return false, removalReason
+			end
 		end
 	end
 	return indexed, reason
