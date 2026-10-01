@@ -591,8 +591,8 @@ function IncidentService:Recent(
 			elseif deleted then
 				total = math.max(0, total - 1)
 				-- A confirmed deletion shifts the next recent row into this page's
-				-- vacant slot. Extend the candidate range so this page still returns
-				-- the full page of durable records when a stale row is repaired.
+				-- vacant slot. Refill within the bounded candidate range; a long
+				-- stale prefix may leave a short page until later searches clean it.
 				last = math.min(maximumCandidate, last + 1)
 			end
 		end
