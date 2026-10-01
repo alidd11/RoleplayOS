@@ -553,7 +553,10 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or maximumOperationalNotes > 200
 		or maximumOperationalNotes ~= math.floor(maximumOperationalNotes)
 	then
-		table.insert(errors, "Dispatch.MaximumOperationalNotes must be a whole number from 0 to 200")
+		table.insert(
+			errors,
+			"Dispatch.MaximumOperationalNotes must be a whole number from 0 to 200"
+		)
 	end
 	local robbery = config.BankRobbery
 	if
