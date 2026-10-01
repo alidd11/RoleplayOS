@@ -47,11 +47,13 @@ return function(PhoneController)
 		recipient.Size = UDim2.new(0.61, -4, 0, 42)
 		recipient.TextYAlignment = Enum.TextYAlignment.Center
 		recipient.AutomaticSize = Enum.AutomaticSize.None
+		recipient.Text = self.pendingBankTransferRecipient or ""
 		local amount = input(self.content, "Amount")
 		amount.Position = UDim2.new(0.61, 4, 0, 104)
 		amount.Size = UDim2.new(0.39, -4, 0, 42)
 		amount.TextYAlignment = Enum.TextYAlignment.Center
 		amount.AutomaticSize = Enum.AutomaticSize.None
+		amount.Text = self.pendingBankTransferAmount or ""
 		local send = button(self.content, "SEND MONEY", C.Blue)
 		send.Position = UDim2.fromOffset(0, 154)
 		send.Size = UDim2.new(1, 0, 0, 40)
@@ -85,9 +87,27 @@ return function(PhoneController)
 			send.Active = false
 			send.Text = "SENDING…"
 			local fingerprint = string.lower(recipient.Text) .. ":" .. tostring(numericAmount)
+			if
+				not NetworkRetryPolicy.canReusePendingBankTransfer(
+					self.pendingBankTransferFingerprint,
+					fingerprint
+				)
+			then
+				recipient.Text = self.pendingBankTransferRecipient or ""
+				amount.Text = self.pendingBankTransferAmount or ""
+				self.context.Controllers.NotificationController:Show(
+					"A previous transfer may still have completed. Retry it with the original details before starting another.",
+					"Bank"
+				)
+				send.Active = true
+				send.Text = "SEND MONEY"
+				return
+			end
 			if self.pendingBankTransferFingerprint ~= fingerprint then
 				self.pendingBankTransferId = HttpService:GenerateGUID(false)
 				self.pendingBankTransferFingerprint = fingerprint
+				self.pendingBankTransferRecipient = recipient.Text
+				self.pendingBankTransferAmount = amount.Text
 			end
 			local response =
 				self.context.Controllers.NetworkController:Request("PhoneTransferFunds", {
@@ -99,6 +119,8 @@ return function(PhoneController)
 			if response.Success then
 				self.pendingBankTransferId = nil
 				self.pendingBankTransferFingerprint = nil
+				self.pendingBankTransferRecipient = nil
+				self.pendingBankTransferAmount = nil
 				amount.Text = ""
 				recipient.Text = ""
 				self:Refresh()
@@ -109,6 +131,8 @@ return function(PhoneController)
 			then
 				self.pendingBankTransferId = nil
 				self.pendingBankTransferFingerprint = nil
+				self.pendingBankTransferRecipient = nil
+				self.pendingBankTransferAmount = nil
 			end
 			send.Active = true
 			send.Text = "SEND MONEY"

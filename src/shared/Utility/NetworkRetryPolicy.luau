@@ -24,4 +24,11 @@ function NetworkRetryPolicy.shouldRetainBankTransferId(success: any, code: any):
 	return type(code) ~= "string" or definitiveBankTransferFailures[code] ~= true
 end
 
+function NetworkRetryPolicy.canReusePendingBankTransfer(
+	pendingFingerprint: any,
+	currentFingerprint: string
+): boolean
+	return pendingFingerprint == nil or pendingFingerprint == currentFingerprint
+end
+
 return table.freeze(NetworkRetryPolicy)
