@@ -611,6 +611,24 @@ H.test("configuration is coherent", function()
 	local valid, errors = ConfigValidator.validate(Config)
 	H.expect(valid, table.concat(errors, "; "))
 end)
+H.test("dispatch operational-note limits are finite and bounded", function()
+	for _, value in { -1, 1.5, 201, 0 / 0, math.huge } do
+		local candidate = table.clone(Config)
+		candidate.Dispatch = table.clone(Config.Dispatch)
+		candidate.Dispatch.MaximumOperationalNotes = value
+		local valid = ConfigValidator.validate(candidate)
+		H.expect(not valid, "accepted invalid operational-note limit " .. tostring(value))
+	end
+	H.expect(DispatchPolicy.operationalNoteLimit(-1) == 0, "negative note limit was not clamped")
+	H.expect(
+		DispatchPolicy.operationalNoteLimit(math.huge) == 200,
+		"infinite note limit was unbounded"
+	)
+	H.expect(
+		DispatchPolicy.operationalNoteLimit("invalid") == 50,
+		"invalid note limit lost fallback"
+	)
+end)
 H.test("economy transaction and transfer receipt histories are bounded", function()
 	local candidate = table.clone(Config)
 	candidate.Economy = table.clone(Config.Economy)

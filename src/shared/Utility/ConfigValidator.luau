@@ -26,6 +26,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"Properties",
 			"Furniture",
 			"Network",
+			"Dispatch",
 			"Spawns",
 			"Teams",
 			"GroupLinks",
@@ -543,6 +544,19 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 				seen[value] = true
 			end
 		end
+	end
+	local dispatch = if type(config.Dispatch) == "table" then config.Dispatch else {}
+	local maximumOperationalNotes = dispatch.MaximumOperationalNotes
+	if
+		type(maximumOperationalNotes) ~= "number"
+		or maximumOperationalNotes < 0
+		or maximumOperationalNotes > 200
+		or maximumOperationalNotes ~= math.floor(maximumOperationalNotes)
+	then
+		table.insert(
+			errors,
+			"Dispatch.MaximumOperationalNotes must be a whole number from 0 to 200"
+		)
 	end
 	local robbery = config.BankRobbery
 	if
