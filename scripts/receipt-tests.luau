@@ -86,7 +86,7 @@ return function(H: any)
 			Logger = logger,
 			Services = {
 				Get = function(_self, name)
-					return assert(dependencies[name])
+					return assert(dependencies[name], "Unexpected receipt dependency: " .. name)
 				end,
 			},
 		}
