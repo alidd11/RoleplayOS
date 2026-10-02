@@ -30,6 +30,15 @@ jobs:
           printf '%s\n' "$output"
           test "$status" -ne 0
           grep -q RUNNER_EXPECTED_FAILURE <<< "$output"
+      - name: Verify deferred errors fail CI
+        shell: bash
+        run: |
+          status=0
+          output=$(lune run scripts/run-tests.luau --prove-async-failure 2>&1) || status=$?
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep -q 'Async failure probe main thread completed' <<< "$output"
+          grep -q RUNNER_EXPECTED_ASYNC_FAILURE <<< "$output"
       - name: Validate structure
         run: bash scripts/validate-structure.sh
       - name: Build Rojo place
