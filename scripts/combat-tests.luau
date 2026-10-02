@@ -1,4 +1,5 @@
 --!strict
+local fs = require("@lune/fs")
 local Runtime = require("./test-runtime")
 
 return function(H: any)
@@ -137,6 +138,19 @@ return function(H: any)
 		return { Service = pava, Actor = actor, Target = target }
 	end
 
+	local function taserServerSource(): string
+		local asset = fs.readFile("server-assets/Tools/Services/Police/Shared/Taser.rbxmx")
+		local nameMarker = '<string name="Name">RoleplayOSTaserServer</string>'
+		local _, nameEnd = string.find(asset, nameMarker, 1, true)
+		assert(nameEnd, "Taser server script marker is missing")
+		local sourceTag = '<string name="Source">'
+		local _, sourceTagEnd = string.find(asset, sourceTag, nameEnd + 1, true)
+		assert(sourceTagEnd, "Taser server source is missing")
+		local sourceEnd = string.find(asset, "</string>", sourceTagEnd + 1, true)
+		assert(sourceEnd, "Taser server source terminator is missing")
+		return string.sub(asset, sourceTagEnd + 1, sourceEnd - 1)
+	end
+
 	H.test("actual PAVA service rejects a backpack-only canister", function()
 		local f = fixture(false)
 		local sprayed, reason = f.Service:Spray(f.Actor, 2)
@@ -164,4 +178,19 @@ return function(H: any)
 		local sprayed, reason = f.Service:Spray(f.Actor, f.Target.UserId)
 		H.expect(sprayed and reason == nil, "clear PAVA target was refused")
 	end)
+	H.test("Taser server authority covers every configured Taser loadout", function()
+		local runtime = Runtime.new()
+		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		local source = taserServerSource()
+		local trustsServerIssuance = string.find(source, "RoleplayOSDutyIssued", 1, true) ~= nil
+		for loadoutId, loadout in config.Loadouts do
+			if table.find(loadout.ToolIds or {}, "Taser") then
+				H.expect(
+					trustsServerIssuance or string.find(source, loadoutId, 1, true) ~= nil,
+					"Taser server gate denies configured loadout " .. loadoutId
+				)
+			end
+		end
+	end)
+
 end
