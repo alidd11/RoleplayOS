@@ -64,6 +64,10 @@ not establish native text moderation or persisted delivery.
 Economy retention validation rejects infinite, non-whole and missing caps while
 preserving current defaults and single-entry settings. Existing actual-service
 economy tests exercise transaction/replay and settlement-receipt trimming.
+MDT page size and persisted index caps reject non-finite, non-whole and missing
+counts without raising. Current defaults, single-row tuning and page-to-cap
+relationships are covered alongside the existing actual-service index trimming,
+closure protection and bounded refill regressions.
 
 `scripts/audit-tests.luau` exercises actual AuditService ring retention, dropped
 entry counts, chronological batch extraction, failed-flush restoration and
