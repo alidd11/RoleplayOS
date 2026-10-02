@@ -9,6 +9,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: ok-nick/setup-aftman@v0.4.2
@@ -33,3 +34,7 @@ jobs:
         run: bash scripts/validate-structure.sh
       - name: Build Rojo place
         run: mkdir -p build && rojo build default.project.json --output build/RoleplayOS.rbxlx
+      - name: Build acceptance place
+        run: rojo build acceptance.project.json --output build/RoleplayOS-Acceptance.rbxlx
+      - name: Build real-baseplate deployment
+        run: rojo build real-baseplate.project.json --output build/RoleplayOS-RealBaseplate.rbxlx

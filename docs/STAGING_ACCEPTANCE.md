@@ -1,14 +1,18 @@
 # Staging and live-server acceptance
 
-This is the release gate for **Emergency Response: Portsmouth**. Run it against a separate staging place in the same experience before updating the production start place.
+This is the release gate for **Emergency Response: Portsmouth**. Initial persistent and fault-injection acceptance must run in a **separate private test experience**, not merely another place in the production experience. Places in the same experience share DataStores. Concurrent test servers must share that test experience so ownership and persistence contention are exercised without touching production data.
 
 ## Build and installation
 
 1. Build the dedicated test place with `rojo build acceptance.project.json -o RoleplayOS-Acceptance.rbxlx`, or serve `acceptance.project.json` to the staging place through the Rojo Studio plugin.
 2. Copy the production map into the staging place or synchronise the RoleplayOS tree into a private copy of the real baseplate.
-3. Publish the staging place. Enable Studio API access only for controlled Studio testing; published servers use the normal experience DataStores.
+3. Publish only to the private test experience. Verify its experience ID before enabling API access or running persistent tests; its published servers use that test experience's DataStores. Enable Studio API access only for controlled testing against the test experience.
 4. Never synchronise `tests/` or `acceptance.project.json` into the production start place. The normal `default.project.json` does not contain them.
 5. Start a two-client Studio server once for local wiring, then test two published servers concurrently for persistence and isolation.
+
+Record the exact Git SHA, experience ID, place version and configuration used. Rebuild any older staging pack from the accepted SHA before using it. Studio mock fault hooks and headless fixtures are local diagnostics, not real DataStore acceptance.
+
+The previously working Studio/live build is useful baseline evidence. After these fixes, prioritise changed-path regressions: required-service startup, malformed-profile quarantine, settlement retry/recovery, and MDT index maintenance/search. Do not erase earlier evidence, but do not treat it as testing a later build.
 
 The Output window must contain both completion messages:
 
@@ -99,6 +103,6 @@ Release only when:
 1. Both automated suites report zero failures.
 2. Every `GATE`, `DATA`, `PLATE`, `DISP`, `ANPR`, `CUST`, `PHONE`, `SEC` and `ISO` row passes.
 3. Any NOT RUN row has a named owner and explicit written risk acceptance.
-4. The tested place version is the exact version promoted to production.
+4. The release uses the tested Git SHA and reviewed configuration/assets. Test-experience pass/group configuration does not automatically establish production entitlements. The authorised owner must record any production-specific differences and targeted smoke checks; do not automatically promote the test place or its destructive fixtures into production.
 
 Rollback immediately if published production shows profile lease conflicts, duplicate registrations, cross-server information leakage, unfiltered text, unrestricted duties, repeating errors or unbounded resource growth.
