@@ -62,3 +62,11 @@ buffer counts and flush timings also cover refusal, optional absence and clamps.
 entry counts, chronological batch extraction, failed-flush restoration and
 duplicate-ID suppression. DataService and logging are explicit dependency doubles;
 periodic scheduling, engine shutdown and real DataStore writes are not exercised.
+
+`scripts/payroll-tests.luau` exercises actual ProfileSchema migration and
+PayrollService rate/payment methods: malformed employment preservation, unreadable
+job refusal, first-period pay, movement gating, department/rank rates and
+departure/teardown fences across a yielding duty lookup. Player, duty, profile
+access and economy payment are explicit doubles; the physical root uses a Lune
+Instance with an explicit position. Periodic startup/player signals, real duty
+integration, balance persistence and native movement are not acceptance-tested.

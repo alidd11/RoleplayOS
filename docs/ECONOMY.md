@@ -77,6 +77,13 @@ Pay now accrues while a shift is worked and is settled on an interval rather tha
 
 An emergency shift pays by department with a bonus for each rank above the first, so seniority is worth holding. Civilian employment pays less, so the services remain the career path. `BaseWage` on a job is what a completed task is worth and is not treated as an hourly rate; a job may declare an `HourlyRate` of its own.
 
+Civilian payroll selects the newest readable employment row with a configured
+job. Malformed scalar rows and unknown jobs are ignored without deleting or
+rewriting the persisted history. If no usable job remains, no civilian wage is
+paid and its movement mark is cleared. This is a read guard, not a schema repair
+or a change to wage rates. The worker's existing per-player error boundary keeps
+one player's failure from stopping payments for other players.
+
 ### Rates are set from prices
 
 The rates in `Config.Payroll` are derived from what things cost, not from what sounds plausible. Against the starter vehicle at fifteen thousand, an emergency shift buys a first car in roughly six hours of play, the premium saloon in about eighteen and the starter flat in about thirty. That leaves the first purchase reachable in a session or two and property a long-term goal.
