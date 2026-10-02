@@ -6,6 +6,11 @@ local InventoryService = {
 		Sandwich = { StackLimit = 1, Weight = 1 },
 	},
 }
+
+local function validQuantity(value: any): boolean
+	return type(value) == "number" and value > 0 and value % 1 == 0
+end
+
 function InventoryService:Init(context: any)
 	self.context = context
 end
@@ -17,23 +22,30 @@ function InventoryService:Add(
 	quantity: number
 ): (boolean, string?)
 	local definition = self.definitions[definitionId]
-	if not definition or quantity <= 0 or quantity % 1 ~= 0 then
+	if not definition or not validQuantity(quantity) then
 		return false, "INVALID_ITEM"
+	end
+	if quantity > definition.StackLimit then
+		return false, "STACK_LIMIT"
 	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
-	if not character then
+	if type(character) ~= "table" then
 		return false, "CHARACTER_NOT_OWNED"
 	end
-	-- Created rather than assumed. Iterating this directly is what throws on a
-	-- character old enough to predate the field, and a migration protects the
-	-- profiles that pass through it rather than every caller for ever.
-	if type(character.Inventory) ~= "table" then
+	-- Missing legacy containers may be backfilled, but present unreadable data
+	-- must remain available for recovery rather than be overwritten and saved.
+	if character.Inventory == nil then
 		character.Inventory = {}
+	elseif type(character.Inventory) ~= "table" then
+		return false, "INVALID_INVENTORY"
 	end
 	local found
 	for _, item in character.Inventory do
-		if item.DefinitionId == definitionId then
+		if type(item) == "table" and item.DefinitionId == definitionId then
+			if not validQuantity(item.Quantity) then
+				return false, "INVALID_ITEM_STATE"
+			end
 			found = item
 		end
 	end
@@ -63,19 +75,24 @@ function InventoryService:Remove(
 	definitionId: string,
 	quantity: number
 ): (boolean, string?)
-	if quantity <= 0 or quantity % 1 ~= 0 then
+	if not validQuantity(quantity) then
 		return false, "INVALID_ITEM"
 	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
-	if not character then
+	if type(character) ~= "table" then
 		return false, "CHARACTER_NOT_OWNED"
 	end
-	if type(character.Inventory) ~= "table" then
+	if character.Inventory == nil then
 		return false, "NOT_HELD"
+	elseif type(character.Inventory) ~= "table" then
+		return false, "INVALID_INVENTORY"
 	end
 	for index, item in character.Inventory do
-		if item.DefinitionId == definitionId then
+		if type(item) == "table" and item.DefinitionId == definitionId then
+			if not validQuantity(item.Quantity) then
+				return false, "INVALID_ITEM_STATE"
+			end
 			if item.Quantity < quantity then
 				return false, "NOT_ENOUGH"
 			end
@@ -92,8 +109,15 @@ end
 
 -- Whether the character is carrying at least one of something.
 function InventoryService:Has(character: any, definitionId: string): boolean
-	for _, item in character.Inventory or {} do
-		if item.DefinitionId == definitionId and item.Quantity > 0 then
+	if type(character) ~= "table" or type(character.Inventory) ~= "table" then
+		return false
+	end
+	for _, item in character.Inventory do
+		if
+			type(item) == "table"
+			and item.DefinitionId == definitionId
+			and validQuantity(item.Quantity)
+		then
 			return true
 		end
 	end

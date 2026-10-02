@@ -56,6 +56,12 @@ return function(H: any)
 				not added and reason == "INVALID_INVENTORY",
 				"unreadable inventory was replaced"
 			)
+			local removed, removeReason = f.Service:Remove(f.Player, "owned", "Sandwich", 1)
+			H.expect(
+				not removed and removeReason == "INVALID_INVENTORY",
+				"unreadable inventory was consumed"
+			)
+			H.expect(not f.Service:Has(f.Character, "Sandwich"), "unreadable inventory was usable")
 			H.expect(
 				f.Character.Inventory == persisted and f.Dirty() == 0,
 				"damaged source was mutated"
