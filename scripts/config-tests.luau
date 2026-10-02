@@ -80,4 +80,47 @@ return function(H: any)
 			"warning threshold reached the storage ceiling"
 		)
 	end)
+
+	H.test("audit configuration rejects unsafe pending and threshold counts", function()
+		local f = fixture()
+		for field, minimum in { AuditMaximumPendingEntries = 25, AuditFlushThreshold = 1 } do
+			for _, value in { math.huge, -math.huge, 0 / 0, "25", 0, -1, 25.5, minimum - 1 } do
+				H.expect(not f.Validate(field, value), "invalid audit count accepted: " .. field)
+			end
+		end
+	end)
+
+	H.test("audit configuration rejects non-finite flush and shutdown deadlines", function()
+		local f = fixture()
+		for _, field in { "AuditFlushIntervalSeconds", "AuditShutdownFlushSeconds" } do
+			for _, value in { math.huge, -math.huge, 0 / 0, "5", 0, -1 } do
+				H.expect(not f.Validate(field, value), "invalid audit duration accepted: " .. field)
+			end
+		end
+	end)
+
+	H.test(
+		"audit defaults, optional fallbacks and service clamp boundaries remain valid",
+		function()
+			local f = fixture()
+			for _, field in
+				{
+					"AuditMaximumPendingEntries",
+					"AuditFlushThreshold",
+					"AuditFlushIntervalSeconds",
+					"AuditShutdownFlushSeconds",
+				}
+			do
+				H.expect(f.Validate(field, nil), "audit fallback refused: " .. field)
+			end
+			H.expect(f.Validate("AuditMaximumPendingEntries", 25), "small pending buffer refused")
+			H.expect(f.Validate("AuditFlushThreshold", 1), "immediate burst threshold refused")
+			H.expect(f.Validate("AuditFlushThreshold", 600), "clamped threshold refused")
+			H.expect(f.Validate("AuditFlushIntervalSeconds", 0.5), "clamped interval refused")
+			H.expect(
+				f.Validate("AuditShutdownFlushSeconds", 0.5),
+				"clamped shutdown budget refused"
+			)
+		end
+	)
 end
