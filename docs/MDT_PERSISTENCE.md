@@ -6,6 +6,13 @@ Person and vehicle searches derive the search permission, department access prof
 
 ## Stores
 
+Startup requires `PageSize`, `MaximumIndexBucketEntries` and
+`MaximumIncidentIndexEntries` to be finite whole numbers of at least one. Each
+index cap must still accommodate a full page. Non-finite values cannot disable
+persisted retention or bypass pagination checks, and a missing page size is
+refused without an invalid comparison. Existing defaults and valid finite tuning
+are unchanged.
+
 - `RoleplayOS_MDTRecords_v1` stores person records by stable character ID and vehicle records by stable vehicle ID.
 - `RoleplayOS_MDTIndexes_v1` stores bounded two-character buckets for filtered first/last-name tokens and normalised registrations.
 - Player profiles remain authoritative for player-owned economy and gameplay state. MDT snapshots are an operational projection, updated idempotently after character, vehicle, custody and road-safety mutations.

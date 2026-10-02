@@ -432,7 +432,8 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	end
 	if
 		type(config.MDT) ~= "table"
-		or type(config.MDT.MaximumIndexBucketEntries) ~= "number"
+		or not wholeNumber(config.MDT.PageSize, 1)
+		or not wholeNumber(config.MDT.MaximumIndexBucketEntries, 1)
 		or config.MDT.MaximumIndexBucketEntries < config.MDT.PageSize
 		or type(config.MDT.RecordCacheSeconds) ~= "number"
 		or config.MDT.RecordCacheSeconds < 0
@@ -454,7 +455,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		or config.MDT.MaximumWarrantReasonLength < 20
 		or type(config.MDT.MaximumWarrantDurationDays) ~= "number"
 		or config.MDT.MaximumWarrantDurationDays < 1
-		or type(config.MDT.MaximumIncidentIndexEntries) ~= "number"
+		or not wholeNumber(config.MDT.MaximumIncidentIndexEntries, 1)
 		or config.MDT.MaximumIncidentIndexEntries < config.MDT.PageSize
 	then
 		table.insert(errors, "Invalid MDT index configuration")

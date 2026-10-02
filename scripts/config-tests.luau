@@ -22,6 +22,46 @@ return function(H: any)
 		}
 	end
 
+	H.test("MDT pagination and persisted index caps reject unsafe counts", function()
+		local f = fixture()
+		for _, field in { "PageSize", "MaximumIndexBucketEntries", "MaximumIncidentIndexEntries" } do
+			for _, value in
+				{ math.huge, -math.huge, 0 / 0, "25", false, 0, -1, f.Config.MDT[field] + 0.5 }
+			do
+				H.expect(
+					not f.Validate(field, value, "MDT"),
+					"invalid MDT count accepted: " .. field
+				)
+			end
+		end
+	end)
+
+	H.test("missing MDT pagination and index caps fail validation without raising", function()
+		local f = fixture()
+		for _, field in { "PageSize", "MaximumIndexBucketEntries", "MaximumIncidentIndexEntries" } do
+			local completed, valid = pcall(f.Validate, field, nil, "MDT")
+			H.expect(completed and not valid, "missing MDT count raised or passed: " .. field)
+		end
+	end)
+
+	H.test("MDT finite tuning preserves defaults and page-to-cap relationships", function()
+		local f = fixture()
+		H.expect(f.ValidateConfig(f.Config), "current MDT defaults refused")
+		local candidate = table.clone(f.Config)
+		candidate.MDT = table.clone(f.Config.MDT)
+		candidate.MDT.PageSize = 1
+		candidate.MDT.MaximumIndexBucketEntries = 1
+		candidate.MDT.MaximumIncidentIndexEntries = 1
+		H.expect(f.ValidateConfig(candidate), "single-row pages and retention refused")
+		for _, field in { "MaximumIndexBucketEntries", "MaximumIncidentIndexEntries" } do
+			H.expect(f.Validate(field, f.Config.MDT.PageSize, "MDT"), "one-page retention refused")
+			H.expect(
+				not f.Validate(field, f.Config.MDT.PageSize - 1, "MDT"),
+				"cap below page size accepted"
+			)
+		end
+	end)
+
 	H.test("economy retention bounds reject non-finite and non-whole counts", function()
 		local f = fixture()
 		for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
