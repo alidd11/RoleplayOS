@@ -1,5 +1,11 @@
 # Production test release — audit
 
+Historical snapshot, **not the current release verdict**. The findings, prices,
+availability and "checked and sound" statements below describe the cited tree;
+they must not be carried forward as current verification. Later hardening found
+additional defects. Use [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) for the
+review checkpoint and [RELEASE_READINESS.md](RELEASE_READINESS.md) for release gates.
+
 State of the tree at `109a210`. Every claim below was re-checked against the
 working tree at the time of writing rather than carried over from an earlier
 pass. This supersedes `RELEASE_AUDIT_2026-08-07.md` and `AUDIT_2026_08_18.md`,
