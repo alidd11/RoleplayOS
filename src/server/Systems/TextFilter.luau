@@ -77,9 +77,7 @@ local function run(
 		-- A caller timeout does not prove the worker stopped. If cancellation is
 		-- refused, keep its slot until completion rather than admit replacements
 		-- over the shared cap. Completion races still release each slot only once.
-		if coroutine.status(worker) == "dead" then
-			releaseFilterSlot(slot)
-		elseif pcall(task.cancel, worker) then
+		if coroutine.status(worker) == "dead" or pcall(task.cancel, worker) then
 			releaseFilterSlot(slot)
 		end
 	end
