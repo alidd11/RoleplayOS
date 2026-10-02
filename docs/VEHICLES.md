@@ -8,6 +8,12 @@ disabled in `Production`; release vehicles must be certified canonical templates
 
 Dealership catalogues refer to configured vehicle IDs. Purchase revalidates catalogue membership and access, reserves the generated registration first, re-checks the active character after that persistent allocation, and only then debits the configured price. A failed payment or character handover releases the unused registration; once payment succeeds, the ownership record is inserted without another yielding allocation step. Ownership, colour, mileage, fuel, condition, insurance, tax and garage are persisted per character.
 
+Purchase and creation refuse an unreadable vehicle collection with
+`INVALID_VEHICLE_STATE` before allocating a registration. Both re-check that
+collection after allocation yields, releasing the unused reservation before any
+purchase payment. Present unreadable data is preserved for recovery, not replaced
+with an empty list. This does not certify individual legacy vehicle rows.
+
 Custom registration changes are restricted to vehicles owned by the player's active character. The per-vehicle update claim is acquired only after that active ownership check, so another client cannot lock a replicated vehicle ID it does not own. Active-character ownership is revalidated after yielding gamepass, moderation and persistence work before the ownership record is changed.
 
 Spawning checks active character ownership, terminal distance, spawn-point clearance, cooldown and the one-active-vehicle limit before cloning a configured ServerStorage model. One in-flight spawn is held per exact Player instance across registration allocation, so retries are serialised without allowing a disconnected handler to release a rejoined player's claim. Clearance checks recognise existing RoleplayOS vehicles and characters in the configured spawn volume.

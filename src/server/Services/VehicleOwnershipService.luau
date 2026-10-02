@@ -522,6 +522,9 @@ function VehicleOwnershipService:_purchase(
 	if not character then
 		return nil, "CHARACTER_NOT_ACTIVE"
 	end
+	if type(character.Vehicles) ~= "table" then
+		return nil, "INVALID_VEHICLE_STATE"
+	end
 	local definition = self:_vehicleDefinition(definitionId)
 	if not definition or definition.Category ~= "Civilian" then
 		return nil, "VEHICLE_NOT_FOR_SALE"
@@ -573,6 +576,12 @@ function VehicleOwnershipService:_purchase(
 	if not character then
 		self:_releaseRegistration(player, registration, vehicleId)
 		return nil, "CHARACTER_NOT_ACTIVE"
+	end
+	-- Persisted ownership may be unreadable, including after allocation yields.
+	-- Refuse before payment rather than debit and then fail to append the vehicle.
+	if type(character.Vehicles) ~= "table" then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "INVALID_VEHICLE_STATE"
 	end
 
 	local paid, reason = self.context.Services:Get("EconomyService"):Apply(player, {
@@ -947,6 +956,9 @@ function VehicleOwnershipService:Create(
 	if not character then
 		return nil, "CHARACTER_NOT_OWNED"
 	end
+	if type(character.Vehicles) ~= "table" then
+		return nil, "INVALID_VEHICLE_STATE"
+	end
 	local vehicleId = HttpService:GenerateGUID(false)
 	local registration, registrationReason = self:_allocate(player, vehicleId)
 	if not registration then
@@ -962,6 +974,10 @@ function VehicleOwnershipService:Create(
 	then
 		self:_releaseRegistration(player, registration, vehicleId)
 		return nil, "PLAYER_UNAVAILABLE"
+	end
+	if type(character.Vehicles) ~= "table" then
+		self:_releaseRegistration(player, registration, vehicleId)
+		return nil, "INVALID_VEHICLE_STATE"
 	end
 	return self:_recordVehicle(
 		player,
