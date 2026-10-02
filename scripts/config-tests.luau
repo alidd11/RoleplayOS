@@ -8,6 +8,7 @@ return function(H: any)
 		local config = runtime.require(shared.Config.Config)
 		local validator = runtime.require(shared.Shared.ConfigValidator)
 		return {
+			Runtime = runtime,
 			Config = config,
 			Validate = function(field: string, value: any, section: string?): boolean
 				local name = section or "Framework"
@@ -20,6 +21,104 @@ return function(H: any)
 			RateLimiter = runtime.require(shared.Shared.RateLimiter),
 		}
 	end
+
+	H.test("phone configuration rejects unsafe message bounds", function()
+		local f = fixture()
+		for _, field in { "MaximumMessages", "MaximumMessageLength" } do
+			for _, value in { math.huge, -math.huge, 0 / 0, "200", false, -1, 1.5 } do
+				H.expect(
+					not f.Validate(field, value, "Phone"),
+					"invalid phone bound accepted: " .. field
+				)
+			end
+			H.expect(not f.Validate(field, nil, "Phone"), "missing phone bound accepted: " .. field)
+		end
+		H.expect(not f.Validate("MaximumMessageLength", 0, "Phone"), "zero message length accepted")
+	end)
+
+	H.test("missing and malformed phone sections fail validation safely", function()
+		local f = fixture()
+		for _, value in { false, 4, "phone" } do
+			local candidate = table.clone(f.Config)
+			candidate.Phone = value
+			local completed, valid = pcall(f.ValidateConfig, candidate)
+			H.expect(completed and not valid, "malformed phone section raised or passed")
+		end
+		local candidate = table.clone(f.Config)
+		candidate.Phone = nil
+		H.expect(not f.ValidateConfig(candidate), "missing phone section accepted")
+	end)
+
+	H.test("valid phone bounds preserve message filtering and inbox retention", function()
+		local f = fixture()
+		H.expect(f.ValidateConfig(f.Config), "current defaults refused")
+		H.expect(f.Validate("MaximumMessageLength", 1, "Phone"), "one-character limit refused")
+		local shared = f.Runtime.services.ReplicatedStorage.RoleplayOS
+		local validator = f.Runtime.require(shared.Shared.PhoneValidator)
+		H.expect(
+			validator.message("a", 1) == "a" and validator.message("ab", 1) == nil,
+			"valid length limit was not enforced"
+		)
+		local service = f.Runtime.require(
+			f.Runtime.services.ServerScriptService.RoleplayOS.Services.PhoneService
+		)
+		local player = { UserId = 1, Parent = f.Runtime.services.Players }
+		f.Runtime.services.Players.GetPlayerByUserId = function()
+			return player
+		end
+		local character = { Phone = { Messages = {} } }
+		local session =
+			{ ActiveCharacterId = "active", Profile = { Characters = { active = character } } }
+		local dirty = 0
+		local data = {
+			GetSession = function()
+				return session
+			end,
+			MarkDirty = function()
+				dirty += 1
+			end,
+		}
+		local config = table.clone(f.Config)
+		config.Phone = table.clone(config.Phone)
+		service:Init({
+			Configuration = config,
+			Services = {
+				Get = function(_self, name)
+					assert(name == "DataService", "Unexpected append dependency")
+					return data
+				end,
+			},
+			Network = {
+				RegisterEvent = function()
+					return {}
+				end,
+			},
+		})
+		service.running = true
+		for _, maximum in { 0, 1, f.Config.Phone.MaximumMessages } do
+			H.expect(
+				f.Validate("MaximumMessages", maximum, "Phone"),
+				"valid retention limit refused"
+			)
+			config.Phone.MaximumMessages = maximum
+			character.Phone.Messages = {}
+			for i = 1, maximum + 2 do
+				H.expect(
+					service:_append(player, character, { MessageId = tostring(i) }),
+					"append failed"
+				)
+			end
+			H.expect(#character.Phone.Messages == maximum, "inbox count exceeded cap")
+			if maximum > 0 then
+				H.expect(
+					character.Phone.Messages[1].MessageId == "3",
+					"retention removed newer messages"
+				)
+			end
+		end
+		H.expect(dirty == f.Config.Phone.MaximumMessages + 7, "append dirty marking changed")
+		service:Destroy()
+	end)
 
 	H.test("persistence configuration rejects non-finite timing bounds", function()
 		local f = fixture()

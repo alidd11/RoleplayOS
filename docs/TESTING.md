@@ -57,6 +57,10 @@ retry-count and optional wait/size bounds, including non-finite values. Positive
 defaults, optional absence and lease/size relationships remain covered. These
 tests reject unsafe inputs; they do not run an infinite retry or wait in CI. Audit
 buffer counts and flush timings also cover refusal, optional absence and clamps.
+Phone limits cover non-finite, missing and malformed refusal, one-character
+filtering and actual PhoneService inbox retention at zero, one and the current
+default cap. Profile lookup/dirty marking are explicit doubles; these checks do
+not establish native text moderation or persisted delivery.
 
 `scripts/audit-tests.luau` exercises actual AuditService ring retention, dropped
 entry counts, chronological batch extraction, failed-flush restoration and

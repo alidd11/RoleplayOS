@@ -23,6 +23,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			"ExperienceAccess",
 			"Characters",
 			"Economy",
+			"Phone",
 			"Progression",
 			"Departments",
 			"Roles",
@@ -102,6 +103,12 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		local value = framework[field]
 		if value ~= nil and (not finiteNumber(value, 0) or value <= 0) then
 			table.insert(errors, "Invalid audit flush duration: " .. field)
+		end
+	end
+	local phone = if type(config.Phone) == "table" then config.Phone else {}
+	for field, minimum in { MaximumMessages = 0, MaximumMessageLength = 1 } do
+		if not wholeNumber(phone[field], minimum) then
+			table.insert(errors, "Invalid phone message bound: " .. field)
 		end
 	end
 	local economy = if type(config.Economy) == "table" then config.Economy else {}
