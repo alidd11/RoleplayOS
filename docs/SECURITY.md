@@ -7,6 +7,12 @@ request tracking is published only for accepted handlers, not busy/shutdown
 refusals. Timed-out handlers remain counted until completion or the configured
 abandonment ceiling; completion and teardown release each slot at most once.
 
+Text filtering has a four-second caller deadline and a shared cap of 16 worker
+coroutines. Timed-out workers release capacity only after confirmed cancellation
+or completion. Cancellation refusal therefore fails closed rather than admitting
+unbounded replacement workers during a stalled moderation call. Filter or
+extraction failure never permits the raw input to be displayed in live servers.
+
 Audit persistence uses a bounded pending ring and a single controlled flush path. Low-volume events flush on a short interval, bursts request one immediate flush, failed writes are retried without allowing the queue or task count to grow without bound, and shutdown drains only within its configured deadline. If a prolonged persistence outage fills the buffer, the oldest pending audit entries are dropped and the server logs the loss rather than sacrificing live-server stability.
 
 Emergency alarms, flashlight state, stamina, walk speed, hunger, food prices, economy debits, dispatch chair access, team duty, and MDT permissions are server-authoritative. Security-sensitive robbery systems should call `EmergencyTriggerService:Trigger()` from server code or use a tagged server-owned prompt; clients never select incident priority or food price.

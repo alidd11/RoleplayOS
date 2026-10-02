@@ -74,14 +74,14 @@ local function run(
 		task.wait(POLL_SECONDS)
 	end
 	if not finished then
-		-- The caller has stopped waiting, so this filter must stop consuming the
-		-- shared admission budget too. Cancel the abandoned worker where Roblox
-		-- permits it; if completion races the timeout, the idempotent slot release
-		-- still prevents a double decrement.
-		if coroutine.status(worker) ~= "dead" then
-			pcall(task.cancel, worker)
+		-- A caller timeout does not prove the worker stopped. If cancellation is
+		-- refused, keep its slot until completion rather than admit replacements
+		-- over the shared cap. Completion races still release each slot only once.
+		if coroutine.status(worker) == "dead" then
+			releaseFilterSlot(slot)
+		elseif pcall(task.cancel, worker) then
+			releaseFilterSlot(slot)
 		end
-		releaseFilterSlot(slot)
 	end
 	if filtered then
 		return filtered, nil

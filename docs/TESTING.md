@@ -38,3 +38,10 @@ retention. It also invokes the registered dispatch-update schema directly. Units
 publication, incident scheduling and audit are explicit dependency doubles; note
 filtering follows the headless Studio bypass. These tests do not establish actual
 UnitService wiring, filtered RPCs, incident persistence or multi-client acceptance.
+
+`scripts/text-filter-tests.luau` exercises the actual TextFilter module with explicit
+non-Studio filter/extractor fixtures: broadcast and recipient selection, refusal
+and recovery, parallel batches, caller deadlines, cancellation and cancellation
+refusal. An isolated task adapter injects cancellation failure. This verifies
+worker admission and fail-closed contracts, not Roblox moderation output or the
+engine's ability to cancel an underlying web request.
