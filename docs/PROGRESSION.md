@@ -8,4 +8,10 @@ Completed validated shift tasks award the configured job XP. The employment reco
 
 Physical job adapters must issue server-side task proofs through `ShiftService`. Clients must never provide XP amounts, levels, reward reasons or completion authority.
 
+Missing legacy progression fields may be backfilled without replacing readable
+tracks. Present unreadable XP, track values or mutation containers return
+`INVALID_PROGRESSION_STATE` without rewriting or dirtying the source. Reward-order
+and history containers must be dense lists. These guards preserve damaged data
+for recovery; they do not repair it or change the XP curve or schema version.
+
 The compact public progression HUD appears only when the server is public, the character is active and the Roblox team is configured as auto-assignable. Its expandable catalogue lists every public role and public job. Whitelisted teams fail the visibility policy on the server and receive no HUD data.

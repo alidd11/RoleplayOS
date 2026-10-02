@@ -45,3 +45,9 @@ and recovery, parallel batches, caller deadlines, cancellation and cancellation
 refusal. An isolated task adapter injects cancellation failure. This verifies
 worker admission and fail-closed contracts, not Roblox moderation output or the
 engine's ability to cancel an underlying web request.
+
+`scripts/progression-tests.luau` exercises actual ProfileSchema migration and
+ProgressionService reads/grants with unreadable XP, mutation containers, tracks,
+sparse retention lists and partial legacy state. Valid rewards retain bounded
+history and replay IDs. Data access, audit and HUD transport are explicit doubles;
+published saves and real client rendering remain acceptance work.
