@@ -22,6 +22,7 @@ end
 assert(#process.args == 0, "Unknown test runner arguments")
 runtime.require(runtime.tests.run)
 require("./persistence-tests")(harness)
+require("./economy-tests")(harness)
 harness.finish()
 assert(harness.passed > 0 and harness.failed == 0, "No successful tests executed")
 print("Headless contract tests completed; Roblox engine and online services were not tested")
