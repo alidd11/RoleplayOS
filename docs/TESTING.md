@@ -87,3 +87,10 @@ Valid purchase and reservation failure retain their existing behaviour. Access,
 content lookup, index scheduling, audit and registration/profile storage are
 explicit doubles. Real assets, facility UI, registration-store contention and
 durable purchase recovery remain external acceptance work.
+
+`scripts/character-tests.luau` exercises actual current migration and
+CharacterService deletion with dictionary/sparse protected records, unreadable
+collections/economy/recovery/slots, confirmation, active-character and
+pending-refund refusals, and valid empty deletion. Data access and dirty marking
+are explicit doubles. These are service API tests, not deletion UI or durable
+saves; creation, selection, avatar assets and respawn acceptance are not established.

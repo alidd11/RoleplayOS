@@ -691,12 +691,29 @@ function CharacterService:Delete(
 	if session.ActiveCharacterId == characterId then
 		return false, "CHARACTER_ACTIVE"
 	end
-	local pendingCashRefunds = character.Economy and character.Economy.PendingCashDropRefunds
+	local economy = character.Economy
+	if economy ~= nil and type(economy) ~= "table" then
+		return false, "CHARACTER_RECORDS_UNREADABLE"
+	end
+	local pendingCashRefunds = economy and economy.PendingCashDropRefunds
+	if pendingCashRefunds ~= nil and type(pendingCashRefunds) ~= "table" then
+		return false, "CHARACTER_RECORDS_UNREADABLE"
+	end
 	if type(pendingCashRefunds) == "table" and next(pendingCashRefunds) ~= nil then
 		return false, "CHARACTER_HAS_PENDING_RECOVERY"
 	end
-	if #character.Vehicles > 0 or #character.Properties > 0 or #character.Employment > 0 then
-		return false, "CHARACTER_HAS_PROTECTED_RECORDS"
+	for _, field in { "Vehicles", "Properties", "Employment" } do
+		local records = character[field]
+		if type(records) ~= "table" then
+			return false, "CHARACTER_RECORDS_UNREADABLE"
+		end
+		-- Persisted collections can be keyed or sparse: length is not emptiness.
+		if next(records) ~= nil then
+			return false, "CHARACTER_HAS_PROTECTED_RECORDS"
+		end
+	end
+	if type(session.Profile.CharacterSlots) ~= "table" then
+		return false, "CHARACTER_RECORDS_UNREADABLE"
 	end
 	session.Profile.Characters[characterId] = nil
 	local index = table.find(session.Profile.CharacterSlots, characterId)
