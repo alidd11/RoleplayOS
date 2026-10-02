@@ -1,6 +1,15 @@
 --!strict
 
+local LevelProgression = require(script.Parent.LevelProgression)
 local ConfigValidator = {}
+
+local function finiteNumber(value: any, minimum: number): boolean
+	return type(value) == "number" and value == value and value < math.huge and value >= minimum
+end
+
+local function wholeNumber(value: any, minimum: number): boolean
+	return finiteNumber(value, minimum) and value % 1 == 0
+end
 
 function ConfigValidator.validate(config: any): (boolean, { string })
 	local errors = {}
@@ -461,19 +470,33 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			end
 		end
 	end
-	local progression = config.Progression or {}
+	local progression = if type(config.Progression) == "table" then config.Progression else {}
 	if
-		type(progression.BaseXP) ~= "number"
-		or progression.BaseXP < 1
-		or type(progression.GrowthFactor) ~= "number"
-		or progression.GrowthFactor < 1
-		or type(progression.MaximumLevel) ~= "number"
-		or progression.MaximumLevel < 1
+		not finiteNumber(progression.BaseXP, 1)
+		or not finiteNumber(progression.GrowthFactor, 1)
+		or not wholeNumber(progression.MaximumLevel, 1)
 		or progression.MaximumLevel > 1000
-		or type(progression.MaximumGrant) ~= "number"
-		or progression.MaximumGrant < 1
+		or not wholeNumber(progression.MaximumGrant, 1)
+		or not wholeNumber(progression.DefaultTaskXP, 1)
+		or progression.DefaultTaskXP > progression.MaximumGrant
 	then
 		table.insert(errors, "Invalid progression configuration")
+	elseif
+		not finiteNumber(
+			LevelProgression.xpForLevel(
+				progression.MaximumLevel,
+				progression.BaseXP,
+				progression.GrowthFactor
+			),
+			0
+		)
+	then
+		table.insert(errors, "Progression curve exceeds finite XP thresholds")
+	end
+	for field, minimum in { MaximumHistory = 0, MaximumRewardIds = 1 } do
+		if not wholeNumber(progression[field], minimum) then
+			table.insert(errors, "Invalid progression retention bound: " .. field)
+		end
 	end
 	for spawnId, spawn in config.Spawns or {} do
 		local station = config.Stations[spawn.StationId]
