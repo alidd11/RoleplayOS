@@ -1,6 +1,6 @@
 # Data model
 
-`ProfileSchema` owns version 1 defaults, reconciliation and sequential migrations. Profiles contain settings, character IDs and records, duty profiles, whitelists, applications, qualifications, gamepass cache and audit metadata. Character records own economy, employment, vehicles, properties, furniture, inventory, licences and progression.
+`ProfileSchema` owns current-version defaults, reconciliation and sequential migrations. Profiles contain settings, character IDs and records, duty profiles, whitelists, applications, qualifications, gamepass cache and audit metadata. Character records own economy, employment, vehicles, properties, furniture, inventory, licences and progression.
 
 All durable references are stable GUID or configuration IDs. Dates are Unix seconds or ISO `YYYY-MM-DD`; transforms are number arrays. Do not persist Roblox values directly. Add migrations before increasing `CURRENT_VERSION`; migrations must be idempotent and tolerate absent fields. Missing legacy authoritative values may be backfilled, but present values that cannot be interpreted safely must fail migration so DataService can preserve and quarantine the original profile instead of committing a destructive default.
 
@@ -15,7 +15,7 @@ mutating or dirtying it. Unrelated malformed rows are preserved and ignored by
 item lookup; they are not automatically deleted. `Has` exposes only usable
 quantities. These guards do not repair corrupted ownership or change the schema.
 
-`PlayerProfile.CustodySentence` is deliberately profile-wide so changing character cannot bypass an active custody period. `ReleaseAt` is the authoritative Unix timestamp. `Offences` is a bounded audit summary; offence codes and compressed gameplay durations come only from `Config.Custody.OffenceTariffs`. Character-specific booking and criminal-history entries remain on the selected character. These values simulate game consequences and are not real sentencing guidance.
+`PlayerProfile.CustodySentence` is deliberately profile-wide so changing character cannot bypass an active custody period. `RemainingSeconds` is the persisted playtime authority; offline time does not serve the sentence. `ReleaseAt` in the runtime summary is only a display estimate. `Offences` is a bounded audit summary; offence codes and compressed gameplay durations come only from `Config.Custody.OffenceTariffs`. Character-specific booking and criminal-history entries remain on the selected character. These values simulate game consequences and are not real sentencing guidance.
 
 `DataService` loads once, holds an expiring server ownership lease, caches in memory, tracks dirty state, autosaves, saves on leave, and releases leases at shutdown. Autosave launches are spread across only part of each cadence so DataStore pressure is smoothed without stretching a profile's lease-renewal interval up to the lease expiry. Loaded profiles establish a size baseline, and dirty snapshots are measured again before ordinary saves so long-session growth reaches the configured warning before Roblox's DataStore value ceiling; the extra encode is skipped during server shutdown to protect the bounded final-save window. UpdateAsync checks ownership before every write. Retries are bounded and back off; unsafe load failure kicks rather than creating a second writable session.
 

@@ -4,6 +4,11 @@ This is the short production handoff for **Emergency Response: Portsmouth**. It
 separates repository checks that can run automatically from decisions and evidence
 that must come from the authorised Roblox place.
 
+The repository-wide code review remains in progress. See
+[PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) for its evidence, coverage and
+remaining work. Historical audit verdicts and green CI alone are not release
+approval.
+
 ## Automated gate
 
 Run from the repository root:
