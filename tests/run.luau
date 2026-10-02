@@ -1,6 +1,6 @@
 --!strict
--- Run in a Rojo test place with this folder mapped as a container, or adapt these
--- specs to TestEZ. They deliberately exercise modules that have no server state.
+-- Run in the dedicated Rojo acceptance place or with scripts/run-tests.luau.
+-- Pure contracts and actual service methods use explicitly injected dependencies.
 local H = require(script.Parent.TestHarness)
 local Shared = game:GetService("ReplicatedStorage").RoleplayOS.Shared
 local Access = require(Shared.AccessEvaluator)

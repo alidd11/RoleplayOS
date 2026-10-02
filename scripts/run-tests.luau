@@ -1,0 +1,25 @@
+--!strict
+local process = require("@lune/process")
+local Runtime = require("./test-runtime")
+
+local runtime = Runtime.new()
+local harness = runtime.require(runtime.tests.TestHarness)
+assert(harness == runtime.require(runtime.tests.TestHarness), "Module caching failed")
+local supported = pcall(function()
+	runtime.services.TextService:FilterStringAsync("no online calls", 1)
+end)
+assert(not supported, "Unsupported online calls must fail closed")
+local fresh = Runtime.new()
+assert(fresh.require(fresh.tests.TestHarness).passed == 0, "Runtime state leaked between suites")
+
+if process.args[1] == "--prove-failure" then
+	harness.test("runner intentional failure", function()
+		harness.expect(false, "RUNNER_EXPECTED_FAILURE")
+	end)
+	harness.finish()
+	error("A failing test did not stop the runner")
+end
+assert(#process.args == 0, "Unknown test runner arguments")
+runtime.require(runtime.tests.run)
+assert(harness.passed > 0 and harness.failed == 0, "No successful tests executed")
+print("Headless contract tests completed; Roblox engine and online services were not tested")
