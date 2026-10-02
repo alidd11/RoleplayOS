@@ -65,7 +65,7 @@ return function(H: any)
 		service:Init({
 			Services = {
 				Get = function(_self, name)
-					return assert(dependencies[name])
+					return assert(dependencies[name], "Unexpected phone dependency: " .. name)
 				end,
 			},
 			Network = {
