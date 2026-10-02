@@ -43,9 +43,9 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 	local consumables = session.Profile.Consumables
 	local processed = consumables.ProcessedDeveloperReceipts
 	if processed[receiptId] == nil then
-		-- Both of these grant a counted consumable by the same rules: add, persist,
-		-- and roll the balance back untouched if the save fails, so a receipt is
-		-- never marked processed against a grant that did not reach the store.
+		-- Keep the grant and marker together even if saving fails: gameplay may
+		-- spend it while Save yields, and a failed write can already have committed.
+		-- A retry saves this state again without applying the grant twice.
 		local COUNTED_GRANTS = {
 			ExtraCharacterSlot = {
 				Field = "ExtraCharacterSlots",
@@ -71,9 +71,6 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 			dataService:MarkDirty(player)
 			local saved, reason = dataService:Save(player)
 			if not saved then
-				consumables[field] = previous
-				processed[receiptId] = nil
-				dataService:MarkDirty(player)
 				self.context.Logger:Error("Developer product grant could not be persisted", {
 					PlayerId = receipt.PlayerId,
 					PurchaseId = receiptId,
@@ -100,9 +97,6 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 		dataService:MarkDirty(player)
 		local saved, reason = dataService:Save(player)
 		if not saved then
-			consumables.EarlyReleaseCredits = previousCredits
-			processed[receiptId] = nil
-			dataService:MarkDirty(player)
 			self.context.Logger:Error("Developer product grant could not be persisted", {
 				PlayerId = receipt.PlayerId,
 				PurchaseId = receiptId,
@@ -116,6 +110,25 @@ function DeveloperProductService:_process(receipt: any): Enum.ProductPurchaseDec
 			Target = tostring(player.UserId),
 			Metadata = { ProductId = receipt.ProductId, Credits = definition.Credits },
 		})
+	else
+		-- An in-memory marker is replay protection, not proof of persistence.
+		local saved, reason = dataService:Save(player)
+		if not saved then
+			self.context.Logger:Error("Developer product receipt could not be persisted", {
+				PlayerId = receipt.PlayerId,
+				PurchaseId = receiptId,
+				Reason = reason,
+			})
+			return Enum.ProductPurchaseDecision.NotProcessedYet
+		end
+	end
+
+	if
+		player.Parent ~= Players
+		or Players:GetPlayerByUserId(player.UserId) ~= player
+		or dataService:GetSession(player) ~= session
+	then
+		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
 
 	-- A purchase made while sentenced is immediately useful. If spawning fails,

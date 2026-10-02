@@ -76,6 +76,15 @@ If a fare result is ambiguous or recoverable after a validated journey, the requ
 
 ## Custody release credits
 
+Developer-product grants and their receipt markers remain together in the live
+profile when a save fails. An error may follow a committed write, and gameplay
+can spend credits while saving yields. Restoring an old count or removing the
+marker would erase later changes or let a retry grant twice. Receipt retries save
+the current profile before acknowledging delivery, including receipts already
+marked in memory. A busy or failed save returns `NotProcessedYet`. Departure after
+a successful save acknowledges the durable grant without starting custody work
+for the stale player. Product IDs, prices and grant amounts are unchanged.
+
 Public custody release consumes one early-release credit. Character loading can
 yield while a developer receipt grants additional credits to the same profile.
 If release is refused, only the attempted credit is returned to the current
