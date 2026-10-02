@@ -168,6 +168,14 @@ function NeedsService:_applySpeed(player: Player, state: any, humanoid: Humanoid
 	else
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
 	end
+	-- Temporary movement effects own their tuning. Needs composes with the
+	-- server-published cap instead of re-stating PAVA's speed here, so a needs
+	-- tick cannot cancel the effect and the two services cannot drift apart.
+	local pavaCap = humanoid:GetAttribute("RoleplayOSPAVAWalkSpeedCap")
+	if type(pavaCap) == "number" and pavaCap >= 0 then
+		state.Sprinting = false
+		speed = math.min(speed, pavaCap)
+	end
 	humanoid.WalkSpeed = speed
 end
 
