@@ -14,4 +14,11 @@ tracks. Present unreadable XP, track values or mutation containers return
 and history containers must be dense lists. These guards preserve damaged data
 for recovery; they do not repair it or change the XP curve or schema version.
 
+Startup validation requires finite curve inputs and thresholds, whole-number
+levels and grants, and a positive default task reward within the grant cap.
+Retention limits must be finite whole numbers: history may be zero, but at least
+one replay ID must remain. Invalid limits are rejected before gameplay, preventing
+non-terminating trimming or silently disabled replay protection. Defaults remain
+100 history entries and 500 replay IDs.
+
 The compact public progression HUD appears only when the server is public, the character is active and the Roblox team is configured as auto-assignable. Its expandable catalogue lists every public role and public job. Whitelisted teams fail the visibility policy on the server and receive no HUD data.
