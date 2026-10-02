@@ -96,9 +96,7 @@ return function(H: any)
 		H.expect(f.Service:Has(f.Character, "Sandwich"), "valid held item hidden")
 		H.expect(f.Service:Remove(f.Player, "owned", "Sandwich", 1), "valid removal blocked")
 		H.expect(
-			f.Character.Inventory[1] == 4
-				and #f.Character.Inventory == 2
-				and f.Dirty() == 2,
+			f.Character.Inventory[1] == 4 and #f.Character.Inventory == 2 and f.Dirty() == 2,
 			"unrelated rows were rewritten"
 		)
 	end)
