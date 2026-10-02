@@ -16,9 +16,19 @@ jobs:
           version: v0.3.0
       - run: aftman install
       - name: Format
-        run: stylua --check src tests
+        run: stylua --check src tests scripts/*.luau
       - name: Lint
-        run: selene src tests
+        run: selene src tests scripts/*.luau
+      - name: Contract tests
+        run: lune run scripts/run-tests.luau
+      - name: Verify failing tests fail CI
+        shell: bash
+        run: |
+          status=0
+          output=$(lune run scripts/run-tests.luau --prove-failure 2>&1) || status=$?
+          printf '%s\n' "$output"
+          test "$status" -ne 0
+          grep -q RUNNER_EXPECTED_FAILURE <<< "$output"
       - name: Validate structure
         run: bash scripts/validate-structure.sh
       - name: Build Rojo place
