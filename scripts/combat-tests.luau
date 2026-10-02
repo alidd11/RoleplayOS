@@ -103,6 +103,9 @@ return function(H: any)
 		function target:SetAttribute(name: string, value: any)
 			targetAttributes[name] = value
 		end
+		function target:GetAttribute(name: string)
+			return targetAttributes[name]
+		end
 		runtime.services.Players.GetPlayerByUserId = function(_self, userId)
 			if userId == actor.UserId then
 				return actor
@@ -135,7 +138,13 @@ return function(H: any)
 		pava._lineOfSight = function()
 			return lineOfSight
 		end
-		return { Service = pava, Actor = actor, Target = target }
+		return {
+			Runtime = runtime,
+			Service = pava,
+			Actor = actor,
+			Target = target,
+			TargetHumanoid = targetHumanoid,
+		}
 	end
 
 	local function taserServerSource(): string
@@ -177,6 +186,29 @@ return function(H: any)
 		local f = sprayFixture(true)
 		local sprayed, reason = f.Service:Spray(f.Actor, f.Target.UserId)
 		H.expect(sprayed and reason == nil, "clear PAVA target was refused")
+	end)
+	H.test("actual PAVA movement reduction survives a Needs speed tick", function()
+		local f = sprayFixture(true)
+		local sprayed, reason = f.Service:Spray(f.Actor, f.Target.UserId)
+		H.expect(sprayed and reason == nil, "PAVA setup failed")
+		H.expect(f.TargetHumanoid.WalkSpeed == 10, "PAVA did not apply its movement reduction")
+
+		local needs = f.Runtime.require(
+			f.Runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService
+		)
+		local config = f.Runtime.require(f.Runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		needs.context = { Configuration = config }
+		local needsHumanoid: any = { WalkSpeed = f.TargetHumanoid.WalkSpeed }
+		function needsHumanoid:GetAttribute(name: string)
+			return f.TargetHumanoid:GetAttribute(name)
+		end
+		function needsHumanoid:SetStateEnabled() end
+		needs:_applySpeed(
+			f.Target,
+			{ Sprinting = false, Hunger = 100, Stamina = 100 },
+			needsHumanoid
+		)
+		H.expect(needsHumanoid.WalkSpeed == 10, "Needs tick cancelled the active PAVA slowdown")
 	end)
 	H.test("Taser server authority covers every configured Taser loadout", function()
 		local runtime = Runtime.new()
