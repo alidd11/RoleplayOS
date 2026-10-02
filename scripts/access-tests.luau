@@ -35,6 +35,7 @@ return function(H: any)
 		local entry = runtime.require(root.ExperienceAccessService)
 		local players, logs = {}, {}
 		local f = {
+			Logs = logs,
 			Group = group,
 			Access = access,
 			Role = role,
@@ -51,15 +52,15 @@ return function(H: any)
 		end
 		function f:Player(userId: number): any
 			local player = { UserId = userId, Parent = runtime.services.Players }
-			function player:GetRankInGroup(groupId)
+			player.GetRankInGroup = function(candidate, groupId)
 				f.Calls += 1
-				return f.Rank(self, groupId)
+				return f.Rank(candidate, groupId)
 			end
-			function player:IsDescendantOf(parent)
-				return self.Parent == parent
+			player.IsDescendantOf = function(candidate, parent)
+				return candidate.Parent == parent
 			end
-			function player:Kick(message)
-				self.Kicked = message
+			player.Kick = function(candidate, message)
+				candidate.Kicked = message
 			end
 			players[userId] = player
 			return player
