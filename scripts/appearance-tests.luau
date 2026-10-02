@@ -134,7 +134,7 @@ return function(H: any)
 			local replay = f.Products:_process(f.Receipt)
 			H.expect(replay.Name == "PurchaseGranted", "receipt replay was not acknowledged")
 			H.expect(
-				f.Profile.Consumables.AppearanceEdits == 1 and #f.Saves == 1,
+				f.Profile.Consumables.AppearanceEdits == 1 and #f.Saves == 2 and f.Saves[2] == 1,
 				"receipt replay duplicated or lost credits"
 			)
 		end

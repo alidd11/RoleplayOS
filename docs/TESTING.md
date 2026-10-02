@@ -131,3 +131,12 @@ receipt replay. Failed application, free first edits and insufficient-credit
 refusal are also covered. Avatar application, player/profile access, saving and
 audit are explicit doubles; native avatar assets, Marketplace delivery and durable
 DataStore acceptance are not established by these tests.
+
+`scripts/receipt-tests.luau` exercises actual DeveloperProductService, DataService
+save/retry logic and CharacterService against a detached store fixture. It covers
+precommit and ambiguous post-commit failures for all three consumable grants,
+spending during a failed save, in-flight replay refusal, preservation of later
+additions, replay save failure and departure after persistence. Store transforms
+replay against detached values; request budgets, avatar application, audit and
+custody presentation are explicit doubles. This does not establish real
+Marketplace callback scheduling, throttling or concurrent published servers.
