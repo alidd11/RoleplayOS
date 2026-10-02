@@ -372,37 +372,41 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			end
 		end
 	end
-	local network = config.Network or {}
+	local network = if type(config.Network) == "table" then config.Network else {}
 	if
-		type(network.MaximumPayloadBytes) ~= "number"
-		or network.MaximumPayloadBytes < 256
-		or type(network.MaximumDepth) ~= "number"
-		or network.MaximumDepth < 1
-		or type(network.MaximumNodes) ~= "number"
-		or network.MaximumNodes < 1
-		or type(network.MaximumStringBytes) ~= "number"
-		or network.MaximumStringBytes < 1
+		not wholeNumber(network.MaximumPayloadBytes, 256)
+		or not wholeNumber(network.MaximumDepth, 1)
+		or not wholeNumber(network.MaximumNodes, 1)
+		or not wholeNumber(network.MaximumStringBytes, 1)
 		or network.MaximumStringBytes > network.MaximumPayloadBytes
-		or type(network.MaximumResponseDepth) ~= "number"
-		or network.MaximumResponseDepth < 1
-		or type(network.MaximumResponseNodes) ~= "number"
-		or network.MaximumResponseNodes < 1
-		or type(network.MaximumResponseStringBytes) ~= "number"
-		or network.MaximumResponseStringBytes < 1
-		or type(network.MaximumResponseTotalStringBytes) ~= "number"
+		or not wholeNumber(network.MaximumResponseDepth, 1)
+		or not wholeNumber(network.MaximumResponseNodes, 1)
+		or not wholeNumber(network.MaximumResponseStringBytes, 1)
+		or not wholeNumber(network.MaximumResponseTotalStringBytes, 1)
 		or network.MaximumResponseTotalStringBytes < network.MaximumResponseStringBytes
-		or type(network.MaximumConcurrentRequests) ~= "number"
-		or network.MaximumConcurrentRequests < 1
-		or type(network.GlobalCapacity) ~= "number"
-		or network.GlobalCapacity < 1
-		or type(network.GlobalRefillPerSecond) ~= "number"
+		or not wholeNumber(network.MaximumConcurrentRequests, 1)
+		or not finiteNumber(network.GlobalCapacity, 1)
+		or not finiteNumber(network.GlobalRefillPerSecond, 0)
 		or network.GlobalRefillPerSecond <= 0
-		or type(network.AvatarCatalogSharedCapacity) ~= "number"
-		or network.AvatarCatalogSharedCapacity < 1
-		or type(network.AvatarCatalogSharedRefillPerSecond) ~= "number"
+		or not finiteNumber(network.AvatarCatalogSharedCapacity, 1)
+		or not finiteNumber(network.AvatarCatalogSharedRefillPerSecond, 0)
 		or network.AvatarCatalogSharedRefillPerSecond <= 0
 	then
 		table.insert(errors, "Invalid global network safety configuration")
+	end
+	local maximumServerRequests = network.MaximumConcurrentRequestsPerServer
+	if maximumServerRequests ~= nil and not wholeNumber(maximumServerRequests, 1) then
+		table.insert(errors, "Invalid network safety bound: MaximumConcurrentRequestsPerServer")
+	end
+	for _, field in { "HandlerTimeoutSeconds", "RequestAbandonSeconds" } do
+		local value = network[field]
+		if value ~= nil and (not finiteNumber(value, 0) or value <= 0) then
+			table.insert(errors, "Invalid network request duration: " .. field)
+		end
+	end
+	local requestDrain = network.ShutdownRequestDrainSeconds
+	if requestDrain ~= nil and not finiteNumber(requestDrain, 0) then
+		table.insert(errors, "Invalid network request duration: ShutdownRequestDrainSeconds")
 	end
 	if type(network.Endpoints) ~= "table" then
 		table.insert(errors, "Network endpoint rate limits are required")
@@ -411,9 +415,8 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 			if
 				type(name) ~= "string"
 				or type(limits) ~= "table"
-				or type(limits.Capacity) ~= "number"
-				or limits.Capacity < 1
-				or type(limits.RefillPerSecond) ~= "number"
+				or not finiteNumber(limits.Capacity, 1)
+				or not finiteNumber(limits.RefillPerSecond, 0)
 				or limits.RefillPerSecond <= 0
 			then
 				table.insert(errors, "Invalid endpoint rate limit: " .. tostring(name))
