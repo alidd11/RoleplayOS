@@ -7,6 +7,12 @@ request tracking is published only for accepted handlers, not busy/shutdown
 refusals. Timed-out handlers remain counted until completion or the configured
 abandonment ceiling; completion and teardown release each slot at most once.
 
+Startup validation requires finite whole network byte/node/depth/concurrency
+bounds and finite positive token capacities/refill rates. Optional request timing
+and server-admission fields keep their existing fallbacks; a zero shutdown drain
+still means no wait. Fractional rate/capacity tuning remains valid. These checks
+do not change shipped limits or prove engine transport acceptance.
+
 Text filtering has a four-second caller deadline and a shared cap of 16 worker
 coroutines. Timed-out workers release capacity only after confirmed cancellation
 or completion. Cancellation refusal therefore fails closed rather than admitting
