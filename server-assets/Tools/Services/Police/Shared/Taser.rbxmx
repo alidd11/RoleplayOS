@@ -2082,8 +2082,12 @@ local function owner(): Player?
 end
 
 local function equippedBy(player: Player): boolean
-&#9;return owner() == player and tool:IsDescendantOf(player.Character)
-&#9;&#9;and table.find({ &quot;PoliceResponse&quot;, &quot;PoliceFrontline&quot;, &quot;ArmedResponse&quot;, &quot;RoadsPolicing&quot; }, tool:GetAttribute(&quot;RoleplayOSLoadoutId&quot;)) ~= nil
+&#9;local character = player.Character
+&#9;return owner() == player
+&#9;&#9;and character ~= nil
+&#9;&#9;and tool:IsDescendantOf(character)
+&#9;&#9;and tool:GetAttribute(&quot;RoleplayOSDutyIssued&quot;) == true
+&#9;&#9;and tool:GetAttribute(&quot;RoleplayOSToolId&quot;) == &quot;Taser&quot;
 end
 
 local function finiteVector3(value): boolean
