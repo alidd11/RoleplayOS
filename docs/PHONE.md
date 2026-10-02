@@ -15,4 +15,10 @@ state. Other players still cannot end the retained call.
 
 Texts are length-limited, rate-limited and filtered through Roblox `TextService` before either participant sees or stores them. The sender and recipient views are filtered concurrently, then the exact Player instances, profile sessions and active characters are revalidated before either inbox is mutated. A disconnect, rejoin or character switch while filtering therefore cancels the stale send instead of writing through a reused UserId. Messages are capped per character to bound profile size. The current implementation intentionally supports online recipients in the same server; reliable offline or cross-server delivery needs a dedicated indexed message store rather than writing into another server's session-locked profile.
 
+Startup requires a Phone configuration table with finite whole-number limits:
+`MaximumMessageLength` must be at least one and `MaximumMessages` at least zero.
+Zero retention removes each message after appending; normal delivery still works.
+Invalid or missing limits are refused before services start. Defaults remain
+240 characters and 200 retained messages.
+
 The 999 page asks for an incident and exact location. Both fields are filtered for broadcast concurrently, and the caller's exact session and active character are revalidated after that yielding work before a successful request creates an `Immediate` dispatch call. Only one 999 submission may be in flight for an exact Player instance, so a retry or parallel click cannot cross the moderation yield and create duplicate dispatch calls. It never grants the caller MDT access and does not trust the client to set arbitrary dispatch fields.
