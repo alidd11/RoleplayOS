@@ -105,10 +105,13 @@ function Runtime.new(): any
 			end,
 		}),
 		TextService = serviceDouble("TextService"),
+		DataStoreService = serviceDouble("DataStoreService"),
 		MemoryStoreService = serviceDouble("MemoryStoreService"),
 		TeleportService = serviceDouble("TeleportService"),
 	}
 	local game = serviceDouble("game", {
+		PlaceId = 1,
+		JobId = "headless-test-server",
 		GetService = function(_self, name)
 			assert(services[name], "Unsupported headless service: " .. name)
 			return services[name]
