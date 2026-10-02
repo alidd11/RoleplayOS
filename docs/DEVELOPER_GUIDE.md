@@ -188,25 +188,21 @@ The bootstrap builds one context and hands the same table to every service:
 - `Sessions` — per-server session table
 - `Network` — the `NetworkServer` instance
 
-### The Critical flag
+### Required and optional services
 
-Set `Critical = true` on the service table if the server must refuse to run
-without it. Everything else is degradable by default, and that default is the
-important part. `ServiceRegistry:_handleFailure` steps over a non-critical service
-that throws in `Init` or `Start`: it is recorded in `Failed()`, logged as "Service
-failed and was stepped over", and left registered so callers still reach it and
-fail one request at a time, which the network layer already catches and reports.
+Services are required by default, as specified in `AGENTS.md`. A failure in
+`Init` or `Start` aborts startup; neither an absent `Critical` flag nor
+`Critical = false` authorises a partially started server to accept players.
 
-The reasoning is written out in `ServiceRegistry.luau` and is worth taking
-seriously: a server with no dealership is a server with no dealership, but a
-server with no `DataService` quietly loses everything its players do, and a server
-with no `AccessService` cannot be trusted about who is allowed on which team. Only
-that second kind justifies refusing to run. Thirteen services currently carry the
-flag, including `DataService`, `AccessService`, `TeamService`, `NetworkService`,
-`GamepassService`, `DeveloperProductService` and `ContentValidationService`.
+Only a genuinely degradable integration may opt in with `Optional = true`.
+Its failure is recorded in `Failed()`, logged as "Service failed and was stepped
+over", and left registered so callers can report feature unavailability. A
+service whose `Init` failed is never started. `Critical = true` always requires
+startup to abort, even if a conflicting `Optional = true` flag is present.
 
-Note that `AGENTS.md` describes this as `Optional = true`. That is stale wording;
-the code reads `Critical` and the default is optional.
+This distinction protects dependencies such as persistence and economy from
+silently disappearing while the rest of the server runs. Do not add optional
+flags merely to suppress startup errors; investigate and fix the failure.
 
 ### Finding other services
 
@@ -230,7 +226,7 @@ service", which is a startup failure rather than a silent nil.
 `Bootstrap.server.luau` validates the configuration, builds the context,
 registers every service in `serviceOrder`, arms `BindToClose` **before** starting
 anything, then runs `Initialise` followed by `Start` inside one `pcall`. If a
-critical service fails, the teardown runs and every player — present and future —
+required service fails, the teardown runs and every player — present and future —
 is kicked with a deliberately generic message; the real diagnostic stays in the
 server log, because returning service paths to a player turns a safe refusal into
 an architecture disclosure.
@@ -245,7 +241,8 @@ last autosave.
 ### Adding a service
 
 1. Create `src/server/Services/<Domain>Service.luau` with `Init`, `Start` and
-   `Destroy`. Add `Critical = true` only if the server is untrustworthy without it.
+   `Destroy`. It is required by default; use `Optional = true` only for a
+   genuinely degradable integration, with callers that handle unavailability.
 2. Add its name to `serviceOrder` in `Bootstrap.server.luau`, positioned after
    everything it needs to be ready. Registration is explicit; a file that is not
    in the list is dead code.
@@ -759,8 +756,9 @@ Run all of these before committing. CI runs the same set, so a failure here is a
 failure there.
 
 ```sh
-stylua --check src tests
-selene src tests
+stylua --check src tests scripts/*.luau
+selene src tests scripts/*.luau
+lune run scripts/run-tests.luau
 bash scripts/validate-structure.sh
 rojo build default.project.json --output build/RoleplayOS.rbxlx
 python3 scripts/validate-network-limits.py
@@ -781,9 +779,10 @@ python3 scripts/validate-network-limits.py
 
 Before a publish, follow the [release-readiness gate](RELEASE_READINESS.md) and
 the runtime checks in [Staging acceptance](STAGING_ACCEPTANCE.md). CI does not
-claim to run Roblox-runtime tests on a generic Linux runner: `tests/run.luau`
-needs a Roblox runtime, mapped by `acceptance.project.json`, and must be run in
-Studio or a pinned Roblox-compatible runner. See [Testing](TESTING.md).
+claim Roblox engine or published-server acceptance. It executes the contract
+suite with pinned Lune and explicit headless doubles; run the Studio-compatible
+specs through `acceptance.project.json` and the external release checks as well.
+See [Testing](TESTING.md) for the runner's exact coverage and limits.
 
 Two more habits from `AGENTS.md` worth restating, because both are invisible until
 they bite: add a migration whenever a persistent shape changes, and update the

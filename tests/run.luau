@@ -2014,5 +2014,6 @@ H.test("warrant cache ignores malformed persisted warrant entries and expiries",
 	service:Destroy()
 end)
 
+require(script.Parent.ServiceRegistryContracts)(H)
 H.finish()
 return true

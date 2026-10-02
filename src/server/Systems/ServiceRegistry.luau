@@ -32,25 +32,13 @@ function Registry:Failed(): { string }
 	return names
 end
 
--- How a service failing is handled.
---
--- There are sixty seven of these and until now any one of them failing took the
--- whole server down: the error reached the bootstrap, every player was kicked,
--- and everybody who tried to join afterwards was kicked too. A bug in the
--- furniture shop emptied the server.
---
--- Almost none of them are load bearing. A server with no dealership is a server
--- with no dealership; a server with no DataService is one that will quietly
--- lose everything its players do, and a server with no AccessService cannot be
--- trusted to say who is allowed on which team. Only that second kind is worth
--- refusing to run for, and those are marked `Critical` on the service itself.
---
--- Degraded beats dead. A failed service is still registered, so callers reach
--- it and fail per request, which the network layer already catches and reports
--- one feature at a time.
+-- Required failures abort startup. Degradation is an explicit opt-in for a
+-- genuinely optional integration, never inferred from a missing Critical flag.
+-- Critical takes precedence over a conflicting Optional flag. A failed optional
+-- service stays registered so callers can report its unavailable feature.
 function Registry:_handleFailure(context: any, name: string, phase: string, problem: any): boolean
 	local service = self.services[name]
-	if service.Critical == true then
+	if service.Critical == true or service.Optional ~= true then
 		return false
 	end
 	self.failed[name] = true
@@ -73,7 +61,7 @@ function Registry:Initialise(context: any)
 			if not self:_handleFailure(context, name, "Init", errorMessage) then
 				error(
 					string.format(
-						"Critical service %s failed to initialise: %s",
+						"Required service %s failed to initialise: %s",
 						name,
 						tostring(errorMessage)
 					),
@@ -98,7 +86,7 @@ function Registry:Start(context: any)
 			if not self:_handleFailure(context, name, "Start", errorMessage) then
 				error(
 					string.format(
-						"Critical service %s failed to start: %s",
+						"Required service %s failed to start: %s",
 						name,
 						tostring(errorMessage)
 					),
