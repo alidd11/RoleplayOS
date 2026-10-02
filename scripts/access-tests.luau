@@ -13,6 +13,8 @@ end
 return function(H: any)
 	local function fixture(): any
 		local runtime = Runtime.new()
+		local scheduler = table.clone(task)
+		runtime.globals.task = scheduler
 		local root = runtime.services.ServerScriptService.RoleplayOS.Services
 		local shared = runtime.services.ReplicatedStorage.RoleplayOS
 		local config = table.clone(runtime.require(shared.Config.Config))
@@ -35,6 +37,7 @@ return function(H: any)
 		local entry = runtime.require(root.ExperienceAccessService)
 		local players, logs = {}, {}
 		local f = {
+			Scheduler = scheduler,
 			Logs = logs,
 			Group = group,
 			Access = access,
@@ -237,12 +240,16 @@ return function(H: any)
 		end)
 		task.wait(0.1)
 		local bounded = result ~= nil and result.Failed == true
+		local released = f.Group.activeLookupCount == 0 and next(f.Group.lookupSlots) == nil
 		release()
 		await(function()
 			return result ~= nil
 		end)
 		f:Destroy()
-		H.expect(bounded, "stalled rank RPC bypassed lookup deadline")
+		H.expect(
+			bounded and released,
+			"stalled rank RPC bypassed deadline or retained cancelled worker"
+		)
 	end)
 
 	H.test("actual group lookup bounds shared RPC admission across players", function()
@@ -289,5 +296,91 @@ return function(H: any)
 		end)
 		f:Destroy()
 		H.expect(bounded, "stalled entry verification did not terminate fail-closed")
+	end)
+
+	H.test("uncancellable group workers retain admission until completion", function()
+		local f = fixture()
+		f.Scheduler.cancel = function()
+			error("injected cancellation refusal")
+		end
+		local release = stall(f)
+		local result = f.Group:GetMembership(f.Player10, "Police")
+		H.expect(
+			result.Failed and f.Group.activeLookupCount == 1,
+			"uncancellable worker lost its slot"
+		)
+		local other = f:Player(20)
+		H.expect(
+			f.Group:GetMembership(other, "Police").Failed and f.Calls == 1,
+			"timeout admitted replacement worker"
+		)
+		release()
+		await(function()
+			return f.Group.activeLookupCount == 0
+		end)
+		H.expect(next(f.Group.lookupSlots) == nil, "completion retained worker tracking")
+		f:Destroy()
+	end)
+
+	H.test("group teardown fences late results and clears outstanding admission", function()
+		local f = fixture()
+		f.Config.Groups.LookupTimeoutSeconds = 0.4
+		f.Scheduler.cancel = function()
+			error("injected cancellation refusal")
+		end
+		local release = stall(f)
+		local result
+		task.spawn(function()
+			result = f.Group:GetMembership(f.Player10, "Police")
+		end)
+		await(function()
+			return f.Calls == 1
+		end)
+		f:Destroy()
+		await(function()
+			return result ~= nil
+		end)
+		H.expect(
+			result.Failed and result.Reason == "PLAYER_UNAVAILABLE",
+			"teardown returned authoritative rank"
+		)
+		release()
+		task.wait(0.02)
+		H.expect(
+			f.Group.activeLookupCount == 0
+				and next(f.Group.lookupSlots) == nil
+				and next(f.Group.cache) == nil,
+			"late worker resurrected state"
+		)
+	end)
+
+	H.test("group lookup configuration rejects invalid durations and admission bounds", function()
+		local runtime = Runtime.new()
+		local root = runtime.services.ReplicatedStorage.RoleplayOS
+		local original = runtime.require(root.Config.Config)
+		local validator = runtime.require(root.Shared.ConfigValidator)
+		for _, field in
+			{
+				"LookupTimeoutSeconds",
+				"CacheSeconds",
+				"MaximumFailureBackoffSeconds",
+				"MaximumConcurrentLookups",
+			}
+		do
+			for _, value in { 0, -1, "4", 0 / 0, math.huge, -math.huge } do
+				local config = table.clone(original)
+				config.Groups = table.clone(config.Groups)
+				config.Groups[field] = value
+				local valid = validator.validate(config)
+				H.expect(not valid, "invalid group bound accepted: " .. field)
+			end
+		end
+		for _, value in { 1.5, 65 } do
+			local config = table.clone(original)
+			config.Groups = table.clone(config.Groups)
+			config.Groups.MaximumConcurrentLookups = value
+			H.expect(not validator.validate(config), "invalid admission count accepted")
+		end
+		H.expect(validator.validate(original), "valid group bounds refused")
 	end)
 end

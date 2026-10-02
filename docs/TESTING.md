@@ -23,3 +23,11 @@ quantity, stack and legacy-shape contracts, including preservation of unreadable
 data. It also calls actual NeedsService starter-food logic with a presentation
 double, proving inventory grant idempotence without claiming native Tool
 activation, respawn wiring or hunger persistence acceptance.
+
+`scripts/access-tests.luau` exercises actual group lookup, access, role assignment
+and entry verification with explicit rank/player fixtures. It covers cache expiry,
+negative-cache recovery, missing/non-member groups, profile/player fences, stalled
+RPC deadlines, shared admission, cancellation refusal and teardown. The fixture
+overrides only its isolated task adapter for cancellation failure. Player signals,
+prefetch pacing, real group ranks and Roblox RPC cancellation remain Studio/live
+acceptance work; no mock result establishes a production entitlement.

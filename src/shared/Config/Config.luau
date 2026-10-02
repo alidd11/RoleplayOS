@@ -334,6 +334,9 @@ local Config = {
 	-- here exists to keep this framework under that ceiling, because a throttled
 	-- check is read as an unverified member and an unverified member is kicked.
 	Groups = {
+		-- Bound the RPC itself, including entry checks outside the request gateway.
+		LookupTimeoutSeconds = 4,
+		MaximumConcurrentLookups = 16,
 		-- A verified answer is good for this long. Raising it cuts request volume
 		-- but leaves a promotion or removal unseen for longer.
 		CacheSeconds = 300,

@@ -82,6 +82,22 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 		table.insert(errors, "ProfileSizeWarningBytes must be below the DataStore value limit")
 	end
 	local economy = if type(config.Economy) == "table" then config.Economy else {}
+	local groups = if type(config.Groups) == "table" then config.Groups else {}
+	for _, field in { "LookupTimeoutSeconds", "CacheSeconds", "MaximumFailureBackoffSeconds" } do
+		local value = groups[field]
+		if type(value) ~= "number" or value ~= value or value <= 0 or value == math.huge then
+			table.insert(errors, "Invalid group lookup duration: " .. field)
+		end
+	end
+	local maximumLookups = groups.MaximumConcurrentLookups
+	if
+		type(maximumLookups) ~= "number"
+		or maximumLookups < 1
+		or maximumLookups > 64
+		or maximumLookups % 1 ~= 0
+	then
+		table.insert(errors, "Groups.MaximumConcurrentLookups must be a whole number from 1 to 64")
+	end
 	for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
 		local value = economy[field]
 		if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then

@@ -179,7 +179,9 @@ function Runtime.new(): any
 		cache[instance] = value
 		return value
 	end
-	return { require = loadModule, tests = tests, services = services }
+	-- Fixtures may replace explicit globals before loading a module (for example
+	-- task cancellation failure). Cached module environments remain isolated.
+	return { require = loadModule, tests = tests, services = services, globals = globals }
 end
 
 return Runtime
