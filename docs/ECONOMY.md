@@ -74,6 +74,15 @@ Vehicle, property and furniture services read prices only from configuration. Re
 
 If a fare result is ambiguous or recoverable after a validated journey, the request remains settlement-pending and cannot be cancelled. Completion retries reuse the taxi request ID and skip the journey checks, but still require the original active characters. Only definitive insufficient-funds or invalid-fare responses clear that pending state and make the request cancellable. A participant disconnecting during settlement cannot turn a possibly committed fare into a cancelled request. Pending taxi request metadata is bounded by the terminal-request cap and request-retention period; pruning that in-memory booking does not delete the EconomyService settlement journal, which still recovers on character selection. Cancellation is terminal: retained `Cancelled` requests cannot be replayed to refresh their retention timestamp or resend status notifications. Never accept a reward or price from a client.
 
+## Custody release credits
+
+Public custody release consumes one early-release credit. Character loading can
+yield while a developer receipt grants additional credits to the same profile.
+If release is refused, only the attempted credit is returned to the current
+count; the refund must not overwrite a concurrent grant. Successful release
+notifications report the current count. This preserves the receipt replay marker
+and does not change product IDs, prices, grant quantities or sentence policy.
+
 ## Wages
 
 Nothing paid anyone. Vehicles, food, furniture and property all took money and only reselling a vehicle ever returned any, so a balance could only fall and every price was arbitrary. Jobs carried a `BaseWage` that no code ever paid out.
