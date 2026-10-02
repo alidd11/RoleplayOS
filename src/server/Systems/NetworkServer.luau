@@ -241,7 +241,6 @@ function NetworkServer:RegisterFunction(
 		local inFlight = self.active[player.UserId]
 		if not inFlight then
 			inFlight = {}
-			self.active[player.UserId] = inFlight
 		end
 		local now = os.clock()
 		local ceiling = self.config.RequestAbandonSeconds or 30
@@ -290,6 +289,9 @@ function NetworkServer:RegisterFunction(
 			Endpoint = name,
 			UserId = player.UserId,
 		}
+		-- Publish tracking only when a slot is acquired. Busy/shutdown refusals
+		-- have no completion callback to remove an otherwise empty user entry.
+		self.active[player.UserId] = inFlight
 		inFlight[requestId] = slot
 		self.activeSlots[requestId] = slot
 		self.activeTotal += 1
