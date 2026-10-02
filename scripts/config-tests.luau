@@ -223,13 +223,20 @@ return function(H: any)
 		end)
 		H.expect(bucket:Allow("user") and not bucket:Allow("user"), "fractional cap was lost")
 		now = 1
-		H.expect(bucket:Allow("user") and not bucket:Allow("user"), "fractional refill was unbounded")
+		H.expect(
+			bucket:Allow("user") and not bucket:Allow("user"),
+			"fractional refill was unbounded"
+		)
 	end)
 
 	H.test("network size relationships and malformed sections fail safely", function()
 		local f = fixture()
 		H.expect(
-			not f.Validate("MaximumStringBytes", f.Config.Network.MaximumPayloadBytes + 1, "Network"),
+			not f.Validate(
+				"MaximumStringBytes",
+				f.Config.Network.MaximumPayloadBytes + 1,
+				"Network"
+			),
 			"request string exceeded its payload bound"
 		)
 		H.expect(
