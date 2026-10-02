@@ -81,23 +81,23 @@ return function(H: any)
 		)
 	end)
 
-	H.test("audit configuration rejects unsafe pending and threshold counts", function()
-		local f = fixture()
-		for field, minimum in { AuditMaximumPendingEntries = 25, AuditFlushThreshold = 1 } do
+	for field, minimum in { AuditMaximumPendingEntries = 25, AuditFlushThreshold = 1 } do
+		H.test("audit configuration rejects unsafe " .. field, function()
+			local f = fixture()
 			for _, value in { math.huge, -math.huge, 0 / 0, "25", 0, -1, 25.5, minimum - 1 } do
 				H.expect(not f.Validate(field, value), "invalid audit count accepted: " .. field)
 			end
-		end
-	end)
+		end)
+	end
 
-	H.test("audit configuration rejects non-finite flush and shutdown deadlines", function()
-		local f = fixture()
-		for _, field in { "AuditFlushIntervalSeconds", "AuditShutdownFlushSeconds" } do
+	for _, field in { "AuditFlushIntervalSeconds", "AuditShutdownFlushSeconds" } do
+		H.test("audit configuration rejects unsafe " .. field, function()
+			local f = fixture()
 			for _, value in { math.huge, -math.huge, 0 / 0, "5", 0, -1 } do
 				H.expect(not f.Validate(field, value), "invalid audit duration accepted: " .. field)
 			end
-		end
-	end)
+		end)
+	end
 
 	H.test(
 		"audit defaults, optional fallbacks and service clamp boundaries remain valid",

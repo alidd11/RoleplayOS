@@ -92,6 +92,18 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	then
 		table.insert(errors, "ProfileSizeWarningBytes must be below the DataStore value limit")
 	end
+	for field, minimum in { AuditMaximumPendingEntries = 25, AuditFlushThreshold = 1 } do
+		local value = framework[field]
+		if value ~= nil and not wholeNumber(value, minimum) then
+			table.insert(errors, "Invalid audit buffer bound: " .. field)
+		end
+	end
+	for _, field in { "AuditFlushIntervalSeconds", "AuditShutdownFlushSeconds" } do
+		local value = framework[field]
+		if value ~= nil and (not finiteNumber(value, 0) or value <= 0) then
+			table.insert(errors, "Invalid audit flush duration: " .. field)
+		end
+	end
 	local economy = if type(config.Economy) == "table" then config.Economy else {}
 	local groups = if type(config.Groups) == "table" then config.Groups else {}
 	for _, field in { "LookupTimeoutSeconds", "CacheSeconds", "MaximumFailureBackoffSeconds" } do

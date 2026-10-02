@@ -13,6 +13,9 @@ return function(H: any)
 		local data = {
 			UpdateSharedRecord = function(_self, _key, transform)
 				f.Writes += 1
+				if f.BeforeWrite then
+					f.BeforeWrite()
+				end
 				if f.FailWrite then
 					return nil, "INJECTED_WRITE_FAILURE"
 				end
@@ -35,18 +38,6 @@ return function(H: any)
 		end
 		return f
 	end
-
-	-- Temporary, bounded reproduction: removed once the startup guard is fixed.
-	H.test("audit diagnostic confirms an infinite pending bound retains 600 rows", function()
-		local f = fixture(math.huge)
-		for index = 1, 600 do
-			f:Record(tostring(index))
-		end
-		H.expect(
-			f.Service.pendingCount == 600 and f.Service.droppedPending == 0,
-			"unsafe configuration did not reproduce the missing cap"
-		)
-	end)
 
 	H.test("actual audit rings retain newest entries under explicit and fallback caps", function()
 		for _, maximum in { 25, 500 } do
@@ -98,4 +89,35 @@ return function(H: any)
 			"repeated audit ID duplicated its durable row"
 		)
 	end)
+
+	H.test(
+		"actual audit failed flush keeps newer arrivals when restoring an overflowing batch",
+		function()
+			local f = fixture(25)
+			for index = 1, 25 do
+				f:Record(tostring(index))
+			end
+			f.BeforeWrite = function()
+				for index = 26, 35 do
+					f:Record(tostring(index))
+				end
+			end
+			f.FailWrite = true
+			H.expect(not f.Service:Flush(), "injected failure was ignored")
+			H.expect(
+				f.Service.pendingCount == 25 and f.Service.droppedPending == 10,
+				"restoration bypassed the cap or lost its dropped-entry accounting"
+			)
+			f.BeforeWrite = nil
+			f.FailWrite = false
+			H.expect(
+				f.Service:Flush() and #f.Stored == 25,
+				"bounded restored batch did not recover"
+			)
+			H.expect(
+				f.Stored[1].AuditId == "11" and f.Stored[25].AuditId == "35",
+				"restoration evicted newer arrivals instead of oldest entries"
+			)
+		end
+	)
 end
