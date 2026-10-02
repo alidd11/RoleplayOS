@@ -69,7 +69,7 @@ function PayrollService:_hourlyRate(player: Player): (number?, string?)
 	local job = nil
 	for index = #records, 1, -1 do
 		local candidate = records[index]
-		local jobId = candidate and candidate.JobId
+		local jobId = if type(candidate) == "table" then candidate.JobId else nil
 		if type(jobId) == "string" and self.context.Configuration.Jobs[jobId] then
 			job = self.context.Configuration.Jobs[jobId]
 			break
