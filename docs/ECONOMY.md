@@ -36,6 +36,13 @@ receipt and both pending pointers are removed. The pending state is structurally
 limited to one settlement per player; completed sender receipts are bounded by
 `Economy.MaximumTransferReceipts`.
 
+Receipt retention treats missing, non-numeric and non-finite completion timestamps
+as unknown chronology (oldest), with the existing ID tie-break. The current
+receipt remains protected by the retention ordering. This fallback does not
+rewrite historical replay payloads: malformed scalar rows are removed, but a
+receipt table is only evicted when the configured cap requires it. Corrupt
+timestamp metadata must not prevent a committed settlement from finalising.
+
 Committed records are never rolled back; each profile's deterministic transaction ID makes replay safe
 when a save or acknowledgement result was ambiguous. Phone transfer attempts carry
 a stable operation ID across timeouts, and taxi fares derive their settlement ID

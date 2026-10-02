@@ -62,7 +62,11 @@ return function(H: any)
 			end
 			local updated
 			for _ = 1, 2 do
-				updated = transform(copy(shared[key]))
+				local ok, result = pcall(transform, copy(shared[key]))
+				if not ok then
+					return nil, "SHARED_RECORD_UPDATE_FAILED"
+				end
+				updated = result
 			end
 			-- DataService's logical contract includes deletion, backed by its tombstone.
 			shared[key] = copy(updated)
@@ -436,6 +440,84 @@ return function(H: any)
 				count == 2 and recent["phone-aaa"] == nil and recent["phone-ccc"] ~= nil,
 				"receipt retention exceeded cap or lost current receipt"
 			)
+		end
+	)
+	H.test(
+		"malformed legacy receipt timestamps cannot prevent bounded settlement finalisation",
+		function()
+			for _, timestamp in { "yesterday", {}, 0 / 0, math.huge, -math.huge } do
+				for _, maximum in { 2, 4 } do
+					local f = fixture()
+					f.Economy.context.Configuration.Economy.MaximumTransferReceipts = maximum
+					f.Shared["pts:10"] = {
+						Recent = {
+							invalidTime = {
+								TransferId = "invalidTime",
+								SenderCharacterId = "sender",
+								RecipientUserId = 20,
+								RecipientCharacterId = "recipient",
+								Amount = 1,
+								Kind = "PlayerTransfer",
+								CompletedAt = timestamp,
+							},
+							validTime = {
+								TransferId = "validTime",
+								SenderCharacterId = "sender",
+								RecipientUserId = 20,
+								RecipientCharacterId = "recipient",
+								Amount = 1,
+								Kind = "PlayerTransfer",
+								CompletedAt = 1,
+							},
+							corrupt = "invalid receipt",
+						},
+					}
+					local result, reason =
+						f.Economy:Transfer(f.Players[10], f.Players[20], 10, "operation")
+					H.expect(
+						result ~= nil and reason == nil,
+						"malformed receipt timestamp blocked finalisation"
+					)
+					f:AssertSettled()
+					local recent = f.Shared["pts:10"].Recent
+					H.expect(
+						recent.corrupt == nil and recent.validTime ~= nil,
+						"receipt maintenance retained wrong rows"
+					)
+					if maximum == 2 then
+						H.expect(
+							recent.invalidTime == nil,
+							"unknown chronology displaced a valid timestamp"
+						)
+					else
+						H.expect(
+							recent.invalidTime ~= nil
+								and recent.invalidTime.Amount == 1
+								and recent.invalidTime.TransferId == "invalidTime",
+							"maintenance discarded a replay payload without cap pressure"
+						)
+						local retainedTime = recent.invalidTime.CompletedAt
+						H.expect(
+							retainedTime == timestamp
+								or (retainedTime ~= retainedTime and timestamp ~= timestamp)
+								or (type(retainedTime) == "table" and next(retainedTime) == nil),
+							"maintenance rewrote historical timestamp"
+						)
+					end
+					H.expect(
+						recent["phone-operation"] ~= nil,
+						"maintenance lost the current replay receipt"
+					)
+					local count = 0
+					for _ in recent do
+						count += 1
+					end
+					H.expect(
+						count == (if maximum == 2 then 2 else 3),
+						"receipt history exceeded cap or lost an untrimmed receipt"
+					)
+				end
+			end
 		end
 	)
 end

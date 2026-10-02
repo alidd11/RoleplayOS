@@ -177,7 +177,17 @@ function EconomyService:_storeSettlementReceipt(record: any): (boolean, string?)
 			local ids = {}
 			for id, receipt in index.Recent do
 				if type(id) == "string" and type(receipt) == "table" then
-					table.insert(ids, { Id = id, At = receipt.CompletedAt or 0 })
+					local completedAt = receipt.CompletedAt
+					if
+						type(completedAt) ~= "number"
+						or completedAt ~= completedAt
+						or math.abs(completedAt) == math.huge
+					then
+						-- Unknown chronology sorts oldest without rewriting the receipt's
+						-- replay payload. Corrupt metadata must not block finalisation.
+						completedAt = 0
+					end
+					table.insert(ids, { Id = id, At = completedAt })
 				else
 					index.Recent[id] = nil
 				end
