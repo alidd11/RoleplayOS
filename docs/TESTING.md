@@ -78,3 +78,12 @@ inactive-character shutdown recovery. Data access, audit and duty are explicit
 doubles; world creation is a presentation fixture using Lune Parts. Native
 prompt signals, expiry scheduling, player-removal ordering, durable saves and
 crash recovery remain engine/published-place acceptance work.
+
+`scripts/vehicle-ownership-tests.luau` exercises actual ProfileSchema migration,
+VehicleOwnershipService purchase/creation and EconomyService payment methods.
+Unreadable ownership is preserved without charging or allocating; a changed
+collection across a yielding reservation releases its plate before payment.
+Valid purchase and reservation failure retain their existing behaviour. Access,
+content lookup, index scheduling, audit and registration/profile storage are
+explicit doubles. Real assets, facility UI, registration-store contention and
+durable purchase recovery remain external acceptance work.
