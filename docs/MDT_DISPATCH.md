@@ -10,6 +10,10 @@ Control-room users receive a live call queue and active-unit board. Unit registr
 
 Incidents and warrants have stable IDs, durable records and audit trails. Active units and calls remain temporary, server-local state and local updates use RemoteEvents. The live unresolved call set is hard-capped by `MaximumActiveCalls`; once full, new calls are refused rather than evicting an active emergency or allowing the server-local queue and snapshots to grow without bound. Resolved calls waiting for their durable incident projection are separately capped by `MaximumResolvedRecoveryCalls`; if that recovery backlog is full, another call is not marked resolved until capacity becomes available, so the server does not trade bounded memory for lost history. Successfully projected calls leave recovery memory on the next sweep. Resolving a dispatch call asynchronously writes an idempotent closed incident projection to the persistent MDT record/index stores; this makes historical review available without leaking the active call queue into another `game.JobId`.
 
+Call updates validate the complete status/priority patch before mutating either
+field. A rejected patch leaves call state, revisions and publications unchanged;
+the remote schema also validates priorities before invoking the service.
+
 Operational call notes are retained to the configured `MaximumOperationalNotes` limit, validated as a whole number from 0 through 200 and defensively clamped at runtime. This keeps even a malformed configuration from turning note trimming into unbounded retained state or a non-terminating loop.
 
 The MDT includes People, Vehicles and Incidents views. Authorised police duties can issue a filtered, expiry-bounded warrant from a person record and revoke it through a two-step confirmation. Active warrants appear as `WANTED` on both the person and their registered vehicle. See [MDT persistence](MDT_PERSISTENCE.md) for index and failure behaviour.
