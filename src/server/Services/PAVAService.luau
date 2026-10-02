@@ -53,6 +53,18 @@ function PAVAService:Init(context: any)
 	self.running = false
 end
 
+function PAVAService:_lineOfSight(actor: Player, target: Player): boolean
+	local actorRoot, targetRoot = rootOf(actor), rootOf(target)
+	if not actorRoot or not targetRoot then
+		return false
+	end
+	local parameters = RaycastParams.new()
+	parameters.FilterType = Enum.RaycastFilterType.Exclude
+	parameters.FilterDescendantsInstances = { actor.Character, target.Character }
+	return workspace:Raycast(actorRoot.Position, targetRoot.Position - actorRoot.Position, parameters) == nil
+end
+
+
 function PAVAService:_restore(target: Player, token: number)
 	local record = self.effects[target.UserId]
 	if not record or record.Token ~= token then
@@ -114,6 +126,9 @@ function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, strin
 	local targetHumanoid = humanoidOf(target)
 	if not targetHumanoid or targetHumanoid.Health <= 0 then
 		return false, "PAVA_TARGET_INVALID"
+	end
+	if not self:_lineOfSight(actor, target) then
+		return false, "PAVA_TARGET_OBSTRUCTED"
 	end
 	self.cooldowns[actor.UserId] = now
 	local token = now
