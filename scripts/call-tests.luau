@@ -31,7 +31,11 @@ return function(H: any)
 			BeginShutdown = function() end,
 		}
 		local duty = { DepartmentId = "Police", Callsign = "P1" }
-		local mdt = { GetAuthorisedDuty = function() return duty end }
+		local mdt = {
+			GetAuthorisedDuty = function()
+				return duty
+			end,
+		}
 		local services = {
 			CallService = service,
 			UnitService = units,
@@ -88,16 +92,19 @@ return function(H: any)
 		local f = fixture()
 		local call = f.Create()
 		H.expect(f.Service:Assign(call.CallId, "police"), "fixture assignment failed")
-		local revision, serviceRevision, publications = call.Revision, f.Service.revision, #f.Publications
+		local revision, serviceRevision, publications =
+			call.Revision, f.Service.revision, #f.Publications
 		local priority = call.Priority
-		local result, reason = f.Service:Update(call.CallId, { Status = "OnScene", Priority = "invalid" })
+		local result, reason =
+			f.Service:Update(call.CallId, { Status = "OnScene", Priority = "invalid" })
 		H.expect(result == nil and reason == "INVALID_CALL_PRIORITY", "invalid patch accepted")
 		H.expect(
 			call.Status == "Assigned" and call.Priority == priority,
 			"refused patch partially changed the call"
 		)
 		H.expect(
-			call.Revision == revision and f.Service.revision == serviceRevision
+			call.Revision == revision
+				and f.Service.revision == serviceRevision
 				and #f.Publications == publications,
 			"refused patch advanced revisions or published"
 		)
@@ -108,8 +115,10 @@ return function(H: any)
 			"valid combined update refused"
 		)
 		H.expect(
-			call.Status == "OnScene" and call.Priority == nextPriority
-				and call.Revision == revision + 1 and f.Service.revision == serviceRevision + 1
+			call.Status == "OnScene"
+				and call.Priority == nextPriority
+				and call.Revision == revision + 1
+				and f.Service.revision == serviceRevision + 1
 				and #f.Publications == publications + 1,
 			"valid patch did not commit exactly once"
 		)
@@ -127,7 +136,11 @@ return function(H: any)
 			"invalid client priority passed schema"
 		)
 		H.expect(
-			schema({ CallId = "call", Status = "OnScene", Priority = f.Configuration.Dispatch.CallPriorities[1] }),
+			schema({
+				CallId = "call",
+				Status = "OnScene",
+				Priority = f.Configuration.Dispatch.CallPriorities[1],
+			}),
 			"valid update failed schema"
 		)
 	end)
@@ -141,7 +154,8 @@ return function(H: any)
 		local revision, publications = call.Revision, #f.Publications
 		H.expect(f.Service:Assign(call.CallId, "police"), "retry refused")
 		H.expect(
-			call.Revision == revision and #f.Publications == publications
+			call.Revision == revision
+				and #f.Publications == publications
 				and f.Units.police.Status == "OnScene",
 			"retry rewrote progress"
 		)
@@ -150,17 +164,24 @@ return function(H: any)
 		H.expect(not f.Service:Assign(call.CallId, "fire"), "wrong department attached")
 		H.expect(f.Service:Close(call.CallId, 10), "resolution refused")
 		H.expect(
-			f.Units.police.AssignedCallId == nil and f.Units.police.Status == "Available"
-				and f.Units.second.AssignedCallId == nil and #f.Projections == 1,
+			f.Units.police.AssignedCallId == nil
+				and f.Units.police.Status == "Available"
+				and f.Units.second.AssignedCallId == nil
+				and #f.Projections == 1,
 			"resolution did not release units and schedule history"
 		)
 		revision, publications = call.Revision, #f.Publications
 		H.expect(not f.Service:Assign(call.CallId, "police"), "resolved call reassigned")
-		H.expect(f.Service:Update(call.CallId, { Status = "OnScene" }) == nil, "resolved call updated")
+		H.expect(
+			f.Service:Update(call.CallId, { Status = "OnScene" }) == nil,
+			"resolved call updated"
+		)
 		H.expect(not f.Service:Close(call.CallId, 10), "resolved call closed twice")
 		H.expect(
-			call.Status == "Resolved" and call.Revision == revision
-				and #f.Publications == publications and #f.Projections == 1,
+			call.Status == "Resolved"
+				and call.Revision == revision
+				and #f.Publications == publications
+				and #f.Projections == 1,
 			"terminal refusal mutated history"
 		)
 	end)
@@ -191,11 +212,16 @@ return function(H: any)
 		H.expect(f.Service:Close(first.CallId, 10), "first close refused")
 		local closed, reason = f.Service:Close(second.CallId, 10)
 		H.expect(
-			not closed and reason == "INCIDENT_RECOVERY_CAPACITY_REACHED" and second.Status == "Open",
+			not closed
+				and reason == "INCIDENT_RECOVERY_CAPACITY_REACHED"
+				and second.Status == "Open",
 			"full recovery backlog discarded another call"
 		)
 		local snapshot = f.Service:Snapshot()
-		H.expect(#snapshot == 1 and snapshot[1].CallId == second.CallId, "recovery call leaked to board")
+		H.expect(
+			#snapshot == 1 and snapshot[1].CallId == second.CallId,
+			"recovery call leaked to board"
+		)
 		H.expect(f.Service.calls[first.CallId] == first, "unpersisted history discarded")
 		first.IncidentPersisted = true
 		f.Service:Snapshot()
@@ -208,11 +234,16 @@ return function(H: any)
 		local call = f.Create()
 		local player = { UserId = 10, DisplayName = "Officer" }
 		for _, note in { "First note", "Second note", "Third note" } do
-			H.expect(f.Service:AddOperationalNote(player, call.CallId, note) == call, "note refused")
+			H.expect(
+				f.Service:AddOperationalNote(player, call.CallId, note) == call,
+				"note refused"
+			)
 		end
 		H.expect(
-			#call.OperationalNotes == 2 and call.OperationalNotes[1].Text == "Second note"
-				and call.OperationalNotes[2].Text == "Third note" and #f.Audits == 3,
+			#call.OperationalNotes == 2
+				and call.OperationalNotes[1].Text == "Second note"
+				and call.OperationalNotes[2].Text == "Third note"
+				and #f.Audits == 3,
 			"note retention order or audit wrong"
 		)
 		local lookups = 0
@@ -225,6 +256,9 @@ return function(H: any)
 		end
 		local result, reason = f.Service:AddOperationalNote(player, call.CallId, "Late note")
 		H.expect(result == nil and reason == "CALL_NOT_FOUND", "late note appended after closure")
-		H.expect(#call.OperationalNotes == 2 and #f.Audits == 3, "late note changed historical snapshot")
+		H.expect(
+			#call.OperationalNotes == 2 and #f.Audits == 3,
+			"late note changed historical snapshot"
+		)
 	end)
 end
