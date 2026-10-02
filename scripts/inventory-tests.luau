@@ -88,7 +88,7 @@ return function(H: any)
 	end)
 
 	H.test("inventory ignores unrelated malformed rows without deleting them", function()
-		local f = fixture({ "damaged row", { DefinitionId = "Unknown", Quantity = "unreadable" } })
+		local f = fixture({ 4, { DefinitionId = "Unknown", Quantity = "unreadable" } })
 		H.expect(
 			f.Service:Add(f.Player, "owned", "Sandwich", 1),
 			"malformed unrelated row blocked grant"
@@ -96,7 +96,7 @@ return function(H: any)
 		H.expect(f.Service:Has(f.Character, "Sandwich"), "valid held item hidden")
 		H.expect(f.Service:Remove(f.Player, "owned", "Sandwich", 1), "valid removal blocked")
 		H.expect(
-			f.Character.Inventory[1] == "damaged row"
+			f.Character.Inventory[1] == 4
 				and #f.Character.Inventory == 2
 				and f.Dirty() == 2,
 			"unrelated rows were rewritten"
@@ -168,7 +168,7 @@ return function(H: any)
 	H.test(
 		"actual starter-food grant survives unrelated malformed inventory and stays idempotent",
 		function()
-			local f = fixture({ "damaged row" })
+			local f = fixture({ 4 })
 			local backpack = roblox.Instance.new("Backpack")
 			f.Player.FindFirstChildOfClass = function(_self, name)
 				return if name == "Backpack" then backpack else nil
@@ -189,7 +189,7 @@ return function(H: any)
 				"starter grant failed or duplicated"
 			)
 			H.expect(
-				f.Character.Inventory[1] == "damaged row" and f.Service:Has(f.Character, "Sandwich"),
+				f.Character.Inventory[1] == 4 and f.Service:Has(f.Character, "Sandwich"),
 				"grant destroyed legacy data"
 			)
 			H.expect(f.Dirty() == 2, "repeated starter grant dirtied profile again")
