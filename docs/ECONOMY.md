@@ -2,6 +2,11 @@
 
 `EconomyService` is the only balance writer. Callers construct a transaction from server configuration; validation rejects non-finite, non-positive, fractional, duplicate and unaffordable operations. The active, owned character is required. Applied transactions update memory atomically, append a bounded history, mark the profile dirty and emit an audit record.
 
+Startup requires `MaximumTransactionHistory` and `MaximumTransferReceipts` to be
+finite whole numbers of at least one. Infinity cannot disable retention by
+passing the integer check. Existing cap defaults and valid finite tuning are
+unchanged; invalid configuration is refused before services start.
+
 Transactions may select `Account = "Bank"` or `Account = "Cash"`. Omitting the
 field continues to mean `Bank`, preserving older callers. Physical money drops
 and robbery proceeds use `Cash`; phone transfers, purchases and wages retain

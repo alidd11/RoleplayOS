@@ -130,7 +130,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	end
 	for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
 		local value = economy[field]
-		if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then
+		if not wholeNumber(value, 1) then
 			table.insert(errors, "Invalid economy bound: " .. field)
 		end
 	end
