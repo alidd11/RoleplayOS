@@ -70,3 +70,11 @@ departure/teardown fences across a yielding duty lookup. Player, duty, profile
 access and economy payment are explicit doubles; the physical root uses a Lune
 Instance with an explicit position. Periodic startup/player signals, real duty
 integration, balance persistence and native movement are not acceptance-tested.
+
+`scripts/money-drop-tests.luau` exercises actual MoneyDropService and
+EconomyService cash methods together: cash/bank separation, pickup retries,
+concurrent claims, expiry during duty lookup, creation-failure refunds and
+inactive-character shutdown recovery. Data access, audit and duty are explicit
+doubles; world creation is a presentation fixture using Lune Parts. Native
+prompt signals, expiry scheduling, player-removal ordering, durable saves and
+crash recovery remain engine/published-place acceptance work.
