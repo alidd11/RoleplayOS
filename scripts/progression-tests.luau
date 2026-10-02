@@ -121,8 +121,8 @@ return function(H: any)
 		end
 	end)
 
-	H.test("progression validates mutation containers before changing XP or replay IDs", function()
-		for _, field in { "RewardIds", "RewardOrder", "History" } do
+	for _, field in { "RewardIds", "RewardOrder", "History" } do
+		H.test("progression validates " .. field .. " before changing XP or replay IDs", function()
 			for _, corrupt in { 4, "damaged" } do
 				local persisted = state()
 				persisted[field] = corrupt
@@ -130,7 +130,10 @@ return function(H: any)
 				local completed, awarded, reason = pcall(grant, f, "reward")
 				H.expect(
 					completed and awarded == nil and reason == "INVALID_PROGRESSION_STATE",
-					"malformed container was not safely refused"
+					"malformed "
+						.. field
+						.. " was not safely refused; XP: "
+						.. tostring(persisted.TotalXP)
 				)
 				H.expect(
 					persisted.TotalXP == 100
@@ -143,8 +146,8 @@ return function(H: any)
 					"refusal published a grant"
 				)
 			end
-		end
-	end)
+		end)
+	end
 
 	H.test("progression refuses sparse retention lists without dropping their source", function()
 		for _, field in { "RewardOrder", "History" } do
@@ -164,33 +167,33 @@ return function(H: any)
 		end
 	end)
 
-	H.test(
-		"progression refuses unreadable track values and preserves partial legacy state",
-		function()
-			for _, trackXp in { "50", -1, 0.5, math.huge, 0 / 0 } do
-				local persisted = state()
-				persisted.Tracks["Job:DeliveryDriver"] = trackXp
-				local f = fixture(persisted)
-				local completed, awarded, reason = pcall(grant, f, "reward")
-				H.expect(
-					completed and awarded == nil and reason == "INVALID_PROGRESSION_STATE",
-					"unreadable track accepted a grant"
-				)
-				H.expect(persisted.TotalXP == 100 and f.Dirty() == 0, "refusal changed overall XP")
-			end
-			local tracks = { ["Job:DeliveryDriver"] = 50 }
-			local persisted = { Tracks = tracks }
+	H.test("progression refuses unreadable track values", function()
+		for _, trackXp in { "50", -1, 0.5, math.huge, 0 / 0 } do
+			local persisted = state()
+			persisted.Tracks["Job:DeliveryDriver"] = trackXp
 			local f = fixture(persisted)
-			H.expect(grant(f, "legacy") ~= nil, "absent legacy fields were not backfilled")
+			local completed, awarded, reason = pcall(grant, f, "reward")
 			H.expect(
-				f.Character.Progression == persisted
-					and persisted.Tracks == tracks
-					and tracks["Job:DeliveryDriver"] == 75
-					and persisted.TotalXP == 25,
-				"backfill erased valid legacy tracks"
+				completed and awarded == nil and reason == "INVALID_PROGRESSION_STATE",
+				"unreadable track accepted a grant"
 			)
+			H.expect(persisted.TotalXP == 100 and f.Dirty() == 0, "refusal changed overall XP")
 		end
-	)
+	end)
+
+	H.test("progression preserves partial legacy state while backfilling absent fields", function()
+		local tracks = { ["Job:DeliveryDriver"] = 50 }
+		local persisted = { Tracks = tracks }
+		local f = fixture(persisted)
+		H.expect(grant(f, "legacy") ~= nil, "absent legacy fields were not backfilled")
+		H.expect(
+			f.Character.Progression == persisted
+				and persisted.Tracks == tracks
+				and tracks["Job:DeliveryDriver"] == 75
+				and persisted.TotalXP == 25,
+			"backfill erased valid legacy tracks"
+		)
+	end)
 
 	H.test(
 		"progression grants remain idempotent with bounded replay and newest-first history",
