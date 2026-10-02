@@ -62,7 +62,11 @@ return function(H: any)
 			end
 			local updated
 			for _ = 1, 2 do
-				updated = transform(copy(shared[key]))
+				local ok, result = pcall(transform, copy(shared[key]))
+				if not ok then
+					return nil, "SHARED_RECORD_UPDATE_FAILED"
+				end
+				updated = result
 			end
 			-- DataService's logical contract includes deletion, backed by its tombstone.
 			shared[key] = copy(updated)
@@ -436,6 +440,55 @@ return function(H: any)
 				count == 2 and recent["phone-aaa"] == nil and recent["phone-ccc"] ~= nil,
 				"receipt retention exceeded cap or lost current receipt"
 			)
+		end
+	)
+	H.test(
+		"malformed legacy receipt timestamps cannot prevent bounded settlement finalisation",
+		function()
+			local f = fixture()
+			f.Shared["pts:10"] = {
+				Recent = {
+					invalidTime = {
+						TransferId = "invalidTime",
+						SenderCharacterId = "sender",
+						RecipientUserId = 20,
+						RecipientCharacterId = "recipient",
+						Amount = 1,
+						Kind = "PlayerTransfer",
+						CompletedAt = "yesterday",
+					},
+					validTime = {
+						TransferId = "validTime",
+						SenderCharacterId = "sender",
+						RecipientUserId = 20,
+						RecipientCharacterId = "recipient",
+						Amount = 1,
+						Kind = "PlayerTransfer",
+						CompletedAt = 1,
+					},
+					corrupt = "invalid receipt",
+				},
+			}
+			local result, reason = f.Economy:Transfer(f.Players[10], f.Players[20], 10, "operation")
+			H.expect(
+				result ~= nil and reason == nil,
+				"malformed receipt timestamp blocked finalisation"
+			)
+			f:AssertSettled()
+			local recent = f.Shared["pts:10"].Recent
+			H.expect(
+				recent.invalidTime == nil and recent.corrupt == nil and recent.validTime ~= nil,
+				"receipt maintenance retained wrong rows"
+			)
+			H.expect(
+				recent["phone-operation"] ~= nil,
+				"maintenance lost the current replay receipt"
+			)
+			local count = 0
+			for _ in recent do
+				count += 1
+			end
+			H.expect(count == 2, "receipt history exceeded configured cap")
 		end
 	)
 end
