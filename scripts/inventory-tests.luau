@@ -217,6 +217,25 @@ return function(H: any)
 		end
 	)
 
+	H.test("inventory refuses multi-row sparse containers", function()
+		local item = { ItemId = "original", DefinitionId = "Parcel", Quantity = 1 }
+		local inventory = { [2] = item, [3] = item }
+		local f = fixture(inventory)
+		local added, addReason = f.Service:Add(f.Player, "owned", "Parcel", 1)
+		local completed, removed, removeReason =
+			pcall(f.Service.Remove, f.Service, f.Player, "owned", "Parcel", 1)
+		H.expect(not added and addReason == "INVALID_INVENTORY", "sparse addition accepted")
+		H.expect(
+			completed and not removed and removeReason == "INVALID_INVENTORY",
+			"sparse removal was not refused safely"
+		)
+		H.expect(not f.Service:Has(f.Character, "Parcel"), "sparse row was usable")
+		H.expect(
+			f.Character.Inventory == inventory and item.Quantity == 1 and f.Dirty() == 0,
+			"sparse source changed"
+		)
+	end)
+
 	H.test("non-list persisted inventory reaches migration but is not exposed as usable", function()
 		local inventory = malformedList("legacy")
 		local f = fixture(inventory)
