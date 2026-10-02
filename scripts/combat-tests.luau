@@ -183,6 +183,7 @@ return function(H: any)
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
 		local source = taserServerSource()
 		local trustsServerIssuance = string.find(source, "RoleplayOSDutyIssued", 1, true) ~= nil
+			and string.find(source, "RoleplayOSToolId", 1, true) ~= nil
 		for loadoutId, loadout in config.Loadouts do
 			if table.find(loadout.ToolIds or {}, "Taser") then
 				H.expect(
