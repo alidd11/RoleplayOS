@@ -76,7 +76,7 @@ local function storedNumber(
 		return defaultValue, nil
 	end
 	local parsed = tonumber(value)
-	if parsed == nil then
+	if parsed == nil or parsed ~= parsed or math.abs(parsed) == math.huge then
 		return nil, invalidReason
 	end
 	return parsed, nil
@@ -107,7 +107,13 @@ function ProfileSchema.migrate(data: any, userId: number): (any?, string?)
 	-- every join, forever.
 	local storedVersion = data.SchemaVersion
 	local version = if storedVersion == nil then 0 else tonumber(storedVersion)
-	if version == nil then
+	if
+		version == nil
+		or version ~= version
+		or math.abs(version) == math.huge
+		or version < 0
+		or version % 1 ~= 0
+	then
 		return nil, "PROFILE_VERSION_INVALID"
 	end
 	if version > ProfileSchema.CURRENT_VERSION then

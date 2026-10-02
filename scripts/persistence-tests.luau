@@ -192,6 +192,48 @@ return function(H: any)
 		end
 	end)
 	H.test(
+		"invalid migration numbers are quarantined without rewriting the primary profile",
+		function()
+			for _, case in { "fractional-version", "overflowed-balance" } do
+				local f = fixture()
+				local stored = f.Store.Values["42"]
+				if case == "fractional-version" then
+					stored.SchemaVersion = 0.5
+				else
+					stored.SchemaVersion = 9
+					stored.Characters.legacy = { Economy = { Balance = "1e309" } }
+				end
+				local profile, reason = f.Service:Load(f.Player)
+				H.expect(
+					profile == nil and reason == "PROFILE_QUARANTINED",
+					"invalid numeric state was published"
+				)
+				H.expect(
+					f.Store.Values["42"].SchemaVersion == stored.SchemaVersion,
+					"primary schema changed on rejection"
+				)
+				local backup = f.Store.Values["q:42"]
+				if case == "fractional-version" then
+					H.expect(
+						backup.Reason == "PROFILE_VERSION_INVALID"
+							and backup.Profile.SchemaVersion == 0.5,
+						"version backup lost original state"
+					)
+				else
+					H.expect(
+						f.Store.Values["42"].Characters.legacy.Economy.Balance == "1e309",
+						"primary balance was coerced on rejection"
+					)
+					H.expect(
+						backup.Reason == "PROFILE_ECONOMY_BALANCE_INVALID"
+							and backup.Profile.Characters.legacy.Economy.Balance == "1e309",
+						"balance backup lost original state"
+					)
+				end
+			end
+		end
+	)
+	H.test(
 		"a departed player's late load releases its lease without publishing a session",
 		function()
 			local f = fixture()
