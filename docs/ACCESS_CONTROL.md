@@ -4,4 +4,16 @@ Access rules support public, gamepass, application, rank, qualification, departm
 
 Whitelisted teams can require Roblox Group membership and minimum rank through a `Group` rule. Emergency roles combine this with the approved application state. See [Roblox group integration](ROBLOX_GROUPS.md).
 
+Duty lookup rechecks the exact player, duty record and expected Team after a
+yielding access evaluation. A team change, including starting a taxi shift,
+ends the mismatched emergency shift through its normal cleanup and cannot return
+the old duty authority. An uncertain `GROUP_CHECK_FAILED` result still preserves
+an otherwise valid shift; a definitive denial ends it.
+
+The permanent duty fixture uses actual DutyService, TaxiService and
+EmploymentService across an access yield. It covers the team transition,
+normal/uncertain access, definitive denial and replacement-record preservation.
+Group access, player/team registry and cleanup dependencies are explicit doubles;
+native signals, group RPCs, equipment and dispatch delivery remain external tests.
+
 Locked catalogue entries remain visible unless `DisplayWhenLocked` is false. Gamepass denials include prompt metadata; application and qualification denials explain the next action. The client may display or prompt, but every protected server action evaluates access again. Marketplace ownership is checked through Roblox and refreshed after the purchase-finished signal.
