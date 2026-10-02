@@ -105,9 +105,9 @@ return function(H: any)
 		runtime.services.Players.GetPlayerByUserId = function(_self, userId)
 			if userId == actor.UserId then
 				return actor
-		elseif userId == target.UserId then
+			elseif userId == target.UserId then
 				return target
-		end
+			end
 			return nil
 		end
 
@@ -159,5 +159,4 @@ return function(H: any)
 		H.expect(not sprayed, "obstructed PAVA target was accepted")
 		H.expect(reason == "PAVA_TARGET_OBSTRUCTED", "obstructed target did not report obstruction")
 	end)
-
 end
