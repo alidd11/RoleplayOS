@@ -109,8 +109,8 @@ return function(H: any)
 			SetAttribute = function() end,
 		}
 		f.Receipt = { ProductId = 123, PlayerId = 10, PurchaseId = "save-fault" }
-		function f:Process()
-			return products:_process(self.Receipt)
+		function f:Process(receipt: any?)
+			return products:_process(receipt or self.Receipt)
 		end
 		function f:Edit()
 			return characters:SetAuthoredAppearance(player, "active", { HeadScale = 1 })
@@ -226,17 +226,24 @@ return function(H: any)
 	)
 
 	H.test(
-		"actual receipt replay rechecks persistence and preserves additions during a failed save",
+		"actual receipt replay rechecks persistence and preserves a second grant during a failed save",
 		function()
 			local f = fixture(grants[1].Definition)
+			local other = { ProductId = 123, PlayerId = 10, PurchaseId = "another-receipt" }
+			local otherDecision
 			f.Store.Before = function()
-				f.Profile.Consumables.AppearanceEdits += 2
-				f.Data:MarkDirty(f.Player)
+				otherDecision = f:Process(other)
 				error("Injected save fault after another mutation")
 			end
 			H.expect(
-				f:Process().Name == "NotProcessedYet" and f.Profile.Consumables.AppearanceEdits == 3,
-				"rollback erased a later mutation"
+				f:Process().Name == "NotProcessedYet" and f.Profile.Consumables.AppearanceEdits == 2,
+				"rollback erased a second grant"
+			)
+			H.expect(
+				otherDecision.Name == "NotProcessedYet"
+					and f.Profile.Consumables.ProcessedDeveloperReceipts["another-receipt"]
+						~= nil,
+				"second pending receipt lost its marker or acknowledged early"
 			)
 			f.Store.Before = function()
 				error("Injected replay save fault")
@@ -245,8 +252,13 @@ return function(H: any)
 			f.Store.Before = nil
 			H.expect(
 				f:Process().Name == "PurchaseGranted"
-					and f.Store.Value.Consumables.AppearanceEdits == 3,
+					and f.Store.Value.Consumables.AppearanceEdits == 2,
 				"healthy replay lost credits"
+			)
+			H.expect(
+				f:Process(other).Name == "PurchaseGranted"
+					and f.Store.Value.Consumables.AppearanceEdits == 2,
+				"second receipt replay duplicated or lost its grant"
 			)
 		end
 	)
