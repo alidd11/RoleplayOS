@@ -239,12 +239,18 @@ function CallService:Update(callId: string, data: any): (any?, string?)
 		if (call.Status ~= "Assigned" and call.Status ~= "OnScene") or #call.UnitIds == 0 then
 			return nil, "INVALID_CALL_STATUS"
 		end
-		call.Status = "OnScene"
 	end
 	if data.Priority ~= nil then
 		if not table.find(self.context.Configuration.Dispatch.CallPriorities, data.Priority) then
 			return nil, "INVALID_CALL_PRIORITY"
 		end
+	end
+	-- Validate the complete patch before changing either field. Refused updates
+	-- must not leave a status change without its revision and publication.
+	if data.Status ~= nil then
+		call.Status = "OnScene"
+	end
+	if data.Priority ~= nil then
 		call.Priority = data.Priority
 	end
 	call.Revision += 1

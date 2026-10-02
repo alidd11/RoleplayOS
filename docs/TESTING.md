@@ -31,3 +31,10 @@ RPC deadlines, shared admission, cancellation refusal and teardown. The fixture
 overrides only its isolated task adapter for cancellation failure. Player signals,
 prefetch pacing, real group ranks and Roblox RPC cancellation remain Studio/live
 acceptance work; no mock result establishes a production entitlement.
+
+`scripts/call-tests.luau` exercises actual CallService updates, assignment retries,
+terminal resolution, last-unit release, recovery caps and operational-note
+retention. It also invokes the registered dispatch-update schema directly. Units,
+publication, incident scheduling and audit are explicit dependency doubles; note
+filtering follows the headless Studio bypass. These tests do not establish actual
+UnitService wiring, filtered RPCs, incident persistence or multi-client acceptance.
