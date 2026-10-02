@@ -58,6 +58,7 @@ return function(H: any)
 			},
 		})
 		return {
+			Runtime = runtime,
 			Service = service,
 			Player = player,
 			Character = character,
@@ -262,4 +263,100 @@ return function(H: any)
 			)
 		end
 	)
+
+	local function validate(f: any, progression: any): (boolean, any)
+		local config = table.clone(f.Config)
+		config.Progression = progression
+		local validator = f.Runtime.require(
+			f.Runtime.services.ReplicatedStorage.RoleplayOS.Shared.ConfigValidator
+		)
+		return validator.validate(config)
+	end
+
+	H.test("progression configuration refuses unsafe retention bounds", function()
+		local f = fixture()
+		for _, field in { "MaximumHistory", "MaximumRewardIds" } do
+			for _, invalid in
+				{
+					{},
+					{ Value = "2" },
+					{ Value = false },
+					{ Value = -1 },
+					{ Value = 0.5 },
+					{ Value = math.huge },
+					{ Value = 0 / 0 },
+				}
+			do
+				local candidate = table.clone(f.Config.Progression)
+				candidate[field] = invalid.Value
+				H.expect(not validate(f, candidate), "unsafe progression bound accepted: " .. field)
+			end
+		end
+		local candidate = table.clone(f.Config.Progression)
+		candidate.MaximumRewardIds = 0
+		H.expect(not validate(f, candidate), "replay protection could be disabled")
+	end)
+
+	H.test(
+		"progression configuration refuses non-finite or unusable curve and grant values",
+		function()
+			local f = fixture()
+			for _, field in
+				{ "BaseXP", "GrowthFactor", "MaximumLevel", "MaximumGrant", "DefaultTaskXP" }
+			do
+				for _, value in { "1", 0, -1, math.huge, 0 / 0 } do
+					local candidate = table.clone(f.Config.Progression)
+					candidate[field] = value
+					H.expect(
+						not validate(f, candidate),
+						"unsafe progression value accepted: " .. field
+					)
+				end
+			end
+			for _, field in { "MaximumLevel", "MaximumGrant", "DefaultTaskXP" } do
+				local candidate = table.clone(f.Config.Progression)
+				candidate[field] = 1.5
+				H.expect(not validate(f, candidate), "fractional count accepted: " .. field)
+			end
+			local candidate = table.clone(f.Config.Progression)
+			candidate.DefaultTaskXP = candidate.MaximumGrant + 1
+			H.expect(not validate(f, candidate), "default task reward exceeds grant cap")
+		end
+	)
+
+	H.test(
+		"progression configuration refuses an overflowing curve and malformed section",
+		function()
+			local f = fixture()
+			local candidate = table.clone(f.Config.Progression)
+			candidate.BaseXP, candidate.GrowthFactor, candidate.MaximumLevel = 1e308, 2, 3
+			H.expect(not validate(f, candidate), "finite inputs produced an infinite XP threshold")
+			local completed, valid = pcall(validate, f, 4)
+			H.expect(
+				completed and not valid,
+				"malformed progression section did not produce a validation refusal"
+			)
+		end
+	)
+
+	H.test("valid progression boundaries retain replay protection and allow no history", function()
+		local f = fixture()
+		H.expect(
+			validate(f, f.Config.Progression),
+			"valid current progression configuration refused"
+		)
+		f.Config.Progression.MaximumHistory = 0
+		f.Config.Progression.MaximumRewardIds = 1
+		H.expect(validate(f, f.Config.Progression), "valid retention boundaries refused")
+		H.expect(grant(f, "boundary") ~= nil, "valid boundary grant refused")
+		H.expect(
+			#f.Character.Progression.History == 0 and #f.Character.Progression.RewardOrder == 1,
+			"boundary retention failed"
+		)
+		local value, reason = grant(f, "boundary")
+		H.expect(
+			value == nil and reason == "DUPLICATE_XP_REWARD",
+			"boundary lost replay protection"
+		)
+	end)
 end
