@@ -11,6 +11,23 @@ local function validQuantity(value: any): boolean
 	return type(value) == "number" and value > 0 and value % 1 == 0
 end
 
+local function validInventory(value: any): boolean
+	if type(value) ~= "table" then
+		return false
+	end
+	local length = #value
+	local count = 0
+	for key in value do
+		if type(key) ~= "number" or key < 1 or key % 1 ~= 0 or key > length then
+			return false
+		end
+		count += 1
+	end
+	-- Readable rows may still form a dictionary or sparse list. Refuse those
+	-- before table.remove can fail after a quantity has already been consumed.
+	return count == length
+end
+
 function InventoryService:Init(context: any)
 	self.context = context
 end
@@ -37,7 +54,7 @@ function InventoryService:Add(
 	-- must remain available for recovery rather than be overwritten and saved.
 	if character.Inventory == nil then
 		character.Inventory = {}
-	elseif type(character.Inventory) ~= "table" then
+	elseif not validInventory(character.Inventory) then
 		return false, "INVALID_INVENTORY"
 	end
 	local found
@@ -85,7 +102,7 @@ function InventoryService:Remove(
 	end
 	if character.Inventory == nil then
 		return false, "NOT_HELD"
-	elseif type(character.Inventory) ~= "table" then
+	elseif not validInventory(character.Inventory) then
 		return false, "INVALID_INVENTORY"
 	end
 	for index, item in character.Inventory do
@@ -109,7 +126,7 @@ end
 
 -- Whether the character is carrying at least one of something.
 function InventoryService:Has(character: any, definitionId: string): boolean
-	if type(character) ~= "table" or type(character.Inventory) ~= "table" then
+	if type(character) ~= "table" or not validInventory(character.Inventory) then
 		return false
 	end
 	for _, item in character.Inventory do

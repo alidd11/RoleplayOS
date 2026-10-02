@@ -6,8 +6,10 @@ All durable references are stable GUID or configuration IDs. Dates are Unix seco
 
 Stored schema versions must identify a finite, non-negative integer migration step. Finite legacy numeric strings remain readable; negative/fractional versions and non-finite authoritative migration values are rejected. Overflowed numeric strings are non-finite too. Future integer versions still return `PROFILE_VERSION_TOO_NEW`, preserving rollback protection. These corruption guards do not change the schema version or valid-profile rounding rules.
 
-Inventory quantities are positive finite integers. Stack caps apply to both new
-and existing grants. InventoryService may backfill a missing legacy container,
+Inventory quantities are positive finite integers. Containers must be dense lists
+with consecutive positive integer keys, not dictionaries or sparse arrays. Shape
+is checked before any quantity mutation. Stack caps apply to both new and existing
+grants. InventoryService may backfill a missing legacy container,
 but refuses a present unreadable container or matching unreadable quantity without
 mutating or dirtying it. Unrelated malformed rows are preserved and ignored by
 item lookup; they are not automatically deleted. `Has` exposes only usable

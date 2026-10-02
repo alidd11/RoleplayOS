@@ -169,6 +169,91 @@ return function(H: any)
 		H.expect(f.Dirty() == 0, "refused ownership marked data dirty")
 	end)
 
+	local function malformedList(key: any): any
+		return { [key] = { ItemId = "original", DefinitionId = "Parcel", Quantity = 1 } }
+	end
+
+	H.test(
+		"inventory refuses non-list containers before an addition can mutate ownership",
+		function()
+			for _, key in { "legacy", 0, -1, 1.5, 2 } do
+				local inventory = malformedList(key)
+				local f = fixture(inventory)
+				local added, reason = f.Service:Add(f.Player, "owned", "Parcel", 1)
+				H.expect(
+					not added and reason == "INVALID_INVENTORY",
+					"non-list inventory accepted addition"
+				)
+				H.expect(
+					f.Character.Inventory == inventory
+						and inventory[key].Quantity == 1
+						and f.Dirty() == 0,
+					"refused addition rewrote source"
+				)
+			end
+		end
+	)
+
+	H.test(
+		"inventory refuses non-list containers before removal can partially consume an item",
+		function()
+			for _, key in { "legacy", 0, -1, 1.5, 2 } do
+				local inventory = malformedList(key)
+				local f = fixture(inventory)
+				local completed, removed, reason =
+					pcall(f.Service.Remove, f.Service, f.Player, "owned", "Parcel", 1)
+				H.expect(
+					completed and not removed and reason == "INVALID_INVENTORY",
+					"non-list removal was not refused safely; remaining quantity: "
+						.. tostring(inventory[key].Quantity)
+				)
+				H.expect(
+					f.Character.Inventory == inventory
+						and inventory[key].Quantity == 1
+						and f.Dirty() == 0,
+					"refused removal rewrote source"
+				)
+			end
+		end
+	)
+
+	H.test("inventory refuses multi-row sparse containers", function()
+		local item = { ItemId = "original", DefinitionId = "Parcel", Quantity = 1 }
+		local inventory = { [2] = item, [3] = item }
+		local f = fixture(inventory)
+		local added, addReason = f.Service:Add(f.Player, "owned", "Parcel", 1)
+		local completed, removed, removeReason =
+			pcall(f.Service.Remove, f.Service, f.Player, "owned", "Parcel", 1)
+		H.expect(not added and addReason == "INVALID_INVENTORY", "sparse addition accepted")
+		H.expect(
+			completed and not removed and removeReason == "INVALID_INVENTORY",
+			"sparse removal was not refused safely"
+		)
+		H.expect(not f.Service:Has(f.Character, "Parcel"), "sparse row was usable")
+		H.expect(
+			f.Character.Inventory == inventory and item.Quantity == 1 and f.Dirty() == 0,
+			"sparse source changed"
+		)
+	end)
+
+	H.test("non-list persisted inventory reaches migration but is not exposed as usable", function()
+		local inventory = malformedList("legacy")
+		local f = fixture(inventory)
+		local root = f.Runtime.services.ReplicatedStorage.RoleplayOS.Shared
+		local schema = f.Runtime.require(root.ProfileSchema)
+		local profile = schema.default(10)
+		profile.Characters.owned = f.Character
+		local migrated, reason = schema.migrate(profile, 10)
+		H.expect(
+			migrated == profile
+				and reason == nil
+				and migrated.Characters.owned.Inventory == inventory,
+			"fixture did not reach the live inventory boundary"
+		)
+		H.expect(not f.Service:Has(f.Character, "Parcel"), "non-list row became usable ownership")
+		H.expect(inventory.legacy.Quantity == 1 and f.Dirty() == 0, "lookup changed source")
+	end)
+
 	H.test(
 		"actual starter-food grant survives unrelated malformed inventory and stays idempotent",
 		function()
