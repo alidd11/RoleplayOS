@@ -23,17 +23,17 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
-local function hasPAVA(player: Player): boolean
-	for _, container in { player.Character, player:FindFirstChildOfClass("Backpack") } do
-		if container then
-			for _, child in container:GetChildren() do
-				if
-					child:IsA("Tool")
-					and (child.Name == "PAVA" or child:GetAttribute("RoleplayOSToolId") == "PAVA")
-				then
-					return true
-				end
-			end
+local function hasEquippedPAVA(player: Player): boolean
+	local character = player.Character
+	if not character then
+		return false
+	end
+	for _, child in character:GetChildren() do
+		if
+			child:IsA("Tool")
+			and (child.Name == "PAVA" or child:GetAttribute("RoleplayOSToolId") == "PAVA")
+		then
+			return true
 		end
 	end
 	return false
@@ -92,7 +92,7 @@ function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, strin
 	if not self.running or not playerIsCurrent(actor) then
 		return false, "PAVA_UNAVAILABLE"
 	end
-	if not hasPAVA(actor) then
+	if not hasEquippedPAVA(actor) then
 		return false, "PAVA_NOT_EQUIPPED"
 	end
 	local now = os.clock()
