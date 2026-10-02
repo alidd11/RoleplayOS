@@ -15,6 +15,12 @@ extraction failure never permits the raw input to be displayed in live servers.
 
 Audit persistence uses a bounded pending ring and a single controlled flush path. Low-volume events flush on a short interval, bursts request one immediate flush, failed writes are retried without allowing the queue or task count to grow without bound, and shutdown drains only within its configured deadline. If a prolonged persistence outage fills the buffer, the oldest pending audit entries are dropped and the server logs the loss rather than sacrificing live-server stability.
 
+Startup validation rejects present non-finite, fractional or undersized audit
+buffer counts, and non-finite or non-positive flush timings. Omitted settings keep
+the existing service fallbacks. The pending minimum remains 25; burst thresholds
+above capacity and positive sub-second timings retain the existing runtime clamps.
+No shipped audit defaults are changed by these guards.
+
 Emergency alarms, flashlight state, stamina, walk speed, hunger, food prices, economy debits, dispatch chair access, team duty, and MDT permissions are server-authoritative. Security-sensitive robbery systems should call `EmergencyTriggerService:Trigger()` from server code or use a tagged server-owned prompt; clients never select incident priority or food price.
 
 The official whitelisted deployment uses configured Roblox group links and fails closed when membership cannot be verified. Group API failures use a short negative-cache cooldown to prevent request storms.

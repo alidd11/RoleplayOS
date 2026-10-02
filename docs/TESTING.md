@@ -55,4 +55,10 @@ published saves and real client rendering remain acceptance work.
 `scripts/config-tests.luau` exercises actual ConfigValidator persistence timing,
 retry-count and optional wait/size bounds, including non-finite values. Positive
 defaults, optional absence and lease/size relationships remain covered. These
-tests reject unsafe inputs; they do not run an infinite retry or wait in CI.
+tests reject unsafe inputs; they do not run an infinite retry or wait in CI. Audit
+buffer counts and flush timings also cover refusal, optional absence and clamps.
+
+`scripts/audit-tests.luau` exercises actual AuditService ring retention, dropped
+entry counts, chronological batch extraction, failed-flush restoration and
+duplicate-ID suppression. DataService and logging are explicit dependency doubles;
+periodic scheduling, engine shutdown and real DataStore writes are not exercised.
