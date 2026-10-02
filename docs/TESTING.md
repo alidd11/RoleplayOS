@@ -17,3 +17,9 @@ This is contract regression coverage, not Roblox engine, physics, networking or 
 `scripts/economy-tests.luau` exercises the actual EconomyService with detached shared-record/profile fixtures: account isolation, replay after reconstructed runtime state, bounded transaction/receipt histories, two-profile settlement, changed-operation refusal, pre/post-commit save faults, ambiguous journal/acknowledgement results, and departure during reservation. A simulated restart reconstructs the service from fixture-durable profiles; it is not a real crash or concurrent published-server test. Real player signals, request budgets and service startup are not simulated by this suite.
 
 `scripts/network-tests.luau` invokes callbacks registered by the actual NetworkServer: authorisation, payload/encoding/schema failures, rate limits, envelope sanitisation, shutdown races, concurrency, timeouts, abandonment and teardown. Lune's property adapter holds RemoteFunction callbacks, and an explicit JSON adapter supplies encoding. These are direct server callback tests, not Roblox client/server transport or encoder compatibility tests. Handler fixtures exit within bounded deadlines. Busy/shutdown refusals must not retain empty user tracking; accepted work remains counted until completion or abandonment.
+
+`scripts/inventory-tests.luau` exercises the actual InventoryService's ownership,
+quantity, stack and legacy-shape contracts, including preservation of unreadable
+data. It also calls actual NeedsService starter-food logic with a presentation
+double, proving inventory grant idempotence without claiming native Tool
+activation, respawn wiring or hunger persistence acceptance.

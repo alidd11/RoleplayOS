@@ -6,6 +6,13 @@ All durable references are stable GUID or configuration IDs. Dates are Unix seco
 
 Stored schema versions must identify a finite, non-negative integer migration step. Finite legacy numeric strings remain readable; negative/fractional versions and non-finite authoritative migration values are rejected. Overflowed numeric strings are non-finite too. Future integer versions still return `PROFILE_VERSION_TOO_NEW`, preserving rollback protection. These corruption guards do not change the schema version or valid-profile rounding rules.
 
+Inventory quantities are positive finite integers. Stack caps apply to both new
+and existing grants. InventoryService may backfill a missing legacy container,
+but refuses a present unreadable container or matching unreadable quantity without
+mutating or dirtying it. Unrelated malformed rows are preserved and ignored by
+item lookup; they are not automatically deleted. `Has` exposes only usable
+quantities. These guards do not repair corrupted ownership or change the schema.
+
 `PlayerProfile.CustodySentence` is deliberately profile-wide so changing character cannot bypass an active custody period. `ReleaseAt` is the authoritative Unix timestamp. `Offences` is a bounded audit summary; offence codes and compressed gameplay durations come only from `Config.Custody.OffenceTariffs`. Character-specific booking and criminal-history entries remain on the selected character. These values simulate game consequences and are not real sentencing guidance.
 
 `DataService` loads once, holds an expiring server ownership lease, caches in memory, tracks dirty state, autosaves, saves on leave, and releases leases at shutdown. Autosave launches are spread across only part of each cadence so DataStore pressure is smoothed without stretching a profile's lease-renewal interval up to the lease expiry. Loaded profiles establish a size baseline, and dirty snapshots are measured again before ordinary saves so long-session growth reaches the configured warning before Roblox's DataStore value ceiling; the extra encode is skipped during server shutdown to protect the bounded final-save window. UpdateAsync checks ownership before every write. Retries are bounded and back off; unsafe load failure kicks rather than creating a second writable session.
