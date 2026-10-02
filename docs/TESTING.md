@@ -51,3 +51,8 @@ ProgressionService reads/grants with unreadable XP, mutation containers, tracks,
 sparse retention lists and partial legacy state. Valid rewards retain bounded
 history and replay IDs. Data access, audit and HUD transport are explicit doubles;
 published saves and real client rendering remain acceptance work.
+
+`scripts/config-tests.luau` exercises actual ConfigValidator persistence timing,
+retry-count and optional wait/size bounds, including non-finite values. Positive
+defaults, optional absence and lease/size relationships remain covered. These
+tests reject unsafe inputs; they do not run an infinite retry or wait in CI.

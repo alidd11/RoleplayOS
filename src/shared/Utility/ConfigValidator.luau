@@ -48,22 +48,24 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	local framework = if type(config.Framework) == "table" then config.Framework else {}
 	for _, field in { "AutosaveSeconds", "ShutdownSaveSeconds", "SessionLeaseSeconds" } do
 		local value = framework[field]
-		if type(value) ~= "number" or value <= 0 then
+		if not finiteNumber(value, 0) or value <= 0 then
 			table.insert(errors, "Invalid persistence framework field: " .. field)
 		end
 	end
 	for _, field in { "MaxSaveAttempts", "JoinLoadAttempts" } do
 		local value = framework[field]
-		if type(value) ~= "number" or value < 1 or value ~= math.floor(value) then
+		if not wholeNumber(value, 1) then
 			table.insert(errors, "Invalid persistence framework attempt count: " .. field)
 		end
 	end
 	local maximumLeaseWait = framework.MaximumLeaseWaitSeconds
-	if maximumLeaseWait ~= nil and (type(maximumLeaseWait) ~= "number" or maximumLeaseWait < 0) then
+	if maximumLeaseWait ~= nil and not finiteNumber(maximumLeaseWait, 0) then
 		table.insert(errors, "Invalid persistence framework wait: MaximumLeaseWaitSeconds")
 	end
 	local handoverSeconds = framework.SessionHandoverSeconds
-	if handoverSeconds ~= nil and (type(handoverSeconds) ~= "number" or handoverSeconds <= 0) then
+	if
+		handoverSeconds ~= nil and (not finiteNumber(handoverSeconds, 0) or handoverSeconds <= 0)
+	then
 		table.insert(errors, "Invalid persistence framework wait: SessionHandoverSeconds")
 	end
 	if
@@ -83,7 +85,7 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	if
 		framework.ProfileSizeWarningBytes ~= nil
 		and (
-			type(framework.ProfileSizeWarningBytes) ~= "number"
+			not finiteNumber(framework.ProfileSizeWarningBytes, 0)
 			or framework.ProfileSizeWarningBytes <= 0
 			or framework.ProfileSizeWarningBytes >= 4 * 1024 * 1024
 		)
