@@ -1,5 +1,6 @@
 --!strict
 local process = require("@lune/process")
+local task = require("@lune/task")
 local Runtime = require("./test-runtime")
 
 local runtime = Runtime.new()
@@ -18,6 +19,17 @@ if process.args[1] == "--prove-failure" then
 	end)
 	harness.finish()
 	error("A failing test did not stop the runner")
+end
+if process.args[1] == "--prove-async-failure" then
+	harness.test("runner main thread succeeds before deferred failure", function()
+		harness.expect(true, "Main-thread fixture failed")
+	end)
+	task.defer(function()
+		error("RUNNER_EXPECTED_ASYNC_FAILURE")
+	end)
+	harness.finish()
+	print("Async failure probe main thread completed")
+	return
 end
 assert(#process.args == 0, "Unknown test runner arguments")
 runtime.require(runtime.tests.run)
