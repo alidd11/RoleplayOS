@@ -1,6 +1,6 @@
 # Architecture
 
-The bootstrap validates configuration, constructs one shared context, explicitly registers services in dependency order, then performs two phases: every `Init` must succeed before any `Start` runs. Required failures abort startup; optional cross-server integrations report degraded operation. Shutdown destroys services in reverse order.
+The bootstrap validates configuration, constructs one shared context, explicitly registers services in dependency order, then performs two phases: every required `Init` must succeed before any `Start` runs. Services are required by default; only explicit `Optional = true` integrations may report degraded operation. `Critical = true` overrides any conflicting optional flag. Failed optional initialisation prevents that service from starting. Shutdown destroys services in reverse order, continuing through individual teardown failures.
 
 The context exposes the logger, immutable configuration, network gateway and service registry. Services obtain peers from the registry and must not require one another, preventing module cycles. Shared modules are dependency-free pure logic where practical.
 
