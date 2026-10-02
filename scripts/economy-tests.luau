@@ -116,18 +116,15 @@ return function(H: any)
 			},
 		}
 		local function economy(): any
-			local value = setmetatable(
-				{
-					seen = {},
-					order = {},
-					transferring = {},
-					connections = {},
-					reconciling = {},
-					recoveryPending = {},
-					recoveryPersistenceFailed = {},
-				},
-				{ __index = EconomyService }
-			)
+			local value = setmetatable({
+				seen = {},
+				order = {},
+				transferring = {},
+				connections = {},
+				reconciling = {},
+				recoveryPending = {},
+				recoveryPersistenceFailed = {},
+			}, { __index = EconomyService })
 			value:Init(context)
 			-- Start's real player signals are deliberately outside these fixtures.
 			value.running = true
