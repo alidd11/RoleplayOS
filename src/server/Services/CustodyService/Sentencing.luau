@@ -190,12 +190,17 @@ return function(CustodyService)
 		consumables.EarlyReleaseCredits = credits - 1
 		local released, reason = self:_completeSentence(player, "EarlyReleaseCredit", sourceId)
 		if not released then
-			consumables.EarlyReleaseCredits = credits
+			-- Character loading yields; receipts may grant more credits meanwhile.
+			-- Return only this attempt's credit instead of restoring an old total.
+			consumables.EarlyReleaseCredits += 1
 			dataService:MarkDirty(player)
 			return false, reason
 		end
 		dataService:MarkDirty(player)
-		self.event:FireClient(player, { Kind = "EarlyRelease", Credits = credits - 1 })
+		self.event:FireClient(
+			player,
+			{ Kind = "EarlyRelease", Credits = consumables.EarlyReleaseCredits }
+		)
 		return true, nil
 	end
 

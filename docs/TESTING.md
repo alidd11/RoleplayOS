@@ -113,3 +113,13 @@ terminal cleanup timer. Stranger refusal and ordinary recipient answer/hang-up
 are also covered. Player signals, profile lookup, network delivery, voice and
 timers are explicit doubles; real audio routing and device UI remain external
 acceptance work.
+
+`scripts/custody-tests.luau` exercises actual custody completion, developer-product
+receipt processing, role assignment and spawn methods with current ProfileSchema
+data. A receipt grant during the yielding character-load boundary must survive
+release refusal and receipt replay; success must report the current credit count.
+Ordinary success/refusal remains covered. Player, access, team, spawn-pad
+resolution, character loading, save, audit and notification boundaries are
+explicit doubles. The save fixture records grant counts, not durable DataStore
+state; marketplace delivery, real character loading and published persistence
+acceptance remain outstanding.
