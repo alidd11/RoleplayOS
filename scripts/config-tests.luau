@@ -22,6 +22,30 @@ return function(H: any)
 		}
 	end
 
+	H.test("economy retention bounds reject non-finite and non-whole counts", function()
+		local f = fixture()
+		for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
+			for _, value in { math.huge, -math.huge, 0 / 0, "200", false, 0, -1, 1.5 } do
+				H.expect(
+					not f.Validate(field, value, "Economy"),
+					"invalid economy retention accepted: " .. field
+				)
+			end
+			H.expect(
+				not f.Validate(field, nil, "Economy"),
+				"missing economy retention accepted: " .. field
+			)
+		end
+	end)
+
+	H.test("economy retention defaults and smallest supported cap remain valid", function()
+		local f = fixture()
+		H.expect(f.ValidateConfig(f.Config), "current economy defaults refused")
+		for _, field in { "MaximumTransactionHistory", "MaximumTransferReceipts" } do
+			H.expect(f.Validate(field, 1, "Economy"), "single-entry retention refused: " .. field)
+		end
+	end)
+
 	H.test("phone configuration rejects unsafe message bounds", function()
 		local f = fixture()
 		for _, field in { "MaximumMessages", "MaximumMessageLength" } do

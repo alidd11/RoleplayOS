@@ -61,6 +61,9 @@ Phone limits cover non-finite, missing and malformed refusal, one-character
 filtering and actual PhoneService inbox retention at zero, one and the current
 default cap. Profile lookup/dirty marking are explicit doubles; these checks do
 not establish native text moderation or persisted delivery.
+Economy retention validation rejects infinite, non-whole and missing caps while
+preserving current defaults and single-entry settings. Existing actual-service
+economy tests exercise transaction/replay and settlement-receipt trimming.
 
 `scripts/audit-tests.luau` exercises actual AuditService ring retention, dropped
 entry counts, chronological batch extraction, failed-flush restoration and
