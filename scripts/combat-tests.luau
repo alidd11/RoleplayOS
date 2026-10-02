@@ -204,12 +204,24 @@ return function(H: any)
 			return f.TargetHumanoid:GetAttribute(name)
 		end
 		function needsHumanoid:SetStateEnabled() end
-		needs:_applySpeed(
-			f.Target,
-			{ Sprinting = false, Hunger = 100, Stamina = 100 },
-			needsHumanoid
-		)
+		local needsState = { Sprinting = true, Hunger = 100, Stamina = 100 }
+		needs:_applySpeed(f.Target, needsState, needsHumanoid)
 		H.expect(needsHumanoid.WalkSpeed == 10, "Needs tick cancelled the active PAVA slowdown")
+		H.expect(not needsState.Sprinting, "PAVA target remained in sprint state")
+
+		local record = f.Service.effects[f.Target.UserId]
+		H.expect(record ~= nil, "PAVA effect record disappeared before expiry")
+		f.Service:_restore(f.Target, record.Token)
+		H.expect(
+			f.TargetHumanoid:GetAttribute("RoleplayOSPAVAWalkSpeedCap") == nil,
+			"PAVA speed cap survived effect restore"
+		)
+		needsHumanoid.WalkSpeed = f.TargetHumanoid.WalkSpeed
+		needs:_applySpeed(f.Target, needsState, needsHumanoid)
+		H.expect(
+			needsHumanoid.WalkSpeed == config.Needs.WalkSpeed,
+			"Needs speed did not recover after PAVA"
+		)
 	end)
 	H.test("Taser server authority covers every configured Taser loadout", function()
 		local runtime = Runtime.new()
