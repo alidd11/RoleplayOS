@@ -61,9 +61,12 @@ function PAVAService:_lineOfSight(actor: Player, target: Player): boolean
 	local parameters = RaycastParams.new()
 	parameters.FilterType = Enum.RaycastFilterType.Exclude
 	parameters.FilterDescendantsInstances = { actor.Character, target.Character }
-	return workspace:Raycast(actorRoot.Position, targetRoot.Position - actorRoot.Position, parameters) == nil
+	return workspace:Raycast(
+		actorRoot.Position,
+		targetRoot.Position - actorRoot.Position,
+		parameters
+	) == nil
 end
-
 
 function PAVAService:_restore(target: Player, token: number)
 	local record = self.effects[target.UserId]
