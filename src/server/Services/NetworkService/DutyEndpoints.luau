@@ -88,6 +88,7 @@ return function(self: any)
 			PAVA_COOLDOWN = "PAVA is cooling down.",
 			PAVA_TARGET_INVALID = "That target cannot be sprayed.",
 			PAVA_TARGET_OUT_OF_RANGE = "The target is out of range.",
+			PAVA_TARGET_OBSTRUCTED = "The target is not in clear view.",
 		}
 		return {
 			Success = sprayed,
