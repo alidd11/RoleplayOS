@@ -58,10 +58,13 @@ return function(H: any)
 		H.expect(reason == "PAVA_NOT_EQUIPPED", "backpack-only PAVA reached target validation")
 	end)
 
-	H.test("actual PAVA service recognises an equipped canister before target validation", function()
-		local f = fixture(true)
-		local sprayed, reason = f.Service:Spray(f.Actor, 2)
-		H.expect(not sprayed, "missing target unexpectedly accepted")
-		H.expect(reason == "PAVA_TARGET_INVALID", "equipped PAVA was treated as unequipped")
-	end)
+	H.test(
+		"actual PAVA service recognises an equipped canister before target validation",
+		function()
+			local f = fixture(true)
+			local sprayed, reason = f.Service:Spray(f.Actor, 2)
+			H.expect(not sprayed, "missing target unexpectedly accepted")
+			H.expect(reason == "PAVA_TARGET_INVALID", "equipped PAVA was treated as unequipped")
+		end
+	)
 end
