@@ -196,7 +196,8 @@ return function(H: any)
 		local needs = f.Runtime.require(
 			f.Runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService
 		)
-		local config = f.Runtime.require(f.Runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		local config =
+			f.Runtime.require(f.Runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
 		needs.context = { Configuration = config }
 		local needsHumanoid: any = { WalkSpeed = f.TargetHumanoid.WalkSpeed }
 		function needsHumanoid:GetAttribute(name: string)
