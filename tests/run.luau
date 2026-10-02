@@ -818,6 +818,105 @@ H.test("profile migration fails closed on unreadable authoritative state", funct
 		"corrupt gang invites were replaced"
 	)
 end)
+
+H.test("profile migration refuses versions that cannot identify a migration step", function()
+	for _, version in { -1, 0.5, "9.5", 0 / 0, math.huge, -math.huge } do
+		local stored = { SchemaVersion = version, Characters = { legacy = {} } }
+		local profile, reason = ProfileSchema.migrate(stored, 42)
+		H.expect(
+			profile == nil and reason == "PROFILE_VERSION_INVALID",
+			"invalid version bypassed migration"
+		)
+		H.expect(
+			stored.Characters.legacy.Economy == nil,
+			"invalid version modified character state"
+		)
+	end
+	local future, futureReason =
+		ProfileSchema.migrate({ SchemaVersion = ProfileSchema.CURRENT_VERSION + 1 }, 42)
+	H.expect(
+		future == nil and futureReason == "PROFILE_VERSION_TOO_NEW",
+		"future version lost rollback protection"
+	)
+end)
+
+H.test("profile migration refuses non-finite authoritative scalar values", function()
+	local cases = {
+		{
+			Version = 8,
+			Container = "CustodySentence",
+			Field = "ReleaseAt",
+			Reason = "PROFILE_CUSTODY_RELEASE_AT_INVALID",
+		},
+		{
+			Version = 8,
+			Container = "CustodySentence",
+			Field = "RemainingSeconds",
+			Reason = "PROFILE_CUSTODY_REMAINING_SECONDS_INVALID",
+		},
+		{
+			Version = 9,
+			Container = "Economy",
+			Field = "Balance",
+			Reason = "PROFILE_ECONOMY_BALANCE_INVALID",
+		},
+		{
+			Version = 9,
+			Container = "Economy",
+			Field = "Cash",
+			Reason = "PROFILE_ECONOMY_CASH_INVALID",
+		},
+		{
+			Version = 10,
+			Container = "Consumables",
+			Field = "EarlyReleaseCredits",
+			Reason = "PROFILE_EARLY_RELEASE_CREDITS_INVALID",
+		},
+		{
+			Version = 11,
+			Container = "Consumables",
+			Field = "AppearanceEdits",
+			Reason = "PROFILE_APPEARANCE_EDITS_INVALID",
+		},
+	}
+	for _, case in cases do
+		for _, value in { "1e309", "-1e309", 0 / 0, math.huge, -math.huge } do
+			local container = { [case.Field] = value }
+			local stored = { SchemaVersion = case.Version }
+			if case.Container == "Economy" then
+				stored.Characters = { legacy = { Economy = container } }
+			else
+				stored[case.Container] = container
+			end
+			local profile, reason = ProfileSchema.migrate(stored, 42)
+			H.expect(
+				profile == nil and reason == case.Reason,
+				case.Field .. " accepted a non-finite value"
+			)
+			H.expect(
+				container[case.Field] == value
+					or (container[case.Field] ~= container[case.Field] and value ~= value),
+				"migration replaced invalid authoritative value"
+			)
+		end
+	end
+end)
+
+H.test("finite legacy numeric strings still migrate through every remaining version", function()
+	local profile, reason = ProfileSchema.migrate({
+		SchemaVersion = "9",
+		Characters = { legacy = { Economy = { Balance = "12.75", Cash = "3" } } },
+	}, 42)
+	H.expect(
+		profile ~= nil and reason == nil and profile.SchemaVersion == ProfileSchema.CURRENT_VERSION,
+		"finite legacy profile refused"
+	)
+	H.expect(
+		profile.Characters.legacy.Economy.Balance == 12
+			and profile.Characters.legacy.Economy.Cash == 3,
+		"finite legacy rounding changed"
+	)
+end)
 H.test("profile migration preserves unreadable authoritative scalar state", function()
 	local cases = {
 		{
