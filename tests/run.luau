@@ -539,8 +539,12 @@ H.test("profile migration reconciles carried cash", function()
 		SchemaVersion = 9,
 		Characters = { old = { Economy = { Balance = 10, Transactions = {} } } },
 	}, 10)
-	H.expect(profile.SchemaVersion == 11, "profile schema did not advance")
+	H.expect(
+		profile.SchemaVersion == ProfileSchema.CURRENT_VERSION,
+		"profile schema did not advance"
+	)
 	H.expect(profile.Characters.old.Economy.Cash == 0, "missing carried cash was not reconciled")
+	H.expect(profile.Characters.old.Economy.Balance == 10, "migration changed the bank balance")
 end)
 H.test("profile migration fails closed on corrupt persisted collections", function()
 	local characters, charactersReason = ProfileSchema.migrate({
@@ -781,7 +785,8 @@ H.test("migration reconciles missing fields", function()
 		profile.SchemaVersion == ProfileSchema.CURRENT_VERSION
 			and profile.UserId == 42
 			and type(profile.Characters) == "table"
-			and type(profile.Communities) == "table",
+			and type(profile.DutyProfiles) == "table"
+			and type(profile.CustodySentence) == "table",
 		"migration failed"
 	)
 end)
