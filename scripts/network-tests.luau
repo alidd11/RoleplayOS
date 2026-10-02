@@ -120,7 +120,7 @@ return function(H: any)
 		function()
 			local f = fixture()
 			local calls = 0
-			local schema = function()
+			local schema = function(_payload)
 				return true
 			end
 			f:Register(function()
@@ -154,10 +154,10 @@ return function(H: any)
 			end
 			for _, validator in
 				{
-					function()
+					function(_payload)
 						return false, "invalid"
 					end,
-					function()
+					function(_payload)
 						error("private schema error")
 					end,
 				}
