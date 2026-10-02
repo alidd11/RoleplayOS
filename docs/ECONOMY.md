@@ -83,6 +83,14 @@ count; the refund must not overwrite a concurrent grant. Successful release
 notifications report the current count. This preserves the receipt replay marker
 and does not change product IDs, prices, grant quantities or sentence policy.
 
+## Appearance edit credits
+
+A paid appearance edit consumes one credit only after avatar application succeeds
+and the exact player, session and character remain current. Avatar application
+can yield while a developer receipt grants another credit, so the successful edit
+deducts from the current count. Failed applications consume no credit. Free first
+edits, prices and product grant quantities retain their existing behaviour.
+
 ## Wages
 
 Nothing paid anyone. Vehicles, food, furniture and property all took money and only reselling a vehicle ever returned any, so a balance could only fall and every price was arbitrary. Jobs carried a `BaseWage` that no code ever paid out.
