@@ -64,6 +64,7 @@ return function(H: any)
 			Config = config,
 			Audits = audits,
 			Events = events,
+			Mode = services.ServerModeService,
 			Dirty = function()
 				return dirty
 			end,
@@ -223,6 +224,41 @@ return function(H: any)
 					and persisted.RewardIds["reward-1"] == nil
 					and persisted.RewardIds["reward-4"] ~= nil,
 				"replay retention wrong"
+			)
+		end
+	)
+
+	H.test(
+		"actual progression HUD publishes valid grants but refuses corrupt and private state",
+		function()
+			local f = fixture()
+			for name, definition in f.Config.Teams do
+				if definition.AutoAssignable then
+					f.Player.Team = { Name = name }
+					break
+				end
+			end
+			H.expect(f.Player.Team ~= nil, "fixture needs a public HUD team")
+			H.expect(grant(f, "hud") ~= nil and #f.Events == 1, "valid grant did not publish a HUD")
+			H.expect(
+				f.Events[1].Overall.TotalXP == 25 and f.Events[1].Grant.Amount == 25,
+				"HUD XP was wrong"
+			)
+			local persisted = f.Character.Progression
+			persisted.TotalXP = "damaged"
+			local value, reason = f.Service:GetPublicHud(f.Player)
+			H.expect(
+				value == nil and reason == "INVALID_PROGRESSION_STATE",
+				"corrupt HUD state exposed"
+			)
+			H.expect(persisted.TotalXP == "damaged" and #f.Events == 1, "HUD lookup rewrote data")
+			f.Mode.Kind = function()
+				return "Private"
+			end
+			local hidden, hiddenReason = f.Service:GetPublicHud(f.Player)
+			H.expect(
+				hidden == nil and hiddenReason == "PUBLIC_PROGRESSION_UNAVAILABLE",
+				"private HUD exposed"
 			)
 		end
 	)

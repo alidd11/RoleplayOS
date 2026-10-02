@@ -6,6 +6,25 @@ local ProgressionVisibility = require(ReplicatedStorage.RoleplayOS.Shared.Progre
 
 local ProgressionService = {}
 
+local function validXp(value: any): boolean
+	return type(value) == "number" and value >= 0 and value % 1 == 0
+end
+
+local function validList(value: any): boolean
+	if type(value) ~= "table" then
+		return false
+	end
+	local length = #value
+	local count = 0
+	for key in value do
+		if type(key) ~= "number" or key < 1 or key % 1 ~= 0 or key > length then
+			return false
+		end
+		count += 1
+	end
+	return count == length
+end
+
 function ProgressionService:Init(context: any)
 	self.context = context
 	self.event = context.Network:RegisterEvent("ProgressionChanged")
@@ -13,17 +32,40 @@ end
 
 function ProgressionService:Start() end
 
-function ProgressionService:_state(character: any): any
-	local state = character.Progression
-	if type(state) ~= "table" or type(state.TotalXP) ~= "number" then
-		state = { TotalXP = 0, Tracks = {}, RewardIds = {}, RewardOrder = {}, History = {} }
-		character.Progression = state
+function ProgressionService:_state(character: any): (any?, string?)
+	local state = if character.Progression == nil then {} else character.Progression
+	if type(state) ~= "table" or (state.TotalXP ~= nil and not validXp(state.TotalXP)) then
+		return nil, "INVALID_PROGRESSION_STATE"
 	end
+	for _, field in { "Tracks", "RewardIds" } do
+		if state[field] ~= nil and type(state[field]) ~= "table" then
+			return nil, "INVALID_PROGRESSION_STATE"
+		end
+	end
+	for _, field in { "RewardOrder", "History" } do
+		if state[field] ~= nil and not validList(state[field]) then
+			return nil, "INVALID_PROGRESSION_STATE"
+		end
+	end
+	for trackId, xp in state.Tracks or {} do
+		if type(trackId) ~= "string" or not validXp(xp) then
+			return nil, "INVALID_PROGRESSION_STATE"
+		end
+	end
+	for _, rewardId in state.RewardOrder or {} do
+		if type(rewardId) ~= "string" then
+			return nil, "INVALID_PROGRESSION_STATE"
+		end
+	end
+	-- Backfill only absent legacy fields, after all readable/mutable containers
+	-- have passed validation. Never erase the stored source to manufacture zero XP.
+	state.TotalXP = state.TotalXP or 0
 	state.Tracks = state.Tracks or {}
 	state.RewardIds = state.RewardIds or {}
 	state.RewardOrder = state.RewardOrder or {}
 	state.History = state.History or {}
-	return state
+	character.Progression = state
+	return state, nil
 end
 
 function ProgressionService:_summary(state: any): any
@@ -50,10 +92,14 @@ function ProgressionService:Get(player: Player, characterId: string?): (any?, st
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local selectedId = characterId or (session and session.ActiveCharacterId)
 	local character = selectedId and session and session.Profile.Characters[selectedId]
-	if not character then
+	if type(character) ~= "table" then
 		return nil, "CHARACTER_NOT_OWNED"
 	end
-	return self:_summary(self:_state(character)), nil
+	local state, reason = self:_state(character)
+	if not state then
+		return nil, reason
+	end
+	return self:_summary(state), nil
 end
 
 function ProgressionService:GetPublicHud(player: Player): (any?, string?)
@@ -70,10 +116,13 @@ function ProgressionService:GetPublicHud(player: Player): (any?, string?)
 	local character = session
 		and session.ActiveCharacterId
 		and session.Profile.Characters[session.ActiveCharacterId]
-	if not character then
+	if type(character) ~= "table" then
 		return nil, "CHARACTER_NOT_ACTIVE"
 	end
-	local state = self:_state(character)
+	local state, reason = self:_state(character)
+	if not state then
+		return nil, reason
+	end
 	local overall = self:_summary(state)
 	local roles = {}
 	for _, role in self.context.Configuration.Roles do
@@ -140,10 +189,13 @@ function ProgressionService:Grant(
 	end
 	local session = self.context.Services:Get("DataService"):GetSession(player)
 	local character = session and session.Profile.Characters[characterId]
-	if not character then
+	if type(character) ~= "table" then
 		return nil, "CHARACTER_NOT_OWNED"
 	end
-	local state = self:_state(character)
+	local state, reason = self:_state(character)
+	if not state then
+		return nil, reason
+	end
 	if state.RewardIds[rewardId] then
 		return nil, "DUPLICATE_XP_REWARD"
 	end
