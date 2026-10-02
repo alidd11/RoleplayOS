@@ -39,19 +39,23 @@ every service, caller or interaction has been reviewed.
 | Inventory and XP | InventoryService ownership/shape/quantity/stack guards; NeedsService starter grant; ProgressionService preservation, grants, replay/history and HUD DTOs | Native food tools, respawn wiring, published saves and rendered client HUD |
 | Access | GroupService, AccessService, RoleService and entry verification with explicit rank/player fixtures | Real entitlements, prefetch/player signals and full role/spawn transitions |
 | Dispatch | CallService patches, assignment retries, closure, release, recovery caps and notes; registered update schema | Actual UnitService/IncidentService integration, moderation and multi-client board behaviour |
+| MDT projections and reads | IncidentService delayed/legacy closure protection combined with malformed-row cleanup, cap ordering and bounded history refill; RecordIndexService bucket cleanup, registration retention and bounded search refill; WarrantService malformed-state guards | Real persistence conflicts, full permission/cache/service integration and published offline searches |
 | Configuration | Current defaults and persistence/progression safety bounds | Complete safety validation of every other configuration section |
 
 See [TESTING.md](TESTING.md) for fixture details. Existing helper tests cover
-additional policies; they are not full-service integration acceptance. Earlier
-focused MDT service tests were isolated checks: their projection/index/search
-interactions still need permanent CI fixtures.
+additional policies; they are not full-service integration acceptance. The MDT
+regressions listed above are permanent fixtures in `tests/run.luau`, executed by
+CI against actual service methods. Storage and other dependencies are injected;
+some cache, permission and repair methods are explicitly overridden. Earlier
+manual checks supplemented these tests, rather than being their only execution.
 
 ## Remaining code work
 
 1. Continue the remaining numeric configuration safety review, including network,
    economy, audit and performance bounds. Reproduce each gap before changing it.
-2. Add permanent MDT service regressions for stale projection plus maintenance,
-   record-index reconciliation and bounded search/history refill interactions.
+2. Deepen MDT fixtures for actual record-repair replay and cache/permission/service
+   interactions. Do not duplicate the existing stale-projection/maintenance,
+   bucket/registration cleanup and bounded search/history refill regressions.
 3. Review financial callers and lifecycle integration: cash drops, payroll,
    vehicle/vendor/property operations and refund paths. MoneyDropService,
    PayrollService and AuditService have been inspected, but inspection alone is
