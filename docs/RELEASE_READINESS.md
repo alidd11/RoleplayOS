@@ -9,12 +9,15 @@ that must come from the authorised Roblox place.
 Run from the repository root:
 
 ```sh
-stylua --check src tests
-selene src tests
+aftman install
+stylua --check src tests scripts/*.luau
+selene src tests scripts/*.luau
+lune run scripts/run-tests.luau
 bash scripts/validate-structure.sh
 python3 scripts/validate-deployment.py --production
 python3 scripts/audit-gamepasses.py
 rojo build real-baseplate.project.json --output build/RoleplayOS-Production.rbxlx
+rojo build acceptance.project.json --output build/RoleplayOS-Acceptance.rbxlx
 ```
 
 The production command is intentionally expected to fail until every item below is
@@ -45,8 +48,9 @@ resolved. Do not bypass or weaken it to obtain a green build.
 
 ## Place-only acceptance
 
-Complete every applicable row in `STAGING_ACCEPTANCE.md` against the exact published
-staging version that will be promoted. At minimum this requires two players and two
+Complete every applicable row in `STAGING_ACCEPTANCE.md` against the exact Git SHA
+in a separate private test experience. Record configuration/assets and review
+production-specific differences before deployment. At minimum this requires two players and two
 live JobIds, because persistence, session locking, dispatch isolation and reset/rejoin
 behaviour cannot be proven by a source build.
 

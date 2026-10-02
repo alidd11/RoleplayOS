@@ -25,7 +25,7 @@ RoleplayOS does not manage `Workspace`, `Terrain`, `Lighting`, `Teams`, `Starter
 
 ## Mandatory backup and staging workflow
 
-1. In Creator Dashboard, create a private staging place inside the **Emergency Response: Portsmouth** experience. Do not test the first migration in the live start place.
+1. In Creator Dashboard, create a **separate private test experience** for initial staging and persistent fault tests. Another place inside the production experience shares production DataStores and is not data isolation.
 2. Open the real baseplate and use **File → Save to File** to create a dated `.rbxl` or `.rbxlx` backup.
 3. Publish a separate dated backup place/version. Record its place version number and the current Git commit.
 4. Copy the real baseplate into the private staging place. Confirm that Terrain, map models, Teams, Lighting and existing scripts are present before connecting Rojo.
@@ -40,7 +40,7 @@ RoleplayOS does not manage `Workspace`, `Terrain`, `Lighting`, `Teams`, `Starter
 7. Start `rojo serve real-baseplate.project.json`, connect the Studio plugin to the **staging place**, and inspect the proposed changes before accepting them.
 8. Confirm that the only new or updated roots are the four RoleplayOS containers shown above. If the plugin proposes removing Workspace, Teams, Terrain or unrelated instances, disconnect immediately.
 9. Save and publish the staging place only after the smoke tests below pass.
-10. Repeat the same connection against the live place during a maintenance window. Use the exact Git commit tested in staging.
+10. Only after acceptance and owner approval, repeat the same connection against the live place during a maintenance window. Use the exact Git commit tested in staging, with reviewed production-specific configuration and assets; record any differences and smoke checks. Do not copy test fixtures into production.
 
 ## Canonical asset migration
 
@@ -132,7 +132,7 @@ The gate requires or highlights:
 - final Roblox group links and minimum ranks; Control intentionally uses the main Universal Projects group;
 - all live gamepass IDs checked against this experience;
 - final uniform template IDs;
-- published API/DataStore access enabled only in the private staging place first;
+- published API/DataStore access enabled only in the separate private test experience first;
 - DataStore names and schema version reviewed before live traffic;
 - experience access behaviour tested with an authorised and unauthorised account;
 - StreamingEnabled behaviour tested around all tagged world integrations.
@@ -154,7 +154,7 @@ Test with at least two Roblox accounts in a private published server, not only S
 9. Phone, stamina, hunger, ID card and compact vehicle HUD do not overlap Roblox CoreGui on desktop, mobile or controller.
 10. Server and client consoles remain free of errors during join, respawn, team change, vehicle use and shutdown.
 
-Use a fresh staging DataStore namespace for destructive test data. Never point experimental schema changes at the live namespace.
+Use the separate test experience's DataStores for destructive test data. Do not assume a namespace switch exists: the current repository does not provide a staging namespace selector. Concurrent acceptance servers must share that test experience. Never point experimental schema changes at production DataStores.
 
 ## Release and rollback
 
