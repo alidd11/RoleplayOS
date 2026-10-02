@@ -51,6 +51,92 @@ return function(H: any)
 		return { Service = pava, Actor = actor }
 	end
 
+	local function sprayFixture(lineOfSight: boolean): any
+		local runtime = Runtime.new()
+		local tasks = table.clone(runtime.globals.task)
+		tasks.delay = function()
+			return nil
+		end
+		runtime.globals.task = tasks
+		local services = runtime.services.ServerScriptService.RoleplayOS.Services
+		local pava = runtime.require(services.PAVAService)
+
+		local actorCharacter = runtime.globals.Instance.new("Model")
+		actorCharacter.Name = "ActorCharacter"
+		local actorRoot = runtime.globals.Instance.new("Part")
+		actorRoot.Name = "HumanoidRootPart"
+		actorRoot.Position = runtime.globals.Vector3.new(0, 0, 0)
+		actorRoot.Parent = actorCharacter
+		local backpack = runtime.globals.Instance.new("Folder")
+		backpack.Name = "Backpack"
+		local tool = runtime.globals.Instance.new("Tool")
+		tool.Name = "PAVA"
+		tool:SetAttribute("RoleplayOSToolId", "PAVA")
+		tool.Parent = actorCharacter
+
+		local targetCharacter = runtime.globals.Instance.new("Model")
+		targetCharacter.Name = "TargetCharacter"
+		local targetRoot = runtime.globals.Instance.new("Part")
+		targetRoot.Name = "HumanoidRootPart"
+		targetRoot.Position = runtime.globals.Vector3.new(8, 0, 0)
+		targetRoot.Parent = targetCharacter
+		local targetHumanoid = runtime.globals.Instance.new("Humanoid")
+		targetHumanoid.Health = 100
+		targetHumanoid.WalkSpeed = 16
+		targetHumanoid.Parent = targetCharacter
+
+		local actor: any = {
+			UserId = 1,
+			Parent = runtime.services.Players,
+			Character = actorCharacter,
+		}
+		function actor:FindFirstChildOfClass(className: string)
+			return if className == "Backpack" then backpack else nil
+		end
+		local targetAttributes = {}
+		local target: any = {
+			UserId = 2,
+			Parent = runtime.services.Players,
+			Character = targetCharacter,
+		}
+		function target:SetAttribute(name: string, value: any)
+			targetAttributes[name] = value
+		end
+		runtime.services.Players.GetPlayerByUserId = function(_self, userId)
+			if userId == actor.UserId then
+				return actor
+		elseif userId == target.UserId then
+				return target
+		end
+			return nil
+		end
+
+		local context = {
+			Services = {
+				Get = function(_self, name)
+					assert(name == "DutyService", "Unexpected PAVA dependency")
+					return {
+						Get = function()
+							return { DepartmentId = "Police" }
+						end,
+					}
+				end,
+			},
+			Network = {
+				RegisterEvent = function()
+					return { FireClient = function() end }
+				end,
+			},
+			Logger = { Audit = function() end },
+		}
+		pava:Init(context)
+		pava.running = true
+		pava._lineOfSight = function()
+			return lineOfSight
+		end
+		return { Service = pava, Actor = actor, Target = target }
+	end
+
 	H.test("actual PAVA service rejects a backpack-only canister", function()
 		local f = fixture(false)
 		local sprayed, reason = f.Service:Spray(f.Actor, 2)
@@ -67,4 +153,11 @@ return function(H: any)
 			H.expect(reason == "PAVA_TARGET_INVALID", "equipped PAVA was treated as unequipped")
 		end
 	)
+	H.test("actual PAVA service rejects an obstructed nearby target", function()
+		local f = sprayFixture(false)
+		local sprayed, reason = f.Service:Spray(f.Actor, f.Target.UserId)
+		H.expect(not sprayed, "obstructed PAVA target was accepted")
+		H.expect(reason == "PAVA_TARGET_OBSTRUCTED", "obstructed target did not report obstruction")
+	end)
+
 end
