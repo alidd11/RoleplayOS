@@ -582,6 +582,11 @@ function PhoneService:EndCall(player: Player, callId: string): (boolean, string?
 	then
 		return false, "CALL_NOT_FOUND"
 	end
+	-- Terminal calls remain briefly for cleanup. A retry must not release the
+	-- participants' newer calls or restart this record's retention timer.
+	if call.State == "Ended" then
+		return true, nil
+	end
 	cancelTimer(self.callTimers, callId)
 	call.State = "Ended"
 	call.EndedAt = os.time()

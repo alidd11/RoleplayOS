@@ -94,3 +94,11 @@ collections/economy/recovery/slots, confirmation, active-character and
 pending-refund refusals, and valid empty deletion. Data access and dirty marking
 are explicit doubles. These are service API tests, not deletion UI or durable
 saves; creation, selection, avatar assets and respawn acceptance are not established.
+
+`scripts/phone-tests.luau` exercises actual PhoneService call placement, answering
+and hang-up. A replay after both previous participants start new calls must
+preserve their busy mappings, notifications, voice teardown count and original
+terminal cleanup timer. Stranger refusal and ordinary recipient answer/hang-up
+are also covered. Player signals, profile lookup, network delivery, voice and
+timers are explicit doubles; real audio routing and device UI remain external
+acceptance work.
