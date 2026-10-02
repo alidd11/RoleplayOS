@@ -828,7 +828,8 @@ function CharacterService:SetAuthoredAppearance(
 		character.Appearance = captured
 		character.AppearanceLocked = true
 		if locked then
-			session.Profile.Consumables.AppearanceEdits = credits - 1
+			-- Avatar application can yield while a receipt adds another credit.
+			session.Profile.Consumables.AppearanceEdits -= 1
 		end
 		runtimeCharacter:SetAttribute("RoleplayOSCivilianAppearance", true)
 		self.context.Services:Get("DataService"):MarkDirty(player)

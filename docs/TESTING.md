@@ -123,3 +123,11 @@ resolution, character loading, save, audit and notification boundaries are
 explicit doubles. The save fixture records grant counts, not durable DataStore
 state; marketplace delivery, real character loading and published persistence
 acceptance remain outstanding.
+
+`scripts/appearance-tests.luau` exercises actual CharacterService appearance edits
+and DeveloperProductService receipt processing with current ProfileSchema data.
+A receipt granted during avatar application must survive a successful edit and
+receipt replay. Failed application, free first edits and insufficient-credit
+refusal are also covered. Avatar application, player/profile access, saving and
+audit are explicit doubles; native avatar assets, Marketplace delivery and durable
+DataStore acceptance are not established by these tests.
