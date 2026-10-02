@@ -16,7 +16,25 @@ Membership of the configured Roblox group is the whitelist for Police, Ambulance
 
 Whitelisted departments use server-side Roblox Group membership and suspension state. Each `GroupLinks` entry contains the real Roblox group ID, minimum accepted rank and display name.
 
-RoleplayOS uses `GroupService:GetRolesInGroupAsync`, which supports Roblox's multi-role group memberships. It calculates the highest public rank returned for the configured group. Results are cached for the player session and discarded when the player leaves; menus and repeated role checks do not repeatedly call Roblox APIs.
+The current implementation calls `Player:GetRankInGroup` for a numeric rank; it
+does not implement multi-role `GetRolesInGroupAsync` lookup. Successful results
+expire after `Groups.CacheSeconds` and are discarded when the player leaves.
+Failures use capped exponential negative-cache backoff. Explicit invalidation
+allows the entry verification retry path to check again. Studio mock access
+bypasses the RPC only when its existing development switch is enabled.
+
+Each uncached RPC has a `Groups.LookupTimeoutSeconds` deadline (four seconds by
+default). `Groups.MaximumConcurrentLookups` caps shared worker admission (16 by
+default), including entry checks and prefetch. Busy, failed and timed-out lookups
+remain failed membership checks; they never establish new access. Existing duty's
+transient-failure policy is unchanged. Entry verification still applies its
+configured attempt/backoff limits, so its total wait is not a single RPC deadline.
+
+Timed-out workers are cancelled where supported. If cancellation fails, the worker
+retains its slot until completion, preventing unlimited replacement workers.
+Completion/teardown release state once, and late results cannot cache membership
+for a departed/replaced player or stopped service. This bounds Luau worker
+admission; it does not prove cancellation of Roblox's underlying network request.
 
 Emergency role access is a combined `All` rule:
 

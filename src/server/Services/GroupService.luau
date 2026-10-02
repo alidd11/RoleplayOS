@@ -9,6 +9,8 @@ local RobloxGroupService = {
 	cache = {},
 	connections = {},
 	failures = {},
+	lookupSlots = {},
+	activeLookupCount = 0,
 	running = false,
 }
 
@@ -16,9 +18,53 @@ local function playerIsCurrent(player: Player): boolean
 	return player.Parent == Players and Players:GetPlayerByUserId(player.UserId) == player
 end
 
+local function releaseLookup(self: any, slot: any)
+	if slot.Counted ~= true then
+		return
+	end
+	slot.Counted = false
+	self.lookupSlots[slot] = nil
+	self.activeLookupCount = math.max(0, self.activeLookupCount - 1)
+end
+
 function RobloxGroupService:Init(context: any)
 	self.context = context
 	self.settings = context.Configuration.Groups
+	self.lookupSlots = {}
+	self.activeLookupCount = 0
+end
+
+function RobloxGroupService:_lookupRank(player: Player, groupId: number): (boolean, any, string?)
+	if self.activeLookupCount >= self.settings.MaximumConcurrentLookups then
+		return false, nil, "GROUP_LOOKUP_BUSY"
+	end
+	local slot = { Counted = true }
+	self.lookupSlots[slot] = true
+	self.activeLookupCount += 1
+	local finished, ok, rank = false, false, nil
+	local worker = task.spawn(function()
+		ok, rank = pcall(player.GetRankInGroup, player, groupId)
+		releaseLookup(self, slot)
+		finished = true
+	end)
+	slot.Thread = worker
+	local deadline = os.clock() + self.settings.LookupTimeoutSeconds
+	while not finished and self.running and playerIsCurrent(player) and os.clock() < deadline do
+		task.wait(0.01)
+	end
+	if not finished then
+		-- A timed-out caller must return, but an uncancellable worker must keep
+		-- its admission slot until completion. Otherwise repeated timeouts could
+		-- create unlimited outstanding RPC workers despite the shared cap.
+		local cancelled = if coroutine.status(worker) == "dead"
+			then true
+			else pcall(task.cancel, worker)
+		if cancelled then
+			releaseLookup(self, slot)
+		end
+		return false, nil, "GROUP_LOOKUP_TIMEOUT"
+	end
+	return ok, rank, if ok then nil else "GROUP_LOOKUP_FAILED"
 end
 
 function RobloxGroupService:GetMembership(player: Player, linkId: string): any
@@ -85,7 +131,7 @@ function RobloxGroupService:GetMembershipByGroupId(
 		playerCache[key] = unconfigured
 		return unconfigured
 	end
-	local ok, rank = pcall(player.GetRankInGroup, player, groupId)
+	local ok, rank, lookupReason = self:_lookupRank(player, groupId)
 	-- The web call yields. A leaving player can be replaced by another Player
 	-- instance with the same UserId while it is in flight, and teardown can run
 	-- too. Never let that stale result update shared failure state or a cache.
@@ -107,11 +153,13 @@ function RobloxGroupService:GetMembershipByGroupId(
 			GroupId = groupId,
 			ConsecutiveFailures = failures,
 			RetryAfterSeconds = backoff,
+			Reason = lookupReason,
 		})
 		local failure = {
 			GroupId = groupId,
 			MinimumRank = minimumRank or 1,
 			Failed = true,
+			Reason = lookupReason or "GROUP_LOOKUP_FAILED",
 			ExpiresAt = os.clock() + backoff,
 		}
 		playerCache[key] = failure
@@ -201,6 +249,15 @@ end
 
 function RobloxGroupService:Destroy()
 	self.running = false
+	for slot in self.lookupSlots do
+		local worker = slot.Thread
+		if worker and coroutine.status(worker) ~= "dead" then
+			pcall(task.cancel, worker)
+		end
+		slot.Counted = false
+	end
+	table.clear(self.lookupSlots)
+	self.activeLookupCount = 0
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
