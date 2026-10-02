@@ -175,6 +175,12 @@ function DutyService:Get(player: Player): any?
 	if not self.running or not playerIsPresent(player) or self.active[player.UserId] ~= duty then
 		return nil
 	end
+	-- A team transition can complete during access lookup without replacing the
+	-- duty record. Do not return that old shift, even on a group-check failure.
+	if player.Team ~= expectedTeam then
+		self:End(player)
+		return nil
+	end
 	if not access.Allowed then
 		-- A check that could not be made is not a refusal.
 		--
