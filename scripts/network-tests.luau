@@ -241,7 +241,10 @@ return function(H: any)
 			return true
 		end)
 		H.expect(f:Invoke().Code == "SERVER_SHUTTING_DOWN", "shutdown race started handler")
-		H.expect(calls == 0 and f.Gateway.activeTotal == 0, "shutdown acquired slot")
+		H.expect(
+			calls == 0 and f.Gateway.activeTotal == 0 and next(f.Gateway.active) == nil,
+			"shutdown retained request tracking"
+		)
 		f:Destroy()
 	end)
 
@@ -301,6 +304,10 @@ return function(H: any)
 			H.expect(f:Invoke(userId).Code == "SERVER_BUSY", "server concurrency cap bypassed")
 			clean = clean and f.Gateway.active[userId] == nil
 		end
+		H.expect(
+			f.Gateway.activeTotal == 1 and next(f.Gateway.active[10]) ~= nil,
+			"refusals discarded a running request"
+		)
 		release = true
 		await(function()
 			return completed
