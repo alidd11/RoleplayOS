@@ -34,6 +34,36 @@ return function(VehicleSpawnerService)
 		end
 	end
 
+	function VehicleSpawnerService:_rememberNetworkOwner(vehicle: Instance, player: Player)
+		local previousOwner = self.networkOwners[vehicle]
+		if
+			previousOwner
+			and previousOwner ~= player
+			and self.networkOwnerVehicles[previousOwner] == vehicle
+		then
+			self.networkOwnerVehicles[previousOwner] = nil
+		end
+		self.networkOwners[vehicle] = player
+		self.networkOwnerVehicles[player] = vehicle
+	end
+
+	function VehicleSpawnerService:_forgetNetworkOwner(vehicle: Instance, player: Player): boolean
+		-- A deferred release from the old driver may run after a new driver already
+		-- owns the vehicle. Heal only the stale reverse entry and never disturb the
+		-- newer forward assignment.
+		if self.networkOwners[vehicle] ~= player then
+			if self.networkOwnerVehicles[player] == vehicle then
+				self.networkOwnerVehicles[player] = nil
+			end
+			return false
+		end
+		self.networkOwners[vehicle] = nil
+		if self.networkOwnerVehicles[player] == vehicle then
+			self.networkOwnerVehicles[player] = nil
+		end
+		return true
+	end
+
 	-- Gives a managed vehicle's physical assemblies to the player actually driving
 	-- it. This is deliberately tied to the live VehicleSeat rather than the player
 	-- who originally spawned the model: service vehicles can legitimately change
@@ -55,25 +85,21 @@ return function(VehicleSpawnerService)
 			return
 		end
 
-		-- A player can move straight from one managed driver seat to another. Release
-		-- any old assignment first so a departed vehicle is not left pinned to that
-		-- client's network ownership for the rest of its lifetime.
-		local previousVehicles = {}
-		for previousVehicle, owner in self.networkOwners do
-			if owner == player and previousVehicle ~= vehicle then
-				table.insert(previousVehicles, previousVehicle)
-			end
-		end
-		for _, previousVehicle in previousVehicles do
+		-- One player can drive only one seat. Keep the reverse edge explicitly so a
+		-- seat change or disconnect does not scan every other driven vehicle.
+		local previousVehicle = self.networkOwnerVehicles[player]
+		if previousVehicle and previousVehicle ~= vehicle then
 			self:_releaseVehicleNetworkOwner(previousVehicle, player)
 		end
 
 		if self.networkOwners[vehicle] == player then
+			-- Repair the reverse edge if a stale deferred callback cleared it.
+			self.networkOwnerVehicles[player] = vehicle
 			return
 		end
 		local assemblies = RigMechanics.setNetworkOwner(vehicle, player)
 		if assemblies > 0 then
-			self.networkOwners[vehicle] = player
+			self:_rememberNetworkOwner(vehicle, player)
 		end
 	end
 
@@ -82,10 +108,9 @@ return function(VehicleSpawnerService)
 	-- callback must never switch that vehicle back to automatic ownership over the
 	-- new driver's assignment.
 	function VehicleSpawnerService:_releaseVehicleNetworkOwner(vehicle: Instance, player: Player)
-		if self.networkOwners[vehicle] ~= player then
+		if not self:_forgetNetworkOwner(vehicle, player) then
 			return
 		end
-		self.networkOwners[vehicle] = nil
 		if not vehicle.Parent then
 			return
 		end
@@ -94,9 +119,13 @@ return function(VehicleSpawnerService)
 		local occupant = seat and seat.Occupant
 		local nextDriver = occupant and Players:GetPlayerFromCharacter(occupant.Parent)
 		if nextDriver and playerIsCurrent(nextDriver) then
+			local previousVehicle = self.networkOwnerVehicles[nextDriver]
+			if previousVehicle and previousVehicle ~= vehicle then
+				self:_releaseVehicleNetworkOwner(previousVehicle, nextDriver)
+			end
 			local assemblies = RigMechanics.setNetworkOwner(vehicle, nextDriver)
 			if assemblies > 0 then
-				self.networkOwners[vehicle] = nextDriver
+				self:_rememberNetworkOwner(vehicle, nextDriver)
 			end
 			return
 		end
@@ -104,13 +133,8 @@ return function(VehicleSpawnerService)
 	end
 
 	function VehicleSpawnerService:_releasePlayerNetworkOwnership(player: Player)
-		local vehicles = {}
-		for vehicle, owner in self.networkOwners do
-			if owner == player then
-				table.insert(vehicles, vehicle)
-			end
-		end
-		for _, vehicle in vehicles do
+		local vehicle = self.networkOwnerVehicles[player]
+		if vehicle then
 			self:_releaseVehicleNetworkOwner(vehicle, player)
 		end
 	end
