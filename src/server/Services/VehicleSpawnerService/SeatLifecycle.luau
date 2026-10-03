@@ -42,6 +42,7 @@ return function(VehicleSpawnerService)
 	function VehicleSpawnerService:_assignVehicleNetworkOwner(vehicle: Instance, player: Player)
 		if
 			not self.running
+			or self.context.Configuration.VehicleData.DriverNetworkOwnership ~= true
 			or not vehicle.Parent
 			or type(vehicle:GetAttribute("RoleplayOSDefinitionId")) ~= "string"
 		then
