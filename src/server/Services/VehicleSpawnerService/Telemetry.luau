@@ -62,10 +62,16 @@ return function(VehicleSpawnerService)
 	-- folder and never consults MaxSpeed, so cutting the engine is the only lever
 	-- that reaches these vehicles at all.
 
-	function VehicleSpawnerService:_setEngine(vehicle: Model, running: boolean)
+	function VehicleSpawnerService:_setEngine(vehicle: Model, running: boolean, state: any?)
 		local settings = self.context.Configuration.Chassis
-		local values = RigMechanics.chassisValues(vehicle, settings)
-		local engine = values and values:FindFirstChild(settings.EngineValueName)
+		local engine = state and state.Engine
+		if not engine or not engine.Parent or not engine:IsDescendantOf(vehicle) then
+			local values = RigMechanics.chassisValues(vehicle, settings)
+			engine = values and values:FindFirstChild(settings.EngineValueName)
+			if state then
+				state.Engine = engine
+			end
+		end
 		if engine and engine:IsA("ValueBase") and (engine :: any).Value ~= running then
 			(engine :: any).Value = running
 		end
@@ -117,7 +123,7 @@ return function(VehicleSpawnerService)
 			if settings.FuelEnabled then
 				state.Fuel = math.max(state.Fuel - burnt, 0)
 				vehicle:SetAttribute("RoleplayOSFuel", state.Fuel)
-				self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
+				self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent, state)
 			end
 		end
 	end
