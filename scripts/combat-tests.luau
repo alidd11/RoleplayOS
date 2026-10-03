@@ -160,7 +160,6 @@ return function(H: any)
 		return string.sub(asset, sourceTagEnd + 1, sourceEnd - 1)
 	end
 
-
 	H.test("PAVA issued clones strip legacy authority but preserve presentation", function()
 		local runtime = Runtime.new()
 		runtime.services.ServerStorage = runtime.globals.Instance.new("Folder")
