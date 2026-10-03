@@ -13,8 +13,10 @@ return function(PublicSafetyController)
 			return
 		end
 		self.watched[tool] = true
+		local toolConnections = {}
+		self.toolConnections[tool] = toolConnections
 		table.insert(
-			self.connections,
+			toolConnections,
 			tool.Activated:Connect(function()
 				local target = self:_targetUserId()
 				if not target then
@@ -63,6 +65,16 @@ return function(PublicSafetyController)
 					-- to the panel after the officer has closed it.
 					self:_showActions(target, response.Data)
 				end
+			end)
+		)
+		table.insert(
+			toolConnections,
+			tool.Destroying:Connect(function()
+				for _, connection in toolConnections do
+					connection:Disconnect()
+				end
+				table.clear(toolConnections)
+				self.toolConnections[tool] = nil
 			end)
 		)
 	end
