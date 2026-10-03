@@ -497,6 +497,8 @@ local function sanitiseImportedVehicle(vehicle: Model)
 			{ "DriveSeat", "SirenControl" },
 			{ "SmeersLightsHandler" },
 			{ "AC6_FE_Sounds" },
+			{ "A-Chassis Tune", "Plugins", "LightAddon", "SmeersLightsHandler" },
+			{ "A-Chassis Tune", "Plugins", "AC6_Stock_Sound", "AC6_FE_Sounds" },
 		}
 	do
 		remove(path)

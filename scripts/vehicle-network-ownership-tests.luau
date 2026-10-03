@@ -83,4 +83,50 @@ return function(H: any)
 			"destroyed vehicle retained physics ownership state"
 		)
 	end)
+
+	H.test("vehicle sanitiser strips nested client-callable legacy remotes", function()
+		local runtime = Runtime.new()
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local rigMechanics = runtime.require(root.VehicleSpawnerService.RigMechanics)
+		local Instance = runtime.globals.Instance
+		local vehicle = Instance.new("Model")
+		vehicle.Name = "CorollaTaxi"
+
+		local tune = Instance.new("Folder")
+		tune.Name = "A-Chassis Tune"
+		tune.Parent = vehicle
+		local plugins = Instance.new("Folder")
+		plugins.Name = "Plugins"
+		plugins.Parent = tune
+
+		local soundPlugin = Instance.new("Folder")
+		soundPlugin.Name = "AC6_Stock_Sound"
+		soundPlugin.Parent = plugins
+		local soundRemote = Instance.new("RemoteEvent")
+		soundRemote.Name = "AC6_FE_Sounds"
+		soundRemote.Parent = soundPlugin
+
+		local lightPlugin = Instance.new("Folder")
+		lightPlugin.Name = "LightAddon"
+		lightPlugin.Parent = plugins
+		local lightRemote = Instance.new("RemoteEvent")
+		lightRemote.Name = "SmeersLightsHandler"
+		lightRemote.Parent = lightPlugin
+
+		rigMechanics.sanitiseImportedVehicle(vehicle)
+
+		H.expect(
+			soundPlugin.Parent == plugins and lightPlugin.Parent == plugins,
+			"sanitiser removed functional plugin containers instead of only legacy remotes"
+		)
+		H.expect(
+			soundPlugin:FindFirstChild("AC6_FE_Sounds") == nil
+				and lightPlugin:FindFirstChild("SmeersLightsHandler") == nil,
+			"nested client-callable legacy vehicle remote survived sanitisation"
+		)
+		H.expect(
+			vehicle:GetAttribute("RoleplayOSSafelyAdapted") == true,
+			"security sanitisation was not recorded on the vehicle"
+		)
+	end)
 end
