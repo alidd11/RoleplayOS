@@ -2,6 +2,12 @@
 local ServerStorage = game:GetService("ServerStorage")
 local ToolFactory = require(script.Parent.Parent.Systems.ToolFactory)
 local LoadoutService = {}
+
+local function canSanitiseRejectedTool(toolId: string, rejection: any): boolean
+	return toolId == "PAVA"
+		and type(rejection) == "string"
+		and string.find(rejection, ":UNSAFE_", 1, true) ~= nil
+end
 local function resolve(root: Instance, path: { string }): Instance?
 	local current: Instance? = root
 	for index = 1, #path do
@@ -18,7 +24,17 @@ function LoadoutService:Start() end
 function LoadoutService:_toolDefinition(toolId: string): any?
 	local validator = self.context.Services:Get("ContentValidationService")
 	if validator and validator.GetToolDefinition then
-		return validator:GetToolDefinition(toolId)
+		local definition = validator:GetToolDefinition(toolId)
+		if definition then
+			return definition
+		end
+		local rejection = if validator.GetToolRejection
+			then validator:GetToolRejection(toolId)
+			else nil
+		if canSanitiseRejectedTool(toolId, rejection) then
+			return self.context.Configuration.Tools[toolId]
+		end
+		return nil
 	end
 	return self.context.Configuration.Tools[toolId]
 end
@@ -27,7 +43,18 @@ function LoadoutService:_toolIds(loadoutId: string, definition: any): { string }
 	local configured = definition.ToolIds or definition.ToolNames or {}
 	local validator = self.context.Services:Get("ContentValidationService")
 	if validator and validator.GetLoadoutToolIds then
-		return validator:GetLoadoutToolIds(loadoutId, configured)
+		local result = validator:GetLoadoutToolIds(loadoutId, configured)
+		if validator.GetToolRejection then
+			for _, toolId in configured do
+				if
+					canSanitiseRejectedTool(toolId, validator:GetToolRejection(toolId))
+					and not table.find(result, toolId)
+				then
+					table.insert(result, toolId)
+				end
+			end
+		end
+		return result
 	end
 	return table.clone(configured)
 end
@@ -326,6 +353,15 @@ function LoadoutService:GiveTool(
 	local backpack = player:FindFirstChildOfClass("Backpack")
 	if not backpack then
 		return false, "BACKPACK_UNAVAILABLE"
+	end
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.IsToolRejected and validator:IsToolRejected(toolId) then
+		local rejection = if validator.GetToolRejection
+			then validator:GetToolRejection(toolId)
+			else nil
+		if not canSanitiseRejectedTool(toolId, rejection) then
+			return false, "TOOL_UNAVAILABLE"
+		end
 	end
 	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 	local tools = if assets then assets:FindFirstChild("Tools") else nil

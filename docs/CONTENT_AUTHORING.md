@@ -4,7 +4,7 @@ Vehicle and Tool authoring is folder-first. Put an inert template in the correct
 
 ## Production asset certification
 
-RoleplayOS deliberately distinguishes functional staging fallbacks from production-quality models. Every inserted vehicle or Tool template must pass a human visual review and carry all of these attributes on its top-level `Model` or `Tool`; otherwise `ContentValidationService` aborts startup.
+RoleplayOS deliberately distinguishes functional staging fallbacks from production-quality models. Every inserted vehicle or Tool template must pass a human visual review and carry all of these attributes on its top-level `Model` or `Tool`. Production aborts startup when required content is rejected. Development keeps rejected imports in `ServerStorage` for inspection and reports them, but excludes them from runtime vehicle and Tool catalogues so rejected content cannot be spawned or issued. The one current exception is PAVA: when its only rejection is unsafe legacy executable content, `LoadoutService` may issue a clone only through its server-owned sanitiser, which removes that authority before the Tool is replicated. Structural, identity and quality failures remain blocked.
 
 | Attribute | Type | Requirement |
 |---|---|---|

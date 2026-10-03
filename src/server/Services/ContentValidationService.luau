@@ -16,6 +16,8 @@ local ContentValidationService = {
 	discoveredVehicles = {},
 	discoveredTools = {},
 	discoveredLoadoutTools = {},
+	rejectedVehicles = {},
+	rejectedTools = {},
 }
 
 local forbiddenClasses = {
@@ -279,20 +281,47 @@ function ContentValidationService:Init(context: any)
 	self.discoveredVehicles = {}
 	self.discoveredTools = {}
 	self.discoveredLoadoutTools = {}
+	self.rejectedVehicles = {}
+	self.rejectedTools = {}
+end
+
+function ContentValidationService:IsVehicleRejected(id: string): boolean
+	return self.rejectedVehicles[id] ~= nil
+end
+
+function ContentValidationService:IsToolRejected(id: string): boolean
+	return self.rejectedTools[id] ~= nil
+end
+
+function ContentValidationService:GetToolRejection(id: string): string?
+	return self.rejectedTools[id]
 end
 
 function ContentValidationService:GetVehicleDefinition(id: string): any?
+	if self:IsVehicleRejected(id) then
+		return nil
+	end
 	return self.context.Configuration.Vehicles[id] or self.discoveredVehicles[id]
 end
 
 function ContentValidationService:GetToolDefinition(id: string): any?
+	if self:IsToolRejected(id) then
+		return nil
+	end
 	return self.context.Configuration.Tools[id] or self.discoveredTools[id]
 end
 
 function ContentValidationService:GetVehicleDefinitions(): { [string]: any }
-	local result = table.clone(self.context.Configuration.Vehicles)
+	local result = {}
+	for id, definition in self.context.Configuration.Vehicles do
+		if not self:IsVehicleRejected(id) then
+			result[id] = definition
+		end
+	end
 	for id, definition in self.discoveredVehicles do
-		result[id] = definition
+		if not self:IsVehicleRejected(id) then
+			result[id] = definition
+		end
 	end
 	return result
 end
@@ -301,9 +330,16 @@ function ContentValidationService:GetLoadoutToolIds(
 	loadoutId: string,
 	configured: { string }
 ): { string }
-	local result = table.clone(configured)
+	local result = {}
+	for _, toolId in configured do
+		if not self:IsToolRejected(toolId) then
+			appendUnique(result, toolId)
+		end
+	end
 	for _, toolId in self.discoveredLoadoutTools[loadoutId] or {} do
-		appendUnique(result, toolId)
+		if not self:IsToolRejected(toolId) then
+			appendUnique(result, toolId)
+		end
 	end
 	return result
 end
@@ -771,6 +807,31 @@ function ContentValidationService:_check(
 	table.insert(self.report.Ready, kind .. ":" .. id)
 end
 
+-- Development keeps rejected imports in ServerStorage so they can be inspected,
+-- but an audit failure must never become runtime authority. Track the exact
+-- configured/discovered id that failed _check so later services see only the
+-- validated catalogue. Production still aborts startup on the same report.
+function ContentValidationService:_checkAndTrack(
+	assets: Instance,
+	kind: string,
+	id: string,
+	definition: any,
+	expectedClass: string
+): boolean
+	local invalidBefore = #self.report.Invalid
+	self:_check(assets, kind, id, definition, expectedClass)
+	if #self.report.Invalid == invalidBefore then
+		return true
+	end
+	local issue = self.report.Invalid[invalidBefore + 1]
+	if kind == "Vehicle" then
+		self.rejectedVehicles[id] = issue or "INVALID"
+	elseif kind == "Tool" then
+		self.rejectedTools[id] = issue or "INVALID"
+	end
+	return false
+end
+
 function ContentValidationService:Start()
 	local quality = self.context.Configuration.ContentQuality
 	local quarantine = workspace:FindFirstChild(quality.QuarantineRootName)
@@ -804,14 +865,14 @@ function ContentValidationService:Start()
 	else
 		self:_discover(assets)
 		for id, definition in self:GetVehicleDefinitions() do
-			self:_check(assets, "Vehicle", id, definition, "Model")
+			self:_checkAndTrack(assets, "Vehicle", id, definition, "Model")
 		end
 		local toolDefinitions = table.clone(self.context.Configuration.Tools)
 		for id, definition in self.discoveredTools do
 			toolDefinitions[id] = definition
 		end
 		for id, definition in toolDefinitions do
-			self:_check(assets, "Tool", id, definition, "Tool")
+			self:_checkAndTrack(assets, "Tool", id, definition, "Tool")
 		end
 	end
 	self:_checkWorldAssets()
@@ -874,6 +935,8 @@ function ContentValidationService:Destroy()
 	table.clear(self.discoveredVehicles)
 	table.clear(self.discoveredTools)
 	table.clear(self.discoveredLoadoutTools)
+	table.clear(self.rejectedVehicles)
+	table.clear(self.rejectedTools)
 end
 
 return ContentValidationService
