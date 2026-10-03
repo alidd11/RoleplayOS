@@ -9,6 +9,7 @@ local PublicSafetyController = {
 	connections = {},
 	watched = setmetatable({}, { __mode = "k" }),
 	scanConnections = {},
+	toolConnections = setmetatable({}, { __mode = "k" }),
 	actionState = {},
 }
 
@@ -148,8 +149,14 @@ function PublicSafetyController:Destroy()
 	for _, connection in self.scanConnections do
 		connection:Disconnect()
 	end
+	for _, toolConnections in self.toolConnections do
+		for _, connection in toolConnections do
+			connection:Disconnect()
+		end
+	end
 	table.clear(self.connections)
 	table.clear(self.scanConnections)
+	table.clear(self.toolConnections)
 	table.clear(self.actionState)
 	if self.unbindLayout then
 		self.unbindLayout()
