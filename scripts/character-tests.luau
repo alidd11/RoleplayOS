@@ -211,5 +211,4 @@ return function(H: any)
 			"dispatch can attach seat listeners to a stale character after yielding"
 		)
 	end)
-
 end
