@@ -93,6 +93,7 @@ function PAVAController:Init(context: any)
 	self.connections = {}
 	self.watched = setmetatable({}, { __mode = "k" })
 	self.toolConnections = setmetatable({}, { __mode = "k" })
+	self.characterConnection = nil
 	self.mouse = nil
 end
 
@@ -173,7 +174,16 @@ function PAVAController:Start()
 	local backpack = player:WaitForChild("Backpack")
 	self:_watchContainer(backpack)
 	local function onCharacter(character: Model)
-		self:_watchContainer(character)
+		if self.characterConnection then
+			self.characterConnection:Disconnect()
+			self.characterConnection = nil
+		end
+		for _, child in character:GetChildren() do
+			self:_watch(child)
+		end
+		self.characterConnection = character.ChildAdded:Connect(function(child)
+			self:_watch(child)
+		end)
 	end
 	if player.Character then
 		onCharacter(player.Character)
@@ -196,6 +206,10 @@ function PAVAController:Start()
 end
 
 function PAVAController:Destroy()
+	if self.characterConnection then
+		self.characterConnection:Disconnect()
+		self.characterConnection = nil
+	end
 	for _, connection in self.connections or {} do
 		connection:Disconnect()
 	end
