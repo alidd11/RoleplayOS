@@ -37,9 +37,9 @@ end
 --
 -- The plate itself is the vehicle's own - its model, its surface, its font. Only
 -- the number is ours.
-function VehiclePlateService:_removeGenerators(vehicle: Model): number
+function VehiclePlateService:_removeGenerators(vehicle: Model, descendants: { Instance }?): number
 	local removed = 0
-	for _, descendant in vehicle:GetDescendants() do
+	for _, descendant in descendants or vehicle:GetDescendants() do
 		if descendant:IsA("BaseScript") and self.generatorNames[compact(descendant.Name)] then
 			descendant:Destroy()
 			removed += 1
@@ -134,14 +134,19 @@ end
 
 function VehiclePlateService:Apply(vehicle: Model, registration: string): number
 	vehicle:SetAttribute("RoleplayOSRegistration", registration)
-	self:_removeGenerators(vehicle)
+	-- Imported models can contain hundreds of descendants. Snapshot once for the
+	-- two full-model passes in ordinary plate application so each vehicle spawn
+	-- does not rebuild the same descendant array just to remove legacy generators
+	-- and then write registration text.
+	local descendants = vehicle:GetDescendants()
+	self:_removeGenerators(vehicle, descendants)
 	if self:_usesNativePlateSystem(vehicle) then
 		local taxiPerm = vehicle:FindFirstChild("TAXIPERM", true)
 		local nativePlate = taxiPerm and taxiPerm:FindFirstChild("Plate", true)
 		return if nativePlate then writeNativePlate(nativePlate, registration) else 0
 	end
 	local changed = 0
-	for _, instance in vehicle:GetDescendants() do
+	for _, instance in descendants do
 		if
 			(instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox"))
 			and self:_isPlateText(instance)
