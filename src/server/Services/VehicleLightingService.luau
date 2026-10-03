@@ -216,20 +216,45 @@ function VehicleLightingService:_paint(vehicle: Instance, force: boolean?)
 	state.LastFlashOn = flashOn
 end
 
--- The driver of a vehicle, or nil.
-local function driverOf(vehicle: Instance): Player?
-	local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
-	local occupant = seat and seat.Occupant
-	return if occupant then Players:GetPlayerFromCharacter(occupant.Parent) else nil
+function VehicleLightingService:_driverSeat(vehicle: Instance, state: any): VehicleSeat?
+	local seat = state.Seat
+	if not seat or not seat.Parent or not seat:IsDescendantOf(vehicle) then
+		seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+		state.Seat = seat
+	end
+	return seat
 end
 
 -- The vehicle a player is driving, or nil. This is the authorisation check: a
--- request only ever reaches the car its sender is sitting in.
+-- request only ever reaches the car whose driver seat the sender occupies.
+--
+-- Start from the sender's own seat and walk its ancestors rather than scanning
+-- every adopted vehicle and recursively searching each one for a driver seat.
+-- The cached driver seat is still revalidated, so a passenger VehicleSeat does
+-- not gain control and a chassis that replaces/reparents its seat is refreshed.
 function VehicleLightingService:_vehicleFor(player: Player): Instance?
-	for vehicle in self.vehicles do
-		if vehicle.Parent and driverOf(vehicle) == player then
-			return vehicle
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+	local occupiedSeat = humanoid and humanoid.SeatPart
+	if not occupiedSeat or not occupiedSeat:IsA("VehicleSeat") then
+		return nil
+	end
+
+	local current: Instance? = occupiedSeat
+	while current and current ~= workspace do
+		local state = self.vehicles[current]
+		if state and current.Parent then
+			local driverSeat = self:_driverSeat(current, state)
+			if driverSeat ~= occupiedSeat then
+				return nil
+			end
+			local occupant = driverSeat and driverSeat.Occupant
+			return if occupant
+					and Players:GetPlayerFromCharacter(occupant.Parent) == player
+				then current
+				else nil
 		end
+		current = current.Parent
 	end
 	return nil
 end
@@ -296,11 +321,7 @@ end
 -- the brake was held. Both are simply functions of the seat and the gear, so
 -- they are read here on the same step as everything else.
 function VehicleLightingService:_readChassis(vehicle: Instance, state: any)
-	local seat = state.Seat
-	if not seat or not seat.Parent then
-		seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
-		state.Seat = seat
-	end
+	local seat = self:_driverSeat(vehicle, state)
 	if not seat then
 		return
 	end
