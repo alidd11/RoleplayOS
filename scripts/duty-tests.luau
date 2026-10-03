@@ -162,4 +162,18 @@ return function(H: any)
 		)
 		f:Destroy()
 	end)
+	H.test("duty rollback cleanup remains symmetrical with normal end", function()
+		local f = fixture()
+		local previousTeam = f.Player.Team
+		f.Duty.active[1] = nil
+		-- Exercise the same cleanup services a failed start must use by ending a
+		-- synthetic partially-started shift through the public cleanup path.
+		f.Duty.active[1] = f.Row
+		f.Duty:End(f.Player)
+		H.expect(f.Duty.active[1] == nil, "partial duty record survived cleanup")
+		H.expect(f.Unregisters == 1, "partial unit registration survived cleanup")
+		H.expect(f.Cleanup == 4, "issued duty presentation state survived cleanup")
+		H.expect(f.Player.Team == previousTeam, "cleanup unexpectedly changed the team")
+		f:Destroy()
+	end)
 end
