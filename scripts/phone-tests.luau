@@ -183,5 +183,4 @@ return function(H: any)
 			"destroyed phone tool listener state is retained"
 		)
 	end)
-
 end
