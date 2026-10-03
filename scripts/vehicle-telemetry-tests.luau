@@ -86,6 +86,7 @@ return function(H: any)
 		local service = runtime.require(root.VehicleSpawnerService)
 
 		local scans = 0
+		local vehicle: any
 		local cachedSeat: any = { Parent = true, Occupant = nil, InVehicle = true }
 		cachedSeat.IsDescendantOf = function(self, candidate)
 			return self.InVehicle and candidate == vehicle
@@ -94,7 +95,7 @@ return function(H: any)
 		replacementSeat.IsDescendantOf = function(self, candidate)
 			return self.InVehicle and candidate == vehicle
 		end
-		local vehicle: any = {
+		vehicle = {
 			Parent = true,
 			GetPivot = function()
 				return { Position = {} }
