@@ -346,5 +346,4 @@ return function(H: any)
 			"Taser pose retains destroyed character listener state"
 		)
 	end)
-
 end
