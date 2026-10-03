@@ -141,6 +141,72 @@ return function(H: any)
 		)
 	end)
 
+	H.test("ANPR alerts fan out only across active duty candidates", function()
+		local runtime = Runtime.new()
+		runtime.services.CollectionService = {}
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local players = runtime.services.Players
+		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		local byId: { [number]: any } = {}
+		for _, userId in { 10, 20, 30 } do
+			byId[userId] = { UserId = userId, Parent = players }
+		end
+		players.GetPlayerByUserId = function(_self, userId)
+			return byId[userId]
+		end
+		players.GetPlayers = function()
+			error("ANPR scanned the full player population")
+		end
+
+		local deliveries, lookups = {}, 0
+		local duties = {
+			[10] = { RoleId = config.ANPR.RoadsRoleId, DepartmentId = "Police" },
+			[20] = { RoleId = "Control", DepartmentId = "Control" },
+			[30] = { RoleId = "PoliceOfficer", DepartmentId = "Police" },
+		}
+		local duty = {
+			ActiveUserIds = function()
+				return { 10, 20 }
+			end,
+			Get = function(_self, player)
+				lookups += 1
+				return duties[player.UserId]
+			end,
+		}
+		local anpr = runtime.require(root.ANPRService)
+		anpr.context = {
+			Configuration = config,
+			Services = {
+				Get = function(_self, name)
+					H.expect(name == "DutyService", "unexpected ANPR fan-out dependency")
+					return duty
+				end,
+			},
+		}
+		anpr.running = true
+		local sensor = runtime.globals.Instance.new("Part")
+		sensor.Parent = runtime.services.Workspace
+		local token = {}
+		anpr.watched = { [sensor] = { Token = token } }
+
+		local recipients = anpr:_alertPlayers(sensor, token)
+		H.expect(recipients ~= nil, "current ANPR watch was rejected")
+		if recipients then
+			for _, player in recipients do
+				table.insert(deliveries, player.UserId)
+			end
+		end
+		H.expect(
+			lookups == 2
+				and #deliveries == 2
+				and contains(deliveries, 10)
+				and contains(deliveries, 20)
+				and not contains(deliveries, 30),
+			"ANPR candidate narrowing changed Roads Policing or Control delivery"
+		)
+		sensor:Destroy()
+	end)
+
 	H.test("radio transmit fan-out stays inside the selected channel set", function()
 		local runtime = Runtime.new()
 		local root = runtime.services.ServerScriptService.RoleplayOS.Services
