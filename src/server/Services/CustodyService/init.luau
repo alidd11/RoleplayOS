@@ -14,6 +14,7 @@ local CustodyService = {
 	cuffed = {},
 	connections = {},
 	commands = {},
+	activeSentences = {},
 	running = false,
 }
 
@@ -48,6 +49,7 @@ function CustodyService:Init(context: any)
 	self.cuffed = {}
 	self.connections = {}
 	self.commands = {}
+	self.activeSentences = {}
 	self.chairPrompts = {}
 	self.chairPromptConnections = {}
 	self.playerConnections = {}
@@ -155,6 +157,94 @@ function CustodyService:_command(
 	)
 end
 
+-- Keeps the one-second sentence timer proportional to the number of actual
+-- prisoners, not the total server population. The table stores the exact Player
+-- instance so a quick rejoin using the same UserId cannot inherit an old timer.
+function CustodyService:_trackSentence(player: Player)
+	self.activeSentences[player.UserId] = player
+end
+
+function CustodyService:_untrackSentence(player: Player)
+	if self.activeSentences[player.UserId] == player then
+		self.activeSentences[player.UserId] = nil
+	end
+end
+
+function CustodyService:_tickSentences(now: number)
+	-- Snapshot ids because completing a sentence can yield through role/spawn work
+	-- and can remove its own entry while this pass is still iterating.
+	local userIds = {}
+	for userId in self.activeSentences do
+		table.insert(userIds, userId)
+	end
+
+	for _, userId in userIds do
+		local player = self.activeSentences[userId]
+		if not player or not playerIsCurrent(player) then
+			self.activeSentences[userId] = nil
+			continue
+		end
+
+		-- Guarded per prisoner. A failure for one detainee must never stop every
+		-- other sentence timer in the server.
+		local processed, problem = pcall(function()
+			if self.activeSentences[userId] ~= player then
+				return
+			end
+			local sentence = self:_sentence(player)
+			if not sentence then
+				self:_untrackSentence(player)
+				return
+			end
+			local remaining = math.max(0, tonumber(sentence.RemainingSeconds) or 0)
+			if remaining <= 0 then
+				self:_untrackSentence(player)
+				return
+			end
+
+			remaining = math.max(0, remaining - 1)
+			sentence.RemainingSeconds = remaining
+			sentence.ReleaseAt = 0
+			sentence.UpdatedAt = now
+			player:SetAttribute("RoleplayOSCustodyReleaseAt", now + remaining)
+			player:SetAttribute("RoleplayOSCustodyRemaining", remaining)
+			if remaining == 0 then
+				local completed, completeReason = self:_completeSentence(player, "Served", nil)
+				if
+					not self.running
+					or not playerIsCurrent(player)
+					or self.activeSentences[userId] ~= player
+					or self:_sentence(player) ~= sentence
+				then
+					return
+				end
+				if not completed then
+					-- Retried rather than left at a permanently zeroed timer. Completion
+					-- can fail for transient spawn/role reasons.
+					local retrySeconds = 5
+					sentence.RemainingSeconds = retrySeconds
+					sentence.ReleaseAt = 0
+					sentence.UpdatedAt = now
+					player:SetAttribute("RoleplayOSCustodyReleaseAt", now + retrySeconds)
+					player:SetAttribute("RoleplayOSCustodyRemaining", retrySeconds)
+					self.context.Logger:Warning("Custody release on time served failed, retrying", {
+						UserId = player.UserId,
+						Reason = completeReason,
+					})
+				end
+			elseif remaining % 10 == 0 then
+				self.context.Services:Get("DataService"):MarkDirty(player)
+			end
+		end)
+		if not processed then
+			self.context.Logger:Error("Custody sentence tick failed", {
+				UserId = player.UserId,
+				Error = tostring(problem),
+			})
+		end
+	end
+end
+
 function CustodyService:Start()
 	self.running = true
 	local chairTag = self.context.Configuration.Custody.ChairTag
@@ -188,6 +278,7 @@ function CustodyService:Start()
 				return
 			end
 			if self:HasActiveSentence(player) then
+				self:_trackSentence(player)
 				local summary = self:GetSentence(player)
 				player:SetAttribute("RoleplayOSCustodyReleaseAt", summary.ReleaseAt)
 				player:SetAttribute("RoleplayOSCustodyRemaining", summary.RemainingSeconds)
@@ -241,6 +332,7 @@ function CustodyService:Start()
 			-- Only an already processed sentence is penalised. Merely being cuffed
 			-- is not an arrest and must never create a sentence by itself.
 			self:AddDisconnectPenalty(player)
+			self:_untrackSentence(player)
 			self.cuffed[player.UserId] = nil
 			local playerConnection = self.playerConnections[player.UserId]
 			if playerConnection then
@@ -270,69 +362,7 @@ function CustodyService:Start()
 			if not self.running then
 				break
 			end
-			local now = os.time()
-			for _, player in Players:GetPlayers() do
-				-- Guarded per prisoner. This loop is the only thing that ends a
-				-- sentence, so a throw for one detainee left every detainee in the
-				-- server serving theirs for ever, with the server restarting as the
-				-- only way out.
-				local released, problem = pcall(function()
-					local sentence = self:_sentence(player)
-					if sentence then
-						local remaining = math.max(0, tonumber(sentence.RemainingSeconds) or 0)
-						if remaining > 0 then
-							remaining = math.max(0, remaining - 1)
-							sentence.RemainingSeconds = remaining
-							sentence.ReleaseAt = 0
-							sentence.UpdatedAt = now
-							player:SetAttribute("RoleplayOSCustodyReleaseAt", now + remaining)
-							player:SetAttribute("RoleplayOSCustodyRemaining", remaining)
-							if remaining == 0 then
-								local completed, completeReason =
-									self:_completeSentence(player, "Served", nil)
-								if
-									not self.running
-									or not playerIsCurrent(player)
-									or self:_sentence(player) ~= sentence
-								then
-									return
-								end
-								if not completed then
-									-- Retried rather than left at a permanently zeroed
-									-- timer. _completeSentence can fail for reasons that
-									-- resolve themselves a few seconds later -- no
-									-- civilian spawn configured yet, a transient role or
-									-- spawn failure -- and the alternative is a prisoner
-									-- stuck in custody forever with a clock reading zero,
-									-- since the `remaining > 0` gate above never lets this
-									-- branch run again once it is.
-									local retrySeconds = 5
-									sentence.RemainingSeconds = retrySeconds
-									sentence.ReleaseAt = 0
-									sentence.UpdatedAt = now
-									player:SetAttribute(
-										"RoleplayOSCustodyReleaseAt",
-										now + retrySeconds
-									)
-									player:SetAttribute("RoleplayOSCustodyRemaining", retrySeconds)
-									self.context.Logger:Warning(
-										"Custody release on time served failed, retrying",
-										{ UserId = player.UserId, Reason = completeReason }
-									)
-								end
-							elseif remaining % 10 == 0 then
-								self.context.Services:Get("DataService"):MarkDirty(player)
-							end
-						end
-					end
-				end)
-				if not released then
-					self.context.Logger:Error("Custody sentence tick failed", {
-						UserId = player.UserId,
-						Error = tostring(problem),
-					})
-				end
-			end
+			self:_tickSentences(os.time())
 		end
 	end)
 	self:_command("/caution", nil, function(actor)
@@ -380,6 +410,7 @@ function CustodyService:Destroy()
 	table.clear(self.booking)
 	table.clear(self.completing)
 	table.clear(self.cuffed)
+	table.clear(self.activeSentences)
 	local chairModels = {}
 	for model in self.chairPrompts do
 		table.insert(chairModels, model)
