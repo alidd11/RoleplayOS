@@ -86,9 +86,8 @@ return function(H: any)
 
 	H.test("vehicle sanitiser strips nested client-callable legacy remotes", function()
 		local runtime = Runtime.new()
-		local rigMechanics = runtime.require(
-			runtime.services.ServerScriptService.RoleplayOS.Services.VehicleSpawnerService.RigMechanics
-		)
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local rigMechanics = runtime.require(root.VehicleSpawnerService.RigMechanics)
 		local Instance = runtime.globals.Instance
 		local vehicle = Instance.new("Model")
 		vehicle.Name = "CorollaTaxi"
@@ -130,5 +129,4 @@ return function(H: any)
 			"security sanitisation was not recorded on the vehicle"
 		)
 	end)
-
 end
