@@ -212,6 +212,12 @@ return function(DataService)
 			end
 		end
 		local ok, problem = self:_retry(function()
+			-- _retry has already waited for request budget. Pace at this exact point
+			-- so a budget recovery cannot release every waiting join into UpdateAsync
+			-- on the same scheduler turn.
+			if not self:_paceProfileLoad(loadToken, player) then
+				error("PROFILE_LOAD_CANCELLED")
+			end
 			if loadToken.Cancelled or self.closing or not self.running then
 				error("PROFILE_LOAD_CANCELLED")
 			end
