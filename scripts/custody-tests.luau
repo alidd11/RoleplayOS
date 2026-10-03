@@ -1,4 +1,5 @@
 --!strict
+local fs = require("@lune/fs")
 local Runtime = require("./test-runtime")
 local task = require("@lune/task")
 
@@ -318,4 +319,21 @@ return function(H: any)
 			"Needs ignored the configured cuffed walk speed"
 		)
 	end)
+	H.test("public-safety tool listeners are released on destruction", function()
+		local watch = fs.readFile("src/client/Controllers/PublicSafetyController/ToolWatch.luau")
+		local controller = fs.readFile("src/client/Controllers/PublicSafetyController/init.luau")
+		H.expect(
+			string.find(watch, "tool.Destroying:Connect", 1, true) ~= nil,
+			"public-safety tool listeners survive destroyed tools"
+		)
+		H.expect(
+			string.find(watch, "self.toolConnections[tool] = nil", 1, true) ~= nil,
+			"public-safety destroyed tool state is retained"
+		)
+		H.expect(
+			string.find(controller, "table.clear(self.toolConnections)", 1, true) ~= nil,
+			"public-safety teardown does not clear tool listener state"
+		)
+	end)
+
 end
