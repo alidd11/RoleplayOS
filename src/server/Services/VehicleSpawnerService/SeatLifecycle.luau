@@ -34,6 +34,86 @@ return function(VehicleSpawnerService)
 		end
 	end
 
+	-- Gives a managed vehicle's physical assemblies to the player actually driving
+	-- it. This is deliberately tied to the live VehicleSeat rather than the player
+	-- who originally spawned the model: service vehicles can legitimately change
+	-- drivers, and the current driver is the client already supplying its control
+	-- input.
+	function VehicleSpawnerService:_assignVehicleNetworkOwner(vehicle: Instance, player: Player)
+		if
+			not self.running
+			or not vehicle.Parent
+			or type(vehicle:GetAttribute("RoleplayOSDefinitionId")) ~= "string"
+		then
+			return
+		end
+		local character = player.Character
+		local driverHumanoid = character and character:FindFirstChildOfClass("Humanoid")
+		local seat = driverHumanoid and driverHumanoid.SeatPart
+		if not seat or not seat:IsA("VehicleSeat") or RigMechanics.vehicleOf(seat) ~= vehicle then
+			return
+		end
+
+		-- A player can move straight from one managed driver seat to another. Release
+		-- any old assignment first so a departed vehicle is not left pinned to that
+		-- client's network ownership for the rest of its lifetime.
+		local previousVehicles = {}
+		for previousVehicle, owner in self.networkOwners do
+			if owner == player and previousVehicle ~= vehicle then
+				table.insert(previousVehicles, previousVehicle)
+			end
+		end
+		for _, previousVehicle in previousVehicles do
+			self:_releaseVehicleNetworkOwner(previousVehicle, player)
+		end
+
+		if self.networkOwners[vehicle] == player then
+			return
+		end
+		local assemblies = RigMechanics.setNetworkOwner(vehicle, player)
+		if assemblies > 0 then
+			self.networkOwners[vehicle] = player
+		end
+	end
+
+	-- Releases only an assignment still owned by this exact player. A new driver
+	-- can take the seat in the same frame the old one leaves; the old deferred
+	-- callback must never switch that vehicle back to automatic ownership over the
+	-- new driver's assignment.
+	function VehicleSpawnerService:_releaseVehicleNetworkOwner(vehicle: Instance, player: Player)
+		if self.networkOwners[vehicle] ~= player then
+			return
+		end
+		self.networkOwners[vehicle] = nil
+		if not vehicle.Parent then
+			return
+		end
+
+		local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+		local occupant = seat and seat.Occupant
+		local nextDriver = occupant and Players:GetPlayerFromCharacter(occupant.Parent)
+		if nextDriver and playerIsCurrent(nextDriver) then
+			local assemblies = RigMechanics.setNetworkOwner(vehicle, nextDriver)
+			if assemblies > 0 then
+				self.networkOwners[vehicle] = nextDriver
+			end
+			return
+		end
+		RigMechanics.setNetworkOwner(vehicle, nil)
+	end
+
+	function VehicleSpawnerService:_releasePlayerNetworkOwnership(player: Player)
+		local vehicles = {}
+		for vehicle, owner in self.networkOwners do
+			if owner == player then
+				table.insert(vehicles, vehicle)
+			end
+		end
+		for _, vehicle in vehicles do
+			self:_releaseVehicleNetworkOwner(vehicle, player)
+		end
+	end
+
 	-- Watches one player's seat, and cleans up after whatever they were riding.
 	function VehicleSpawnerService:_watchSeat(player: Player)
 		if not self.running or not playerIsCurrent(player) then
@@ -57,6 +137,19 @@ return function(VehicleSpawnerService)
 				if seat then
 					local mounted = RigMechanics.vehicleOf(seat)
 					lastVehicle = mounted
+					if seat:IsA("VehicleSeat") then
+						task.defer(function()
+							if
+								self.running
+								and playerIsCurrent(player)
+								and player.Character == character
+								and humanoid.SeatPart == seat
+								and mounted.Parent
+							then
+								self:_assignVehicleNetworkOwner(mounted, player)
+							end
+						end)
+					end
 					-- After the kit has had its go, so this picks up only what its broken
 					-- R15 path left behind rather than racing it.
 					task.delay(0.4, function()
@@ -101,6 +194,7 @@ return function(VehicleSpawnerService)
 					then
 						return
 					end
+					self:_releaseVehicleNetworkOwner(vehicle, player)
 					-- Accessories first, then the rest of the joints.
 					--
 					-- Order matters: RigMechanics.detachRider destroys every joint spanning the rider
