@@ -200,5 +200,4 @@ return function(H: any)
 			"interrupted territory load leaves the civilian team assigned"
 		)
 	end)
-
 end
