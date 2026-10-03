@@ -176,6 +176,53 @@ local function vehicleOf(seat: BasePart): Instance
 	return root
 end
 
+-- Assigns every unanchored physical assembly belonging to a vehicle to its
+-- current driver, or returns those assemblies to Roblox's automatic ownership
+-- when there is no driver.
+--
+-- A-Chassis vehicles are not one rigid assembly: wheels and other constrained
+-- pieces can have separate assembly roots. Setting only the VehicleSeat leaves
+-- the remaining solver work on the server, which is precisely the cost that
+-- grows when a populated server has dozens of moving cars. Walking descendants
+-- happens only on seat transitions, never on a frame loop.
+--
+-- Network ownership is a performance decision, not an authority boundary.
+-- Persistent mileage/fuel, fines, ownership and economy validation remain
+-- server-authored and continue to reject implausible movement.
+local function setNetworkOwner(vehicle: Instance, player: Player?): number
+	local roots: { [BasePart]: boolean } = {}
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA("BasePart") and not descendant.Anchored then
+			local root = descendant.AssemblyRootPart or descendant
+			if not root.Anchored then
+				roots[root] = true
+			end
+		end
+	end
+
+	local changed = 0
+	for part in roots do
+		local checked, canSet = pcall(function()
+			local allowed = part:CanSetNetworkOwnership()
+			return allowed
+		end)
+		if not checked or canSet ~= true then
+			continue
+		end
+		local applied = pcall(function()
+			if player then
+				part:SetNetworkOwner(player)
+			else
+				part:SetNetworkOwnershipAuto()
+			end
+		end)
+		if applied then
+			changed += 1
+		end
+	end
+	return changed
+end
+
 -- Hangs the rider's accessories on the bike's proxy head, which its own script
 -- fails to do on an R15 avatar.
 --
@@ -542,6 +589,7 @@ return {
 	detachRider = detachRider,
 	restoreRig = restoreRig,
 	vehicleOf = vehicleOf,
+	setNetworkOwner = setNetworkOwner,
 	anchorAccessoriesToProxy = anchorAccessoriesToProxy,
 	reattachAccessories = reattachAccessories,
 	chassisReady = chassisReady,

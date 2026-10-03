@@ -2417,6 +2417,10 @@ local Config = {
 		["SurronCivilian"] = 4200,
 	},
 	VehicleData = {
+		-- Moving vehicle physics belongs on the driver client, while all gameplay
+		-- authority remains on the server. This is the main physics scaling lever for
+		-- populated servers with dozens of A-Chassis assemblies.
+		DriverNetworkOwnership = true,
 		-- Retained for speed enforcement and the replacement spawner integration;
 		-- RoleplayOS no longer contains a vehicle spawning implementation.
 		StudsPerSecondToMph = 0.626,

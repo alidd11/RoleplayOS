@@ -182,6 +182,13 @@ H.test("transfer settlement replay IDs and acknowledgement transitions are stabl
 	)
 end)
 
+H.test("driver network ownership is enabled for managed vehicle physics", function()
+	H.expect(
+		Config.VehicleData.DriverNetworkOwnership == true,
+		"managed vehicles are not configured to offload driven physics"
+	)
+end)
+
 H.test("cash drops have per-player and server population limits", function()
 	H.expect(Config.MoneyDrops.MaximumActivePerPlayer > 0, "per-player drop limit missing")
 	H.expect(

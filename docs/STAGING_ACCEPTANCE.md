@@ -88,6 +88,7 @@ Test with the intended maximum player count or the closest practical Studio simu
 
 - No repeating errors or warnings after the initial acceptance report.
 - Server frame time remains stable while driving through streamed areas.
+- With multiple occupied RoleplayOS vehicles, each eligible unanchored assembly reports the current driver as network owner; after the driver exits, ownership returns to automatic without pinning the vehicle to the departed player.
 - Script activity has no unexplained continuous high-frequency task.
 - Network receive/send does not grow continuously while players are idle.
 - Memory reaches a stable plateau after repeated spawn/despawn, duty and phone cycles.

@@ -20,6 +20,8 @@ Spawning checks active character ownership, terminal distance, spawn-point clear
 
 Civilian mileage and fuel are calculated once per second on the server from bounded vehicle movement. Implausible position jumps are discarded so a client-owned physics assembly cannot inject an unbounded persistent distance. Fuel includes a small occupied-idle cost, is exposed through server-authored Model/VehicleSeat attributes for the HUD, and stops a standard `VehicleSeat` when empty. Values are marked dirty at a bounded interval and once more on despawn; team-vehicle consumption is session-only.
 
+Driven RoleplayOS vehicles explicitly assign each eligible unanchored physics assembly to the current driver and return it to Roblox automatic ownership when the driver leaves. This keeps A-Chassis solver work distributed as server population grows instead of pinning every moving vehicle to the server. Network ownership is not trusted as gameplay authority: mileage and fuel are still derived and bounded server-side, road-safety detections are corroborated on the server, and clients still cannot decide ownership, prices, fines or persistent records.
+
 Transfer, resale escrow and finance agreements remain future economy work.
 
 

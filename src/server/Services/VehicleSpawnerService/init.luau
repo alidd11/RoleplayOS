@@ -20,6 +20,9 @@ local VehicleSpawnerService = {
 	deathConnections = {},
 	spawnConnections = {},
 	seatConnections = {},
+	-- Explicit physics ownership for managed vehicles, keyed by the live model.
+	-- Entries exist only while a driver owns at least one unanchored assembly.
+	networkOwners = {},
 	-- Per-vehicle odometer and tank state, keyed by owner user id. Held here
 	-- rather than only on the model's attributes because the burn loop needs the
 	-- previous position to integrate distance, and that is working state rather
@@ -40,6 +43,7 @@ function VehicleSpawnerService:Init(context: any)
 	self.settings = context.Configuration.VehicleSpawners
 	self.running = false
 	self.previewCleaning = true
+	self.networkOwners = {}
 end
 
 function VehicleSpawnerService:Start()
@@ -47,6 +51,7 @@ function VehicleSpawnerService:Start()
 	table.insert(
 		self.connections,
 		Players.PlayerRemoving:Connect(function(player)
+			self:_releasePlayerNetworkOwnership(player)
 			self:Remove(player.UserId)
 			self.cooldowns[player.UserId] = nil
 			-- Spawn claims are keyed by the exact Player instance. A rejoin may
@@ -219,6 +224,7 @@ function VehicleSpawnerService:Destroy()
 		table.clear(held)
 	end
 	table.clear(self.active)
+	table.clear(self.networkOwners)
 	table.clear(self.cooldowns)
 	table.clear(self.spawning)
 	local previewRoot = ReplicatedStorage:FindFirstChild("RoleplayOSVehiclePreviews")
