@@ -1,4 +1,5 @@
 --!strict
+local fs = require("@lune/fs")
 local Runtime = require("./test-runtime")
 
 return function(H: any)
@@ -179,4 +180,25 @@ return function(H: any)
 			f.Service:Destroy()
 		end
 	)
+	H.test("territory civilian spawn rolls back team after interrupted load", function()
+		local source = fs.readFile("src/server/Services/SpawnService.luau")
+		local territoryStart =
+			string.find(source, "function SpawnService:_enterCivilianAtTerritory", 1, true)
+		local loadAt = territoryStart
+			and string.find(source, "player:LoadCharacterAsync()", territoryStart, true)
+		local checkAt = loadAt
+			and string.find(
+				source,
+				"if not self.running or not playerIsCurrent(player) then",
+				loadAt,
+				true
+			)
+		local restoreAt = checkAt
+			and string.find(source, "player.Team = previousTeam", checkAt, true)
+		H.expect(
+			loadAt ~= nil and checkAt ~= nil and restoreAt ~= nil,
+			"interrupted territory load leaves the civilian team assigned"
+		)
+	end)
+
 end
