@@ -79,8 +79,7 @@ return function(H: any)
 
 		service:_releaseVehicleNetworkOwner(vehicle, player)
 		H.expect(
-			service.networkOwners[vehicle] == nil
-				and service.networkOwnerVehicles[player] == nil,
+			service.networkOwners[vehicle] == nil and service.networkOwnerVehicles[player] == nil,
 			"destroyed vehicle retained physics ownership state"
 		)
 	end)
