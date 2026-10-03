@@ -45,11 +45,19 @@ function EmergencyTriggerService:Broadcast(call: any)
 	if not self.running or type(call) ~= "table" or type(call.DepartmentIds) ~= "table" then
 		return
 	end
-	for _, target in Players:GetPlayers() do
+	local dutyService = self.context.Services:Get("DutyService")
+	-- Only active-duty players can ever pass the delivery check, so snapshot that
+	-- bounded set instead of walking every civilian in a large server. Get below
+	-- remains the authority check and may remove a stale duty while it revalidates.
+	for _, userId in dutyService:ActiveUserIds() do
 		if not self.running then
 			return
 		end
-		local duty = self.context.Services:Get("DutyService"):Get(target)
+		local target = Players:GetPlayerByUserId(userId)
+		if not target then
+			continue
+		end
+		local duty = dutyService:Get(target)
 		-- Duty resolution may yield on Roblox group access. A shutdown or player
 		-- replacement during that wait invalidates this delivery.
 		if
