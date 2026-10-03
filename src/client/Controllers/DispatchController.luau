@@ -609,7 +609,11 @@ function DispatchController:Start()
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if not humanoid then
 			local found = character:WaitForChild("Humanoid", 10)
-			if not found or not found:IsA("Humanoid") or character ~= Players.LocalPlayer.Character then
+			if
+				not found
+				or not found:IsA("Humanoid")
+				or character ~= Players.LocalPlayer.Character
+			then
 				return
 			end
 			humanoid = found
