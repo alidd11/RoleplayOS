@@ -390,7 +390,7 @@ return function(H: any)
 			string.find(source, "self.containerConnections[container] = nil", 1, true) ~= nil,
 			"Taser pose retains destroyed character listener state"
 		)
-	end)	H.test("combat controllers release transient character container listeners", function()
+	end)\n\n	H.test("combat controllers release transient character container listeners", function()
 		for _, path in
 			{
 				"src/client/Controllers/PAVAController.luau",
@@ -410,5 +410,4 @@ return function(H: any)
 			)
 		end
 	end)
-
 end
