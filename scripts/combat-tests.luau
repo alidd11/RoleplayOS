@@ -293,4 +293,20 @@ return function(H: any)
 			end
 		end
 	end)
+	H.test("Taser expiry does not overwrite newer movement owners", function()
+		local source = fs.readFile("server-assets/Tools/Services/Police/Shared/Taser.rbxmx")
+		for _, guard in
+			{
+				"if humanoid.WalkSpeed == 0 then",
+				"if humanoid.JumpPower == 0 then",
+				"if humanoid.JumpHeight == 0 then",
+				"if humanoid.AutoRotate == false then",
+			}
+		do
+			H.expect(
+				string.find(source, guard, 1, true) ~= nil,
+				"Taser expiry lacks conditional restore: " .. guard
+			)
+		end
+	end)
 end
