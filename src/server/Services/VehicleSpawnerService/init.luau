@@ -49,10 +49,7 @@ end
 -- Returns the one live framework-owned vehicle for this player when it is the
 -- exact persistent vehicle requested. This keeps callers on the spawner's
 -- authoritative active map instead of rediscovering a clone through Workspace.
-function VehicleSpawnerService:GetActiveOwnedVehicle(
-	ownerUserId: number,
-	vehicleId: string
-): Model?
+function VehicleSpawnerService:GetActiveOwnedVehicle(ownerUserId: number, vehicleId: string): Model?
 	local vehicle = self.active[ownerUserId]
 	if
 		not vehicle
