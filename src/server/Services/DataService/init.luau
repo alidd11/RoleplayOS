@@ -240,8 +240,8 @@ function DataService:_paceProfileLoad(loadToken: any, player: Player): boolean
 	then
 		return false
 	end
-	local interval =
-		tonumber(self.context.Configuration.Framework.ProfileLoadStartIntervalSeconds) or 0.05
+	local interval = tonumber(self.context.Configuration.Framework.ProfileLoadStartIntervalSeconds)
+		or 0.05
 	local now = os.clock()
 	local scheduledAt = math.max(now, self.nextProfileLoadAt or 0)
 	self.nextProfileLoadAt = scheduledAt + interval
