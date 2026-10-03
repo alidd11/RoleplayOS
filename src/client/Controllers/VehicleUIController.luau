@@ -145,25 +145,7 @@ function VehicleUIController:Start()
 			self:_watchCharacter(character)
 		end)
 	)
-	local function watchCamera(camera: Camera?)
-		if self.cameraConnection then
-			self.cameraConnection:Disconnect()
-			self.cameraConnection = nil
-		end
-		if camera then
-			self.cameraConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-				self:_broadcast()
-			end)
-		end
-		self:_broadcast()
-	end
-	watchCamera(workspace.CurrentCamera)
-	table.insert(
-		self.connections,
-		workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-			watchCamera(workspace.CurrentCamera)
-		end)
-	)
+
 end
 
 function VehicleUIController:IsActive(): boolean
@@ -171,10 +153,6 @@ function VehicleUIController:IsActive(): boolean
 end
 
 function VehicleUIController:Destroy()
-	if self.cameraConnection then
-		self.cameraConnection:Disconnect()
-		self.cameraConnection = nil
-	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
