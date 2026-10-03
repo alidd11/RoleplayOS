@@ -437,6 +437,8 @@ return function(H: any)
 
 	H.test("discovered service tools require explicit auto-equip opt-in", function()
 		local runtime = Runtime.new()
+		runtime.services.ServerStorage = roblox.Instance.new("Folder")
+		runtime.services.CollectionService = {}
 		local shared = runtime.services.ReplicatedStorage.RoleplayOS
 		local configuration = table.clone(runtime.require(shared.Config.Config))
 		configuration.Roles = {
