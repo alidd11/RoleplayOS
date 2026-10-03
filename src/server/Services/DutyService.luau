@@ -213,6 +213,19 @@ function DutyService:Get(player: Player): any?
 	return duty
 end
 
+-- Returns a detached candidate list for server fan-out paths.
+-- This is deliberately not an authorisation result: callers must still use Get
+-- (or MDTService) immediately before delivery because group access, team and role
+-- state may change while a yielding operation is in flight. Keeping the snapshot
+-- here avoids making every operational event scan the whole server population.
+function DutyService:ActiveUserIds(): { number }
+	local result = {}
+	for userId in self.active do
+		table.insert(result, userId)
+	end
+	return result
+end
+
 local function rollbackStart(self: any, player: Player, previousTeam: any, dutyRecord: any?)
 	if dutyRecord == nil or self.active[player.UserId] == dutyRecord then
 		self.active[player.UserId] = nil
