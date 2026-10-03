@@ -176,5 +176,4 @@ return function(H: any)
 		H.expect(f.Player.Team == previousTeam, "cleanup unexpectedly changed the team")
 		f:Destroy()
 	end)
-
 end
