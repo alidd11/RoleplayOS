@@ -151,10 +151,7 @@ local function unsafeDescendant(
 	return nil
 end
 
-local function unsafeSource(
-	root: Instance,
-	descendants: { Instance }?
-): (Instance?, string?)
+local function unsafeSource(root: Instance, descendants: { Instance }?): (Instance?, string?)
 	local scanned = descendants or root:GetDescendants()
 	for _, descendant in scanned do
 		if descendant:IsA("LuaSourceContainer") then
