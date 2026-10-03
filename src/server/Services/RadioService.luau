@@ -111,6 +111,19 @@ function RadioService:SetChannel(player: Player, channelId: string): (any?, stri
 	return snapshot, nil
 end
 
+-- Snapshot only the users whose radio is currently tuned to one channel.
+-- The snapshot protects iteration from channel changes while duty revalidation
+-- yields; it is a candidate list only and carries no authorisation.
+function RadioService:_channelUserIds(channelId: string): { number }
+	local result = {}
+	for userId, selected in self.current do
+		if selected == channelId then
+			table.insert(result, userId)
+		end
+	end
+	return result
+end
+
 function RadioService:Transmit(player: Player, message: string): (boolean, string?)
 	if not self.running then
 		return false, "RADIO_UNAVAILABLE"
@@ -195,9 +208,13 @@ function RadioService:Transmit(player: Player, message: string): (boolean, strin
 	while #self.messages[channelId] > 50 do
 		table.remove(self.messages[channelId], 1)
 	end
-	for _, recipient in Players:GetPlayers() do
+	for _, userId in self:_channelUserIds(channelId) do
 		if not self.running then
 			return false, "RADIO_UNAVAILABLE"
+		end
+		local recipient = Players:GetPlayerByUserId(userId)
+		if not recipient then
+			continue
 		end
 		local recipientDuty = self:_duty(recipient)
 		if not self.running then
