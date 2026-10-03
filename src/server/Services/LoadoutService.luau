@@ -327,6 +327,10 @@ function LoadoutService:GiveTool(
 	if not backpack then
 		return false, "BACKPACK_UNAVAILABLE"
 	end
+	local validator = self.context.Services:Get("ContentValidationService")
+	if validator and validator.IsToolRejected and validator:IsToolRejected(toolId) then
+		return false, "TOOL_UNAVAILABLE"
+	end
 	local assets = ServerStorage:FindFirstChild("RoleplayOSAssets")
 	local tools = if assets then assets:FindFirstChild("Tools") else nil
 	if not tools then

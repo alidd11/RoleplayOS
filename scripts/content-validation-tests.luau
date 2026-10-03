@@ -136,4 +136,66 @@ return function(H: any)
 			"certified unsafe descendant bypassed forbidden source validation"
 		)
 	end)
+
+	H.test("rejected tools and vehicles stay unavailable in development", function()
+		local service, _, runtime = fixture()
+		local Instance = runtime.globals.Instance
+		local configuration = service.context.Configuration
+		configuration.Tools = {}
+		configuration.Vehicles = {}
+
+		local assets = Instance.new("Folder")
+		assets.Name = "RoleplayOSAssets"
+		local tools = Instance.new("Folder")
+		tools.Name = "Tools"
+		tools.Parent = assets
+		local unsafeTool = Instance.new("Tool")
+		unsafeTool.Name = "UnsafeTool"
+		unsafeTool.Parent = tools
+		local toolRemote = Instance.new("RemoteEvent")
+		toolRemote.Name = "LegacyAuthority"
+		toolRemote.Parent = unsafeTool
+		local toolDefinition = { AssetPath = { "Tools", "UnsafeTool" } }
+		configuration.Tools.UnsafeTool = toolDefinition
+
+		local vehicles = Instance.new("Folder")
+		vehicles.Name = "Vehicles"
+		vehicles.Parent = assets
+		local unsafeVehicle = Instance.new("Model")
+		unsafeVehicle.Name = "UnsafeVehicle"
+		unsafeVehicle.Parent = vehicles
+		local vehicleRemote = Instance.new("RemoteEvent")
+		vehicleRemote.Name = "LegacyAuthority"
+		vehicleRemote.Parent = unsafeVehicle
+		local vehicleDefinition = { AssetPath = { "Vehicles", "UnsafeVehicle" } }
+		configuration.Vehicles.UnsafeVehicle = vehicleDefinition
+
+		H.expect(
+			not service:_checkAndTrack(assets, "Tool", "UnsafeTool", toolDefinition, "Tool"),
+			"unsafe tool unexpectedly passed validation"
+		)
+		H.expect(
+			not service:_checkAndTrack(
+				assets,
+				"Vehicle",
+				"UnsafeVehicle",
+				vehicleDefinition,
+				"Model"
+			),
+			"unsafe vehicle unexpectedly passed validation"
+		)
+		H.expect(
+			service:IsToolRejected("UnsafeTool")
+				and service:GetToolDefinition("UnsafeTool") == nil
+				and #service:GetLoadoutToolIds("Test", { "UnsafeTool" }) == 0,
+			"rejected tool remained available to runtime issuance"
+		)
+		H.expect(
+			service:IsVehicleRejected("UnsafeVehicle")
+				and service:GetVehicleDefinition("UnsafeVehicle") == nil
+				and service:GetVehicleDefinitions().UnsafeVehicle == nil,
+			"rejected vehicle remained available to runtime spawning"
+		)
+	end)
+
 end
