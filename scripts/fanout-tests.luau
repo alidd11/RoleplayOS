@@ -30,6 +30,7 @@ return function(H: any)
 
 	H.test("dispatch fan-out never scans civilians outside active duty", function()
 		local runtime = Runtime.new()
+		runtime.services.CollectionService = {}
 		local root = runtime.services.ServerScriptService.RoleplayOS.Services
 		local players = runtime.services.Players
 		local byId: { [number]: any } = {}
@@ -89,6 +90,7 @@ return function(H: any)
 
 	H.test("emergency alerts fan out only across active duty candidates", function()
 		local runtime = Runtime.new()
+		runtime.services.CollectionService = {}
 		local root = runtime.services.ServerScriptService.RoleplayOS.Services
 		local players = runtime.services.Players
 		local byId: { [number]: any } = {}
