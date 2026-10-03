@@ -249,7 +249,8 @@ function VehicleLightingService:_vehicleFor(player: Player): Instance?
 				return nil
 			end
 			local occupant = driverSeat and driverSeat.Occupant
-			return if occupant and Players:GetPlayerFromCharacter(occupant.Parent) == player
+			return if occupant
+					and Players:GetPlayerFromCharacter(occupant.Parent) == player
 				then current
 				else nil
 		end
