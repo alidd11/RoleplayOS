@@ -167,10 +167,7 @@ return function(H: any)
 		H.expect(f.Service:Load(f.Player) ~= nil, "first profile load failed")
 		H.expect(f.Service:Load(second) ~= nil, "second profile load failed")
 		H.expect(#starts == 2, "profile load pacing changed UpdateAsync count")
-		H.expect(
-			starts[2] - starts[1] >= 0.02,
-			"profile UpdateAsync starts were not staggered"
-		)
+		H.expect(starts[2] - starts[1] >= 0.02, "profile UpdateAsync starts were not staggered")
 	end)
 
 	H.test("profile load refuses another live server's lease without modifying it", function()
