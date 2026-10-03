@@ -2119,6 +2119,7 @@ local function stun(humanoid: Humanoid)
 &#9;local previousJumpHeight = humanoid.JumpHeight
 &#9;local previousAutoRotate = humanoid.AutoRotate
 &#9;humanoid:UnequipTools()
+&#9;humanoid:SetAttribute(&quot;RoleplayOSTaserStunned&quot;, true)
 &#9;humanoid.WalkSpeed = 0
 &#9;humanoid.JumpPower = 0
 &#9;humanoid.JumpHeight = 0
@@ -2128,6 +2129,7 @@ local function stun(humanoid: Humanoid)
 &#9;&#9;&#9;return
 &#9;&#9;end
 &#9;&#9;stunTokens[humanoid] = nil
+&#9;&#9;humanoid:SetAttribute(&quot;RoleplayOSTaserStunned&quot;, nil)
 &#9;&#9;humanoid.WalkSpeed = previousWalkSpeed
 &#9;&#9;humanoid.JumpPower = previousJumpPower
 &#9;&#9;humanoid.JumpHeight = previousJumpHeight

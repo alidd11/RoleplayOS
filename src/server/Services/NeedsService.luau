@@ -176,6 +176,13 @@ function NeedsService:_applySpeed(player: Player, state: any, humanoid: Humanoid
 		state.Sprinting = false
 		speed = math.min(speed, pavaCap)
 	end
+	-- A Taser stun is another server-owned movement effect. The Taser asset
+	-- publishes the state on the Humanoid so this twice-per-second needs loop
+	-- cannot accidentally restore normal movement before the stun expires.
+	if humanoid:GetAttribute("RoleplayOSTaserStunned") == true then
+		state.Sprinting = false
+		speed = 0
+	end
 	humanoid.WalkSpeed = speed
 end
 
