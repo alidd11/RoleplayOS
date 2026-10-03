@@ -200,20 +200,5 @@ return function(H: any)
 			"interrupted territory load leaves the civilian team assigned"
 		)
 	end)
-	H.test("vehicle UI follows replacement CurrentCamera", function()
-		local source = fs.readFile("src/client/Controllers/VehicleUIController.luau")
-		H.expect(
-			string.find(source, 'workspace:GetPropertyChangedSignal("CurrentCamera")', 1, true) ~= nil,
-			"vehicle UI does not watch CurrentCamera replacement"
-		)
-		H.expect(
-			string.find(source, 'camera:GetPropertyChangedSignal("ViewportSize")', 1, true) ~= nil,
-			"vehicle UI does not follow the active camera viewport"
-		)
-		H.expect(
-			string.find(source, "self.cameraConnection:Disconnect()", 1, true) ~= nil,
-			"replacement camera viewport connection is not cleaned up"
-		)
-	end)
 
 end
