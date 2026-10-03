@@ -69,6 +69,17 @@ function ConfigValidator.validate(config: any): (boolean, { string })
 	then
 		table.insert(errors, "Invalid persistence framework wait: SessionHandoverSeconds")
 	end
+	local profileLoadInterval = framework.ProfileLoadStartIntervalSeconds
+	if
+		profileLoadInterval ~= nil
+		and (
+			not finiteNumber(profileLoadInterval, 0)
+			or profileLoadInterval <= 0
+			or profileLoadInterval > 0.25
+		)
+	then
+		table.insert(errors, "Invalid profile load start interval")
+	end
 	if
 		type(framework.AutosaveSeconds) == "number"
 		and type(framework.SessionLeaseSeconds) == "number"

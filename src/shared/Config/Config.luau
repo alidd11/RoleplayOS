@@ -93,6 +93,12 @@ local Config = {
 		-- loop, so a failure that clears within a few seconds never reaches the
 		-- player at all.
 		JoinLoadAttempts = 3,
+		-- Spread profile lease acquisitions across a join wave. The reservation is
+		-- made immediately before UpdateAsync, after any DataStore budget wait, so a
+		-- recovered budget cannot release every waiting player at once. At the
+		-- default, a 100-player wave is admitted over roughly five seconds while
+		-- requests themselves may still overlap.
+		ProfileLoadStartIntervalSeconds = 0.05,
 		-- A profile larger than this is reported while there is still room to act.
 		-- Roblox refuses a value over four megabytes, and a profile that reaches
 		-- that stops saving silently: every write fails from then on and the

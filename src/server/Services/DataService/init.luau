@@ -141,6 +141,7 @@ function DataService:Init(context: any)
 	self.budgetWarnings = {}
 	self.finalReleases = {}
 	self.shutdownDeadline = nil
+	self.nextProfileLoadAt = 0
 	self.mock = RunService:IsStudio() and context.Configuration.Framework.UseMockDataInStudio
 	self.mockSharedRecords = {}
 	self.scopedSharedRecordStores = {}
@@ -223,6 +224,35 @@ end
 -- to Roblox DataStore APIs directly.
 function DataService:GetRequestBudget(requestType: Enum.DataStoreRequestType): number
 	return DataStoreService:GetRequestBudgetForRequestType(requestType)
+end
+
+-- Profile leases are acquired with UpdateAsync, and a server restart can admit a
+-- large join wave at once. Budget waiting alone does not spread that wave: many
+-- waiters can observe recovered budget together and all begin their requests on
+-- the same scheduler turn. Reserve a server-wide start slot before yielding so
+-- profile load attempts remain staggered even after a budget drought.
+function DataService:_paceProfileLoad(loadToken: any, player: Player): boolean
+	if
+		loadToken.Cancelled
+		or self.closing
+		or not self.running
+		or not player:IsDescendantOf(Players)
+	then
+		return false
+	end
+	local interval = tonumber(self.context.Configuration.Framework.ProfileLoadStartIntervalSeconds)
+		or 0.05
+	local now = os.clock()
+	local scheduledAt = math.max(now, self.nextProfileLoadAt or 0)
+	self.nextProfileLoadAt = scheduledAt + interval
+	local delay = scheduledAt - now
+	if delay > 0 then
+		task.wait(delay)
+	end
+	return not loadToken.Cancelled
+		and not self.closing
+		and self.running
+		and player:IsDescendantOf(Players)
 end
 
 -- `requestType` defaults to UpdateAsync because every write path uses it, and a

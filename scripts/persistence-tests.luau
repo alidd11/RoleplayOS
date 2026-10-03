@@ -140,6 +140,36 @@ return function(H: any)
 			"wrong lease owner"
 		)
 	end)
+	H.test("profile load attempts are staggered across a join wave", function()
+		local f = fixture()
+		f.Service.context.Configuration.Framework.ProfileLoadStartIntervalSeconds = 0.03
+		f.Service.nextProfileLoadAt = 0
+		local second: any = {
+			UserId = 43,
+			Name = "SecondContractPlayer",
+			Parent = f.Player.Parent,
+			Present = true,
+		}
+		function second:IsDescendantOf(parent)
+			return self.Present and parent == self.Parent
+		end
+		function second:GetJoinData()
+			return {}
+		end
+		f.Store.Values["43"] = f.Copy(f.Store.Values["42"])
+		f.Store.Values["43"].AuditMetadata.SessionLock = nil
+		local starts = {}
+		f.Store.BeforeUpdate = function(key)
+			if key == "42" or key == "43" then
+				table.insert(starts, os.clock())
+			end
+		end
+		H.expect(f.Service:Load(f.Player) ~= nil, "first profile load failed")
+		H.expect(f.Service:Load(second) ~= nil, "second profile load failed")
+		H.expect(#starts == 2, "profile load pacing changed UpdateAsync count")
+		H.expect(starts[2] - starts[1] >= 0.02, "profile UpdateAsync starts were not staggered")
+	end)
+
 	H.test("profile load refuses another live server's lease without modifying it", function()
 		local f = fixture()
 		f.Store.Values["42"].AuditMetadata.SessionLock.ServerId = "other-owner"
