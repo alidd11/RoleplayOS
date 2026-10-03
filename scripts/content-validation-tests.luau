@@ -225,9 +225,7 @@ return function(H: any)
 		})
 		local ids = loadout:_toolIds("Test", { ToolIds = { "PAVA", "UnsafeTool" } })
 		H.expect(
-			#ids == 1
-				and ids[1] == "PAVA"
-				and loadout:_toolDefinition("PAVA") == pavaDefinition,
+			#ids == 1 and ids[1] == "PAVA" and loadout:_toolDefinition("PAVA") == pavaDefinition,
 			"PAVA unsafe-content rejection did not stay behind its sanitised issuance path"
 		)
 	end)
