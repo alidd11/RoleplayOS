@@ -182,11 +182,11 @@ return function(H: any)
 	)
 	H.test("territory civilian spawn rolls back team after interrupted load", function()
 		local source = fs.readFile("src/server/Services/SpawnService.luau")
-		local loadCheck = "if not self.running or not playerIsCurrent(player) then"
-		local restore = "if playerIsCurrent(player) then\\n\\t\\t\\tplayer.Team = previousTeam"
-		local loadAt = string.find(source, "player:LoadCharacterAsync()", 1, true)
-		local checkAt = loadAt and string.find(source, loadCheck, loadAt, true)
-		local restoreAt = checkAt and string.find(source, restore, checkAt, true)
+		local territoryStart = string.find(source, "function SpawnService:_enterCivilianAtTerritory", 1, true)
+		local loadAt = territoryStart and string.find(source, "player:LoadCharacterAsync()", territoryStart, true)
+		local checkAt = loadAt
+			and string.find(source, "if not self.running or not playerIsCurrent(player) then", loadAt, true)
+		local restoreAt = checkAt and string.find(source, "player.Team = previousTeam", checkAt, true)
 		H.expect(
 			loadAt ~= nil and checkAt ~= nil and restoreAt ~= nil,
 			"interrupted territory load leaves the civilian team assigned"
