@@ -606,7 +606,18 @@ function DispatchController:Start()
 			connection:Disconnect()
 		end
 		table.clear(self.characterConnections)
-		local humanoid = character:WaitForChild("Humanoid") :: Humanoid
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not humanoid then
+			local found = character:WaitForChild("Humanoid", 10)
+			if
+				not found
+				or not found:IsA("Humanoid")
+				or character ~= Players.LocalPlayer.Character
+			then
+				return
+			end
+			humanoid = found
+		end
 		table.insert(
 			self.characterConnections,
 			humanoid.Seated:Connect(function(active)
