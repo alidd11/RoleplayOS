@@ -391,4 +391,25 @@ return function(H: any)
 			"Taser pose retains destroyed character listener state"
 		)
 	end)
+
+	H.test("combat controllers release transient character container listeners", function()
+		for _, path in
+			{
+				"src/client/Controllers/PAVAController.luau",
+				"src/client/Controllers/MeleeWeaponController.luau",
+			}
+		do
+			local source = fs.readFile(path)
+			local tracksContainers =
+				string.find(source, "self.containerConnections[container] = connections", 1, true)
+			H.expect(
+				tracksContainers ~= nil,
+				path .. " does not isolate transient character container listeners"
+			)
+			H.expect(
+				string.find(source, "container.Destroying:Connect", 1, true) ~= nil,
+				path .. " retains old character listeners across respawns"
+			)
+		end
+	end)
 end
