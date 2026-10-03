@@ -356,8 +356,10 @@ return function(H: any)
 			}
 		do
 			local source = fs.readFile(path)
+			local tracksContainers =
+				string.find(source, "self.containerConnections[container] = connections", 1, true)
 			H.expect(
-				string.find(source, "self.containerConnections[container] = connections", 1, true) ~= nil,
+				tracksContainers ~= nil,
 				path .. " does not isolate transient character container listeners"
 			)
 			H.expect(
@@ -366,5 +368,4 @@ return function(H: any)
 			)
 		end
 	end)
-
 end
