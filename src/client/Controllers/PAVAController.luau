@@ -144,13 +144,16 @@ function PAVAController:_watch(tool: Instance)
 			self.mouse = nil
 		end)
 	)
-	table.insert(toolConnections, tool.Destroying:Connect(function()
-		for _, connection in toolConnections do
-			connection:Disconnect()
-		end
-		table.clear(toolConnections)
-		self.toolConnections[tool] = nil
-	end))
+	table.insert(
+		toolConnections,
+		tool.Destroying:Connect(function()
+			for _, connection in toolConnections do
+				connection:Disconnect()
+			end
+			table.clear(toolConnections)
+			self.toolConnections[tool] = nil
+		end)
+	)
 end
 
 function PAVAController:_watchContainer(container: Instance)
