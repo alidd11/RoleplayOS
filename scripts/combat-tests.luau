@@ -334,7 +334,12 @@ return function(H: any)
 	H.test("Taser pose releases transient character container listeners", function()
 		local source = fs.readFile("src/client/Controllers/TaserPoseController.luau")
 		H.expect(
-			string.find(source, "self.containerConnections[container] = connections", 1, true) ~= nil,
+			string.find(
+				source,
+				"self.containerConnections[container] = connections",
+				1,
+				true
+			) ~= nil,
 			"Taser pose does not isolate transient character container listeners"
 		)
 		H.expect(
