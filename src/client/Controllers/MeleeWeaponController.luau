@@ -4,7 +4,11 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
-local MeleeWeaponController = { connections = {}, watched = setmetatable({}, { __mode = "k" }), containerConnections = {} }
+local MeleeWeaponController = {
+	connections = {},
+	watched = setmetatable({}, { __mode = "k" }),
+	containerConnections = {},
+}
 
 local function targetFromAim(mouse: Mouse?): Player?
 	local part = mouse and mouse.Target
