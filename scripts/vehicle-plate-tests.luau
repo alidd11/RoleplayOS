@@ -69,9 +69,7 @@ return function(H: any)
 			"live owned vehicle plate refresh failed"
 		)
 		H.expect(
-			lookedUp == 1
-				and appliedVehicle == vehicle
-				and appliedRegistration == "AB12 CDE",
+			lookedUp == 1 and appliedVehicle == vehicle and appliedRegistration == "AB12 CDE",
 			"plate refresh did not use the validated active vehicle"
 		)
 		H.expect(
