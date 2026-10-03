@@ -486,5 +486,4 @@ return function(H: any)
 			"explicit service-tool auto-equip opt-in was ignored"
 		)
 	end)
-
 end
