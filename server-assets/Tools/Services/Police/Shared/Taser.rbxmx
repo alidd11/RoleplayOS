@@ -2147,10 +2147,21 @@ local function stun(humanoid: Humanoid)
 &#9;&#9;end
 &#9;&#9;stunTokens[humanoid] = nil
 &#9;&#9;humanoid:SetAttribute(&quot;RoleplayOSTaserStunned&quot;, nil)
-&#9;&#9;humanoid.WalkSpeed = previousWalkSpeed
-&#9;&#9;humanoid.JumpPower = previousJumpPower
-&#9;&#9;humanoid.JumpHeight = previousJumpHeight
-&#9;&#9;humanoid.AutoRotate = previousAutoRotate
+&#9;&#9;-- Restore only values that still carry the stun state. Another authoritative
+&#9;&#9;-- system may have changed movement while the stun was active (for example,
+&#9;&#9;-- custody cuffing the player); expiry must not overwrite that newer state.
+&#9;&#9;if humanoid.WalkSpeed == 0 then
+&#9;&#9;&#9;humanoid.WalkSpeed = previousWalkSpeed
+&#9;&#9;end
+&#9;&#9;if humanoid.JumpPower == 0 then
+&#9;&#9;&#9;humanoid.JumpPower = previousJumpPower
+&#9;&#9;end
+&#9;&#9;if humanoid.JumpHeight == 0 then
+&#9;&#9;&#9;humanoid.JumpHeight = previousJumpHeight
+&#9;&#9;end
+&#9;&#9;if humanoid.AutoRotate == false then
+&#9;&#9;&#9;humanoid.AutoRotate = previousAutoRotate
+&#9;&#9;end
 &#9;end)
 end
 
