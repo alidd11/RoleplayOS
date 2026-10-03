@@ -86,8 +86,14 @@ return function(H: any)
 		local service = runtime.require(root.VehicleSpawnerService)
 
 		local scans = 0
-		local cachedSeat: any = { Parent = true, Occupant = nil }
-		local replacementSeat: any = { Parent = true, Occupant = nil }
+		local cachedSeat: any = { Parent = true, Occupant = nil, InVehicle = true }
+		cachedSeat.IsDescendantOf = function(self, candidate)
+			return self.InVehicle and candidate == vehicle
+		end
+		local replacementSeat: any = { Parent = true, Occupant = nil, InVehicle = true }
+		replacementSeat.IsDescendantOf = function(self, candidate)
+			return self.InVehicle and candidate == vehicle
+		end
 		local vehicle: any = {
 			Parent = true,
 			GetPivot = function()
@@ -113,11 +119,11 @@ return function(H: any)
 		service:_consumeTick(1)
 		H.expect(scans == 0, "telemetry rescanned a vehicle with a valid cached seat")
 
-		cachedSeat.Parent = nil
+		cachedSeat.InVehicle = false
 		service:_consumeTick(1)
 		H.expect(
 			scans == 1 and service.telemetry[10].Seat == replacementSeat,
-			"telemetry did not refresh a destroyed cached seat exactly once"
+			"telemetry did not refresh a reparented cached seat exactly once"
 		)
 
 		service:_consumeTick(1)
