@@ -172,13 +172,16 @@ function MeleeWeaponController:_watch(tool: Instance)
 			end
 		end)
 	)
-	table.insert(toolConnections, tool.Destroying:Connect(function()
-		for _, connection in toolConnections do
-			connection:Disconnect()
-		end
-		table.clear(toolConnections)
-		self.toolConnections[tool] = nil
-	end))
+	table.insert(
+		toolConnections,
+		tool.Destroying:Connect(function()
+			for _, connection in toolConnections do
+				connection:Disconnect()
+			end
+			table.clear(toolConnections)
+			self.toolConnections[tool] = nil
+		end)
+	)
 end
 
 function MeleeWeaponController:_scan(container: Instance)
