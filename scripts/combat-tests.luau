@@ -331,4 +331,23 @@ return function(H: any)
 			)
 		end
 	end)
+	H.test("combat character watchers are replaced on respawn", function()
+		for _, path in
+			{
+				"src/client/Controllers/PAVAController.luau",
+				"src/client/Controllers/MeleeWeaponController.luau",
+			}
+		do
+			local source = fs.readFile(path)
+			H.expect(
+				string.find(source, "self.characterConnection:Disconnect()", 1, true) ~= nil,
+				path .. " retains a ChildAdded watcher for each old character"
+			)
+			H.expect(
+				string.find(source, "self.characterConnection = character.ChildAdded:Connect", 1, true) ~= nil,
+				path .. " does not replace the active character watcher"
+			)
+		end
+	end)
+
 end
