@@ -52,14 +52,16 @@ return function(H: any)
 				return if name == "Tools" then toolsFolder else nil
 			end,
 		}
-		return service, {
-			Assets = assets,
-			Tool = tool,
-			Descendants = descendants,
-			Scans = function()
-				return scans
-			end,
-		}, runtime
+		return service,
+			{
+				Assets = assets,
+				Tool = tool,
+				Descendants = descendants,
+				Scans = function()
+					return scans
+				end,
+			},
+			runtime
 	end
 
 	H.test("content validation snapshots one asset tree for all checks", function()
@@ -82,7 +84,10 @@ return function(H: any)
 			"Tool"
 		)
 
-		H.expect(f.Scans() == 1, "one tool validation recursively enumerated its tree more than once")
+		H.expect(
+			f.Scans() == 1,
+			"one tool validation recursively enumerated its tree more than once"
+		)
 		H.expect(
 			#service.report.Invalid == 0 and table.find(service.report.Ready, "Tool:TestTool"),
 			"valid tool changed validation outcome while reusing the descendant snapshot"
@@ -109,7 +114,7 @@ return function(H: any)
 			Name = "Reviewed",
 			ClassName = "Script",
 			Parent = f.Tool,
-			Source = "local HttpService = game:GetService(\"HttpService\")",
+			Source = 'local HttpService = game:GetService("HttpService")',
 			IsA = function(_self, className)
 				return className == "LuaSourceContainer" or className == "Script"
 			end,
