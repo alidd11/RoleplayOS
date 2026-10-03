@@ -223,6 +223,34 @@ return function(H: any)
 			"Needs speed did not recover after PAVA"
 		)
 	end)
+	H.test("Needs preserves an active Taser stun", function()
+		local runtime = Runtime.new()
+		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		local needs = runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
+		needs.context = { Configuration = config }
+		local player: any = { GetAttribute = function() return nil end }
+		local humanoid: any = { WalkSpeed = config.Needs.WalkSpeed }
+		function humanoid:GetAttribute(name: string)
+			return if name == "RoleplayOSTaserStunned" then true else nil
+		end
+		function humanoid:SetStateEnabled() end
+		local state = { Sprinting = true, Hunger = 100, Stamina = 100 }
+		needs:_applySpeed(player, state, humanoid)
+		H.expect(humanoid.WalkSpeed == 0, "Needs tick cancelled the active Taser stun")
+		H.expect(not state.Sprinting, "Taser-stunned target remained in sprint state")
+	end)
+	H.test("Taser server publishes its stun state for movement composition", function()
+		local source = taserServerSource()
+		H.expect(
+			string.find(source, 'SetAttribute(&quot;RoleplayOSTaserStunned&quot;, true)', 1, true) ~= nil,
+			"Taser server does not publish the active stun state"
+		)
+		H.expect(
+			string.find(source, 'SetAttribute(&quot;RoleplayOSTaserStunned&quot;, nil)', 1, true) ~= nil,
+			"Taser server does not clear the stun state on expiry"
+		)
+	end)
+
 	H.test("Taser server authority covers every configured Taser loadout", function()
 		local runtime = Runtime.new()
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
