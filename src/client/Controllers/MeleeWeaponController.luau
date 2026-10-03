@@ -119,6 +119,7 @@ function MeleeWeaponController:Init(context: any)
 	self.connections = {}
 	self.watched = setmetatable({}, { __mode = "k" })
 	self.toolConnections = setmetatable({}, { __mode = "k" })
+	self.characterConnection = nil
 end
 
 function MeleeWeaponController:_watch(tool: Instance)
@@ -200,7 +201,16 @@ function MeleeWeaponController:Start()
 	local player = Players.LocalPlayer
 	self:_scan(player:WaitForChild("Backpack"))
 	local function characterAdded(character: Model)
-		self:_scan(character)
+		if self.characterConnection then
+			self.characterConnection:Disconnect()
+			self.characterConnection = nil
+		end
+		for _, child in character:GetChildren() do
+			self:_watch(child)
+		end
+		self.characterConnection = character.ChildAdded:Connect(function(child)
+			self:_watch(child)
+		end)
 	end
 	if player.Character then
 		characterAdded(player.Character)
@@ -209,6 +219,10 @@ function MeleeWeaponController:Start()
 end
 
 function MeleeWeaponController:Destroy()
+	if self.characterConnection then
+		self.characterConnection:Disconnect()
+		self.characterConnection = nil
+	end
 	for _, connection in self.connections do
 		connection:Disconnect()
 	end
