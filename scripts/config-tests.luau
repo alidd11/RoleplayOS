@@ -1,5 +1,6 @@
 --!strict
 local Runtime = require("./test-runtime")
+local roblox = require("@lune/roblox")
 
 return function(H: any)
 	local function fixture(): any
@@ -415,4 +416,75 @@ return function(H: any)
 		local completed, valid = pcall(f.ValidateConfig, candidate)
 		H.expect(completed and not valid, "malformed Network section raised or passed")
 	end)
+
+	H.test("public PCSO role and presentation are removed", function()
+		local f = fixture()
+		H.expect(f.Config.Roles.PCSO == nil, "PCSO role remained configured")
+		H.expect(f.Config.Loadouts.PCSO == nil, "PCSO loadout remained configured")
+		H.expect(
+			f.Config.Uniforms.PoliceCommunitySupportOfficer == nil,
+			"PCSO uniform remained configured"
+		)
+		H.expect(
+			table.find(f.Config.Departments.Police.RoleIds, "PCSO") == nil,
+			"Police department still advertised PCSO"
+		)
+		H.expect(
+			table.find(f.Config.Spawns.PoliceLockerRoom.RoleIds, "PCSO") == nil,
+			"Police spawn still admitted PCSO"
+		)
+	end)
+
+	H.test("discovered service tools require explicit auto-equip opt-in", function()
+		local runtime = Runtime.new()
+		local shared = runtime.services.ReplicatedStorage.RoleplayOS
+		local configuration = table.clone(runtime.require(shared.Config.Config))
+		configuration.Roles = {
+			PoliceOfficer = {
+				DepartmentId = "Police",
+				LoadoutId = "PoliceResponse",
+			},
+		}
+		configuration.Loadouts = {
+			PoliceResponse = { Id = "PoliceResponse", ToolIds = {} },
+		}
+		local service = runtime.require(
+			runtime.services.ServerScriptService.RoleplayOS.Services.ContentValidationService
+		)
+		service:Init({ Configuration = configuration })
+
+		local assets = roblox.Instance.new("Folder")
+		assets.Name = "RoleplayOSAssets"
+		local tools = roblox.Instance.new("Folder")
+		tools.Name = "Tools"
+		tools.Parent = assets
+		local services = roblox.Instance.new("Folder")
+		services.Name = "Services"
+		services.Parent = tools
+		local police = roblox.Instance.new("Folder")
+		police.Name = "Police"
+		police.Parent = services
+		local sharedTools = roblox.Instance.new("Folder")
+		sharedTools.Name = "Shared"
+		sharedTools.Parent = police
+		local tool = roblox.Instance.new("Tool")
+		tool.Name = "UnconfiguredPoliceTool"
+		tool.Parent = sharedTools
+
+		service:_discoverTool(assets, tool)
+		H.expect(
+			#service:GetLoadoutToolIds("PoliceResponse", {}) == 0,
+			"unconfigured service tool was auto-issued by folder placement"
+		)
+
+		tool:SetAttribute("AutoEquip", true)
+		service:Init({ Configuration = configuration })
+		service:_discoverTool(assets, tool)
+		local ids = service:GetLoadoutToolIds("PoliceResponse", {})
+		H.expect(
+			#ids == 1 and ids[1] == "UnconfiguredPoliceTool",
+			"explicit service-tool auto-equip opt-in was ignored"
+		)
+	end)
+
 end

@@ -616,7 +616,9 @@ function ContentValidationService:_discoverTool(assets: Instance, tool: Tool)
 		return
 	end
 	self.discoveredTools[id] = definition
-	if tool:GetAttribute("AutoEquip") ~= false then
+	-- Folder placement registers eligibility, not authority. A discovered service
+	-- tool enters a duty loadout only when the authored template opts in explicitly.
+	if tool:GetAttribute("AutoEquip") == true then
 		for _, loadoutId in targetLoadouts do
 			local loadout = self.context.Configuration.Loadouts[loadoutId]
 			if loadout then

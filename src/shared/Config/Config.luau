@@ -645,7 +645,6 @@ local Config = {
 			Description = "Access approved civilian rifle equipment where server rules permit it.",
 		},
 		-- Base Police Officer and Frontline Policing access on the public place.
-		-- PCSO remains the free public policing route.
 		PublicPoliceTeam = {
 			Id = "PublicPoliceTeam",
 			GamepassId = 1937222319,
@@ -1296,7 +1295,6 @@ local Config = {
 				{ Name = "Chief Constable", Abbreviation = "CC", Numbered = false },
 			},
 			RoleIds = {
-				"PCSO",
 				"PoliceOfficer",
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
@@ -1540,37 +1538,6 @@ local Config = {
 			TeamName = "Civilian",
 			Access = { AccessType = "Public", DisplayWhenLocked = true },
 		},
-		-- Free on the public place, and the only policing role that is. A PCSO
-		-- carries a radio and a notebook and no handcuffs, which is both the real
-		-- distinction and a reason to buy the police pass.
-		PCSO = {
-			Id = "PCSO",
-			Name = "Police Community Support Officer",
-			TeamName = "Police",
-			DepartmentId = "Police",
-			-- PCSO is the free public policing route. It must not appear or be
-			-- assignable in the whitelisted deployment, even to police-group members.
-			Access = {
-				AccessType = "ServerKind",
-				Kind = "Public",
-				-- The menu explicitly hides this role outside Public servers. Keeping
-				-- the card visible here prevents a stale/undetected server-kind value
-				-- from making the free public route disappear entirely.
-				DisplayWhenLocked = true,
-			},
-			LoadoutId = "PCSO",
-			UniformId = "PoliceCommunitySupportOfficer",
-			AutoEquipUniform = true,
-			-- Stated rather than inherited.
-			--
-			-- This role is free on the public tier and its department is Police,
-			-- so inheriting the department handed every player in the game warrant
-			-- creation, custody booking, search, escort and the blue light
-			-- exemption. A PCSO has no power of arrest, which is the whole reason
-			-- the role exists separately, and that has to be written down
-			-- somewhere the code reads rather than only in a comment.
-			Permissions = { "PersonSearch", "VehicleSearch", "IncidentWrite" },
-		},
 		PoliceOfficer = {
 			Id = "PoliceOfficer",
 			Name = "Police Officer",
@@ -1783,7 +1750,6 @@ local Config = {
 			StationId = "CityCentre",
 			TeamName = "Police",
 			RoleIds = {
-				"PCSO",
 				"PoliceOfficer",
 				"PoliceFrontline",
 				"ArmedResponseOfficer",
@@ -1836,13 +1802,6 @@ local Config = {
 		},
 	},
 	Uniforms = {
-		PoliceCommunitySupportOfficer = {
-			Id = "PoliceCommunitySupportOfficer",
-			ShirtTemplate = "2301512590",
-			TrousersTemplate = "700637070",
-			KitAssetPath = { "Uniforms", "Police", "PoliceCommunitySupportOfficer" },
-			RemovePersonalAccessories = true,
-		},
 		PoliceStandard = { Id = "PoliceStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		AmbulanceStandard = { Id = "AmbulanceStandard", ShirtTemplate = "", TrousersTemplate = "" },
 		FireStandard = { Id = "FireStandard", ShirtTemplate = "", TrousersTemplate = "" },
@@ -2005,9 +1964,6 @@ local Config = {
 			Id = "PoliceResponse",
 			ToolIds = { "Handcuffs", "Taser", "PAVA" },
 		},
-		-- No handcuffs. A PCSO has no power of arrest, and the custody workflow is
-		-- gated on carrying them, so the distinction enforces itself.
-		PCSO = { Id = "PCSO", ToolIds = {} },
 		PoliceFrontline = {
 			Id = "PoliceFrontline",
 			ToolIds = { "Handcuffs", "Taser", "PAVA" },
