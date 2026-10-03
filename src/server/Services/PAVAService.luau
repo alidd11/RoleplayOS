@@ -8,6 +8,7 @@ local EFFECT_SECONDS = 30
 local MAX_DISTANCE = 18
 local MIN_INTERVAL = 0.65
 local REDUCED_WALK_SPEED = 10
+local WALK_SPEED_CAP_ATTRIBUTE = "RoleplayOSPAVAWalkSpeedCap"
 
 local function rootOf(player: Player): BasePart?
 	local character = player.Character
@@ -78,9 +79,10 @@ function PAVAService:_restore(target: Player, token: number)
 		record.ExpiryThread = nil
 	end
 	local humanoid = humanoidOf(target)
-	if humanoid and humanoid:GetAttribute("RoleplayOSPAVAOriginalWalkSpeed") ~= nil then
+	if humanoid then
 		local original = humanoid:GetAttribute("RoleplayOSPAVAOriginalWalkSpeed")
 		humanoid:SetAttribute("RoleplayOSPAVAOriginalWalkSpeed", nil)
+		humanoid:SetAttribute(WALK_SPEED_CAP_ATTRIBUTE, nil)
 		if type(original) == "number" and humanoid.WalkSpeed == REDUCED_WALK_SPEED then
 			humanoid.WalkSpeed = original
 		end
@@ -141,6 +143,7 @@ function PAVAService:Spray(actor: Player, targetUserId: number): (boolean, strin
 	end
 	local original = targetHumanoid.WalkSpeed
 	targetHumanoid:SetAttribute("RoleplayOSPAVAOriginalWalkSpeed", original)
+	targetHumanoid:SetAttribute(WALK_SPEED_CAP_ATTRIBUTE, REDUCED_WALK_SPEED)
 	targetHumanoid.WalkSpeed = math.min(original, REDUCED_WALK_SPEED)
 	target:SetAttribute("RoleplayOSPAVAffectedUntil", os.time() + EFFECT_SECONDS)
 	local record = { Token = token, ActorUserId = actor.UserId }
