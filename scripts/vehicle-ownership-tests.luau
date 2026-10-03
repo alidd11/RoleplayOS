@@ -33,6 +33,7 @@ return function(H: any)
 		end
 		local f: any = {
 			Player = player,
+			Players = runtime.services.Players,
 			Character = character,
 			Profile = profile,
 			Session = { ActiveCharacterId = "owned", Profile = profile },
@@ -224,6 +225,63 @@ return function(H: any)
 				and next(f.Service.purchasing) == nil,
 			"valid purchase lost registration/indexing or retained claim"
 		)
+		f:Destroy()
+	end)
+
+	H.test("registration lookup stays indexed after purchase without scanning players", function()
+		local f = fixture({})
+		local vehicle, reason = f:Purchase()
+		H.expect(vehicle ~= nil and reason == nil, "fixture purchase failed")
+		f.Players.GetPlayers = function()
+			error("registration lookup scanned the full player population")
+		end
+		local found, owner = f.Service:GetByRegistration(vehicle.Registration)
+		H.expect(
+			found == vehicle and owner == f.Player,
+			"newly purchased vehicle was not available through the registration index"
+		)
+		f:Destroy()
+	end)
+
+	H.test("registration index follows changes, cleanup and pending profile fallback", function()
+		local vehicle = {
+			VehicleId = "existing",
+			OwnerCharacterId = "owned",
+			DefinitionId = "TestVehicle",
+			Registration = "AB123",
+		}
+		local f = fixture({ vehicle })
+		f.Service:_indexLoadedVehicles(f.Player)
+		f.Players.GetPlayers = function()
+			error("registration lookup scanned the full player population")
+		end
+
+		local found, owner = f.Service:GetByRegistration("ab123")
+		H.expect(found == vehicle and owner == f.Player, "loaded vehicle was not indexed")
+
+		vehicle.Registration = "CD456"
+		f.Service:_indexVehicle(f.Player, vehicle)
+		local old = f.Service:GetByRegistration("AB123")
+		local updated, updatedOwner = f.Service:GetByRegistration("cd456")
+		H.expect(old == nil, "registration change retained the old index entry")
+		H.expect(
+			updated == vehicle and updatedOwner == f.Player,
+			"registration change did not publish the new index entry"
+		)
+
+		f.Service:_clearRegistrationIndex(f.Player)
+		H.expect(
+			f.Service:GetByRegistration("CD456") == nil,
+			"player cleanup retained an indexed registration"
+		)
+
+		f.Service.registrationIndexPending[f.Player] = true
+		local pending, pendingOwner = f.Service:GetByRegistration("CD456")
+		H.expect(
+			pending == vehicle and pendingOwner == f.Player,
+			"pending profile fallback lost a live vehicle during join recovery"
+		)
+		f.Service.registrationIndexPending[f.Player] = nil
 		f:Destroy()
 	end)
 

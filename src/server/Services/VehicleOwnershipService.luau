@@ -7,6 +7,9 @@ local TextFilter = require(script.Parent.Parent.Systems.TextFilter)
 local VehicleOwnershipService = {
 	registrations = {},
 	registrationUpdates = {},
+	registrationIndex = {},
+	indexedVehiclesByPlayer = {},
+	registrationIndexPending = {},
 	purchasing = {},
 	connections = {},
 	running = false,
@@ -21,6 +24,9 @@ function VehicleOwnershipService:Init(context: any)
 	self.connections = {}
 	table.clear(self.purchasing)
 	table.clear(self.registrationUpdates)
+	table.clear(self.registrationIndex)
+	table.clear(self.indexedVehiclesByPlayer)
+	table.clear(self.registrationIndexPending)
 	table.clear(self.registrations)
 end
 
@@ -30,6 +36,13 @@ function VehicleOwnershipService:Start()
 		self.connections,
 		Players.PlayerAdded:Connect(function(player)
 			self:_scheduleRegistrationRecovery(player)
+		end)
+	)
+	table.insert(
+		self.connections,
+		Players.PlayerRemoving:Connect(function(player)
+			self:_clearRegistrationIndex(player)
+			self.registrationIndexPending[player] = nil
 		end)
 	)
 	for _, player in Players:GetPlayers() do
@@ -270,7 +283,86 @@ function VehicleOwnershipService:_recoverLoadedRegistrationSwaps(player: Player)
 	end
 end
 
+local function normaliseRegistration(value: any): string?
+	if type(value) ~= "string" or value == "" then
+		return nil
+	end
+	return string.upper(value)
+end
+
+function VehicleOwnershipService:_removeIndexedVehicle(player: Player, vehicle: any)
+	local byPlayer = self.indexedVehiclesByPlayer[player]
+	if not byPlayer then
+		return
+	end
+	local registration = byPlayer[vehicle]
+	if not registration then
+		return
+	end
+	byPlayer[vehicle] = nil
+	local bucket = self.registrationIndex[registration]
+	if bucket and bucket[vehicle] == player then
+		bucket[vehicle] = nil
+		if next(bucket) == nil then
+			self.registrationIndex[registration] = nil
+		end
+	end
+	if next(byPlayer) == nil then
+		self.indexedVehiclesByPlayer[player] = nil
+	end
+end
+
+function VehicleOwnershipService:_indexVehicle(player: Player, vehicle: any)
+	self:_removeIndexedVehicle(player, vehicle)
+	local registration = normaliseRegistration(vehicle and vehicle.Registration)
+	if not registration then
+		return
+	end
+	local bucket = self.registrationIndex[registration]
+	if not bucket then
+		bucket = {}
+		self.registrationIndex[registration] = bucket
+	end
+	bucket[vehicle] = player
+	local byPlayer = self.indexedVehiclesByPlayer[player]
+	if not byPlayer then
+		byPlayer = {}
+		self.indexedVehiclesByPlayer[player] = byPlayer
+	end
+	byPlayer[vehicle] = registration
+end
+
+function VehicleOwnershipService:_clearRegistrationIndex(player: Player)
+	local byPlayer = self.indexedVehiclesByPlayer[player]
+	if not byPlayer then
+		return
+	end
+	local vehicles = {}
+	for vehicle in byPlayer do
+		table.insert(vehicles, vehicle)
+	end
+	for _, vehicle in vehicles do
+		self:_removeIndexedVehicle(player, vehicle)
+	end
+end
+
+function VehicleOwnershipService:_indexLoadedVehicles(player: Player)
+	self:_clearRegistrationIndex(player)
+	local session = self.context.Services:Get("DataService"):GetSession(player)
+	for _, character in if session then session.Profile.Characters else {} do
+		local vehicles = character.Vehicles
+		if type(vehicles) == "table" then
+			for _, vehicle in vehicles do
+				if type(vehicle) == "table" then
+					self:_indexVehicle(player, vehicle)
+				end
+			end
+		end
+	end
+end
+
 function VehicleOwnershipService:_scheduleRegistrationRecovery(player: Player)
+	self.registrationIndexPending[player] = true
 	task.spawn(function()
 		local data = self.context.Services:Get("DataService")
 		while self.running and playerIsCurrent(player) and not data:GetSession(player) do
@@ -278,7 +370,11 @@ function VehicleOwnershipService:_scheduleRegistrationRecovery(player: Player)
 		end
 		if self.running and playerIsCurrent(player) and data:GetSession(player) then
 			self:_recoverLoadedRegistrationSwaps(player)
+			if self.running and playerIsCurrent(player) and data:GetSession(player) then
+				self:_indexLoadedVehicles(player)
+			end
 		end
+		self.registrationIndexPending[player] = nil
 	end)
 end
 
@@ -306,6 +402,7 @@ function VehicleOwnershipService:_recordVehicle(
 		StoredGarageId = garageId,
 	}
 	table.insert(character.Vehicles, vehicle)
+	self:_indexVehicle(player, vehicle)
 	self.context.Services:Get("DataService"):MarkDirty(player)
 	local indexed, indexError = pcall(function()
 		self.context.Services
@@ -356,12 +453,42 @@ end
 
 function VehicleOwnershipService:GetByRegistration(registration: string): (any?, Player?)
 	registration = string.upper(registration)
-	for _, player in game:GetService("Players"):GetPlayers() do
-		local session = self.context.Services:Get("DataService"):GetSession(player)
-		for _, character in if session then session.Profile.Characters else {} do
-			for _, vehicle in character.Vehicles do
-				if string.upper(vehicle.Registration) == registration then
-					return vehicle, player
+	local bucket = self.registrationIndex[registration]
+	if bucket then
+		local stale = {}
+		for vehicle, player in bucket do
+			if
+				playerIsCurrent(player)
+				and normaliseRegistration(vehicle and vehicle.Registration) == registration
+			then
+				return vehicle, player
+			end
+			table.insert(stale, { Player = player, Vehicle = vehicle })
+		end
+		for _, entry in stale do
+			self:_removeIndexedVehicle(entry.Player, entry.Vehicle)
+		end
+	end
+
+	-- A player whose profile is still loading or recovering registration swaps
+	-- has not joined the stable index yet. Scan only those transient sessions so
+	-- a camera hit during a join wave preserves the old lookup semantics without
+	-- walking every settled profile on every plate touch.
+	local data = self.context.Services:Get("DataService")
+	for player in self.registrationIndexPending do
+		if playerIsCurrent(player) then
+			local session = data:GetSession(player)
+			for _, character in if session then session.Profile.Characters else {} do
+				local vehicles = character.Vehicles
+				if type(vehicles) == "table" then
+					for _, vehicle in vehicles do
+						if
+							type(vehicle) == "table"
+							and normaliseRegistration(vehicle.Registration) == registration
+						then
+							return vehicle, player
+						end
+					end
 				end
 			end
 		end
@@ -891,6 +1018,7 @@ function VehicleOwnershipService:SetCustomRegistration(
 		end
 		vehicle.Registration = registration
 		vehicle.CustomRegistration = true
+		self:_indexVehicle(player, vehicle)
 		self.registrations[registration] = true
 		data:MarkDirty(player)
 
@@ -999,6 +1127,9 @@ function VehicleOwnershipService:Destroy()
 	table.clear(self.connections)
 	table.clear(self.purchasing)
 	table.clear(self.registrationUpdates)
+	table.clear(self.registrationIndex)
+	table.clear(self.indexedVehiclesByPlayer)
+	table.clear(self.registrationIndexPending)
 	table.clear(self.registrations)
 end
 return VehicleOwnershipService
