@@ -226,6 +226,20 @@ function DutyService:ActiveUserIds(): { number }
 	return result
 end
 
+local function rollbackStart(self: any, player: Player, previousTeam: any, dutyRecord: any?)
+	if dutyRecord == nil or self.active[player.UserId] == dutyRecord then
+		self.active[player.UserId] = nil
+	end
+	self.context.Services:Get("UnitService"):Unregister(player)
+	self.context.Services:Get("LoadoutService"):ClearIssued(player)
+	self.context.Services:Get("UniformService"):Restore(player)
+	self.context.Services:Get("ImportedSystemAdapterService"):ClearEpaulettes(player)
+	if playerIsPresent(player) then
+		player.Team = previousTeam
+		self.context.Services:Get("IdentificationService"):Refresh(player)
+	end
+end
+
 function DutyService:_begin(player: Player, request: any): (boolean, string?)
 	if not self.running or not playerIsPresent(player) then
 		return false, "DUTY_UNAVAILABLE"
@@ -291,7 +305,8 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		return false, roleReason
 	end
 	if not self.running or not playerIsPresent(player) then
-		return false, "DUTY_UNAVAILABLE"
+		rollbackStart(self, player, previousTeam, nil)
+		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local spawned, finalSpawnReason =
 		self.context.Services:Get("SpawnService"):Spawn(player, request)
@@ -300,7 +315,8 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		return false, finalSpawnReason
 	end
 	if not self.running or not playerIsPresent(player) then
-		return false, "DUTY_UNAVAILABLE"
+		rollbackStart(self, player, previousTeam, nil)
+		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	-- Players arrive in their Roblox clothing and choose an authorised uniform
 	-- from the changing room. This keeps clothing selection visible and avoids
@@ -332,6 +348,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 	-- anybody already in self.active, so that player could never go on duty again
 	-- for the remaining life of the server -- with no error explaining why.
 	if not self.running or not playerIsPresent(player) then
+		rollbackStart(self, player, previousTeam, nil)
 		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local dutyRecord = {
@@ -378,6 +395,7 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 	local shoulder = self.context.Services:Get("ShoulderNumberService"):Callsign(player, profile)
 	local playerIsCurrent = playerIsPresent(player)
 	if not self.running or not playerIsCurrent or self.active[player.UserId] ~= dutyRecord then
+		rollbackStart(self, player, previousTeam, dutyRecord)
 		return false, if playerIsCurrent then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local callsign = if type(shoulder) == "string" and #shoulder >= 2
@@ -390,13 +408,11 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		StationId = request.StationId,
 	})
 	if not unit then
-		self.active[player.UserId] = nil
-		player.Team = previousTeam
+		rollbackStart(self, player, previousTeam, dutyRecord)
 		return false, unitReason
 	end
 	if not playerIsPresent(player) then
-		self.context.Services:Get("UnitService"):Unregister(player)
-		self.active[player.UserId] = nil
+		rollbackStart(self, player, previousTeam, dutyRecord)
 		return false, "PLAYER_LEFT"
 	end
 	dutyRecord.Callsign = callsign
