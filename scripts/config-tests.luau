@@ -208,7 +208,12 @@ return function(H: any)
 	H.test("optional persistence guards reject present non-finite values", function()
 		local f = fixture()
 		for _, field in
-			{ "MaximumLeaseWaitSeconds", "SessionHandoverSeconds", "ProfileSizeWarningBytes" }
+			{
+				"MaximumLeaseWaitSeconds",
+				"SessionHandoverSeconds",
+				"ProfileLoadStartIntervalSeconds",
+				"ProfileSizeWarningBytes",
+			}
 		do
 			for _, value in { 0 / 0, math.huge, -math.huge, "10", -1 } do
 				H.expect(
@@ -223,11 +228,26 @@ return function(H: any)
 		local f = fixture()
 		H.expect(f.ValidateConfig(f.Config), "current configuration was refused")
 		for _, field in
-			{ "MaximumLeaseWaitSeconds", "SessionHandoverSeconds", "ProfileSizeWarningBytes" }
+			{
+				"MaximumLeaseWaitSeconds",
+				"SessionHandoverSeconds",
+				"ProfileLoadStartIntervalSeconds",
+				"ProfileSizeWarningBytes",
+			}
 		do
 			H.expect(f.Validate(field, nil), "optional fallback was refused: " .. field)
 		end
 		H.expect(f.Validate("MaximumLeaseWaitSeconds", 0), "immediate lease refusal was disabled")
+		H.expect(
+			f.Validate("ProfileLoadStartIntervalSeconds", 0.001)
+				and f.Validate("ProfileLoadStartIntervalSeconds", 0.25),
+			"safe profile load pacing range was refused"
+		)
+		H.expect(
+			not f.Validate("ProfileLoadStartIntervalSeconds", 0)
+				and not f.Validate("ProfileLoadStartIntervalSeconds", 0.251),
+			"unsafe profile load pacing interval was accepted"
+		)
 		H.expect(
 			f.Validate("MaxSaveAttempts", 1) and f.Validate("JoinLoadAttempts", 1),
 			"single-attempt bounds were refused"
