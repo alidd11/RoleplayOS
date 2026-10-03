@@ -196,6 +196,40 @@ return function(H: any)
 				and service:GetVehicleDefinitions().UnsafeVehicle == nil,
 			"rejected vehicle remained available to runtime spawning"
 		)
+
+		local pava = Instance.new("Tool")
+		pava.Name = "PAVA"
+		pava.Parent = tools
+		local pavaRemote = Instance.new("RemoteEvent")
+		pavaRemote.Name = "LegacySpray"
+		pavaRemote.Parent = pava
+		local pavaDefinition = { AssetPath = { "Tools", "PAVA" } }
+		configuration.Tools.PAVA = pavaDefinition
+		H.expect(
+			not service:_checkAndTrack(assets, "Tool", "PAVA", pavaDefinition, "Tool"),
+			"unsafe PAVA fixture unexpectedly passed validation"
+		)
+
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local loadout = runtime.require(root.LoadoutService)
+		loadout:Init({
+			Configuration = configuration,
+			Services = {
+				Get = function(_self, name)
+					if name == "ContentValidationService" then
+						return service
+					end
+					return nil
+				end,
+			},
+		})
+		local ids = loadout:_toolIds("Test", { ToolIds = { "PAVA", "UnsafeTool" } })
+		H.expect(
+			#ids == 1
+				and ids[1] == "PAVA"
+				and loadout:_toolDefinition("PAVA") == pavaDefinition,
+			"PAVA unsafe-content rejection did not stay behind its sanitised issuance path"
+		)
 	end)
 
 end

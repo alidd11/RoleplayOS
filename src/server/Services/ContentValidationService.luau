@@ -286,11 +286,15 @@ function ContentValidationService:Init(context: any)
 end
 
 function ContentValidationService:IsVehicleRejected(id: string): boolean
-	return self.rejectedVehicles[id] == true
+	return self.rejectedVehicles[id] ~= nil
 end
 
 function ContentValidationService:IsToolRejected(id: string): boolean
-	return self.rejectedTools[id] == true
+	return self.rejectedTools[id] ~= nil
+end
+
+function ContentValidationService:GetToolRejection(id: string): string?
+	return self.rejectedTools[id]
 end
 
 function ContentValidationService:GetVehicleDefinition(id: string): any?
@@ -819,10 +823,11 @@ function ContentValidationService:_checkAndTrack(
 	if #self.report.Invalid == invalidBefore then
 		return true
 	end
+	local issue = self.report.Invalid[invalidBefore + 1]
 	if kind == "Vehicle" then
-		self.rejectedVehicles[id] = true
+		self.rejectedVehicles[id] = issue or "INVALID"
 	elseif kind == "Tool" then
-		self.rejectedTools[id] = true
+		self.rejectedTools[id] = issue or "INVALID"
 	end
 	return false
 end
