@@ -13,7 +13,8 @@ end
 return function(H: any)
 	H.test("active duty candidates are detached from the authoritative duty table", function()
 		local runtime = Runtime.new()
-		local duty = runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.DutyService)
+		local duty =
+			runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.DutyService)
 		duty.active = { [10] = { DepartmentId = "Police" }, [20] = { DepartmentId = "Fire" } }
 		local candidates = duty:ActiveUserIds()
 		H.expect(
