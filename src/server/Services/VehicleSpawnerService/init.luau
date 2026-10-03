@@ -46,6 +46,25 @@ function VehicleSpawnerService:Init(context: any)
 	self.networkOwners = {}
 end
 
+-- Returns the one live framework-owned vehicle for this player when it is the
+-- exact persistent vehicle requested. This keeps callers on the spawner's
+-- authoritative active map instead of rediscovering a clone through Workspace.
+function VehicleSpawnerService:GetActiveOwnedVehicle(
+	ownerUserId: number,
+	vehicleId: string
+): Model?
+	local vehicle = self.active[ownerUserId]
+	if
+		not vehicle
+		or not vehicle.Parent
+		or vehicle:GetAttribute("RoleplayOSOwnerUserId") ~= ownerUserId
+		or vehicle:GetAttribute("RoleplayOSVehicleId") ~= vehicleId
+	then
+		return nil
+	end
+	return vehicle
+end
+
 function VehicleSpawnerService:Start()
 	self.running = true
 	table.insert(
