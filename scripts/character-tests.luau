@@ -1,4 +1,5 @@
 --!strict
+local fs = require("@lune/fs")
 local Runtime = require("./test-runtime")
 
 return function(H: any)
