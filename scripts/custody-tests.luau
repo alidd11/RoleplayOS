@@ -28,6 +28,9 @@ return function(H: any)
 			return if id == 10 and player.Parent == runtime.services.Players then player else nil
 		end
 		local f: any = {
+			Runtime = runtime,
+			Configuration = config,
+			Attributes = attributes,
 			Profile = profile,
 			Player = player,
 			Dirty = 0,
@@ -93,6 +96,7 @@ return function(H: any)
 			custody, role, spawn
 		custody:Init(context)
 		custody.running = true
+		custody:_trackSentence(player)
 		role:Init(context)
 		role:Start()
 		spawn:Init(context)
@@ -161,6 +165,10 @@ return function(H: any)
 				f.Custody.completing[f.Player] == nil and #f.Events == 0,
 				"failed release retained claim or success event"
 			)
+			H.expect(
+				f.Custody.activeSentences[f.Player.UserId] == f.Player,
+				"failed release stopped the live sentence timer"
+			)
 			local decision = f.Products:_process(f.Receipt)
 			H.expect(decision.Name == "PurchaseGranted", "receipt replay was not acknowledged")
 			H.expect(
@@ -188,6 +196,10 @@ return function(H: any)
 			H.expect(
 				#f.Events == 1 and f.Events[1].Credits == 2,
 				"release notification reported stale credit count"
+			)
+			H.expect(
+				f.Custody.activeSentences[f.Player.UserId] == nil,
+				"successful release retained the sentence timer"
 			)
 			local replay, replayReason = f:Release()
 			H.expect(
@@ -223,6 +235,68 @@ return function(H: any)
 			end
 		end
 	)
+	H.test("custody ticks only tracked prisoners instead of the server population", function()
+		local f = fixture()
+		f.Runtime.services.Players.GetPlayers = function()
+			error("custody tick scanned the full player population")
+		end
+		f.Profile.CustodySentence.RemainingSeconds = 12
+		f.Custody:_tickSentences(1000)
+		H.expect(
+			f.Profile.CustodySentence.RemainingSeconds == 11,
+			"active prisoner sentence did not advance"
+		)
+		H.expect(
+			f.Attributes.RoleplayOSCustodyRemaining == 11
+				and f.Attributes.RoleplayOSCustodyReleaseAt == 1011,
+			"custody attributes did not follow the tracked sentence"
+		)
+		H.expect(
+			f.Custody.activeSentences[f.Player.UserId] == f.Player,
+			"live sentence fell out of the active set"
+		)
+	end)
+
+	H.test("custody does not serve sentence time after the tracked player leaves", function()
+		local f = fixture()
+		f.Profile.CustodySentence.RemainingSeconds = 12
+		f.Player.Parent = nil
+		f.Custody:_tickSentences(1000)
+		H.expect(
+			f.Profile.CustodySentence.RemainingSeconds == 12,
+			"offline time reduced the persisted sentence"
+		)
+		H.expect(
+			f.Custody.activeSentences[f.Player.UserId] == nil,
+			"departed prisoner remained in the timer set"
+		)
+	end)
+
+	H.test("applying custody registers the player for sentence ticking", function()
+		local f = fixture()
+		f.Custody.activeSentences = {}
+		f.Profile.CustodySentence.RemainingSeconds = 0
+		local offenceCode
+		for code, tariff in f.Configuration.Custody.OffenceTariffs do
+			if
+				code ~= f.Configuration.Custody.DisconnectPenaltyCode
+				and tonumber(tariff.Seconds)
+				and tariff.Seconds > 0
+			then
+				offenceCode = code
+				break
+			end
+		end
+		H.expect(offenceCode ~= nil, "custody fixture has no timed offence")
+		local sentence, reason =
+			f.Custody:ApplySentence(f.Player, { offenceCode }, "ContractTest", 99)
+		H.expect(sentence ~= nil and reason == nil, "valid sentence application failed")
+		H.expect(
+			f.Custody.activeSentences[f.Player.UserId] == f.Player,
+			"new sentence was not registered for ticking"
+		)
+	end)
+
 	H.test("Needs uses the configured cuffed walk speed", function()
 		local runtime = Runtime.new()
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
