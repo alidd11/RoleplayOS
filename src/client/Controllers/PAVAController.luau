@@ -3,7 +3,7 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
-local PAVAController = { connections = {}, watched = {} }
+local PAVAController = { connections = {}, watched = {}, containerConnections = {} }
 
 local function playerFromPart(part: BasePart?): Player?
 	local character = part and part:FindFirstAncestorOfClass("Model")
@@ -157,13 +157,28 @@ function PAVAController:_watch(tool: Instance)
 end
 
 function PAVAController:_watchContainer(container: Instance)
+	if self.containerConnections[container] then
+		return
+	end
 	for _, child in container:GetChildren() do
 		self:_watch(child)
 	end
+	local connections = {}
+	self.containerConnections[container] = connections
 	table.insert(
-		self.connections,
+		connections,
 		container.ChildAdded:Connect(function(child)
 			self:_watch(child)
+		end)
+	)
+	table.insert(
+		connections,
+		container.Destroying:Connect(function()
+			for _, connection in connections do
+				connection:Disconnect()
+			end
+			table.clear(connections)
+			self.containerConnections[container] = nil
 		end)
 	)
 end
@@ -200,6 +215,12 @@ function PAVAController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections or {})
+	for container, connections in self.containerConnections do
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		self.containerConnections[container] = nil
+	end
 	for _, toolConnections in self.toolConnections or {} do
 		for _, connection in toolConnections do
 			connection:Disconnect()
