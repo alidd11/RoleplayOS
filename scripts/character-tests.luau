@@ -200,4 +200,16 @@ return function(H: any)
 			"interrupted territory load leaves the civilian team assigned"
 		)
 	end)
+	H.test("dispatch character setup bounds humanoid wait and rejects stale respawns", function()
+		local source = fs.readFile("src/client/Controllers/DispatchController.luau")
+		H.expect(
+			string.find(source, 'character:WaitForChild("Humanoid", 10)', 1, true) ~= nil,
+			"dispatch character setup can wait forever for a missing humanoid"
+		)
+		H.expect(
+			string.find(source, "character ~= Players.LocalPlayer.Character", 1, true) ~= nil,
+			"dispatch can attach seat listeners to a stale character after yielding"
+		)
+	end)
+
 end
