@@ -335,5 +335,4 @@ return function(H: any)
 			"public-safety teardown does not clear tool listener state"
 		)
 	end)
-
 end
