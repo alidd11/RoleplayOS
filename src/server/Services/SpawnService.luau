@@ -319,6 +319,12 @@ function SpawnService:_enterCivilianAtTerritory(
 		player:LoadCharacterAsync()
 	end)
 	if not self.running or not playerIsCurrent(player) then
+		-- RoleService already changed the team before the yielding character load.
+		-- If this exact player is still present, restore the previous authority state;
+		-- a departed Player must not be mutated after its session has gone away.
+		if playerIsCurrent(player) then
+			player.Team = previousTeam
+		end
 		return false, "SPAWN_UNAVAILABLE"
 	end
 	local loadedCharacter = player.Character
