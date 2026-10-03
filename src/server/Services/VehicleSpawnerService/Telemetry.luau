@@ -90,7 +90,7 @@ return function(VehicleSpawnerService)
 			-- consumption tick. If a chassis really replaces the seat, its old instance
 			-- loses its parent and the next tick resolves the replacement once.
 			local seat = state.Seat
-			if not seat or not seat.Parent then
+			if not seat or not seat.Parent or not seat:IsDescendantOf(vehicle) then
 				seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
 				state.Seat = seat
 			end
