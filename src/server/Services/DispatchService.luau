@@ -252,7 +252,16 @@ function DispatchService:_fireAuthorised(payload: any, callId: string?, unitDepa
 	local call = callId and self.context.Services:Get("CallService").calls[callId] or nil
 	local unitScoped = payload.Kind == "UnitChanged"
 	local mdt = self.context.Services:Get("MDTService")
-	for _, player in Players:GetPlayers() do
+	local dutyService = self.context.Services:Get("DutyService")
+	-- Candidate enumeration scales with people actually on duty rather than total
+	-- server population. ActiveUserIds is only a snapshot: every candidate still
+	-- goes through the same yielding MDT/duty authorisation immediately before
+	-- delivery, so this is not a permission cache.
+	for _, userId in dutyService:ActiveUserIds() do
+		local player = Players:GetPlayerByUserId(userId)
+		if not player then
+			continue
+		end
 		-- GetAuthorisedDuty may yield while Roblox resolves group access, but the
 		-- returned duty is revalidated by DutyService after that yield. Use that
 		-- exact snapshot for relevance as well as MDT access; a second lookup could
