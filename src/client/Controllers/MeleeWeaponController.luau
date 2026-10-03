@@ -118,6 +118,7 @@ function MeleeWeaponController:Init(context: any)
 	self.context = context
 	self.connections = {}
 	self.watched = setmetatable({}, { __mode = "k" })
+	self.toolConnections = setmetatable({}, { __mode = "k" })
 end
 
 function MeleeWeaponController:_watch(tool: Instance)
@@ -130,20 +131,22 @@ function MeleeWeaponController:_watch(tool: Instance)
 	end
 	self.watched[tool] = true
 	local mouse: Mouse? = nil
+	local toolConnections = {}
+	self.toolConnections[tool] = toolConnections
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Equipped:Connect(function(value)
 			mouse = value
 		end)
 	)
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Unequipped:Connect(function()
 			mouse = nil
 		end)
 	)
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Activated:Connect(function()
 			local target = targetFromAim(mouse)
 			if not target then
@@ -167,6 +170,16 @@ function MeleeWeaponController:_watch(tool: Instance)
 					"Equipment"
 				)
 			end
+		end)
+	)
+	table.insert(
+		toolConnections,
+		tool.Destroying:Connect(function()
+			for _, connection in toolConnections do
+				connection:Disconnect()
+			end
+			table.clear(toolConnections)
+			self.toolConnections[tool] = nil
 		end)
 	)
 end
@@ -200,6 +213,12 @@ function MeleeWeaponController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, toolConnections in self.toolConnections do
+		for _, connection in toolConnections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(self.toolConnections)
 	self.watched = {}
 end
 
