@@ -2,7 +2,6 @@
 
 -- Keeps imported vehicles' own plate geometry and artwork. RoleplayOS only
 -- supplies the server-authored registration text used by persistence and ANPR.
-local Workspace = game:GetService("Workspace")
 local VehiclePlateService = {}
 
 local function compact(value: string): string
@@ -161,17 +160,14 @@ function VehiclePlateService:RefreshOwned(
 	vehicleId: string,
 	registration: string
 ): boolean
-	for _, instance in Workspace:GetDescendants() do
-		if
-			instance:IsA("Model")
-			and instance:GetAttribute("RoleplayOSOwnerUserId") == ownerUserId
-			and instance:GetAttribute("RoleplayOSVehicleId") == vehicleId
-		then
-			self:Apply(instance, registration)
-			return true
-		end
+	local vehicle = self.context.Services
+		:Get("VehicleSpawnerService")
+		:GetActiveOwnedVehicle(ownerUserId, vehicleId)
+	if not vehicle then
+		return false
 	end
-	return false
+	self:Apply(vehicle, registration)
+	return true
 end
 
 return VehiclePlateService
