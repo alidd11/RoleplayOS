@@ -89,7 +89,7 @@ The direct content item must be a `Model` containing a `VehicleSeat`. Service fo
 
 ## Tool folders
 
-Tools mirror the service hierarchy. A Tool in `Tools/Shared` is eligible for every service loadout. A Tool in a department or police-division folder is added only to matching loadouts. Set `AutoEquip = false` when it should be registered but supplied through a locker or another workflow.
+Tools mirror the service hierarchy. Folder placement registers which service loadouts a Tool is eligible for, but does not grant it automatically. A discovered service Tool is added to matching loadouts only when its top-level `AutoEquip` attribute is explicitly `true`; otherwise it remains registered for a locker or another authorised workflow.
 
 - A Tool with `RequiresHandle = true` must contain `Handle`.
 - Tool name is the default stable ID; `RoleplayOSAssetId` can override it.

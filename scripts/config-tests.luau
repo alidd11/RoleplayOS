@@ -415,4 +415,32 @@ return function(H: any)
 		local completed, valid = pcall(f.ValidateConfig, candidate)
 		H.expect(completed and not valid, "malformed Network section raised or passed")
 	end)
+
+	H.test("public PCSO role and presentation are removed", function()
+		local f = fixture()
+		H.expect(f.Config.Roles.PCSO == nil, "PCSO role remained configured")
+		H.expect(f.Config.Loadouts.PCSO == nil, "PCSO loadout remained configured")
+		H.expect(
+			f.Config.Uniforms.PoliceCommunitySupportOfficer == nil,
+			"PCSO uniform remained configured"
+		)
+		H.expect(
+			table.find(f.Config.Departments.Police.RoleIds, "PCSO") == nil,
+			"Police department still advertised PCSO"
+		)
+		H.expect(
+			table.find(f.Config.Spawns.PoliceLockerRoom.RoleIds, "PCSO") == nil,
+			"Police spawn still admitted PCSO"
+		)
+	end)
+
+	H.test("discovered service tools require explicit auto-equip opt-in", function()
+		local runtime = Runtime.new()
+		local shared = runtime.services.ReplicatedStorage.RoleplayOS
+		local policy = runtime.require(shared.Shared.ToolDiscoveryPolicy)
+		H.expect(not policy.shouldAutoEquip(nil), "missing AutoEquip opted in")
+		H.expect(not policy.shouldAutoEquip(false), "false AutoEquip opted in")
+		H.expect(not policy.shouldAutoEquip(1), "non-boolean AutoEquip opted in")
+		H.expect(policy.shouldAutoEquip(true), "explicit AutoEquip=true was refused")
+	end)
 end
