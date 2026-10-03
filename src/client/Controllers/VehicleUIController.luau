@@ -145,7 +145,15 @@ function VehicleUIController:Start()
 			self:_watchCharacter(character)
 		end)
 	)
-
+	local camera = workspace.CurrentCamera
+	if camera then
+		table.insert(
+			self.connections,
+			camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+				self:_broadcast()
+			end)
+		)
+	end
 end
 
 function VehicleUIController:IsActive(): boolean
