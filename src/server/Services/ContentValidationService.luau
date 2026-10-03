@@ -2,7 +2,8 @@
 
 local ServerStorage = game:GetService("ServerStorage")
 local CollectionService = game:GetService("CollectionService")
-local ToolDiscoveryPolicy = require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.ToolDiscoveryPolicy)
+local ToolDiscoveryPolicy =
+	require(game:GetService("ReplicatedStorage").RoleplayOS.Shared.ToolDiscoveryPolicy)
 
 local ContentValidationService = {
 	-- Unsafe imported content is a server-wide trust failure, not an optional
