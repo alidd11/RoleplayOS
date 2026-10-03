@@ -78,7 +78,16 @@ return function(VehicleSpawnerService)
 			if not vehicle or not vehicle.Parent then
 				continue
 			end
-			local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+			-- Imported vehicles can contain hundreds of descendants. The driver seat
+			-- does not normally change after spawn, so keep the resolved instance in
+			-- telemetry state instead of recursively walking the whole model every
+			-- consumption tick. If a chassis really replaces the seat, its old instance
+			-- loses its parent and the next tick resolves the replacement once.
+			local seat = state.Seat
+			if not seat or not seat.Parent then
+				seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+				state.Seat = seat
+			end
 			local position = vehicle:GetPivot().Position
 			local previous = state.LastPosition or position
 			state.LastPosition = position
