@@ -62,10 +62,16 @@ return function(VehicleSpawnerService)
 	-- folder and never consults MaxSpeed, so cutting the engine is the only lever
 	-- that reaches these vehicles at all.
 
-	function VehicleSpawnerService:_setEngine(vehicle: Model, running: boolean)
+	function VehicleSpawnerService:_setEngine(vehicle: Model, running: boolean, state: any?)
 		local settings = self.context.Configuration.Chassis
-		local values = RigMechanics.chassisValues(vehicle, settings)
-		local engine = values and values:FindFirstChild(settings.EngineValueName)
+		local engine = state and state.Engine
+		if not engine or not engine.Parent or not engine:IsDescendantOf(vehicle) then
+			local values = RigMechanics.chassisValues(vehicle, settings)
+			engine = values and values:FindFirstChild(settings.EngineValueName)
+			if state then
+				state.Engine = engine
+			end
+		end
 		if engine and engine:IsA("ValueBase") and (engine :: any).Value ~= running then
 			(engine :: any).Value = running
 		end
@@ -78,7 +84,16 @@ return function(VehicleSpawnerService)
 			if not vehicle or not vehicle.Parent then
 				continue
 			end
-			local seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+			-- Imported vehicles can contain hundreds of descendants. The driver seat
+			-- does not normally change after spawn, so keep the resolved instance in
+			-- telemetry state instead of recursively walking the whole model every
+			-- consumption tick. If a chassis replaces or reparents the seat, the next
+			-- tick resolves the current descendant once.
+			local seat = state.Seat
+			if not seat or not seat.Parent or not seat:IsDescendantOf(vehicle) then
+				seat = vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+				state.Seat = seat
+			end
 			local position = vehicle:GetPivot().Position
 			local previous = state.LastPosition or position
 			state.LastPosition = position
@@ -108,7 +123,7 @@ return function(VehicleSpawnerService)
 			if settings.FuelEnabled then
 				state.Fuel = math.max(state.Fuel - burnt, 0)
 				vehicle:SetAttribute("RoleplayOSFuel", state.Fuel)
-				self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent)
+				self:_setEngine(vehicle, state.Fuel > settings.EmptyFuelPercent, state)
 			end
 		end
 	end
