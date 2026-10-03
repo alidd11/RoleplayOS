@@ -2,6 +2,83 @@
 local Runtime = require("./test-runtime")
 
 return function(H: any)
+	H.test("vehicle telemetry caches the chassis engine control", function()
+		local runtime = Runtime.new()
+		runtime.services.ServerStorage = runtime.globals.Instance.new("Folder")
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local service = runtime.require(root.VehicleSpawnerService)
+
+		local scans = 0
+		local vehicle: any = {}
+		local values: any = {}
+		local currentEngine: any = nil
+		local firstEngine: any = {
+			Parent = values,
+			Value = false,
+			IsDescendantOf = function(_self, candidate)
+				return candidate == vehicle
+			end,
+			IsA = function(_self, className)
+				return className == "ValueBase"
+			end,
+		}
+		local replacementEngine: any = {
+			Parent = values,
+			Value = false,
+			IsDescendantOf = function(_self, candidate)
+				return candidate == vehicle
+			end,
+			IsA = function(_self, className)
+				return className == "ValueBase"
+			end,
+		}
+		currentEngine = firstEngine
+		values.Name = "Values"
+		values.IsA = function(_self, className)
+			return className == "Folder"
+		end
+		values.FindFirstChild = function(_self, name)
+			return if name == "Engine" then currentEngine else nil
+		end
+		vehicle.GetDescendants = function()
+			scans += 1
+			return { values }
+		end
+
+		service.context = {
+			Configuration = {
+				Chassis = {
+					ValuesFolderName = "Values",
+					EngineValueName = "Engine",
+				},
+			},
+		}
+		local state: any = {}
+
+		service:_setEngine(vehicle, true, state)
+		H.expect(
+			scans == 1 and state.Engine == firstEngine and firstEngine.Value == true,
+			"initial engine control was not resolved and cached"
+		)
+
+		service:_setEngine(vehicle, false, state)
+		H.expect(
+			scans == 1 and firstEngine.Value == false,
+			"cached engine control triggered another descendant scan"
+		)
+
+		firstEngine.Parent = nil
+		currentEngine = replacementEngine
+		service:_setEngine(vehicle, true, state)
+		H.expect(
+			scans == 2 and state.Engine == replacementEngine and replacementEngine.Value == true,
+			"destroyed engine control was not refreshed exactly once"
+		)
+
+		service:_setEngine(vehicle, false, state)
+		H.expect(scans == 2, "replacement engine control was rescanned on the next update")
+	end)
+
 	H.test("vehicle telemetry caches the resolved driver seat", function()
 		local runtime = Runtime.new()
 		runtime.services.ServerStorage = runtime.globals.Instance.new("Folder")
