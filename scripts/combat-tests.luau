@@ -226,9 +226,14 @@ return function(H: any)
 	H.test("Needs preserves an active Taser stun", function()
 		local runtime = Runtime.new()
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
-		local needs = runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
+		local needs =
+			runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
 		needs.context = { Configuration = config }
-		local player: any = { GetAttribute = function() return nil end }
+		local player: any = {
+			GetAttribute = function()
+				return nil
+			end,
+		}
 		local humanoid: any = { WalkSpeed = config.Needs.WalkSpeed }
 		function humanoid:GetAttribute(name: string)
 			return if name == "RoleplayOSTaserStunned" then true else nil
@@ -242,11 +247,13 @@ return function(H: any)
 	H.test("Taser server publishes its stun state for movement composition", function()
 		local source = taserServerSource()
 		H.expect(
-			string.find(source, 'SetAttribute(&quot;RoleplayOSTaserStunned&quot;, true)', 1, true) ~= nil,
+			string.find(source, "SetAttribute(&quot;RoleplayOSTaserStunned&quot;, true)", 1, true)
+				~= nil,
 			"Taser server does not publish the active stun state"
 		)
 		H.expect(
-			string.find(source, 'SetAttribute(&quot;RoleplayOSTaserStunned&quot;, nil)', 1, true) ~= nil,
+			string.find(source, "SetAttribute(&quot;RoleplayOSTaserStunned&quot;, nil)", 1, true)
+				~= nil,
 			"Taser server does not clear the stun state on expiry"
 		)
 	end)
