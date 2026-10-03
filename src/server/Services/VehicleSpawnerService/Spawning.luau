@@ -308,7 +308,10 @@ return function(VehicleSpawnerService)
 		self.cooldowns[player.UserId] = os.clock()
 		self.spawning[player] = nil
 		vehicle.Destroying:Once(function()
-			self.networkOwners[vehicle] = nil
+			local networkOwner = self.networkOwners[vehicle]
+			if networkOwner then
+				self:_forgetNetworkOwner(vehicle, networkOwner)
+			end
 			if self.active[player.UserId] == vehicle then
 				self.active[player.UserId] = nil
 				-- Last chance to bank the drive before the model goes.
