@@ -223,4 +223,25 @@ return function(H: any)
 			end
 		end
 	)
+	H.test("Needs uses the configured cuffed walk speed", function()
+		local runtime = Runtime.new()
+		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
+		local needs = runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
+		needs.context = { Configuration = config }
+		local player: any = {}
+		function player:GetAttribute(name: string)
+			return if name == "RoleplayOSCuffed" then true else nil
+		end
+		local humanoid: any = { WalkSpeed = config.Needs.WalkSpeed }
+		function humanoid:GetAttribute()
+			return nil
+		end
+		function humanoid:SetStateEnabled() end
+		needs:_applySpeed(player, { Sprinting = false, Hunger = 100, Stamina = 100 }, humanoid)
+		H.expect(
+			humanoid.WalkSpeed == config.Custody.CuffedWalkSpeed,
+			"Needs ignored the configured cuffed walk speed"
+		)
+	end)
+
 end
