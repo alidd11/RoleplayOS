@@ -171,6 +171,9 @@ function CustodyService:_untrackSentence(player: Player)
 end
 
 function CustodyService:_tickSentences(now: number)
+	if next(self.activeSentences) == nil then
+		return
+	end
 	-- Snapshot ids because completing a sentence can yield through role/spawn work
 	-- and can remove its own entry while this pass is still iterating.
 	local userIds = {}
