@@ -2068,8 +2068,10 @@ local roundsValue = tool:WaitForChild(&quot;Rounds&quot;)
 
 local MAX_RANGE = 25
 local FIRE_COOLDOWN = 1.25
+local VISUAL_COOLDOWN = 0.1
 local STUN_SECONDS = 5
 local lastFire = 0
+local lastVisual = {}
 local reloading = false
 local stunTokens = setmetatable({}, { __mode = &quot;k&quot; })
 
@@ -2094,6 +2096,21 @@ local function finiteVector3(value): boolean
 &#9;return typeof(value) == &quot;Vector3&quot;
 &#9;&#9;and value.X == value.X and value.Y == value.Y and value.Z == value.Z
 &#9;&#9;and math.abs(value.X) &lt; 1e6 and math.abs(value.Y) &lt; 1e6 and math.abs(value.Z) &lt; 1e6
+end
+
+local function allowVisual(player: Player, key: string): boolean
+&#9;local now = os.clock()
+&#9;local playerState = lastVisual[player]
+&#9;if not playerState then
+&#9;&#9;playerState = {}
+&#9;&#9;lastVisual[player] = playerState
+&#9;end
+&#9;local previous = playerState[key]
+&#9;if previous and now - previous &lt; VISUAL_COOLDOWN then
+&#9;&#9;return false
+&#9;end
+&#9;playerState[key] = now
+&#9;return true
 end
 
 local function setVisual(remotePartName: string, enabled: boolean)
@@ -2197,15 +2214,19 @@ reloadRemote.OnServerEvent:Connect(function(player: Player)
 end)
 
 flashlightRemote.OnServerEvent:Connect(function(player: Player, enabled)
-&#9;if equippedBy(player) and type(enabled) == &quot;boolean&quot; then
+&#9;if equippedBy(player) and type(enabled) == &quot;boolean&quot; and allowVisual(player, &quot;Flashlight&quot;) then
 &#9;&#9;setVisual(&quot;FlashlightPart&quot;, enabled)
 &#9;end
 end)
 
 laserRemote.OnServerEvent:Connect(function(player: Player, enabled)
-&#9;if equippedBy(player) and type(enabled) == &quot;boolean&quot; then
+&#9;if equippedBy(player) and type(enabled) == &quot;boolean&quot; and allowVisual(player, &quot;Laser&quot;) then
 &#9;&#9;setVisual(&quot;LaserPart&quot;, enabled)
 &#9;end
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+&#9;lastVisual[player] = nil
 end)
 
 </string>

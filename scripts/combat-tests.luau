@@ -258,6 +258,26 @@ return function(H: any)
 		)
 	end)
 
+	H.test("Taser visual remotes are rate limited and cleaned up", function()
+		local source = taserServerSource()
+		H.expect(
+			string.find(source, "local VISUAL_COOLDOWN = 0.1", 1, true) ~= nil,
+			"Taser visual remotes have no bounded request cadence"
+		)
+		H.expect(
+			string.find(source, "allowVisual(player, &quot;Flashlight&quot;)", 1, true) ~= nil,
+			"Taser flashlight remote bypasses visual rate limiting"
+		)
+		H.expect(
+			string.find(source, "allowVisual(player, &quot;Laser&quot;)", 1, true) ~= nil,
+			"Taser laser remote bypasses visual rate limiting"
+		)
+		H.expect(
+			string.find(source, "lastVisual[player] = nil", 1, true) ~= nil,
+			"Taser visual limiter retains departed players"
+		)
+	end)
+
 	H.test("Taser server authority covers every configured Taser loadout", function()
 		local runtime = Runtime.new()
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
