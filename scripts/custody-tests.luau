@@ -226,7 +226,8 @@ return function(H: any)
 	H.test("Needs uses the configured cuffed walk speed", function()
 		local runtime = Runtime.new()
 		local config = runtime.require(runtime.services.ReplicatedStorage.RoleplayOS.Config.Config)
-		local needs = runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
+		local needs =
+			runtime.require(runtime.services.ServerScriptService.RoleplayOS.Services.NeedsService)
 		needs.context = { Configuration = config }
 		local player: any = {}
 		function player:GetAttribute(name: string)
@@ -243,5 +244,4 @@ return function(H: any)
 			"Needs ignored the configured cuffed walk speed"
 		)
 	end)
-
 end
