@@ -132,6 +132,7 @@ return function(CustodyService)
 			table.insert(sentence.Offences, offence)
 		end
 		trimToMaximum(sentence.Offences, config.MaximumActiveOffences)
+		self:_trackSentence(target)
 		self.context.Services:Get("DataService"):MarkDirty(target)
 		local summary = self:GetSentence(target)
 		target:SetAttribute("RoleplayOSCustodyReleaseAt", summary.ReleaseAt)
@@ -272,6 +273,7 @@ return function(CustodyService)
 			sentence.ReleaseAt = 0
 			sentence.UpdatedAt = os.time()
 		end
+		self:_untrackSentence(player)
 		player:SetAttribute("RoleplayOSCustodyReleaseAt", nil)
 		player:SetAttribute("RoleplayOSCustodyRemaining", 0)
 		player.RespawnLocation = nil
