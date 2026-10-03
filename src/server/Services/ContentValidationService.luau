@@ -133,8 +133,13 @@ local function certifiedBy(specification: any, descendant: Instance, path: { str
 	return false
 end
 
-local function unsafeDescendant(root: Instance, allowed: any?): Instance?
-	for _, descendant in root:GetDescendants() do
+local function unsafeDescendant(
+	root: Instance,
+	allowed: any?,
+	descendants: { Instance }?
+): Instance?
+	local scanned = descendants or root:GetDescendants()
+	for _, descendant in scanned do
 		if forbiddenClasses[descendant.ClassName] or descendant:IsA("LuaSourceContainer") then
 			-- A certified repository asset may carry narrowly reviewed framework
 			-- logic. Both identity and class and the exact root-relative ancestry
@@ -148,8 +153,9 @@ local function unsafeDescendant(root: Instance, allowed: any?): Instance?
 	return nil
 end
 
-local function unsafeSource(root: Instance): (Instance?, string?)
-	for _, descendant in root:GetDescendants() do
+local function unsafeSource(root: Instance, descendants: { Instance }?): (Instance?, string?)
+	local scanned = descendants or root:GetDescendants()
+	for _, descendant in scanned do
 		if descendant:IsA("LuaSourceContainer") then
 			-- Reading Source can fail on its own, independent of what the source
 			-- actually contains - Roblox gates it behind a capability that is not
@@ -188,12 +194,14 @@ local function qualityIssue(
 	root: Instance,
 	expectedClass: string,
 	configuration: any,
-	configuredAssetId: string?
+	configuredAssetId: string?,
+	descendants: { Instance }?
 ): string?
 	local quality = configuration.ContentQuality
 	if not quality then
 		return "CONTENT_QUALITY_CONFIG_REQUIRED"
 	end
+	local scanned = descendants or root:GetDescendants()
 	if quality.RequireCertification then
 		local manifest = if configuredAssetId and quality.CertifiedAssets
 			then quality.CertifiedAssets[configuredAssetId]
@@ -227,7 +235,7 @@ local function qualityIssue(
 		end
 	end
 	local parts = 0
-	for _, descendant in root:GetDescendants() do
+	for _, descendant in scanned do
 		if descendant:IsA("BasePart") then
 			parts += 1
 		end
@@ -246,7 +254,7 @@ local function qualityIssue(
 	if parts > maximumParts then
 		return "PART_BUDGET_EXCEEDED"
 	end
-	if #root:GetDescendants() > maximumDescendants then
+	if #scanned > maximumDescendants then
 		return "DESCENDANT_BUDGET_EXCEEDED"
 	end
 	if expectedClass == "Model" and root:IsA("Model") then
@@ -369,7 +377,11 @@ function ContentValidationService:_indexUnmanagedIdentities(roots: { Instance })
 	end
 end
 
-local function worldQualityIssue(root: Instance, configuration: any): string?
+local function worldQualityIssue(
+	root: Instance,
+	configuration: any,
+	descendants: { Instance }?
+): string?
 	local quality = configuration.ContentQuality
 	if not root:IsA("Model") then
 		return "WORLD_ASSET_MODEL_REQUIRED"
@@ -377,7 +389,7 @@ local function worldQualityIssue(root: Instance, configuration: any): string?
 	if root:GetAttribute("RoleplayOSAssetKind") == nil then
 		return "WORLD_ASSET_KIND_REQUIRED"
 	end
-	local certification = qualityIssue(root, "WorldAsset", configuration, nil)
+	local certification = qualityIssue(root, "WorldAsset", configuration, nil, descendants)
 	if certification then
 		return certification
 	end
@@ -408,7 +420,8 @@ function ContentValidationService:_checkWorldAssets()
 			table.insert(self.report.Invalid, "WorldAsset:" .. root.Name .. ":NOT_IN_WORKSPACE")
 			continue
 		end
-		local unsafe = unsafeDescendant(root)
+		local descendants = root:GetDescendants()
+		local unsafe = unsafeDescendant(root, nil, descendants)
 		if unsafe then
 			table.insert(
 				self.report.Invalid,
@@ -416,7 +429,7 @@ function ContentValidationService:_checkWorldAssets()
 			)
 			continue
 		end
-		local problem = worldQualityIssue(root, self.context.Configuration)
+		local problem = worldQualityIssue(root, self.context.Configuration, descendants)
 		if problem then
 			table.insert(self.report.Invalid, "WorldAsset:" .. root:GetFullName() .. ":" .. problem)
 			continue
@@ -703,8 +716,16 @@ function ContentValidationService:_check(
 		return
 	end
 	local manifest = self.context.Configuration.ContentQuality.CertifiedAssets[id]
-	local unsafe =
-		unsafeDescendant(template, if manifest then manifest.AllowedUnsafeDescendants else nil)
+	-- GetDescendants builds the complete array before returning. None of the
+	-- validation below yields or mutates the template, so one snapshot is both
+	-- authoritative for this pass and avoids walking large imported assets four
+	-- times during synchronous startup.
+	local descendants = template:GetDescendants()
+	local unsafe = unsafeDescendant(
+		template,
+		if manifest then manifest.AllowedUnsafeDescendants else nil,
+		descendants
+	)
 	if unsafe then
 		table.insert(
 			self.report.Invalid,
@@ -712,12 +733,13 @@ function ContentValidationService:_check(
 		)
 		return
 	end
-	local unsafeScript, sourceIssue = unsafeSource(template)
+	local unsafeScript, sourceIssue = unsafeSource(template, descendants)
 	if unsafeScript and sourceIssue then
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":UNSAFE_SOURCE_" .. sourceIssue)
 		return
 	end
-	local qualityProblem = qualityIssue(template, expectedClass, self.context.Configuration, id)
+	local qualityProblem =
+		qualityIssue(template, expectedClass, self.context.Configuration, id, descendants)
 	if qualityProblem then
 		table.insert(self.report.Invalid, kind .. ":" .. id .. ":" .. qualityProblem)
 		return
@@ -725,9 +747,18 @@ function ContentValidationService:_check(
 	if not self:_registerIdentity(template, id) then
 		return
 	end
-	if expectedClass == "Model" and not template:FindFirstChildWhichIsA("VehicleSeat", true) then
-		table.insert(self.report.Invalid, kind .. ":" .. id .. ":DRIVER_SEAT_REQUIRED")
-		return
+	if expectedClass == "Model" then
+		local hasDriverSeat = false
+		for _, descendant in descendants do
+			if descendant:IsA("VehicleSeat") then
+				hasDriverSeat = true
+				break
+			end
+		end
+		if not hasDriverSeat then
+			table.insert(self.report.Invalid, kind .. ":" .. id .. ":DRIVER_SEAT_REQUIRED")
+			return
+		end
 	end
 	if
 		expectedClass == "Tool"
