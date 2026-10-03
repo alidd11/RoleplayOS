@@ -3,7 +3,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local TaserPoseController = { connections = {}, watched = {} }
+local TaserPoseController = { connections = {}, watched = {}, containerConnections = {} }
 
 function TaserPoseController:Init(_context: any) end
 
@@ -199,17 +199,32 @@ function TaserPoseController:_watch(tool: Tool)
 end
 
 function TaserPoseController:_scan(container: Instance)
+	if self.containerConnections[container] then
+		return
+	end
 	for _, child in container:GetChildren() do
 		if isTaser(child) then
 			self:_watch(child :: Tool)
 		end
 	end
+	local connections = {}
+	self.containerConnections[container] = connections
 	table.insert(
-		self.connections,
+		connections,
 		container.ChildAdded:Connect(function(child)
 			if isTaser(child) then
 				self:_watch(child :: Tool)
 			end
+		end)
+	)
+	table.insert(
+		connections,
+		container.Destroying:Connect(function()
+			for _, connection in connections do
+				connection:Disconnect()
+			end
+			table.clear(connections)
+			self.containerConnections[container] = nil
 		end)
 	)
 end
@@ -240,6 +255,12 @@ function TaserPoseController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for container, connections in self.containerConnections do
+		for _, connection in connections do
+			connection:Disconnect()
+		end
+		self.containerConnections[container] = nil
+	end
 end
 
 return TaserPoseController
