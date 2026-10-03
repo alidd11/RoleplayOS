@@ -6,12 +6,18 @@ Its original scripts are not used: they accepted client-authoritative hits,
 moved arbitrary tools into `Lighting`, disabled an arbitrary `SprintScript`,
 and created accumulating input connections.
 
-The live template is the sanitised tool at
-`ServerStorage.RoleplayOSAssets.Tools.Services.Police.Shared.PAVA`. It has no
-scripts, remotes, or screen GUI. RoleplayOS issues it to authorised police
-roles only (`PoliceResponse`, `PoliceFrontline`, `ArmedResponse`, and
-`RoadsPolicing`). Ambulance and fire loadouts do not receive PAVA because it is
-police equipment.
+The repository import lives at
+`ServerStorage.RoleplayOSAssets.Tools.Services.Police.Shared.PAVA`. It is
+treated as untrusted presentation content: before any clone enters a player's
+Backpack, `LoadoutService` removes every Lua source container, remote, bindable,
+prompt and click detector. Geometry, sounds, particles and animations remain for
+the RoleplayOS controller. Production content validation still fails closed if
+the stored template itself contains unreviewed executable descendants, so
+runtime stripping is defence in depth rather than certification.
+
+RoleplayOS issues PAVA to authorised police roles only (`PoliceResponse`,
+`PoliceFrontline`, `ArmedResponse`, and `RoadsPolicing`). Ambulance and
+fire loadouts do not receive PAVA because it is police equipment.
 
 Use is server-authoritative: the server checks police duty, possession of the
 issued tool, target validity, distance, health, and a cooldown before applying

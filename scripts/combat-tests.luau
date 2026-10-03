@@ -160,6 +160,49 @@ return function(H: any)
 		return string.sub(asset, sourceTagEnd + 1, sourceEnd - 1)
 	end
 
+	H.test("PAVA issued clones strip legacy authority but preserve presentation", function()
+		local runtime = Runtime.new()
+		runtime.services.ServerStorage = runtime.globals.Instance.new("Folder")
+		local root = runtime.services.ServerScriptService.RoleplayOS.Services
+		local loadout = runtime.require(root.LoadoutService)
+		local Instance = runtime.globals.Instance
+		local tool = Instance.new("Tool")
+		tool.Name = "PAVA"
+
+		local legacyScript = Instance.new("Script")
+		legacyScript.Name = "LegacyServer"
+		legacyScript.Parent = tool
+		local legacyRemote = Instance.new("RemoteEvent")
+		legacyRemote.Name = "Spray"
+		legacyRemote.Parent = tool
+		local legacyPrompt = Instance.new("ProximityPrompt")
+		legacyPrompt.Name = "LegacyPrompt"
+		legacyPrompt.Parent = tool
+
+		local nozzle = Instance.new("Part")
+		nozzle.Name = "SprayPart"
+		nozzle.Parent = tool
+		local emitter = Instance.new("ParticleEmitter")
+		emitter.Name = "Spray"
+		emitter.Parent = nozzle
+		local animation = Instance.new("Animation")
+		animation.Name = "PAVA Equip"
+		animation.Parent = tool
+
+		local removed = loadout:_sanitiseImportedTool(tool, "PAVA")
+		H.expect(removed == 3, "PAVA legacy authority was not removed exactly once")
+		H.expect(
+			tool:FindFirstChild("LegacyServer") == nil
+				and tool:FindFirstChild("Spray") == nil
+				and tool:FindFirstChild("LegacyPrompt") == nil,
+			"issued PAVA retained executable, remote or prompt authority"
+		)
+		H.expect(
+			nozzle.Parent == tool and emitter.Parent == nozzle and animation.Parent == tool,
+			"PAVA sanitisation removed presentation used by the RoleplayOS controller"
+		)
+	end)
+
 	H.test("actual PAVA service rejects a backpack-only canister", function()
 		local f = fixture(false)
 		local sprayed, reason = f.Service:Spray(f.Actor, 2)

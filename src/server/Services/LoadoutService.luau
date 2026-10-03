@@ -31,6 +31,36 @@ function LoadoutService:_toolIds(loadoutId: string, definition: any): { string }
 	end
 	return table.clone(configured)
 end
+
+-- The supplied PAVA package still contains its original client/server behaviour
+-- in the repository asset. RoleplayOS owns PAVA authority now, so an issued
+-- clone is presentation only: geometry, sounds, particles and animations stay;
+-- executable, remote and direct-interaction descendants are removed before the
+-- clone can enter a player's Backpack.
+function LoadoutService:_sanitiseImportedTool(tool: Tool, toolId: string): number
+	if toolId ~= "PAVA" then
+		return 0
+	end
+	local removed = 0
+	for _, descendant in tool:GetDescendants() do
+		if
+			descendant:IsA("LuaSourceContainer")
+			or descendant:IsA("RemoteEvent")
+			or descendant:IsA("RemoteFunction")
+			or descendant:IsA("UnreliableRemoteEvent")
+			or descendant:IsA("BindableEvent")
+			or descendant:IsA("BindableFunction")
+			or descendant:IsA("ProximityPrompt")
+			or descendant:IsA("ClickDetector")
+		then
+			if descendant.Parent then
+				descendant:Destroy()
+				removed += 1
+			end
+		end
+	end
+	return removed
+end
 local function canonicalizeTool(tool: Tool, toolId: string)
 	if tool.Name ~= toolId then
 		if tool:GetAttribute("RoleplayOSAssetName") == nil then
@@ -265,6 +295,7 @@ function LoadoutService:Apply(player: Player, loadoutId: string): (boolean, stri
 		elseif template and template:IsA("Tool") then
 			local clone = template:Clone()
 			canonicalizeTool(clone, toolId)
+			self:_sanitiseImportedTool(clone, toolId)
 			prepareVisibleTool(clone, toolId, toolDefinition)
 			patchBatteringRam(clone, toolId)
 			clone.CanBeDropped = false
@@ -326,6 +357,7 @@ function LoadoutService:GiveTool(
 	end
 	local clone = template:Clone()
 	canonicalizeTool(clone, toolId)
+	self:_sanitiseImportedTool(clone, toolId)
 	if toolDefinition and toolDefinition.Weapon then
 		clone:SetAttribute("RoleplayOSWeaponId", toolId)
 		clone:SetAttribute("RoleplayOSWeaponPurchase", source == "Vendor")
