@@ -39,8 +39,16 @@ function ANPRService:_alertPlayers(sensor: BasePart, token: any): { Player }?
 	if not self:_isCurrentWatch(sensor, token) then
 		return nil
 	end
-	for _, player in Players:GetPlayers() do
-		local duty = self.context.Services:Get("DutyService"):Get(player)
+	local dutyService = self.context.Services:Get("DutyService")
+	-- ANPR alerts can only ever reach on-duty Roads Policing or Control users.
+	-- Snapshot that bounded candidate set rather than walking every civilian for
+	-- every wanted-plate hit. Get below remains the authority check and may yield.
+	for _, userId in dutyService:ActiveUserIds() do
+		local player = Players:GetPlayerByUserId(userId)
+		if not player then
+			continue
+		end
+		local duty = dutyService:Get(player)
 		-- DutyService:Get can yield on group access. Do not resume a stale ANPR
 		-- notification pass after teardown or after this sensor was untagged and
 		-- re-tagged under a new watch generation.
