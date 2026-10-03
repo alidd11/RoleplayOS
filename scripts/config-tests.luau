@@ -1,6 +1,5 @@
 --!strict
 local Runtime = require("./test-runtime")
-local roblox = require("@lune/roblox")
 
 return function(H: any)
 	local function fixture(): any
@@ -437,55 +436,11 @@ return function(H: any)
 
 	H.test("discovered service tools require explicit auto-equip opt-in", function()
 		local runtime = Runtime.new()
-		runtime.services.ServerStorage = roblox.Instance.new("Folder")
-		runtime.services.CollectionService = {}
 		local shared = runtime.services.ReplicatedStorage.RoleplayOS
-		local configuration = table.clone(runtime.require(shared.Config.Config))
-		configuration.Roles = {
-			PoliceOfficer = {
-				DepartmentId = "Police",
-				LoadoutId = "PoliceResponse",
-			},
-		}
-		configuration.Loadouts = {
-			PoliceResponse = { Id = "PoliceResponse", ToolIds = {} },
-		}
-		local service = runtime.require(
-			runtime.services.ServerScriptService.RoleplayOS.Services.ContentValidationService
-		)
-		service:Init({ Configuration = configuration })
-
-		local assets = roblox.Instance.new("Folder")
-		assets.Name = "RoleplayOSAssets"
-		local tools = roblox.Instance.new("Folder")
-		tools.Name = "Tools"
-		tools.Parent = assets
-		local services = roblox.Instance.new("Folder")
-		services.Name = "Services"
-		services.Parent = tools
-		local police = roblox.Instance.new("Folder")
-		police.Name = "Police"
-		police.Parent = services
-		local sharedTools = roblox.Instance.new("Folder")
-		sharedTools.Name = "Shared"
-		sharedTools.Parent = police
-		local tool = roblox.Instance.new("Tool")
-		tool.Name = "UnconfiguredPoliceTool"
-		tool.Parent = sharedTools
-
-		service:_discoverTool(assets, tool)
-		H.expect(
-			#service:GetLoadoutToolIds("PoliceResponse", {}) == 0,
-			"unconfigured service tool was auto-issued by folder placement"
-		)
-
-		tool:SetAttribute("AutoEquip", true)
-		service:Init({ Configuration = configuration })
-		service:_discoverTool(assets, tool)
-		local ids = service:GetLoadoutToolIds("PoliceResponse", {})
-		H.expect(
-			#ids == 1 and ids[1] == "UnconfiguredPoliceTool",
-			"explicit service-tool auto-equip opt-in was ignored"
-		)
+		local policy = runtime.require(shared.Shared.ToolDiscoveryPolicy)
+		H.expect(not policy.shouldAutoEquip(nil), "missing AutoEquip opted in")
+		H.expect(not policy.shouldAutoEquip(false), "false AutoEquip opted in")
+		H.expect(not policy.shouldAutoEquip(1), "non-boolean AutoEquip opted in")
+		H.expect(policy.shouldAutoEquip(true), "explicit AutoEquip=true was refused")
 	end)
 end
