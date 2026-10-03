@@ -231,5 +231,4 @@ return function(H: any)
 			"PAVA unsafe-content rejection did not stay behind its sanitised issuance path"
 		)
 	end)
-
 end
