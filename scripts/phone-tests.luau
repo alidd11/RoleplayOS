@@ -1,4 +1,5 @@
 --!strict
+local fs = require("@lune/fs")
 local Runtime = require("./test-runtime")
 
 return function(H: any)
@@ -166,5 +167,20 @@ return function(H: any)
 		f.Service.callTimers[call.CallId].Callback()
 		H.expect(f.Service.calls[call.CallId] == nil, "terminal cleanup failed")
 		f.Service:Destroy()
+	end)
+	H.test("phone tool listeners are released with destroyed tools", function()
+		local source = fs.readFile("src/client/Controllers/PhoneController/init.luau")
+		H.expect(
+			string.find(source, "self.toolConnections = setmetatable", 1, true) ~= nil,
+			"phone tool connections are still retained in the controller-wide list"
+		)
+		H.expect(
+			string.find(source, "tool.Destroying:Connect", 1, true) ~= nil,
+			"destroyed phone tools do not release their listeners"
+		)
+		H.expect(
+			string.find(source, "self.toolConnections[tool] = nil", 1, true) ~= nil,
+			"destroyed phone tool listener state is retained"
+		)
 	end)
 end

@@ -24,6 +24,7 @@ function PhoneController:Init(context: any)
 	self.context = context
 	self.page = "Home"
 	self.watchedTools = setmetatable({}, { __mode = "k" })
+	self.toolConnections = setmetatable({}, { __mode = "k" })
 end
 
 -- Announces that a full device is on screen. The ambient heads-up display
@@ -136,6 +137,8 @@ function PhoneController:Start()
 			and not self.watchedTools[tool]
 		then
 			self.watchedTools[tool] = true
+			local toolConnections = {}
+			self.toolConnections[tool] = toolConnections
 			local function open()
 				self.body.Visible = true
 				self:_announce(true)
@@ -145,15 +148,25 @@ function PhoneController:Start()
 			-- screen comes up on Equipped. Activated alone was not enough: it only
 			-- fires when an already equipped tool is clicked in the world, so
 			-- picking the slot appeared to do nothing.
-			table.insert(self.connections, tool.Equipped:Connect(open))
-			table.insert(self.connections, tool.Activated:Connect(open))
+			table.insert(toolConnections, tool.Equipped:Connect(open))
+			table.insert(toolConnections, tool.Activated:Connect(open))
 			table.insert(
-				self.connections,
+				toolConnections,
 				tool.Unequipped:Connect(function()
 					-- Putting the handset away closes it, so the screen cannot be
 					-- left open while the character is holding something else.
 					self.body.Visible = false
 					self:_announce(false)
+				end)
+			)
+			table.insert(
+				toolConnections,
+				tool.Destroying:Connect(function()
+					for _, connection in toolConnections do
+						connection:Disconnect()
+					end
+					table.clear(toolConnections)
+					self.toolConnections[tool] = nil
 				end)
 			)
 		end
@@ -237,6 +250,12 @@ function PhoneController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections)
+	for _, toolConnections in self.toolConnections do
+		for _, connection in toolConnections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(self.toolConnections)
 	if self.gui then
 		self.gui:Destroy()
 	end
