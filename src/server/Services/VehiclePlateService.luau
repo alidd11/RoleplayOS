@@ -37,10 +37,7 @@ end
 --
 -- The plate itself is the vehicle's own - its model, its surface, its font. Only
 -- the number is ours.
-function VehiclePlateService:_removeGenerators(
-	vehicle: Model,
-	descendants: { Instance }?
-): number
+function VehiclePlateService:_removeGenerators(vehicle: Model, descendants: { Instance }?): number
 	local removed = 0
 	for _, descendant in descendants or vehicle:GetDescendants() do
 		if descendant:IsA("BaseScript") and self.generatorNames[compact(descendant.Name)] then
