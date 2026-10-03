@@ -292,7 +292,8 @@ function DutyService:_begin(player: Player, request: any): (boolean, string?)
 		return false, roleReason
 	end
 	if not self.running or not playerIsPresent(player) then
-		return false, "DUTY_UNAVAILABLE"
+		rollbackStart(self, player, previousTeam, nil)
+		return false, if playerIsPresent(player) then "DUTY_UNAVAILABLE" else "PLAYER_LEFT"
 	end
 	local spawned, finalSpawnReason =
 		self.context.Services:Get("SpawnService"):Spawn(player, request)
