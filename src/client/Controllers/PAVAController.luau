@@ -92,6 +92,7 @@ function PAVAController:Init(context: any)
 	self.context = context
 	self.connections = {}
 	self.watched = setmetatable({}, { __mode = "k" })
+	self.toolConnections = setmetatable({}, { __mode = "k" })
 	self.mouse = nil
 end
 
@@ -100,8 +101,10 @@ function PAVAController:_watch(tool: Instance)
 		return
 	end
 	self.watched[tool] = true
+	local toolConnections = {}
+	self.toolConnections[tool] = toolConnections
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Equipped:Connect(function(mouse)
 			self.mouse = mouse
 			local character = tool.Parent
@@ -115,7 +118,7 @@ function PAVAController:_watch(tool: Instance)
 		end)
 	)
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Activated:Connect(function()
 			local target = targetPlayer(self.mouse)
 			if not target then
@@ -136,9 +139,19 @@ function PAVAController:_watch(tool: Instance)
 		end)
 	)
 	table.insert(
-		self.connections,
+		toolConnections,
 		tool.Unequipped:Connect(function()
 			self.mouse = nil
+		end)
+	)
+	table.insert(
+		toolConnections,
+		tool.Destroying:Connect(function()
+			for _, connection in toolConnections do
+				connection:Disconnect()
+			end
+			table.clear(toolConnections)
+			self.toolConnections[tool] = nil
 		end)
 	)
 end
@@ -187,6 +200,12 @@ function PAVAController:Destroy()
 		connection:Disconnect()
 	end
 	table.clear(self.connections or {})
+	for _, toolConnections in self.toolConnections or {} do
+		for _, connection in toolConnections do
+			connection:Disconnect()
+		end
+	end
+	table.clear(self.toolConnections or {})
 	self.watched = {}
 	self.mouse = nil
 end
