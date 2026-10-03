@@ -309,4 +309,26 @@ return function(H: any)
 			)
 		end
 	end)
+	H.test("transient combat tool listeners are released on destruction", function()
+		for _, path in
+			{
+				"src/client/Controllers/PAVAController.luau",
+				"src/client/Controllers/MeleeWeaponController.luau",
+			}
+		do
+			local source = fs.readFile(path)
+			H.expect(
+				string.find(source, "self.toolConnections = setmetatable", 1, true) ~= nil,
+				path .. " does not isolate transient tool listeners"
+			)
+			H.expect(
+				string.find(source, "tool.Destroying:Connect", 1, true) ~= nil,
+				path .. " does not release listeners when a tool is destroyed"
+			)
+			H.expect(
+				string.find(source, "self.toolConnections[tool] = nil", 1, true) ~= nil,
+				path .. " retains destroyed tool listener state"
+			)
+		end
+	end)
 end
